@@ -275,3 +275,20 @@ services:
       - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
     healthcheck:
       disable: true
+
+  airplaneslive-bridge:
+    build:
+      context: ./bridge
+    container_name: goat-moon-airplaneslive-bridge
+    network_mode: host
+    restart: unless-stopped
+    depends_on:
+      zenoh-router:
+        condition: service_healthy
+    environment:
+      - GOAT_CERT_DIR=/certs
+    command: ["python3", "/app/airplaneslive_bridge.py"]
+    volumes:
+      - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
+    healthcheck:
+      disable: true
