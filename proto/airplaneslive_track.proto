@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package ltu.cis.tracks.v1;
+
+// Live aircraft position from airplanes.live ADS-B aggregator (airplaneslive_bridge.py)
+// Published to: <ORG>/air/airplaneslive/tracks/v1  (regional)
+//               <ORG>/air/airplaneslive/mil/v1      (worldwide military)
+// No API key required. Includes registration and type unlike OpenSky.
+// Zero means "not present" for numeric fields.
+message AirplanesLiveTrack {
+  double timestamp          = 1;  // Unix epoch when fetched (_ts)
+  string source             = 2;  // "airplaneslive" (_src)
+  string icao24             = 3;  // ICAO 24-bit hex address, e.g. "4b1234"
+  string callsign           = 4;  // ATC flight number / callsign
+  string registration       = 5;  // Aircraft registration, e.g. "LN-RGC"
+  string aircraft_type      = 6;  // ICAO type code, e.g. "B738"
+  double lat_deg            = 7;  // WGS-84 latitude
+  double lon_deg            = 8;  // WGS-84 longitude
+  int32  alt_baro_ft        = 9;  // Barometric altitude, feet
+  int32  alt_geom_ft        = 10; // Geometric (GPS) altitude, feet
+  double ground_speed_kts   = 11; // Ground speed, knots
+  double track_deg          = 12; // True track angle, degrees clockwise from N
+  string squawk             = 13; // Mode A squawk code
+  bool   is_military        = 14; // True when sourced from the /mil endpoint
+}
