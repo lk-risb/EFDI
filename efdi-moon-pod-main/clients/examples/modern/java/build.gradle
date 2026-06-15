@@ -1,0 +1,45 @@
+// Gradle build for the modern Java goat-moon-pod examples.
+//
+//   ./gradlew run -Pmain=Publish
+//   ./gradlew run -Pmain=Subscribe --args="release/goat/**"
+//
+// JDK 17+. The zenoh-java-jvm artifact bundles the native Zenoh library as a resource — no
+// separate zenoh-c install needed.
+
+plugins {
+    id 'application'
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // Official Eclipse Zenoh Java/Kotlin JNI binding. Pinned to the fabric's Zenoh 1.9.0.
+    implementation 'org.eclipse.zenoh:zenoh-java-jvm:1.9.0'
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+}
+
+// Pull the shared connect helper (GoatConnect.java) into compilation alongside the examples,
+// mirroring how the Python/Go examples reach back into connect/<lang>/.
+sourceSets {
+    main {
+        java {
+            srcDirs = ['.', '../../../connect/java']
+        }
+    }
+}
+
+// Pick the entry point at run time: ./gradlew run -Pmain=Publish (default Publish).
+application {
+    mainClass = providers.gradleProperty('main').orElse('Publish')
+}
+
+run {
+    standardInput = System.in
+}
