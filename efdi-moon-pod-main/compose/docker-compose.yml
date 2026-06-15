@@ -1,0 +1,70 @@
+# moon-pod — v0 data-plane bundle.
+#
+# Runs the containerizable data-plane services. The WireGuard mesh client (goat-clientd)
+# runs on the HOST as a systemd service (see ../host/), NOT here — see ../docs/architecture.md.
+# The goat-doctor health probe also runs as a HOST systemd timer (goat-cli is no-daemon by
+# design, ADR 1019, and has no published container image) — see ../host/goat-doctor.* .
+#
+# network_mode: host so each service binds the pod's mesh IP directly (the mesh is maintained
+# by the host's goat-clientd). No netns sidecar, no NAT gymnastics.
+#
+# Values come from .env (copied from .env.example, populated by first-boot.sh from the active
+# profile + the minted artifacts). Images are pinned by digest (ADR 0859). Both services here
+# use ALREADY-PUBLISHED images — no local build context (the earlier ../audit + ../doctor
+# build-context stubs were an oversight; corrected to reuse published artifacts).
+
+services:
+  zenoh-router:
+    # Upstream eclipse/zenoh, pinned by content digest (ADR 0858 upstream pivot).
+    image: eclipse/zenoh:1.9.0@sha256:157965d71e0bfd0a044d76a985ff0e5c306ad3968929168fb9678cd2a7fec23f
+    container_name: goat-moon-zenoh-router
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      - RUST_LOG=${ZENOH_LOG:-info}
+    volumes:
+      # Rendered from host/zenoh-router.json5.tmpl by first-boot.sh.
+      - ${POD_STATE_DIR:?set in .env}/zenoh/config.json5:/etc/zenoh/config.json5:ro
+      - ${POD_STATE_DIR}/zenoh/tls:/etc/zenoh/tls:ro
+      - ${POD_STATE_DIR}/zenoh/rocksdb:/var/lib/zenoh/rocksdb
+      # NOTE: this v0 pod config declares NO per-prefix storages, so the rocksdb backend .so is
+      # not required (basic pub/sub works without it). Add the SHA256-verified .so overlay
+      # (mirror the sandbox zenoh config) when the pod needs replay/retention.
+    command: ["-c", "/etc/zenoh/config.json5"]
+    healthcheck:
+      test: ["CMD-SHELL", "true"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  audit-sink:
+    # Reuse the PUBLISHED goat-audit-subscriber image (a standalone Rust Zenoh client). No build.
+    # v0 runs it in OBSERVE-ONLY mode: it subscribes over mTLS and emits Prometheus metrics, but
+    # without AUDIT_SUBSCRIBER_S3_ENDPOINT it does NOT durably persist. Durable local audit
+    # (NDJSON on the LUKS volume, or a co-located MinIO) is a documented v0.x follow-up — see
+    # ../docs/architecture.md "Audit". For the EC2 functionality test, observe-only proves the
+    # audit data path (subscribe + count) without standing up object storage.
+    image: ghcr.io/desertgoat/goat-audit-subscriber:sha-51d9a8b@sha256:03cd651e180863d2ef4d32a881515c3e8f70b60b21f0484a46fd501b3903951d
+    container_name: goat-moon-audit-sink
+    network_mode: host
+    restart: unless-stopped
+    depends_on:
+      zenoh-router:
+        condition: service_healthy
+    environment:
+      # Real audit-subscriber contract (AUDIT_SUBSCRIBER_*). Subscribe to the pod's namespace +
+      # inbound goat on the LOCAL router over mTLS. No S3 endpoint => observe-only.
+      - AUDIT_SUBSCRIBER_ENDPOINT=${ZENOH_LOCAL_ENDPOINT:?set in .env}
+      - AUDIT_SUBSCRIBER_KEY=${PARTNER_NAMESPACE:?set in .env}/**
+      - AUDIT_SUBSCRIBER_ID=${POD_ID:-moon-pod}
+      - AUDIT_SUBSCRIBER_CERT=/etc/zenoh/tls/pod-cert.pem
+      - AUDIT_SUBSCRIBER_KEY_FILE=/etc/zenoh/tls/pod-key.pem
+      - AUDIT_SUBSCRIBER_ROOT_CA=/etc/zenoh/tls/ca-roots.pem
+      - AUDIT_SUBSCRIBER_METRICS_BIND=0.0.0.0:9303
+    volumes:
+      - ${POD_STATE_DIR}/zenoh/tls:/etc/zenoh/tls:ro   # mTLS leaf to subscribe (pod's own cert)
+    healthcheck:
+      test: ["CMD-SHELL", "true"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
