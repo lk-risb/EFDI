@@ -1,0 +1,6 @@
+FROM python:3.12-slim
+# copernicusmarine pulls xarray, dask, and netcdf4 — image is ~800 MB.
+RUN pip install --no-cache-dir eclipse-zenoh==1.9.0 copernicusmarine
+WORKDIR /app
+COPY cmems_bridge.py ./
+CMD ["python3", "/app/cmems_bridge.py"]
