@@ -1,0 +1,11 @@
+[package]
+name = "goat_connect"
+version = "0.1.0"
+edition = "2021"
+description = "Open an mTLS Zenoh session to a goat-moon-pod from env vars (the only goat-specific code you need)."
+license = "EPL-2.0 OR Apache-2.0"
+
+[dependencies]
+# Pinned to the fleet's Zenoh 1.9.0. The 1.x API is async (tokio).
+zenoh = "=1.9.0"
+serde_json = "1"

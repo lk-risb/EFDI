@@ -1,0 +1,93 @@
+// moon-pod — pod-side Zenoh router config TEMPLATE.
+//
+// Rendered by host/first-boot.sh via `envsubst` into ${POD_STATE_DIR}/zenoh/config.json5.
+// The values are pod/profile/bundle-driven — see docs/efdi-vs-production.md. NOTHING
+// stack-specific (EFDI / jailbreak / production) is hardcoded: every environment value arrives
+// from the signed bundle (the source of truth) or the active profile.
+//
+// Placeholders (all supplied by first-boot.sh from the profile + the goat-cli-extracted certs):
+//   ${ZENOH_LISTEN_PORT}      local listen port for pod-side clients (goat-cli, audit-sink)
+//   ${ZENOH_FABRIC_ENDPOINT}  the goat-side endpoint the pod dials OUT to (ingress gateway / router).
+//                             SOURCE OF TRUTH = the bundle's goat_cli_extras.router_endpoint
+//                             (first-boot reads it from the bundle-derived profile.toml); the
+//                             profile var is only a hand-driven-validation fallback.
+//   ${PARTNER_NAMESPACE}      the pod's first-party write/read prefix (its slot, or release/<partner>)
+//   ${INBOUND_NAMESPACE}      the bilateral prefix the fabric publishes TO the pod (profile-driven;
+//                             NOT hardcoded to any stack — e.g. release/goat when bilateral)
+//   ${POD_CERT_PEM}           pod leaf cert  (from goat profile init: mtls.cert.pem)
+//   ${POD_KEY_PEM}            pod leaf key   (from goat profile init: mtls.key.pem)
+//   ${CA_ROOTS_PEM}           CA roots       (from goat profile init: ca-roots.pem) — from the BUNDLE
+{
+  mode: "router",
+
+  // Local listen for pod-side clients (goat-cli pub/sub, audit-sink subscribe) over mTLS.
+  listen: {
+    endpoints: ["tls/0.0.0.0:${ZENOH_LISTEN_PORT}"],
+  },
+
+  // Dial OUT to the goat-side receiver (ingress gateway per ADR 1020, or a router endpoint for
+  // direct sandbox validation). The pod is a Tier-2 peer; goat-side decides the admitted shape.
+  connect: {
+    endpoints: ["${ZENOH_FABRIC_ENDPOINT}"],
+  },
+
+  transport: {
+    link: {
+      tls: {
+        // Pod identity for BOTH directions: as a listener (local clients verify us) and as a
+        // connector (the gateway verifies us). CA roots come from the bundle, never compiled in.
+        listen_certificate: "${POD_CERT_PEM}",
+        listen_private_key: "${POD_KEY_PEM}",
+        connect_certificate: "${POD_CERT_PEM}",
+        connect_private_key: "${POD_KEY_PEM}",
+        root_ca_certificate: "${CA_ROOTS_PEM}",
+        enable_mtls: true,
+        // Router/gateway cert SAN binds the mesh IP, not the DNS name we dial — match the
+        // audit-subscriber + the sandbox router posture.
+        verify_name_on_connect: false,
+      },
+    },
+  },
+
+  plugins_loading: {
+    enabled: true,
+    search_dirs: ["/", "/opt/zenoh/plugins"],
+  },
+
+  // Pod-side ACL: default-deny, mTLS-gated. The pod is the partner's own single-tenant box, so
+  // this is the partner's own boundary; the load-bearing enforcement is GOAT-SIDE (the ingress
+  // gateway + core-router ACL, ADR 1020). We still default-deny here as good hygiene.
+  access_control: {
+    enabled: true,
+    default_permission: "deny",
+    rules: [
+      {
+        // The pod's own first-party data: publish + subscribe within its namespace, both flows.
+        id: "pod-firstparty",
+        messages: ["put", "delete", "declare_subscriber", "query", "declare_queryable", "reply"],
+        flows: ["egress", "ingress"],
+        permission: "allow",
+        key_exprs: ["${PARTNER_NAMESPACE}/**"],
+      },
+      {
+        // Inbound bilateral data from goat: subscribe/deliver only (no pod writes here).
+        // Prefix is profile-driven (${INBOUND_NAMESPACE}), never hardcoded to a stack.
+        id: "pod-inbound",
+        messages: ["declare_subscriber", "query", "put", "reply"],
+        flows: ["egress", "ingress"],
+        permission: "allow",
+        key_exprs: ["${INBOUND_NAMESPACE}/**"],
+      },
+    ],
+    subjects: [
+      {
+        // Any mTLS peer rooted in the bundle's CA (pod-local clients + the goat side).
+        id: "mtls-peer",
+        link_protocols: ["tls"],
+      },
+    ],
+    policies: [
+      { rules: ["pod-firstparty", "pod-inbound"], subjects: ["mtls-peer"] },
+    ],
+  },
+}
