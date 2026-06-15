@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package ltu.cis.tracks.v1;
+
+// NOTAM (Notice to Air Missions) from ICAO Dataservices API (notam_bridge.py)
+// Published to: <ORG>/airspace/notam/<location>/v1
+// JSON keys _ts → timestamp, _src → source. Zero means "not present" for numerics.
+message Notam {
+  double timestamp      = 1;  // Unix epoch when fetched (_ts)
+  string source         = 2;  // "icao-notam" (_src)
+  string notam_id       = 3;  // Raw key/id from ICAO API
+  string notam_number   = 4;  // NOTAM series+number, e.g. "A1234/26"
+  string notam_type     = 5;  // "N"=new, "R"=replace, "C"=cancel
+  string location       = 6;  // ICAO airport or FIR code, e.g. "EYVI"
+  string state_code     = 7;  // ISO-3166-1 alpha-2, e.g. "LT"
+  string start_validity = 8;  // ISO-8601 UTC start of validity
+  string end_validity   = 9;  // ISO-8601 UTC end (or "PERM")
+  string q_code         = 10; // ICAO Q-code, e.g. "QNFLT" = Flight restriction
+  string subject        = 11; // Q-code subject decoded, e.g. "Air Traffic Flow"
+  string condition      = 12; // Q-code condition, e.g. "Restricted"
+  string full_text      = 13; // Complete NOTAM text as issued
+  double lat_deg        = 14; // Centre latitude (0 if not a geographic NOTAM)
+  double lon_deg        = 15; // Centre longitude (0 if not a geographic NOTAM)
+  double radius_nm      = 16; // Radius in nautical miles (0 if not applicable)
+  int32  lower_fl       = 17; // Lower flight level, e.g. 0 = GND
+  int32  upper_fl       = 18; // Upper flight level, e.g. 999 = UNL
+  int32  criticality    = 19; // ICAO criticality score (higher = more critical)
+}

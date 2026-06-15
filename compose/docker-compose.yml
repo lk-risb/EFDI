@@ -63,8 +63,215 @@ services:
       - AUDIT_SUBSCRIBER_METRICS_BIND=0.0.0.0:9303
     volumes:
       - ${POD_STATE_DIR}/zenoh/tls:/etc/zenoh/tls:ro   # mTLS leaf to subscribe (pod's own cert)
+
+  opensky-bridge:
+    build:
+      context: ./bridge
+    container_name: goat-moon-opensky-bridge
+    network_mode: host
+    restart: unless-stopped
+    depends_on:
+      zenoh-router:
+        condition: service_healthy
+    environment:
+      # Scripts live in the image (from ./bridge/); certs come from the bundle.
+      - GOAT_CERT_DIR=/certs
+    volumes:
+      - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
     healthcheck:
-      test: ["CMD-SHELL", "true"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
+      disable: true
+
+  aisstream-bridge:
+    build:
+      context: ./bridge
+    container_name: goat-moon-aisstream-bridge
+    network_mode: host
+    restart: unless-stopped
+    depends_on:
+      zenoh-router:
+        condition: service_healthy
+    environment:
+      - GOAT_CERT_DIR=/certs
+      - AISSTREAM_KEY=${AISSTREAM_KEY:?set AISSTREAM_KEY in .env}
+    command: ["python3", "/app/ais_bridge.py"]
+    volumes:
+      - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
+    healthcheck:
+      disable: true
+
+  openmeteo-bridge:
+    build:
+      context: ./bridge
+    container_name: goat-moon-openmeteo-bridge
+    network_mode: host
+    restart: unless-stopped
+    depends_on:
+      zenoh-router:
+        condition: service_healthy
+    environment:
+      - GOAT_CERT_DIR=/certs
+    command: ["python3", "/app/openmeteo_bridge.py"]
+    volumes:
+      - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
+    healthcheck:
+      disable: true
+
+  meteo-lt-bridge:
+    build:
+      context: ./bridge
+    container_name: goat-moon-meteo-lt-bridge
+    network_mode: host
+    restart: unless-stopped
+    depends_on:
+      zenoh-router:
+        condition: service_healthy
+    environment:
+      - GOAT_CERT_DIR=/certs
+    command: ["python3", "/app/meteo_lt_bridge.py"]
+    volumes:
+      - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
+    healthcheck:
+      disable: true
+
+  yr-no-bridge:
+    build:
+      context: ./bridge
+    container_name: goat-moon-yr-no-bridge
+    network_mode: host
+    restart: unless-stopped
+    depends_on:
+      zenoh-router:
+        condition: service_healthy
+    environment:
+      - GOAT_CERT_DIR=/certs
+    command: ["python3", "/app/yr_no_bridge.py"]
+    volumes:
+      - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
+    healthcheck:
+      disable: true
+
+  n2yo-bridge:
+    build:
+      context: ./bridge
+    container_name: goat-moon-n2yo-bridge
+    network_mode: host
+    restart: unless-stopped
+    depends_on:
+      zenoh-router:
+        condition: service_healthy
+    environment:
+      - GOAT_CERT_DIR=/certs
+      - N2YO_KEY=${N2YO_KEY:?set N2YO_KEY in .env}
+    command: ["python3", "/app/n2yo_bridge.py"]
+    volumes:
+      - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
+    healthcheck:
+      disable: true
+
+  osm-bridge:
+    build:
+      context: ./bridge
+    container_name: goat-moon-osm-bridge
+    network_mode: host
+    restart: unless-stopped
+    depends_on:
+      zenoh-router:
+        condition: service_healthy
+    environment:
+      - GOAT_CERT_DIR=/certs
+    command: ["python3", "/app/osm_bridge.py"]
+    volumes:
+      - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
+    healthcheck:
+      disable: true
+
+  purpleair-bridge:
+    build:
+      context: ./bridge
+    container_name: goat-moon-purpleair-bridge
+    network_mode: host
+    restart: unless-stopped
+    depends_on:
+      zenoh-router:
+        condition: service_healthy
+    environment:
+      - GOAT_CERT_DIR=/certs
+      - PURPLEAIR_KEY=${PURPLEAIR_KEY:-}
+    command: ["python3", "/app/purpleair_bridge.py"]
+    volumes:
+      - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
+    healthcheck:
+      disable: true
+
+  cmems-bridge:
+    build:
+      context: ./bridge
+      dockerfile: Dockerfile.cmems
+    container_name: goat-moon-cmems-bridge
+    network_mode: host
+    restart: unless-stopped
+    depends_on:
+      zenoh-router:
+        condition: service_healthy
+    environment:
+      - GOAT_CERT_DIR=/certs
+      - COPERNICUSMARINE_SERVICE_USERNAME=${CMEMS_USER:-}
+      - COPERNICUSMARINE_SERVICE_PASSWORD=${CMEMS_PASS:-}
+    volumes:
+      - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
+    healthcheck:
+      disable: true
+
+  notam-bridge:
+    build:
+      context: ./bridge
+    container_name: goat-moon-notam-bridge
+    network_mode: host
+    restart: unless-stopped
+    depends_on:
+      zenoh-router:
+        condition: service_healthy
+    environment:
+      - GOAT_CERT_DIR=/certs
+      - ICAO_NOTAM_KEY=${ICAO_NOTAM_KEY:-}
+    command: ["python3", "/app/notam_bridge.py"]
+    volumes:
+      - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
+    healthcheck:
+      disable: true
+
+  fr24-bridge:
+    build:
+      context: ./bridge
+    container_name: goat-moon-fr24-bridge
+    network_mode: host
+    restart: unless-stopped
+    depends_on:
+      zenoh-router:
+        condition: service_healthy
+    environment:
+      - GOAT_CERT_DIR=/certs
+      - FR24_KEY=${FR24_KEY:-}
+    command: ["python3", "/app/fr24_bridge.py"]
+    volumes:
+      - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
+    healthcheck:
+      disable: true
+
+  windy-bridge:
+    build:
+      context: ./bridge
+    container_name: goat-moon-windy-bridge
+    network_mode: host
+    restart: unless-stopped
+    depends_on:
+      zenoh-router:
+        condition: service_healthy
+    environment:
+      - GOAT_CERT_DIR=/certs
+      - WINDY_KEY=${WINDY_KEY:-}
+    command: ["python3", "/app/windy_bridge.py"]
+    volumes:
+      - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
+    healthcheck:
+      disable: true
