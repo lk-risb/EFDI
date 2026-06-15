@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package ltu.cis.tracks.v1;
+
+// Live aircraft position from OpenSky Network (opensky_bridge.py)
+// Published to: 1851281db70ccc0409dad4ecfc874cf5/opensky/tracks/v1
+message AircraftTrack {
+  double timestamp     = 1;  // Unix epoch when record was created locally
+  string source        = 2;  // "opensky"
+  string icao24        = 3;  // ICAO 24-bit transponder address (hex, e.g. "3c6444")
+  string callsign      = 4;  // Flight callsign, e.g. "DLH123" (may be empty)
+  string origin_country = 5; // Country of registration, e.g. "Germany"
+  double lat_deg       = 6;  // WGS-84 latitude in decimal degrees
+  double lon_deg       = 7;  // WGS-84 longitude in decimal degrees
+  double baro_alt_m    = 8;  // Barometric altitude in metres (0 if unknown)
+  double geo_alt_m     = 9;  // Geometric (GPS) altitude in metres (0 if unknown)
+  double speed_ms      = 10; // Ground speed in m/s (0 if unknown)
+  double heading_deg   = 11; // True track, degrees clockwise from north (0 if unknown)
+  double vertical_rate_ms = 12; // Vertical rate m/s; positive = climbing (0 if unknown)
+  bool   on_ground     = 13; // True if aircraft reported on the ground
+  string squawk        = 14; // Transponder squawk code, e.g. "7700" (may be empty)
+  string pos_source    = 15; // "ADS-B", "ASTERIX", "MLAT", or "FLARM"
+  int64  time_position = 16; // Unix epoch of last position update from OpenSky
+}

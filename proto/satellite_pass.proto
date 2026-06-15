@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package ltu.cis.tracks.v1;
+
+// Real-time satellite position from N2YO (n2yo_bridge.py)
+// Published to: <ORG>/space/n2yo/<sat-id>/position/v1
+// JSON keys _ts → timestamp, _src → source.
+message SatellitePosition {
+  double timestamp      = 1;  // Unix epoch when position was calculated (_ts)
+  string source         = 2;  // "n2yo" (_src)
+  int32  sat_id         = 3;  // NORAD catalog number, e.g. 25544 (ISS)
+  string sat_name       = 4;  // Satellite name, e.g. "ISS (ZARYA)"
+  double lat_deg        = 5;  // Sub-satellite latitude, degrees
+  double lon_deg        = 6;  // Sub-satellite longitude, degrees
+  double alt_km         = 7;  // Altitude above WGS-84 ellipsoid, km
+  double azimuth_deg    = 8;  // Azimuth from observer, degrees clockwise from N
+  double elevation_deg  = 9;  // Elevation above horizon from observer, degrees
+  double ra             = 10; // Right ascension, degrees
+  double dec            = 11; // Declination, degrees
+  int32  eclipsed       = 12; // 1 if satellite is in Earth's shadow, 0 otherwise
+  // Observer position used for azimuth/elevation calculation
+  double obs_lat_deg    = 13;
+  double obs_lon_deg    = 14;
+  double obs_alt_km     = 15;
+}

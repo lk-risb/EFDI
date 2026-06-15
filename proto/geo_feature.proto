@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package ltu.cis.tracks.v1;
+
+// Geographic feature from OpenStreetMap Overpass (osm_bridge.py)
+// Published to: <ORG>/geo/osm/<feature-type>/v1
+// JSON keys _ts → timestamp, _src → source.
+message GeoFeature {
+  double timestamp    = 1;  // Unix epoch of the query that returned this feature (_ts)
+  string source       = 2;  // "osm" (_src)
+  int64  osm_id       = 3;  // OpenStreetMap element ID
+  string osm_type     = 4;  // "node", "way", or "relation"
+  double lat_deg      = 5;  // Centroid latitude (node position or way/relation centroid)
+  double lon_deg      = 6;  // Centroid longitude
+  string feature_type = 7;  // Primary tag value, e.g. "aerodrome", "port", "military"
+  string name         = 8;  // name= tag value (may be empty)
+  string iata         = 9;  // iata= tag (airports only; may be empty)
+  string icao         = 10; // icao= tag (airports only; may be empty)
+  string tags_json    = 11; // Full OSM tags serialised as compact JSON object
+}

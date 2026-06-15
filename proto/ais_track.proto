@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package ltu.cis.tracks.v1;
+
+// Live AIS vessel position from aisstream.io (ais_bridge.py)
+// Published to: 1851281db70ccc0409dad4ecfc874cf5/ais/aisstream/tracks/v1
+// JSON wire format: keys _ts → timestamp, _src → source; all other keys match field names.
+// Zero value means "not present" for numeric optional fields.
+message AisTrack {
+  double timestamp    = 1;  // Unix epoch when record was received locally (_ts)
+  string source       = 2;  // "aisstream" (_src)
+  uint32 mmsi         = 3;  // Maritime Mobile Service Identity (9-digit number)
+  string msg_type     = 4;  // AIS message type, e.g. "PositionReport"
+  double lat_deg      = 5;  // WGS-84 latitude in decimal degrees
+  double lon_deg      = 6;  // WGS-84 longitude in decimal degrees
+  string ship_name    = 7;  // Vessel name from AIS (empty if not in message)
+  double sog_ms       = 8;  // Speed over ground in m/s (0 if unknown)
+  double cog_deg      = 9;  // Course over ground in degrees (0 if unknown)
+  double heading_deg  = 10; // True heading in degrees (0 if 511 "not available")
+  string nav_status   = 11; // Navigation status, e.g. "under_way_engine", "moored"
+  string time_utc     = 12; // UTC timestamp string from aisstream.io metadata
+}

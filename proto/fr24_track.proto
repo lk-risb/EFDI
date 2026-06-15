@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package ltu.cis.tracks.v1;
+
+// Live aircraft position from FlightRadar24 API (fr24_bridge.py)
+// Published to: <ORG>/air/fr24/tracks/v1
+// JSON keys _ts → timestamp, _src → source. Zero means "not present" for numerics.
+// Complements opensky_bridge.py — FR24 includes registration, type, airline.
+message Fr24Track {
+  double timestamp       = 1;  // Unix epoch when fetched (_ts)
+  string source          = 2;  // "fr24" (_src)
+  string fr24_id         = 3;  // FR24 internal flight ID
+  string callsign        = 4;  // ATC callsign, e.g. "AFL1234"
+  string registration    = 5;  // Aircraft registration, e.g. "LY-BOA"
+  string aircraft_type   = 6;  // ICAO type code, e.g. "B738"
+  double lat_deg         = 7;  // WGS-84 latitude
+  double lon_deg         = 8;  // WGS-84 longitude
+  int32  alt_ft          = 9;  // Barometric altitude, feet
+  int32  speed_kts       = 10; // Ground speed, knots
+  int32  heading_deg     = 11; // True track, degrees clockwise from N
+  bool   on_ground       = 12; // True if aircraft reported on ground
+  string painted_as      = 13; // Airline/livery ICAO code the aircraft is painted as
+  string operating_as    = 14; // Operating carrier ICAO code
+}
