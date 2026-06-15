@@ -1,0 +1,24 @@
+[package]
+name = "goat-moon-pod-examples-rust"
+version = "0.1.0"
+edition = "2021"
+license = "EPL-2.0 OR Apache-2.0"
+
+[[bin]]
+name = "publish"
+path = "src/bin/publish.rs"
+
+[[bin]]
+name = "subscribe"
+path = "src/bin/subscribe.rs"
+
+[dependencies]
+# The goat-specific connect helper (in this repo). Mirrors connect/python/goat_connect.py.
+goat_connect = { path = "../../../connect/rust" }
+
+# Plain Zenoh 1.x — pinned to the fleet's Zenoh 1.9.0. Async (tokio).
+zenoh = "=1.9.0"
+
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "time"] }
+serde_json = "1"
+chrono = "0.4"
