@@ -1,0 +1,14 @@
+# moon-pod — host goat-doctor probe (oneshot, fired by goat-doctor.timer).
+# Installed + enabled by first-boot.sh, which renders ${GOAT_PROFILE_DIR}, ${POD_STATE_DIR}
+# and ${DOCTOR_SH} via envsubst. Runs goat-cli on the host (no container).
+
+[Unit]
+Description=moon-pod health probe (goat doctor)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+Environment=GOAT_PROFILE_DIR=${GOAT_PROFILE_DIR}
+Environment=DOCTOR_STATUS_PATH=${POD_STATE_DIR}/doctor/status.json
+ExecStart=${DOCTOR_SH}
