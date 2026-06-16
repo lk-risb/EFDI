@@ -15,7 +15,6 @@ register() {
 # ── AIR ──────────────────────────────────────────────────────────────────────
 register "air/civ/tracks/v1"        # OpenSky + FR24 + airplanes.live + APRS aircraft
 register "air/mil/tracks/v1"        # airplanes.live military
-register "air/quality/v1"           # PurpleAir air quality sensors
 register "air/notam/v1"             # ICAO NOTAMs worldwide (single topic, location in payload)
 
 # ── LAND ─────────────────────────────────────────────────────────────────────
@@ -30,13 +29,14 @@ register "sea/surface/v1"           # CMEMS ocean surface data
 # ── SPACE ────────────────────────────────────────────────────────────────────
 register "space/tracks/v1"          # N2YO satellite positions
 
-# ── WEATHER (cross-domain) ───────────────────────────────────────────────────
+# ── ENV (environmental conditions) ───────────────────────────────────────────
+register "env/air_quality/v1"       # PurpleAir ground-based PM2.5/PM10 sensors
 for place in vilnius kaunas klaipeda riga tallinn kaliningrad; do
-  register "weather/$place/current/v1"    # Open-Meteo current conditions
-  register "weather/$place/forecast/v1"   # meteo.lt + yr.no + Windy forecasts
+  register "env/weather/$place/current/v1"    # Open-Meteo current conditions
+  register "env/weather/$place/forecast/v1"   # meteo.lt + yr.no + Windy forecasts
 done
 for place in siauliai panevezys; do
-  register "weather/$place/forecast/v1"
+  register "env/weather/$place/forecast/v1"
 done
 
 # ── APRS catch-all (unclassified symbols) ────────────────────────────────────
