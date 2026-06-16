@@ -276,6 +276,24 @@ services:
     healthcheck:
       disable: true
 
+  here-traffic-bridge:
+    build:
+      context: ./bridge
+    container_name: goat-moon-here-traffic-bridge
+    network_mode: host
+    restart: unless-stopped
+    depends_on:
+      zenoh-router:
+        condition: service_healthy
+    environment:
+      - GOAT_CERT_DIR=/certs
+      - HERE_KEY=${HERE_KEY:-}
+    command: ["python3", "/app/here_traffic_bridge.py"]
+    volumes:
+      - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
+    healthcheck:
+      disable: true
+
   airplaneslive-bridge:
     build:
       context: ./bridge

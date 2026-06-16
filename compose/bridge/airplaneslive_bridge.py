@@ -96,8 +96,8 @@ def normalize(ac: dict, is_military: bool) -> dict | None:
 
 def run(args):
     session = zenoh.open(make_config())
-    pub_tracks = session.declare_publisher("{}/air/airplaneslive/tracks/v1".format(ORG))
-    pub_mil    = session.declare_publisher("{}/air/airplaneslive/mil/v1".format(ORG))
+    pub_tracks = session.declare_publisher("{}/air/civ/tracks/v1".format(ORG))
+    pub_mil    = session.declare_publisher("{}/air/mil/tracks/v1".format(ORG))
 
     url_region = "{}/point/{}/{}/{}".format(BASE_URL, args.lat, args.lon, args.radius)
     url_mil    = "{}/mil".format(BASE_URL)

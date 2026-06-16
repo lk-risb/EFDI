@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package ltu.cis.tracks.v1;
+
+// Real-time road traffic flow segment from HERE Traffic Flow v7 API (here_traffic_bridge.py)
+// Published to: <ORG>/land/traffic/v1
+// Free tier: 250 000 transactions/month. Jam factor 0=free flow, 10=standstill.
+// Zero means "not present" for numeric fields.
+message HereTrafficFlow {
+  double timestamp             = 1;  // Unix epoch when fetched (_ts)
+  string source                = 2;  // "here-traffic" (_src)
+  double lat_deg               = 3;  // Representative point latitude
+  double lon_deg               = 4;  // Representative point longitude
+  double speed_kmh             = 5;  // Current speed on segment, km/h
+  double free_flow_speed_kmh   = 6;  // Free-flow (uncongested) speed, km/h
+  double jam_factor            = 7;  // Congestion level 0 (free) – 10 (standstill)
+  double confidence            = 8;  // Data confidence 0–1
+  string traversability        = 9;  // "open" or "closed"
+}

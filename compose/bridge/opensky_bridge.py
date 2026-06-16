@@ -160,7 +160,7 @@ def normalize(state: list) -> dict | None:
 # ---------------------------------------------------------------------------
 
 def run(args):
-    topic = "{}/opensky/{}".format(ORG, args.topic_suffix)
+    topic = "{}/air/civ/{}".format(ORG, args.topic_suffix)
     print("Zenoh topic:", topic, flush=True)
     print("Bounding box: lat [{}, {}]  lon [{}, {}]".format(
         args.lamin, args.lamax, args.lomin, args.lomax), flush=True)

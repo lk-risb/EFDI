@@ -110,7 +110,7 @@ def run(args):
     def get_pub(location: str):
         if location not in pub_cache:
             pub_cache[location] = session.declare_publisher(
-                "{}/airspace/notam/{}/v1".format(ORG, location)
+                "{}/air/notam/{}/v1".format(ORG, location)
             )
         return pub_cache[location]
 

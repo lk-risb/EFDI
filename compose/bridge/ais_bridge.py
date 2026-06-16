@@ -186,7 +186,7 @@ def normalize(msg: dict) -> dict | None:
 # ---------------------------------------------------------------------------
 
 def run(args):
-    topic = "{}/ais/aisstream/{}".format(ORG, args.topic_suffix)
+    topic = "{}/sea/civ/{}".format(ORG, args.topic_suffix)
     print("Zenoh topic:", topic, flush=True)
     print("AIS bounding box:", args.bbox, flush=True)
 
