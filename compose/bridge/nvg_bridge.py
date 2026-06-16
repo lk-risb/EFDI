@@ -41,6 +41,7 @@ ROUTER = "tls/zenoh.efdi.netbird.efdi-backbone.net:7447"
 ORG    = "1851281db70ccc0409dad4ecfc874cf5"
 HERE   = os.path.dirname(os.path.abspath(__file__))
 _CERT_DIR = os.environ.get("GOAT_CERT_DIR", HERE)
+_ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", ROUTER)
 
 NVG_NS      = "http://tide.act.nato.int/schemas/2012/10/nvg"
 NVG_VERSION = "2.0.2"
@@ -64,8 +65,9 @@ _TOPIC_SIDC = {
 def make_config() -> "zenoh.Config":
     conf = zenoh.Config()
     conf.insert_json5("mode", '"client"')
-    conf.insert_json5("connect/endpoints", json.dumps([ROUTER]))
-    conf.insert_json5("transport/link/tls", json.dumps({
+    conf.insert_json5("connect/endpoints", json.dumps([_ENDPOINT]))
+    if _ENDPOINT.startswith("tls"):
+        conf.insert_json5("transport/link/tls", json.dumps({
         "root_ca_certificate": os.path.join(_CERT_DIR, "efdi-ca-root.pem"),
         "connect_certificate": os.path.join(_CERT_DIR, ORG + "-cert.pem"),
         "connect_private_key": os.path.join(_CERT_DIR, ORG + "-key.pem"),

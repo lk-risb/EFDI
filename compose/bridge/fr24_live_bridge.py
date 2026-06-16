@@ -29,19 +29,21 @@ ROUTER = "tls/zenoh.efdi.netbird.efdi-backbone.net:7447"
 ORG    = "1851281db70ccc0409dad4ecfc874cf5"
 HERE   = os.path.dirname(os.path.abspath(__file__))
 _CERT_DIR = os.environ.get("GOAT_CERT_DIR", HERE)
+_ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", ROUTER)
 
 FR24_BASE     = "https://fr24api.flightradar24.com/api/live"
 POLL_INTERVAL = 60  # seconds — free tier is credit-limited, don't poll faster
 
 # Operational bbox: south,north,west,east — Baltic + Scandinavia + E.Europe + Middle East
-DEFAULT_BOUNDS = "20,73,4,65"
+DEFAULT_BOUNDS = "41,62,14,45"
 
 
 def make_config() -> "zenoh.Config":
     conf = zenoh.Config()
     conf.insert_json5("mode", '"client"')
-    conf.insert_json5("connect/endpoints", json.dumps([ROUTER]))
-    conf.insert_json5("transport/link/tls", json.dumps({
+    conf.insert_json5("connect/endpoints", json.dumps([_ENDPOINT]))
+    if _ENDPOINT.startswith("tls"):
+        conf.insert_json5("transport/link/tls", json.dumps({
         "root_ca_certificate": os.path.join(_CERT_DIR, "efdi-ca-root.pem"),
         "connect_certificate": os.path.join(_CERT_DIR, ORG + "-cert.pem"),
         "connect_private_key": os.path.join(_CERT_DIR, ORG + "-key.pem"),
