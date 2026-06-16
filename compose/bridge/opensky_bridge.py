@@ -37,10 +37,10 @@ OPENSKY_URL  = "https://opensky-network.org/api/states/all"
 POLL_INTERVAL = 10  # seconds — OpenSky free-tier minimum
 
 # Baltic / Lithuania + neighbours default bounding box
-DEFAULT_LAMIN = 52.0
-DEFAULT_LAMAX = 60.0
-DEFAULT_LOMIN = 18.0
-DEFAULT_LOMAX = 30.0
+DEFAULT_LAMIN = -90.0   # worldwide
+DEFAULT_LAMAX = 90.0
+DEFAULT_LOMIN = -180.0
+DEFAULT_LOMAX = 180.0
 
 # OpenSky states/all column indices
 _ICAO24       = 0
