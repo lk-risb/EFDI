@@ -34,7 +34,7 @@ OVERPASS_URL  = "https://overpass-api.de/api/interpreter"
 POLL_INTERVAL = 43200  # 12 h — OSM features don't change often
 
 # Operational bbox S, W, N, E — Baltic + Scandinavia + E.Europe + Middle East
-BBOX = (20.0, 4.0, 73.0, 65.0)
+BBOX = (41.0, 14.0, 62.0, 45.0)
 
 # Features to query: (feature_type, OSM tag key, OSM tag value)
 FEATURE_QUERIES = [

@@ -41,7 +41,7 @@ APRSIS_APP       = "efdi-aprs-bridge/1.0"
 
 DEFAULT_LAT      = 55.17
 DEFAULT_LNG      = 23.88
-DEFAULT_RANGE_KM = 4000   # km radius from Lithuania — covers Baltic→Middle East
+DEFAULT_RANGE_KM = 1000   # km radius from Lithuania — Eastern NATO flank
 
 RECONNECT_DELAY_S = 10.0
 

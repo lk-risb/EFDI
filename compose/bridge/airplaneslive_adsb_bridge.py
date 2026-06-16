@@ -36,7 +36,7 @@ _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", ROUTER)
 
 BASE_URL      = "https://api.airplanes.live/v2"
 POLL_INTERVAL = 5    # seconds — no documented rate limit
-MIL_INTERVAL  = 30   # military endpoint
+MIL_INTERVAL  = 5    # military endpoint — same rate as civil
 
 # API hard-limits radius to 250 nm per query. Poll multiple centers to cover
 # the full operational area (20°N–73°N, 4°E–65°E).
