@@ -31,10 +31,16 @@ register "space/tracks/v1"          # N2YO satellite positions
 
 # ── ENV (environmental conditions) ───────────────────────────────────────────
 register "env/air_quality/v1"       # PurpleAir ground-based PM2.5/PM10 sensors
-for place in vilnius kaunas klaipeda riga tallinn kaliningrad; do
-  register "env/weather/current/v1/$place"    # Open-Meteo current conditions
-  register "env/weather/forecast/v1/$place"   # meteo.lt + yr.no + Windy forecasts
+# current + forecast (Open-Meteo, yr.no, Windy): all operational cities
+for place in \
+    vilnius kaunas klaipeda riga tallinn kaliningrad \
+    helsinki stockholm oslo \
+    warsaw kyiv minsk moscow \
+    istanbul beirut tel_aviv baghdad tehran; do
+  register "env/weather/current/v1/$place"
+  register "env/weather/forecast/v1/$place"
 done
+# Lithuania-only forecast (meteo.lt)
 for place in siauliai panevezys; do
   register "env/weather/forecast/v1/$place"
 done

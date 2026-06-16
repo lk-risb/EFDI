@@ -31,8 +31,8 @@ _CERT_DIR = os.environ.get("GOAT_CERT_DIR", HERE)
 HERE_FLOW_URL = "https://data.traffic.hereapi.com/v7/flow"
 POLL_INTERVAL = 300  # 5 min — traffic updates ~5 min on HERE free tier
 
-# Baltic region bounding box: west,south,east,north
-DEFAULT_BBOX = "-180.0,-90.0,180.0,90.0"  # worldwide
+# Operational bbox: west,south,east,north — Baltic + Scandinavia + E.Europe + Middle East
+DEFAULT_BBOX = "4.0,20.0,65.0,73.0"
 
 
 def make_config() -> "zenoh.Config":
