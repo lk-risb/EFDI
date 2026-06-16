@@ -46,7 +46,7 @@ _CERT_DIR = os.environ.get("GOAT_CERT_DIR", HERE)
 # inside the compose stack. Falls back to the remote router for standalone use.
 _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", ROUTER)
 
-COT_STALE_S    = 90
+COT_STALE_S    = 20  # fast-refresh; 4× airplaneslive poll (5s)
 RECONNECT_S    = 5
 SEND_TIMEOUT_S = 10
 

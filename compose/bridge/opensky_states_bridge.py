@@ -35,7 +35,7 @@ _CERT_DIR = os.environ.get("GOAT_CERT_DIR", HERE)
 _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", ROUTER)
 
 OPENSKY_URL  = "https://opensky-network.org/api/states/all"
-POLL_INTERVAL = 10  # seconds — OpenSky free-tier minimum
+POLL_INTERVAL = 120  # seconds — free tier 429 guard
 
 # Operational focus: Baltic + Scandinavia + Eastern Europe + Middle East
 # Covers ~20°N–73°N, 4°E–65°E  (Lithuania centroid ≈ 55.17°N, 23.88°E)
