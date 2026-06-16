@@ -97,7 +97,7 @@ def run(args):
         )
 
     session = zenoh.open(make_config())
-    pub = session.declare_publisher("{}/air/fr24/tracks/v1".format(ORG))
+    pub = session.declare_publisher("{}/air/civ/tracks/v1".format(ORG))
     print("Bounds:", args.bounds, "  interval:", args.interval, "s", flush=True)
 
     try:

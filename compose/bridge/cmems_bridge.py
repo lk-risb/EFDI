@@ -122,7 +122,7 @@ def fetch_and_publish(pub_cache: dict, session, dataset_id: str, points: list):
             # Remove None values
             point = {k: v for k, v in point.items() if v is not None}
 
-            key = "{}/ocean/cmems/{}/v1".format(ORG, dataset_id)
+            key = "{}/sea/surface/{}/v1".format(ORG, dataset_id)
             if key not in pub_cache:
                 pub_cache[key] = session.declare_publisher(key)
             pub_cache[key].put(json.dumps(point).encode())

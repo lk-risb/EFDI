@@ -108,12 +108,7 @@ def run(args):
         raise SystemExit("N2YO_KEY not set — get a free key at https://www.n2yo.com/api/")
 
     session = zenoh.open(make_config())
-    publishers = {
-        sat_id: session.declare_publisher(
-            "{}/space/n2yo/{}/position/v1".format(ORG, sat_id)
-        )
-        for sat_id in args.sats
-    }
+    pub = session.declare_publisher("{}/space/tracks/v1".format(ORG))
     print("Satellites:", args.sats, flush=True)
     print("Observer: lat={} lon={} alt={}km".format(args.lat, args.lon, args.alt), flush=True)
 
@@ -127,7 +122,7 @@ def run(args):
                 if point is None:
                     continue
                 payload = json.dumps(point)
-                publishers[sat_id].put(payload.encode())
+                pub.put(payload.encode())
                 print("PUB n2yo/{} {} el={:.1f}° az={:.1f}°".format(
                     sat_id,
                     point.get("sat_name", ""),
@@ -139,8 +134,7 @@ def run(args):
     except KeyboardInterrupt:
         pass
     finally:
-        for pub in publishers.values():
-            pub.undeclare()
+        pub.undeclare()
         session.close()
 
 
