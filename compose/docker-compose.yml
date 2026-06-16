@@ -93,7 +93,7 @@ services:
     environment:
       - GOAT_CERT_DIR=/certs
       - AISSTREAM_KEY=${AISSTREAM_KEY:?set AISSTREAM_KEY in .env}
-    command: ["python3", "/app/ais_bridge.py"]
+    command: ["python3", "/app/aisstream_ws_bridge.py"]
     volumes:
       - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
     healthcheck:
@@ -110,7 +110,7 @@ services:
         condition: service_healthy
     environment:
       - GOAT_CERT_DIR=/certs
-    command: ["python3", "/app/openmeteo_bridge.py"]
+    command: ["python3", "/app/openmeteo_forecast_bridge.py"]
     volumes:
       - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
     healthcheck:
@@ -127,7 +127,7 @@ services:
         condition: service_healthy
     environment:
       - GOAT_CERT_DIR=/certs
-    command: ["python3", "/app/meteo_lt_bridge.py"]
+    command: ["python3", "/app/meteolt_forecast_bridge.py"]
     volumes:
       - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
     healthcheck:
@@ -144,7 +144,7 @@ services:
         condition: service_healthy
     environment:
       - GOAT_CERT_DIR=/certs
-    command: ["python3", "/app/yr_no_bridge.py"]
+    command: ["python3", "/app/yrno_forecast_bridge.py"]
     volumes:
       - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
     healthcheck:
@@ -162,7 +162,7 @@ services:
     environment:
       - GOAT_CERT_DIR=/certs
       - N2YO_KEY=${N2YO_KEY:?set N2YO_KEY in .env}
-    command: ["python3", "/app/n2yo_bridge.py"]
+    command: ["python3", "/app/n2yo_satpos_bridge.py"]
     volumes:
       - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
     healthcheck:
@@ -179,7 +179,7 @@ services:
         condition: service_healthy
     environment:
       - GOAT_CERT_DIR=/certs
-    command: ["python3", "/app/osm_bridge.py"]
+    command: ["python3", "/app/osm_overpass_bridge.py"]
     volumes:
       - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
     healthcheck:
@@ -197,7 +197,7 @@ services:
     environment:
       - GOAT_CERT_DIR=/certs
       - PURPLEAIR_KEY=${PURPLEAIR_KEY:-}
-    command: ["python3", "/app/purpleair_bridge.py"]
+    command: ["python3", "/app/purpleair_sensor_bridge.py"]
     volumes:
       - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
     healthcheck:
@@ -214,7 +214,7 @@ services:
         condition: service_healthy
     environment:
       - GOAT_CERT_DIR=/certs
-    command: ["python3", "/app/aprs_bridge.py"]
+    command: ["python3", "/app/aprsis_bridge.py"]
     volumes:
       - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
     healthcheck:
@@ -251,7 +251,7 @@ services:
     environment:
       - GOAT_CERT_DIR=/certs
       - ICAO_NOTAM_KEY=${ICAO_NOTAM_KEY:-}
-    command: ["python3", "/app/notam_bridge.py"]
+    command: ["python3", "/app/icao_notam_bridge.py"]
     volumes:
       - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
     healthcheck:
@@ -269,7 +269,7 @@ services:
     environment:
       - GOAT_CERT_DIR=/certs
       - FR24_KEY=${FR24_KEY:-}
-    command: ["python3", "/app/fr24_bridge.py"]
+    command: ["python3", "/app/fr24_live_bridge.py"]
     volumes:
       - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
     healthcheck:
@@ -287,7 +287,7 @@ services:
     environment:
       - GOAT_CERT_DIR=/certs
       - WINDY_KEY=${WINDY_KEY:-}
-    command: ["python3", "/app/windy_bridge.py"]
+    command: ["python3", "/app/windy_forecast_bridge.py"]
     volumes:
       - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
     healthcheck:
@@ -322,7 +322,7 @@ services:
         condition: service_healthy
     environment:
       - GOAT_CERT_DIR=/certs
-    command: ["python3", "/app/airplaneslive_bridge.py"]
+    command: ["python3", "/app/airplaneslive_adsb_bridge.py"]
     volumes:
       - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
     healthcheck:
