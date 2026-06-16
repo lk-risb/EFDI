@@ -47,11 +47,24 @@ RECONNECT_S    = 5
 SEND_TIMEOUT_S = 10
 
 _TOPIC_COT = {
-    "air/civ/tracks/v1":  "a-f-A",
-    "air/mil/tracks/v1":  "a-n-A",
-    "land/civ/tracks/v1": "a-f-G-U-C",
-    "sea/civ/tracks/v1":  "a-f-S-W-C",
-    "aprs/tracks/v1":     "a-u-G",
+    "air/civ/tracks/v1":   "a-f-A",
+    "air/mil/tracks/v1":   "a-n-A",
+    "land/civ/tracks/v1":  "a-f-G-U-C",
+    "sea/civ/tracks/v1":   "a-f-S-W-C",
+    "aprs/tracks/v1":      "a-u-G",
+    "radar/*/tracks/v1":   "a-u-A",   # ASTERIX CAT62 fused radar tracks
+}
+
+# iconsetpath refs for ATAK's built-in 2525B iconset.
+# If the iconset is not installed on the device ATAK silently falls back to
+# the CoT type's 2525B geometric symbol, so these are safe to always include.
+_COT_USERICON = {
+    "a-f-A":     "f7f71666-8b28-4b57-9fbb-e38e61d33b79/Aircraft/Fixed Wing/Military Fixed Wing.png",
+    "a-n-A":     "f7f71666-8b28-4b57-9fbb-e38e61d33b79/Aircraft/Fixed Wing/Unknown Fixed Wing.png",
+    "a-u-A":     "f7f71666-8b28-4b57-9fbb-e38e61d33b79/Aircraft/Fixed Wing/Unknown Fixed Wing.png",
+    "a-f-G-U-C": "f7f71666-8b28-4b57-9fbb-e38e61d33b79/Ground/Vehicle/Ground Vehicle.png",
+    "a-f-S-W-C": "f7f71666-8b28-4b57-9fbb-e38e61d33b79/Maritime/Surface/Surface Vessel.png",
+    "a-u-G":     "f7f71666-8b28-4b57-9fbb-e38e61d33b79/Ground/Unknown/Unknown Ground.png",
 }
 
 
@@ -90,7 +103,8 @@ def _uid(track: dict) -> str:
 
 
 def _callsign(track: dict, uid: str) -> str:
-    for key in ("callsign", "registration", "mmsi"):
+    # ship_name first (AIS), then tail number, then flight callsign, then MMSI
+    for key in ("ship_name", "registration", "callsign", "mmsi"):
         v = track.get(key)
         if v and str(v).strip():
             return str(v).strip()
@@ -103,6 +117,7 @@ def _hae(track: dict) -> float:
         ("alt_geom_ft", 0.3048),
         ("baro_alt_m",  1.0),
         ("alt_baro_ft", 0.3048),
+        ("alt_ft",      0.3048),   # FR24
         ("alt_m",       1.0),
     ):
         v = track.get(key)
@@ -112,15 +127,20 @@ def _hae(track: dict) -> float:
 
 
 def _speed_ms(track: dict) -> float:
-    if track.get("speed_ms") is not None:
-        return round(float(track["speed_ms"]), 2)
-    if track.get("ground_speed_kts") is not None:
-        return round(float(track["ground_speed_kts"]) * 0.514444, 2)
+    for key, scale in (
+        ("speed_ms",        1.0),
+        ("ground_speed_kts", 0.514444),  # airplaneslive
+        ("speed_kts",        0.514444),  # FR24
+        ("sog_ms",           1.0),       # AIS
+    ):
+        v = track.get(key)
+        if v is not None:
+            return round(float(v) * scale, 2)
     return 0.0
 
 
 def _course(track: dict) -> float:
-    for key in ("heading_deg", "track_deg"):
+    for key in ("heading_deg", "track_deg", "cog_deg"):  # cog_deg = AIS
         v = track.get(key)
         if v is not None:
             return round(float(v), 1)
@@ -155,6 +175,9 @@ def track_to_cot(track: dict, cot_type: str) -> str | None:
         "le":  "9999999.0",
     })
     detail = ET.SubElement(event, "detail")
+    icon_path = _COT_USERICON.get(cot_type)
+    if icon_path:
+        ET.SubElement(detail, "usericon", {"iconsetpath": icon_path})
     ET.SubElement(detail, "contact", {"callsign": cs})
     ET.SubElement(detail, "track", {
         "speed":  str(_speed_ms(track)),

@@ -45,5 +45,8 @@ for place in siauliai panevezys; do
   register "env/weather/forecast/v1/$place"
 done
 
+# ── RADAR (ASTERIX CAT62 fused system tracks) ────────────────────────────────
+register "radar/+/tracks/v1"          # + = radar host label (e.g. 192-0-2-1)
+
 # ── APRS catch-all (unclassified symbols) ────────────────────────────────────
 register "aprs/tracks/v1"
