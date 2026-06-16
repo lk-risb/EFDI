@@ -32,16 +32,17 @@ HERE   = os.path.dirname(os.path.abspath(__file__))
 # Defaults to HERE so the script works unchanged when run directly from the bundle.
 # In Docker set GOAT_CERT_DIR=/certs and mount the bundle certs there.
 _CERT_DIR = os.environ.get("GOAT_CERT_DIR", HERE)
+_ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", ROUTER)
 
 OPENSKY_URL  = "https://opensky-network.org/api/states/all"
 POLL_INTERVAL = 10  # seconds — OpenSky free-tier minimum
 
 # Operational focus: Baltic + Scandinavia + Eastern Europe + Middle East
 # Covers ~20°N–73°N, 4°E–65°E  (Lithuania centroid ≈ 55.17°N, 23.88°E)
-DEFAULT_LAMIN = 20.0
-DEFAULT_LAMAX = 73.0
-DEFAULT_LOMIN = 4.0
-DEFAULT_LOMAX = 65.0
+DEFAULT_LAMIN = 41.0   # Eastern NATO flank + Ukraine + ~1000 km buffer
+DEFAULT_LAMAX = 62.0
+DEFAULT_LOMIN = 14.0
+DEFAULT_LOMAX = 45.0
 
 # OpenSky states/all column indices
 _ICAO24       = 0
@@ -70,8 +71,9 @@ _POS_SOURCE_NAMES = {0: "ADS-B", 1: "ASTERIX", 2: "MLAT", 3: "FLARM"}
 def make_config() -> "zenoh.Config":
     conf = zenoh.Config()
     conf.insert_json5("mode", '"client"')
-    conf.insert_json5("connect/endpoints", json.dumps([ROUTER]))
-    conf.insert_json5("transport/link/tls", json.dumps({
+    conf.insert_json5("connect/endpoints", json.dumps([_ENDPOINT]))
+    if _ENDPOINT.startswith("tls"):
+        conf.insert_json5("transport/link/tls", json.dumps({
         "root_ca_certificate": os.path.join(_CERT_DIR, "efdi-ca-root.pem"),
         "connect_certificate": os.path.join(_CERT_DIR, ORG + "-cert.pem"),
         "connect_private_key": os.path.join(_CERT_DIR, ORG + "-key.pem"),

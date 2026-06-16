@@ -29,6 +29,7 @@ ROUTER = "tls/zenoh.efdi.netbird.efdi-backbone.net:7447"
 ORG    = "1851281db70ccc0409dad4ecfc874cf5"
 HERE   = os.path.dirname(os.path.abspath(__file__))
 _CERT_DIR = os.environ.get("GOAT_CERT_DIR", HERE)
+_ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", ROUTER)
 
 PURPLEAIR_URL = "https://api.purpleair.com/v1/sensors"
 POLL_INTERVAL = 300  # 5 min — sensors update ~2 min, free tier rate-friendly
@@ -59,8 +60,9 @@ def _pm25_to_aqi(pm25: float) -> tuple[int, str]:
 def make_config() -> "zenoh.Config":
     conf = zenoh.Config()
     conf.insert_json5("mode", '"client"')
-    conf.insert_json5("connect/endpoints", json.dumps([ROUTER]))
-    conf.insert_json5("transport/link/tls", json.dumps({
+    conf.insert_json5("connect/endpoints", json.dumps([_ENDPOINT]))
+    if _ENDPOINT.startswith("tls"):
+        conf.insert_json5("transport/link/tls", json.dumps({
         "root_ca_certificate": os.path.join(_CERT_DIR, "efdi-ca-root.pem"),
         "connect_certificate": os.path.join(_CERT_DIR, ORG + "-cert.pem"),
         "connect_private_key": os.path.join(_CERT_DIR, ORG + "-key.pem"),
