@@ -76,6 +76,7 @@ services:
     environment:
       # Scripts live in the image (from ./bridge/); certs come from the bundle.
       - GOAT_CERT_DIR=/certs
+      - ZENOH_LOCAL_ENDPOINT=${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}
     volumes:
       - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
     healthcheck:
@@ -92,6 +93,7 @@ services:
         condition: service_healthy
     environment:
       - GOAT_CERT_DIR=/certs
+      - ZENOH_LOCAL_ENDPOINT=${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}
       - AISSTREAM_KEY=${AISSTREAM_KEY:?set AISSTREAM_KEY in .env}
     command: ["python3", "/app/aisstream_ws_bridge.py"]
     volumes:
@@ -110,6 +112,7 @@ services:
         condition: service_healthy
     environment:
       - GOAT_CERT_DIR=/certs
+      - ZENOH_LOCAL_ENDPOINT=${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}
     command: ["python3", "/app/openmeteo_forecast_bridge.py"]
     volumes:
       - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
@@ -127,6 +130,7 @@ services:
         condition: service_healthy
     environment:
       - GOAT_CERT_DIR=/certs
+      - ZENOH_LOCAL_ENDPOINT=${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}
     command: ["python3", "/app/meteolt_forecast_bridge.py"]
     volumes:
       - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
@@ -144,6 +148,7 @@ services:
         condition: service_healthy
     environment:
       - GOAT_CERT_DIR=/certs
+      - ZENOH_LOCAL_ENDPOINT=${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}
     command: ["python3", "/app/yrno_forecast_bridge.py"]
     volumes:
       - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
@@ -161,6 +166,7 @@ services:
         condition: service_healthy
     environment:
       - GOAT_CERT_DIR=/certs
+      - ZENOH_LOCAL_ENDPOINT=${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}
       - N2YO_KEY=${N2YO_KEY:?set N2YO_KEY in .env}
     command: ["python3", "/app/n2yo_satpos_bridge.py"]
     volumes:
@@ -179,6 +185,7 @@ services:
         condition: service_healthy
     environment:
       - GOAT_CERT_DIR=/certs
+      - ZENOH_LOCAL_ENDPOINT=${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}
     command: ["python3", "/app/osm_overpass_bridge.py"]
     volumes:
       - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
@@ -196,6 +203,7 @@ services:
         condition: service_healthy
     environment:
       - GOAT_CERT_DIR=/certs
+      - ZENOH_LOCAL_ENDPOINT=${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}
       - PURPLEAIR_KEY=${PURPLEAIR_KEY:-}
     command: ["python3", "/app/purpleair_sensor_bridge.py"]
     volumes:
@@ -214,6 +222,7 @@ services:
         condition: service_healthy
     environment:
       - GOAT_CERT_DIR=/certs
+      - ZENOH_LOCAL_ENDPOINT=${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}
     command: ["python3", "/app/aprsis_bridge.py"]
     volumes:
       - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
@@ -232,6 +241,7 @@ services:
         condition: service_healthy
     environment:
       - GOAT_CERT_DIR=/certs
+      - ZENOH_LOCAL_ENDPOINT=${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}
       - COPERNICUSMARINE_SERVICE_USERNAME=${CMEMS_USER:-}
       - COPERNICUSMARINE_SERVICE_PASSWORD=${CMEMS_PASS:-}
     volumes:
@@ -250,6 +260,7 @@ services:
         condition: service_healthy
     environment:
       - GOAT_CERT_DIR=/certs
+      - ZENOH_LOCAL_ENDPOINT=${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}
       - ICAO_NOTAM_KEY=${ICAO_NOTAM_KEY:-}
     command: ["python3", "/app/icao_notam_bridge.py"]
     volumes:
@@ -268,6 +279,7 @@ services:
         condition: service_healthy
     environment:
       - GOAT_CERT_DIR=/certs
+      - ZENOH_LOCAL_ENDPOINT=${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}
       - FR24_KEY=${FR24_KEY:-}
     command: ["python3", "/app/fr24_live_bridge.py"]
     volumes:
@@ -286,6 +298,7 @@ services:
         condition: service_healthy
     environment:
       - GOAT_CERT_DIR=/certs
+      - ZENOH_LOCAL_ENDPOINT=${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}
       - WINDY_KEY=${WINDY_KEY:-}
     command: ["python3", "/app/windy_forecast_bridge.py"]
     volumes:
@@ -304,6 +317,7 @@ services:
         condition: service_healthy
     environment:
       - GOAT_CERT_DIR=/certs
+      - ZENOH_LOCAL_ENDPOINT=${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}
       - HERE_KEY=${HERE_KEY:-}
     command: ["python3", "/app/here_traffic_bridge.py"]
     volumes:
@@ -322,6 +336,7 @@ services:
         condition: service_healthy
     environment:
       - GOAT_CERT_DIR=/certs
+      - ZENOH_LOCAL_ENDPOINT=${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}
     command: ["python3", "/app/airplaneslive_adsb_bridge.py"]
     volumes:
       - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
@@ -339,6 +354,7 @@ services:
         condition: service_healthy
     environment:
       - GOAT_CERT_DIR=/certs
+      - ZENOH_LOCAL_ENDPOINT=${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}
     command: >
       python3 /app/cot_bridge.py
       --host 239.2.3.1
@@ -360,6 +376,7 @@ services:
         condition: service_healthy
     environment:
       - GOAT_CERT_DIR=/certs
+      - ZENOH_LOCAL_ENDPOINT=${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}
       - TAK_HOST=${TAK_HOST:-127.0.0.1}
       - TAK_PORT=${TAK_PORT:-8087}
     command: >
@@ -382,6 +399,7 @@ services:
         condition: service_healthy
     environment:
       - GOAT_CERT_DIR=/certs
+      - ZENOH_LOCAL_ENDPOINT=${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}
       - RADAR_HOST=${RADAR_HOST:-127.0.0.1}
       - RADAR_PORT=${RADAR_PORT:-30002}
     command: >
@@ -406,6 +424,7 @@ services:
         condition: service_healthy
     environment:
       - GOAT_CERT_DIR=/certs
+      - ZENOH_LOCAL_ENDPOINT=${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}
       - SITAWARE_URL=${SITAWARE_URL:-}
       - SITAWARE_USER=${SITAWARE_USER:-}
       - SITAWARE_PASS=${SITAWARE_PASS:-}
