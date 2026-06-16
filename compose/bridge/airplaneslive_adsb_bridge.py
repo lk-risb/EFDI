@@ -38,10 +38,17 @@ BASE_URL      = "https://api.airplanes.live/v2"
 POLL_INTERVAL = 30   # seconds — no strict rate limit, but be polite
 MIL_INTERVAL  = 60   # military endpoint — less time-critical
 
-# Center on Lithuania; 2000 nm radius covers Baltic → Middle East → Norway
-DEFAULT_LAT    = 55.17
-DEFAULT_LON    = 23.88
-DEFAULT_RADIUS = 2000  # nautical miles (~3700 km from Vilnius)
+# API hard-limits radius to 250 nm per query. Poll multiple centers to cover
+# the full operational area (20°N–73°N, 4°E–65°E).
+MAX_RADIUS = 250  # nm — enforced by airplanes.live API (403 above this)
+POLL_CENTERS = [
+    (57.0, 22.0),   # Baltic / Scandinavia
+    (52.0, 20.0),   # Central Europe / Poland
+    (48.0, 35.0),   # Ukraine / Black Sea
+    (41.0, 29.0),   # Turkey / Caucasus
+    (35.0, 38.0),   # Levant / Syria
+    (33.0, 45.0),   # Iraq / Iran
+]
 
 
 def make_config() -> "zenoh.Config":
@@ -73,6 +80,13 @@ def fetch(url: str) -> list:
         return []
 
 
+def _int(v, default: int = 0) -> int:
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return default
+
+
 def normalize(ac: dict, is_military: bool) -> dict | None:
     lat = ac.get("lat")
     lon = ac.get("lon")
@@ -87,8 +101,8 @@ def normalize(ac: dict, is_military: bool) -> dict | None:
         "aircraft_type":  (ac.get("t") or "").strip(),
         "lat_deg":        lat,
         "lon_deg":        lon,
-        "alt_baro_ft":    int(ac.get("alt_baro") or 0),
-        "alt_geom_ft":    int(ac.get("alt_geom") or 0),
+        "alt_baro_ft":    _int(ac.get("alt_baro")),
+        "alt_geom_ft":    _int(ac.get("alt_geom")),
         "ground_speed_kts": float(ac.get("gs") or 0),
         "track_deg":      float(ac.get("track") or 0),
         "squawk":         (ac.get("squawk") or ""),
@@ -101,30 +115,33 @@ def run(args):
     pub_tracks = session.declare_publisher("{}/air/civ/tracks/v1".format(ORG))
     pub_mil    = session.declare_publisher("{}/air/mil/tracks/v1".format(ORG))
 
-    url_region = "{}/point/{}/{}/{}".format(BASE_URL, args.lat, args.lon, args.radius)
-    url_mil    = "{}/mil".format(BASE_URL)
-
-    print("airplanes.live: center {}/{} radius={}nm  poll={}s".format(
-        args.lat, args.lon, args.radius, args.interval), flush=True)
+    url_mil = "{}/mil".format(BASE_URL)
+    print("airplanes.live: {} centers radius={}nm  poll={}s".format(
+        len(POLL_CENTERS), MAX_RADIUS, args.interval), flush=True)
 
     last_mil = 0.0
     try:
         while True:
-            aircraft = fetch(url_region)
+            seen = set()
             count = 0
-            for ac in aircraft:
-                track = normalize(ac, False)
-                if track is None:
-                    continue
-                pub_tracks.put(json.dumps(track).encode(), encoding=zenoh.Encoding.APPLICATION_JSON)
-                count += 1
-            print("airplaneslive tracks: {}".format(count), flush=True)
+            for lat, lon in POLL_CENTERS:
+                url = "{}/point/{}/{}/{}".format(BASE_URL, lat, lon, MAX_RADIUS)
+                for ac in fetch(url):
+                    icao = ac.get("hex", "").lower()
+                    if icao in seen:
+                        continue
+                    seen.add(icao)
+                    track = normalize(ac, False)
+                    if track is None:
+                        continue
+                    pub_tracks.put(json.dumps(track).encode(), encoding=zenoh.Encoding.APPLICATION_JSON)
+                    count += 1
+            print("airplaneslive tracks: {} ({} centers)".format(count, len(POLL_CENTERS)), flush=True)
 
             now = time.time()
             if now - last_mil >= MIL_INTERVAL:
-                mil = fetch(url_mil)
                 mil_count = 0
-                for ac in mil:
+                for ac in fetch(url_mil):
                     track = normalize(ac, True)
                     if track is None:
                         continue
@@ -144,12 +161,6 @@ def run(args):
 
 def main():
     ap = argparse.ArgumentParser(description="airplanes.live ADS-B → Zenoh bridge")
-    ap.add_argument("--lat",    type=float, default=DEFAULT_LAT,
-                    help="Center latitude for regional poll (default: {})".format(DEFAULT_LAT))
-    ap.add_argument("--lon",    type=float, default=DEFAULT_LON,
-                    help="Center longitude for regional poll (default: {})".format(DEFAULT_LON))
-    ap.add_argument("--radius", type=int,   default=DEFAULT_RADIUS,
-                    help="Radius in nautical miles (default: {})".format(DEFAULT_RADIUS))
     ap.add_argument("--interval", type=int, default=POLL_INTERVAL,
                     help="Poll interval in seconds (default: {})".format(POLL_INTERVAL))
     args = ap.parse_args()
