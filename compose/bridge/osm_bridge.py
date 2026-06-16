@@ -118,7 +118,7 @@ def run(args):
                     point = normalize(elem, feature_type)
                     if point is None:
                         continue
-                    pub.put(json.dumps(point).encode())
+                    pub.put(json.dumps(point).encode(), encoding=zenoh.Encoding.APPLICATION_JSON)
                     count += 1
                 print("PUB osm/{}: {} features".format(feature_type, count), flush=True)
                 time.sleep(5)  # polite gap between Overpass queries

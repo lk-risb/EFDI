@@ -103,7 +103,7 @@ def run(args):
     session = zenoh.open(make_config())
     publishers = {
         place: session.declare_publisher(
-            "{}/env/weather/{}/forecast/v1".format(ORG, place)
+            "{}/env/weather/forecast/v1/{}".format(ORG, place)
         )
         for place in args.places
     }
@@ -122,7 +122,7 @@ def run(args):
                     continue
                 point = normalize(raw, ts)
                 payload = json.dumps(point)
-                publishers[place].put(payload.encode())
+                publishers[place].put(payload.encode(), encoding=zenoh.Encoding.APPLICATION_JSON)
                 print("PUB meteo-lt/{} {} {}°C {}".format(
                     place,
                     ts.get("forecastTimeUtc", "")[:16],

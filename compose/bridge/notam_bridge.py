@@ -114,7 +114,7 @@ def run(args):
                 point = normalize(raw)
                 if point is None:
                     continue
-                pub.put(json.dumps(point).encode())
+                pub.put(json.dumps(point).encode(), encoding=zenoh.Encoding.APPLICATION_JSON)
                 seen.add(point["location"])
             print("Published {} NOTAMs across {} locations".format(
                 len(notams), len(seen)), flush=True)

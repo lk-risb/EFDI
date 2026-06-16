@@ -32,11 +32,11 @@ register "space/tracks/v1"          # N2YO satellite positions
 # ── ENV (environmental conditions) ───────────────────────────────────────────
 register "env/air_quality/v1"       # PurpleAir ground-based PM2.5/PM10 sensors
 for place in vilnius kaunas klaipeda riga tallinn kaliningrad; do
-  register "env/weather/$place/current/v1"    # Open-Meteo current conditions
-  register "env/weather/$place/forecast/v1"   # meteo.lt + yr.no + Windy forecasts
+  register "env/weather/current/v1/$place"    # Open-Meteo current conditions
+  register "env/weather/forecast/v1/$place"   # meteo.lt + yr.no + Windy forecasts
 done
 for place in siauliai panevezys; do
-  register "env/weather/$place/forecast/v1"
+  register "env/weather/forecast/v1/$place"
 done
 
 # ── APRS catch-all (unclassified symbols) ────────────────────────────────────

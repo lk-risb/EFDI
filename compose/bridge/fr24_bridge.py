@@ -108,7 +108,7 @@ def run(args):
                 track = normalize(f)
                 if track is None:
                     continue
-                pub.put(json.dumps(track).encode())
+                pub.put(json.dumps(track).encode(), encoding=zenoh.Encoding.APPLICATION_JSON)
                 published += 1
             print("FR24 poll: {} flights published".format(published), flush=True)
             time.sleep(args.interval)

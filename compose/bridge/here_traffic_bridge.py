@@ -114,7 +114,7 @@ def run(args):
                 point = normalize(result)
                 if point is None:
                     continue
-                pub.put(json.dumps(point).encode())
+                pub.put(json.dumps(point).encode(), encoding=zenoh.Encoding.APPLICATION_JSON)
                 count += 1
             print("HERE Traffic: {} segments published".format(count), flush=True)
             time.sleep(args.interval)

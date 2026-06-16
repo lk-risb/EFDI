@@ -114,7 +114,7 @@ def run(args):
                 track = normalize(ac, False)
                 if track is None:
                     continue
-                pub_tracks.put(json.dumps(track).encode())
+                pub_tracks.put(json.dumps(track).encode(), encoding=zenoh.Encoding.APPLICATION_JSON)
                 count += 1
             print("airplaneslive tracks: {}".format(count), flush=True)
 
@@ -126,7 +126,7 @@ def run(args):
                     track = normalize(ac, True)
                     if track is None:
                         continue
-                    pub_mil.put(json.dumps(track).encode())
+                    pub_mil.put(json.dumps(track).encode(), encoding=zenoh.Encoding.APPLICATION_JSON)
                     mil_count += 1
                 print("airplaneslive mil: {}".format(mil_count), flush=True)
                 last_mil = now

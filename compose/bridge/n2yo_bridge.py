@@ -122,7 +122,7 @@ def run(args):
                 if point is None:
                     continue
                 payload = json.dumps(point)
-                pub.put(payload.encode())
+                pub.put(payload.encode(), encoding=zenoh.Encoding.APPLICATION_JSON)
                 print("PUB n2yo/{} {} el={:.1f}° az={:.1f}°".format(
                     sat_id,
                     point.get("sat_name", ""),
