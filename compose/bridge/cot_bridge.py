@@ -46,7 +46,8 @@ _CERT_DIR = os.environ.get("GOAT_CERT_DIR", HERE)
 # inside the compose stack. Falls back to the remote router for standalone use.
 _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", ROUTER)
 
-COT_STALE_S    = 20  # fast-refresh; 4× airplaneslive poll (5s)
+COT_STALE_S    = 20      # fast-refresh; 4× airplaneslive poll (5s)
+GEO_STALE_S    = 86400  # 24 h for fixed infrastructure (OSM features)
 RECONNECT_S    = 5
 SEND_TIMEOUT_S = 10
 
@@ -55,8 +56,33 @@ _TOPIC_COT = {
     "air/mil/tracks/v1":   "a-n-A",
     "land/civ/tracks/v1":  "a-f-G-U-C",
     "sea/civ/tracks/v1":   "a-f-S-W-C",
-    "aprs/tracks/v1":      "a-u-G",
-    "radar/*/tracks/v1":   "a-u-A",   # ASTERIX CAT62 fused radar tracks
+    "aprs/tracks/v1":      None,         # dynamic per APRS symbol — see _aprs_cot_type()
+    "radar/*/tracks/v1":   "a-u-A",      # ASTERIX CAT62 fused radar tracks
+}
+
+# APRS symbol table+code → CoT type.  Fixed infrastructure → neutral installation.
+# Aircraft/balloon symbols → unknown air.  Everything else → unknown ground.
+_APRS_SYM_COT = {
+    "/-":  "a-n-G-I",      # house / home
+    "/#":  "a-n-G-E-V-R",  # digipeater relay
+    "/&":  "a-n-G-E-V-R",  # iGate relay
+    "/_":  "a-n-G-I",      # weather station
+    "/r":  "a-n-G-I",      # antenna / tower
+    "/^":  "a-u-A",        # aircraft
+    "/O":  "a-u-A",        # balloon
+    "\\_": "a-n-G-I",      # alternate-table weather
+    "\\#": "a-n-G-E-V-R",  # alternate-table digipeater
+}
+
+def _aprs_cot_type(track: dict) -> str:
+    return _APRS_SYM_COT.get(track.get("symbol", ""), "a-u-G")
+
+# OSM feature_type → CoT type for fixed infrastructure
+_OSM_COT = {
+    "aerodrome": "a-f-G-I-B-A",  # friendly ground installation base aerodrome
+    "port":      "a-f-G-I-B-O",  # friendly ground installation base offloading
+    "military":  "a-f-G-I-B-M",  # friendly ground installation base military
+    "station":   "a-n-G-I",      # neutral ground installation (railway)
 }
 
 # ---------------------------------------------------------------------------
@@ -143,7 +169,7 @@ def _ts(ts: float) -> str:
 
 def _uid(track: dict) -> str:
     src = track.get("_src", "efdi")
-    for key in ("icao24", "mmsi", "sensor_id"):
+    for key in ("icao24", "mmsi", "sensor_id", "osm_id"):
         v = track.get(key)
         if v:
             return "EFDI-{}-{}".format(src, str(v).upper())
@@ -154,8 +180,8 @@ def _uid(track: dict) -> str:
 
 
 def _callsign(track: dict, uid: str) -> str:
-    # ship_name first (AIS), then tail number, then flight callsign, then MMSI
-    for key in ("ship_name", "registration", "callsign", "mmsi"):
+    # OSM name first, then ship_name (AIS), tail number, flight callsign, MMSI
+    for key in ("name", "ship_name", "registration", "callsign", "mmsi"):
         v = track.get(key)
         if v and str(v).strip():
             return str(v).strip()
@@ -198,14 +224,14 @@ def _course(track: dict) -> float:
     return 0.0
 
 
-def track_to_cot(track: dict, cot_type: str) -> str | None:
+def track_to_cot(track: dict, cot_type: str, stale_s: float = COT_STALE_S) -> str | None:
     lat = track.get("lat_deg")
     lon = track.get("lon_deg")
     if lat is None or lon is None:
         return None
 
     now   = float(track.get("_ts", time.time()))
-    stale = now + COT_STALE_S
+    stale = now + stale_s
     uid   = _uid(track)
     cs    = _callsign(track, uid)
 
@@ -319,19 +345,38 @@ class UdpSender:
 # Zenoh → CoT callbacks
 # ---------------------------------------------------------------------------
 
-def make_handler(cot_type: str, sender, verbose: bool):
+def make_handler(cot_type_or_fn, sender, verbose: bool, stale_s: float = COT_STALE_S):
     def handler(sample):
         try:
             track = json.loads(bytes(sample.payload).decode())
         except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
             return
-        xml = track_to_cot(track, cot_type)
+        cot_type = cot_type_or_fn(track) if callable(cot_type_or_fn) else cot_type_or_fn
+        xml = track_to_cot(track, cot_type, stale_s=stale_s)
         if xml is None:
             return
         sender.send(xml)
         if verbose:
             cs = track.get("callsign") or track.get("registration") or track.get("mmsi") or "?"
             print("CoT {} {}".format(cot_type, cs), flush=True)
+    return handler
+
+
+def make_geo_handler(sender, verbose: bool):
+    """Handler for OSM land/geo/v1 — maps feature_type to CoT type with 24h stale."""
+    def handler(sample):
+        try:
+            track = json.loads(bytes(sample.payload).decode())
+        except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
+            return
+        feature_type = track.get("feature_type", "")
+        cot_type = _OSM_COT.get(feature_type, "a-n-G-I")
+        xml = track_to_cot(track, cot_type, stale_s=GEO_STALE_S)
+        if xml is None:
+            return
+        sender.send(xml)
+        if verbose:
+            print("CoT {} {} {}".format(cot_type, feature_type, track.get("name", "?")), flush=True)
     return handler
 
 
@@ -351,8 +396,18 @@ def run(args):
     subs = []
     for suffix, cot_type in _TOPIC_COT.items():
         key = "{}/{}".format(ORG, suffix)
-        subs.append(session.declare_subscriber(key, make_handler(cot_type, sender, args.verbose)))
-        print("SUB {} → {}".format(key, cot_type), flush=True)
+        if cot_type is None:
+            # APRS: dynamic CoT type from symbol field
+            subs.append(session.declare_subscriber(key, make_handler(_aprs_cot_type, sender, args.verbose)))
+            print("SUB {} → [dynamic APRS symbol]".format(key), flush=True)
+        else:
+            subs.append(session.declare_subscriber(key, make_handler(cot_type, sender, args.verbose)))
+            print("SUB {} → {}".format(key, cot_type), flush=True)
+
+    # OSM geo features (aerodromes, ports, military bases, railway stations) — 24h stale
+    geo_key = "{}/land/geo/v1".format(ORG)
+    subs.append(session.declare_subscriber(geo_key, make_geo_handler(sender, args.verbose)))
+    print("SUB {} → [OSM geo features, 24h stale]".format(geo_key), flush=True)
 
     print("Bridge running — Ctrl-C to stop", flush=True)
     try:
