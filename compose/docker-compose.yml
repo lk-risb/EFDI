@@ -327,3 +327,56 @@ services:
       - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
     healthcheck:
       disable: true
+
+  atak-cot-bridge:
+    build:
+      context: ./bridge
+    container_name: goat-moon-atak-cot-bridge
+    network_mode: host
+    restart: unless-stopped
+    depends_on:
+      zenoh-router:
+        condition: service_healthy
+    environment:
+      - GOAT_CERT_DIR=/certs
+      - TAK_HOST=${TAK_HOST:?set TAK_HOST to your FreeTAKServer Tailscale IP in .env}
+      - TAK_PORT=${TAK_PORT:-8087}
+    command: >
+      python3 /app/cot_bridge.py
+      --host ${TAK_HOST:-127.0.0.1}
+      --port ${TAK_PORT:-8087}
+    volumes:
+      - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
+    healthcheck:
+      disable: true
+
+  sitaware-nvg-bridge:
+    build:
+      context: ./bridge
+    container_name: goat-moon-sitaware-nvg-bridge
+    network_mode: host
+    restart: unless-stopped
+    depends_on:
+      zenoh-router:
+        condition: service_healthy
+    environment:
+      - GOAT_CERT_DIR=/certs
+      - SITAWARE_URL=${SITAWARE_URL:-}
+      - SITAWARE_USER=${SITAWARE_USER:-}
+      - SITAWARE_PASS=${SITAWARE_PASS:-}
+      - SITAWARE_SOURCE=${SITAWARE_SOURCE:-efdi-live}
+    command: >
+      python3 /app/nvg_bridge.py
+      --url ${SITAWARE_URL:-}
+      --user ${SITAWARE_USER:-}
+      --password ${SITAWARE_PASS:-}
+      --source ${SITAWARE_SOURCE:-efdi-live}
+    volumes:
+      - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
+    healthcheck:
+      disable: true
+    profiles:
+      - sitaware
+
+volumes:
+  fts-data:
