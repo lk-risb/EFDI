@@ -37,10 +37,10 @@ BASE_URL      = "https://api.airplanes.live/v2"
 POLL_INTERVAL = 30   # seconds — no strict rate limit, but be polite
 MIL_INTERVAL  = 60   # military endpoint — less time-critical
 
-# Baltic region center + radius covering ~53-66°N, 9-32°E
-DEFAULT_LAT    = 58.5
-DEFAULT_LON    = 20.5
-DEFAULT_RADIUS = 9999  # nautical miles — effectively worldwide
+# Center on Lithuania; 2000 nm radius covers Baltic → Middle East → Norway
+DEFAULT_LAT    = 55.17
+DEFAULT_LON    = 23.88
+DEFAULT_RADIUS = 2000  # nautical miles (~3700 km from Vilnius)
 
 
 def make_config() -> "zenoh.Config":

@@ -36,11 +36,12 @@ _CERT_DIR = os.environ.get("GOAT_CERT_DIR", HERE)
 OPENSKY_URL  = "https://opensky-network.org/api/states/all"
 POLL_INTERVAL = 10  # seconds — OpenSky free-tier minimum
 
-# Baltic / Lithuania + neighbours default bounding box
-DEFAULT_LAMIN = -90.0   # worldwide
-DEFAULT_LAMAX = 90.0
-DEFAULT_LOMIN = -180.0
-DEFAULT_LOMAX = 180.0
+# Operational focus: Baltic + Scandinavia + Eastern Europe + Middle East
+# Covers ~20°N–73°N, 4°E–65°E  (Lithuania centroid ≈ 55.17°N, 23.88°E)
+DEFAULT_LAMIN = 20.0
+DEFAULT_LAMAX = 73.0
+DEFAULT_LOMIN = 4.0
+DEFAULT_LOMAX = 65.0
 
 # OpenSky states/all column indices
 _ICAO24       = 0

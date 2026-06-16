@@ -33,8 +33,8 @@ _CERT_DIR = os.environ.get("GOAT_CERT_DIR", HERE)
 PURPLEAIR_URL = "https://api.purpleair.com/v1/sensors"
 POLL_INTERVAL = 300  # 5 min — sensors update ~2 min, free tier rate-friendly
 
-# Baltic bounding box  NW lat, NW lon, SE lat, SE lon (PurpleAir uses nwlat/nwlng/selat/selng)
-DEFAULT_BBOX = {"nwlat": 90.0, "nwlng": -180.0, "selat": -90.0, "selng": 180.0}  # worldwide
+# Operational bbox: Baltic + Scandinavia + E.Europe + Middle East
+DEFAULT_BBOX = {"nwlat": 73.0, "nwlng": 4.0, "selat": 20.0, "selng": 65.0}
 
 _FIELDS = "sensor_index,name,latitude,longitude,pm1.0,pm2.5,pm10.0,pm2.5_cf_1,temperature,humidity,pressure,confidence"
 
