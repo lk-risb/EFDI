@@ -35,7 +35,7 @@ FR24_BASE     = "https://fr24api.flightradar24.com/api/live"
 POLL_INTERVAL = 15   # seconds — paid key, fair-use
 
 # Operational bbox: south,north,west,east — Baltic + Scandinavia + E.Europe + Middle East
-DEFAULT_BOUNDS = "41,62,14,45"
+DEFAULT_BOUNDS = "41,62,10,50"
 
 
 def make_config() -> "zenoh.Config":

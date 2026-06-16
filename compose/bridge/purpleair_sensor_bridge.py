@@ -35,7 +35,7 @@ PURPLEAIR_URL = "https://api.purpleair.com/v1/sensors"
 POLL_INTERVAL = 300  # 5 min — sensors update ~2 min, free tier rate-friendly
 
 # Operational bbox: Baltic + Scandinavia + E.Europe + Middle East
-DEFAULT_BBOX = {"nwlat": 73.0, "nwlng": 4.0, "selat": 20.0, "selng": 65.0}
+DEFAULT_BBOX = {"nwlat": 62.0, "nwlng": 14.0, "selat": 41.0, "selng": 45.0}
 
 _FIELDS = "sensor_index,name,latitude,longitude,pm1.0,pm2.5,pm10.0,pm2.5_cf_1,temperature,humidity,pressure,confidence"
 
