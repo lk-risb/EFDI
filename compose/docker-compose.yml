@@ -203,6 +203,23 @@ services:
     healthcheck:
       disable: true
 
+  aprs-bridge:
+    build:
+      context: ./bridge
+    container_name: goat-moon-aprs-bridge
+    network_mode: host
+    restart: unless-stopped
+    depends_on:
+      zenoh-router:
+        condition: service_healthy
+    environment:
+      - GOAT_CERT_DIR=/certs
+    command: ["python3", "/app/aprs_bridge.py"]
+    volumes:
+      - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
+    healthcheck:
+      disable: true
+
   cmems-bridge:
     build:
       context: ./bridge
