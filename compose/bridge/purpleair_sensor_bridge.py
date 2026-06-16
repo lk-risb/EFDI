@@ -7,7 +7,7 @@ bounding box and publishes each sensor reading as an AirQualityReading JSON.
 Free read API key: https://develop.purpleair.com/ (register, instant approval)
 Rate limit: 100 requests/minute on free tier.
 
-Zenoh topic:  <ORG>/air/purpleair/<sensor-id>/v1
+Zenoh topic:  <ORG>/env/air_quality/v1
 Proto schema: air_quality.proto  (message AirQualityReading, package ltu.cis.tracks.v1)
 
 Run:
