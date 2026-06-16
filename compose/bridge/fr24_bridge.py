@@ -33,8 +33,8 @@ _CERT_DIR = os.environ.get("GOAT_CERT_DIR", HERE)
 FR24_BASE     = "https://fr24api.flightradar24.com/api/live"
 POLL_INTERVAL = 60  # seconds — free tier is credit-limited, don't poll faster
 
-# Baltic + surrounding region: south,north,west,east (FR24 uses lat_min,lat_max,lon_min,lon_max)
-DEFAULT_BOUNDS = "-90,90,-180,180"  # worldwide
+# Operational bbox: south,north,west,east — Baltic + Scandinavia + E.Europe + Middle East
+DEFAULT_BOUNDS = "20,73,4,65"
 
 
 def make_config() -> "zenoh.Config":

@@ -39,9 +39,9 @@ _CERT_DIR = os.environ.get("GOAT_CERT_DIR", HERE)
 AISSTREAM_HOST = "stream.aisstream.io"
 AISSTREAM_PATH = "/v0/stream"
 
-# Worldwide coverage — single bbox spanning all latitudes and longitudes.
-# Pass --bbox to restrict to a region, e.g. [[53.5,9.0],[66.0,30.0]] for Baltic.
-DEFAULT_BBOX = [[-90, -180], [90, 180]]
+# Two-polygon coverage: Baltic/North Sea + Mediterranean/Middle East
+# aisstream accepts a list of bounding boxes  [[sw_lat,sw_lon],[ne_lat,ne_lon]]
+DEFAULT_BBOX = [[[44, 4], [73, 55]], [[20, 25], [42, 65]]]
 
 RECONNECT_DELAY_S = 10.0
 
@@ -195,7 +195,7 @@ def run(args):
 
     subscribe_msg = json.dumps({
         "APIKey": args.apikey,
-        "BoundingBoxes": [args.bbox],
+        "BoundingBoxes": args.bbox,
         "FilterMessageTypes": [
             "PositionReport",
             "ExtendedClassBPositionReport",

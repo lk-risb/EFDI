@@ -31,11 +31,28 @@ OPENMETEO_URL = "https://api.open-meteo.com/v1/forecast"
 POLL_INTERVAL = 900  # 15 min — Open-Meteo current updates every 15 min
 
 DEFAULT_LOCATIONS = [
-    {"name": "vilnius",  "lat": 54.6872, "lon": 25.2797},
-    {"name": "kaunas",   "lat": 54.8982, "lon": 23.9045},
-    {"name": "klaipeda", "lat": 55.7127, "lon": 21.1351},
-    {"name": "riga",     "lat": 56.9460, "lon": 24.1059},
-    {"name": "tallinn",  "lat": 59.4370, "lon": 24.7536},
+    # Baltic states
+    {"name": "vilnius",    "lat": 54.6872, "lon": 25.2797},
+    {"name": "kaunas",     "lat": 54.8982, "lon": 23.9045},
+    {"name": "klaipeda",   "lat": 55.7127, "lon": 21.1351},
+    {"name": "riga",       "lat": 56.9460, "lon": 24.1059},
+    {"name": "tallinn",    "lat": 59.4370, "lon": 24.7536},
+    {"name": "kaliningrad","lat": 54.7104, "lon": 20.4522},
+    # Scandinavia
+    {"name": "helsinki",   "lat": 60.1699, "lon": 24.9384},
+    {"name": "stockholm",  "lat": 59.3293, "lon": 18.0686},
+    {"name": "oslo",       "lat": 59.9139, "lon": 10.7522},
+    # Eastern Europe / conflict zone
+    {"name": "warsaw",     "lat": 52.2297, "lon": 21.0122},
+    {"name": "kyiv",       "lat": 50.4501, "lon": 30.5234},
+    {"name": "minsk",      "lat": 53.9045, "lon": 27.5615},
+    {"name": "moscow",     "lat": 55.7558, "lon": 37.6173},
+    # Middle East / conflict zone
+    {"name": "istanbul",   "lat": 41.0082, "lon": 28.9784},
+    {"name": "beirut",     "lat": 33.8886, "lon": 35.4955},
+    {"name": "tel_aviv",   "lat": 32.0853, "lon": 34.7818},
+    {"name": "baghdad",    "lat": 33.3152, "lon": 44.3661},
+    {"name": "tehran",     "lat": 35.6892, "lon": 51.3890},
 ]
 
 _CURRENT_VARS = ",".join([
