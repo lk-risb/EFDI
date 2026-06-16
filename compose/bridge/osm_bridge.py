@@ -33,7 +33,7 @@ OVERPASS_URL  = "https://overpass-api.de/api/interpreter"
 POLL_INTERVAL = 43200  # 12 h — OSM features don't change often
 
 # Baltic + surrounding region bounding box: S, W, N, E
-BBOX = (53.5, 9.0, 66.0, 32.0)
+BBOX = (-90.0, -180.0, 90.0, 180.0)  # worldwide — Overpass may timeout on very large queries
 
 # Features to query: (feature_type, OSM tag key, OSM tag value)
 FEATURE_QUERIES = [

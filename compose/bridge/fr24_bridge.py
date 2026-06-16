@@ -34,7 +34,7 @@ FR24_BASE     = "https://fr24api.flightradar24.com/api/live"
 POLL_INTERVAL = 60  # seconds — free tier is credit-limited, don't poll faster
 
 # Baltic + surrounding region: south,north,west,east (FR24 uses lat_min,lat_max,lon_min,lon_max)
-DEFAULT_BOUNDS = "53.5,66.0,9.0,32.0"
+DEFAULT_BOUNDS = "-90,90,-180,180"  # worldwide
 
 
 def make_config() -> "zenoh.Config":

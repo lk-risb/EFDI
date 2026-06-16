@@ -40,7 +40,7 @@ MIL_INTERVAL  = 60   # military endpoint — less time-critical
 # Baltic region center + radius covering ~53-66°N, 9-32°E
 DEFAULT_LAT    = 58.5
 DEFAULT_LON    = 20.5
-DEFAULT_RADIUS = 500  # nautical miles
+DEFAULT_RADIUS = 9999  # nautical miles — effectively worldwide
 
 
 def make_config() -> "zenoh.Config":
