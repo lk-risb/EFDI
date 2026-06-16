@@ -25,14 +25,15 @@ Run:
 """
 
 import argparse
+import base64
 import json
 import os
-import queue
 import socket
 import struct
 import threading
 import time
 import xml.etree.ElementTree as ET
+import zlib
 from datetime import datetime, timezone
 
 import zenoh
@@ -55,16 +56,62 @@ _TOPIC_COT = {
     "radar/*/tracks/v1":   "a-u-A",   # ASTERIX CAT62 fused radar tracks
 }
 
-# iconsetpath refs for ATAK's built-in 2525B iconset.
-# If the iconset is not installed on the device ATAK silently falls back to
-# the CoT type's 2525B geometric symbol, so these are safe to always include.
-_COT_USERICON = {
-    "a-f-A":     "f7f71666-8b28-4b57-9fbb-e38e61d33b79/Aircraft/Fixed Wing/Military Fixed Wing.png",
-    "a-n-A":     "f7f71666-8b28-4b57-9fbb-e38e61d33b79/Aircraft/Fixed Wing/Unknown Fixed Wing.png",
-    "a-u-A":     "f7f71666-8b28-4b57-9fbb-e38e61d33b79/Aircraft/Fixed Wing/Unknown Fixed Wing.png",
-    "a-f-G-U-C": "f7f71666-8b28-4b57-9fbb-e38e61d33b79/Ground/Vehicle/Ground Vehicle.png",
-    "a-f-S-W-C": "f7f71666-8b28-4b57-9fbb-e38e61d33b79/Maritime/Surface/Surface Vessel.png",
-    "a-u-G":     "f7f71666-8b28-4b57-9fbb-e38e61d33b79/Ground/Unknown/Unknown Ground.png",
+# ---------------------------------------------------------------------------
+# Embedded icon generator — stdlib only, no Pillow needed.
+# Icons are pre-rendered at import time and sent as b64image in CoT <usericon>.
+# ATAK CIV 5.x honours b64image without needing any installed iconset.
+# ---------------------------------------------------------------------------
+
+def _icon_png_b64(shape: str, rgb: tuple, size: int = 32) -> str:
+    W = H = size
+    cx = cy = W / 2.0
+    F = rgb + (255,)
+    T = (0, 0, 0, 0)
+
+    def _px(x, y):
+        nx = (x - cx) / W
+        ny = (y - cy) / H   # positive = down
+        if shape == "aircraft":
+            body  = (nx / 0.07) ** 2 + (ny / 0.45) ** 2 <= 1.0
+            wings = abs(ny + 0.05) <= 0.13 and abs(nx) <= 0.46
+            tail  = abs(ny - 0.30) <= 0.08 and abs(nx) <= 0.22
+            return F if (body or wings or tail) else T
+        if shape == "ship":
+            return F if (nx / 0.28) ** 2 + (ny / 0.46) ** 2 <= 1.0 else T
+        if shape == "vehicle":
+            return F if abs(nx / 0.30) ** 4 + abs(ny / 0.22) ** 4 <= 1.0 else T
+        return F if nx * nx + ny * ny <= 0.18 else T  # circle (unknown)
+
+    pixels = [_px(x, y) for y in range(H) for x in range(W)]
+
+    def _chunk(tag: bytes, data: bytes) -> bytes:
+        crc = zlib.crc32(tag + data) & 0xFFFFFFFF
+        return struct.pack(">I", len(data)) + tag + data + struct.pack(">I", crc)
+
+    raw = b"".join(
+        b"\x00" + b"".join(bytes(pixels[y * W + x]) for x in range(W))
+        for y in range(H)
+    )
+    png = (
+        b"\x89PNG\r\n\x1a\n"
+        + _chunk(b"IHDR", struct.pack(">IIBBBBB", W, H, 8, 6, 0, 0, 0))
+        + _chunk(b"IDAT", zlib.compress(raw, 9))
+        + _chunk(b"IEND", b"")
+    )
+    return base64.b64encode(png).decode()
+
+
+_BLUE   = (0, 116, 217)   # 2525B friendly blue
+_GREEN  = (0, 164, 0)     # 2525B neutral green
+_YELLOW = (255, 215, 0)   # 2525B unknown yellow
+
+_COT_ICON_B64 = {
+    "a-f-A":     _icon_png_b64("aircraft", _BLUE),
+    "a-n-A":     _icon_png_b64("aircraft", _GREEN),
+    "a-u-A":     _icon_png_b64("aircraft", _YELLOW),
+    "a-f-G-U-C": _icon_png_b64("vehicle",  _BLUE),
+    "a-f-S-W-C": _icon_png_b64("ship",     _BLUE),
+    "a-u-G":     _icon_png_b64("circle",   _YELLOW),
 }
 
 
@@ -175,9 +222,9 @@ def track_to_cot(track: dict, cot_type: str) -> str | None:
         "le":  "9999999.0",
     })
     detail = ET.SubElement(event, "detail")
-    icon_path = _COT_USERICON.get(cot_type)
-    if icon_path:
-        ET.SubElement(detail, "usericon", {"iconsetpath": icon_path})
+    icon_b64 = _COT_ICON_B64.get(cot_type)
+    if icon_b64:
+        ET.SubElement(detail, "usericon", {"b64image": icon_b64})
     ET.SubElement(detail, "contact", {"callsign": cs})
     ET.SubElement(detail, "track", {
         "speed":  str(_speed_ms(track)),
