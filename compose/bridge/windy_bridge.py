@@ -146,7 +146,7 @@ def run(args):
     session = zenoh.open(make_config())
     publishers = {
         loc["name"]: session.declare_publisher(
-            "{}/env/weather/{}/forecast/v1".format(ORG, loc["name"])
+            "{}/env/weather/forecast/v1/{}".format(ORG, loc["name"])
         )
         for loc in args.locations
     }
@@ -163,7 +163,7 @@ def run(args):
                 count = 0
                 for idx, ts_ms in enumerate(timestamps[:args.hours]):
                     point = normalize_step(loc, raw, args.model, idx, ts_ms)
-                    pub.put(json.dumps(point).encode())
+                    pub.put(json.dumps(point).encode(), encoding=zenoh.Encoding.APPLICATION_JSON)
                     count += 1
                 print("PUB windy/{} {} steps ({})".format(
                     loc["name"], count,

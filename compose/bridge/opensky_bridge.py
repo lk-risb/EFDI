@@ -181,7 +181,7 @@ def run(args):
                 if track is None:
                     continue
                 payload = json.dumps(track)
-                pub.put(payload.encode())
+                pub.put(payload.encode(), encoding=zenoh.Encoding.APPLICATION_JSON)
                 print("PUB", payload[:140], flush=True)
                 published += 1
 
