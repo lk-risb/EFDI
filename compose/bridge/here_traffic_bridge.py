@@ -33,7 +33,7 @@ HERE_FLOW_URL = "https://data.traffic.hereapi.com/v7/flow"
 POLL_INTERVAL = 300  # 5 min — traffic updates ~5 min on HERE free tier
 
 # Operational bbox: west,south,east,north — Baltic + Scandinavia + E.Europe + Middle East
-DEFAULT_BBOX = "4.0,20.0,65.0,73.0"
+DEFAULT_BBOX = "14.0,41.0,45.0,62.0"
 
 
 def make_config() -> "zenoh.Config":
