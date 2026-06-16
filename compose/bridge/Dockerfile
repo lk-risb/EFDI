@@ -7,5 +7,6 @@ COPY opensky_bridge.py ais_bridge.py aprs_bridge.py cat62_bridge.py \
      openmeteo_bridge.py meteo_lt_bridge.py yr_no_bridge.py \
      n2yo_bridge.py osm_bridge.py purpleair_bridge.py \
      notam_bridge.py fr24_bridge.py windy_bridge.py \
-     airplaneslive_bridge.py here_traffic_bridge.py ./
+     airplaneslive_bridge.py here_traffic_bridge.py \
+     cot_bridge.py nvg_bridge.py ./
 CMD ["python3", "/app/opensky_bridge.py"]
