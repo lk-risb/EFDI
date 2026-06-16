@@ -35,8 +35,8 @@ _CERT_DIR = os.environ.get("GOAT_CERT_DIR", HERE)
 _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", ROUTER)
 
 BASE_URL      = "https://api.airplanes.live/v2"
-POLL_INTERVAL = 30   # seconds — no strict rate limit, but be polite
-MIL_INTERVAL  = 60   # military endpoint — less time-critical
+POLL_INTERVAL = 5    # seconds — no documented rate limit
+MIL_INTERVAL  = 30   # military endpoint
 
 # API hard-limits radius to 250 nm per query. Poll multiple centers to cover
 # the full operational area (20°N–73°N, 4°E–65°E).

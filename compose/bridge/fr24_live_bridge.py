@@ -32,7 +32,7 @@ _CERT_DIR = os.environ.get("GOAT_CERT_DIR", HERE)
 _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", ROUTER)
 
 FR24_BASE     = "https://fr24api.flightradar24.com/api/live"
-POLL_INTERVAL = 60  # seconds — free tier is credit-limited, don't poll faster
+POLL_INTERVAL = 15   # seconds — paid key, fair-use
 
 # Operational bbox: south,north,west,east — Baltic + Scandinavia + E.Europe + Middle East
 DEFAULT_BOUNDS = "41,62,14,45"
@@ -57,7 +57,8 @@ def fetch_flights(api_key: str, bounds: str) -> list:
     url = "{}/flight-positions/light?bounds={}".format(FR24_BASE, bounds)
     req = urllib.request.Request(url, headers={
         "User-Agent":    "efdi-fr24-bridge/1.0",
-        "Accept":        "application/json",
+        "Accept":          "application/json",
+        "Accept-Version": "v1",
         "Authorization": "Bearer {}".format(api_key),
     })
     try:
