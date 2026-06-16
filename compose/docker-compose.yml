@@ -328,10 +328,10 @@ services:
     healthcheck:
       disable: true
 
-  atak-cot-bridge:
+  atak-cot-udp:
     build:
       context: ./bridge
-    container_name: goat-moon-atak-cot-bridge
+    container_name: goat-moon-atak-cot-udp
     network_mode: host
     restart: unless-stopped
     depends_on:
@@ -339,7 +339,28 @@ services:
         condition: service_healthy
     environment:
       - GOAT_CERT_DIR=/certs
-      - TAK_HOST=${TAK_HOST:?set TAK_HOST to your FreeTAKServer Tailscale IP in .env}
+    command: >
+      python3 /app/cot_bridge.py
+      --host 239.2.3.1
+      --port 6969
+      --udp
+    volumes:
+      - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
+    healthcheck:
+      disable: true
+
+  atak-cot-tcp:
+    build:
+      context: ./bridge
+    container_name: goat-moon-atak-cot-tcp
+    network_mode: host
+    restart: unless-stopped
+    depends_on:
+      zenoh-router:
+        condition: service_healthy
+    environment:
+      - GOAT_CERT_DIR=/certs
+      - TAK_HOST=${TAK_HOST:-127.0.0.1}
       - TAK_PORT=${TAK_PORT:-8087}
     command: >
       python3 /app/cot_bridge.py
@@ -377,6 +398,3 @@ services:
       disable: true
     profiles:
       - sitaware
-
-volumes:
-  fts-data:
