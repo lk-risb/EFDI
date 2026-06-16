@@ -143,7 +143,7 @@ def run(args):
                 sid = point["sensor_id"]
                 if sid is None:
                     continue
-                pub.put(json.dumps(point).encode())
+                pub.put(json.dumps(point).encode(), encoding=zenoh.Encoding.APPLICATION_JSON)
             time.sleep(args.interval)
     except KeyboardInterrupt:
         pass

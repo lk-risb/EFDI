@@ -106,7 +106,7 @@ def run(args):
     session = zenoh.open(make_config())
     publishers = {
         loc["name"]: session.declare_publisher(
-            "{}/env/weather/{}/forecast/v1".format(ORG, loc["name"])
+            "{}/env/weather/forecast/v1/{}".format(ORG, loc["name"])
         )
         for loc in args.locations
     }
@@ -124,7 +124,7 @@ def run(args):
                 # Strip None values — proto zero-value convention
                 point = {k: v for k, v in point.items() if v is not None}
                 payload = json.dumps(point)
-                publishers[loc["name"]].put(payload.encode())
+                publishers[loc["name"]].put(payload.encode(), encoding=zenoh.Encoding.APPLICATION_JSON)
                 print("PUB yr-no/{} {}°C {} {}m/s".format(
                     loc["name"],
                     point.get("temperature_c"),

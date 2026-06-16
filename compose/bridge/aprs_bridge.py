@@ -79,17 +79,19 @@ def aprsis_connect(lat: float, lng: float, range_km: int):
     print("APRS-IS:", banner, flush=True)
 
     # Login read-only (pass -1 = no transmit)
-    if range_km is not None:
-        # Embed filter in login line — required by some tier-2 servers
-        login = "user NOCALL pass -1 vers {} filter r/{}/{}/{}\r\n".format(
-            APRSIS_APP, lat, lng, range_km)
-        print("APRS-IS filter: r/{}/{}/{}".format(lat, lng, range_km), flush=True)
-    else:
-        login = "user NOCALL pass -1 vers {}\r\n".format(APRSIS_APP)
-        print("APRS-IS filter: none (global feed)", flush=True)
+    login = "user NOCALL pass -1 vers {}\r\n".format(APRSIS_APP)
     sock.sendall(login.encode())
     resp = f.readline().decode("utf-8", errors="replace").strip()
     print("APRS-IS:", resp, flush=True)
+
+    # Send filter as separate command (more broadly supported than embedding in login)
+    if range_km:
+        filt = "#filter r/{}/{}/{}".format(lat, lng, range_km)
+    else:
+        # t/p = all position packets, worldwide
+        filt = "#filter t/p"
+    sock.sendall((filt + "\r\n").encode())
+    print("APRS-IS filter sent: {}".format(filt), flush=True)
 
     return sock, f
 
@@ -256,7 +258,7 @@ def run(args):
                         continue
                     topic = _route_topic(track.get("symbol", ""))
                     payload = json.dumps(track)
-                    _pubs[topic].put(payload.encode())
+                    _pubs[topic].put(payload.encode(), encoding=zenoh.Encoding.APPLICATION_JSON)
                     print("PUB {} {}".format(topic.split("/")[-3], payload[:80]), flush=True)
 
             except (EOFError, OSError, TimeoutError) as exc:

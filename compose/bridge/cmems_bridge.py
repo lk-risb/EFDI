@@ -125,7 +125,7 @@ def fetch_and_publish(pub_cache: dict, session, dataset_id: str, points: list):
             key = "{}/sea/surface/{}/v1".format(ORG, dataset_id)
             if key not in pub_cache:
                 pub_cache[key] = session.declare_publisher(key)
-            pub_cache[key].put(json.dumps(point).encode())
+            pub_cache[key].put(json.dumps(point).encode(), encoding=zenoh.Encoding.APPLICATION_JSON)
             print("PUB cmems {} {} SST={}°C sal={}PSU".format(
                 pt["name"], time_str,
                 point.get("sea_surface_temperature_c", "?"),
