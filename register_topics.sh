@@ -16,9 +16,7 @@ register() {
 register "air/civ/tracks/v1"        # OpenSky + FR24 + airplanes.live + APRS aircraft
 register "air/mil/tracks/v1"        # airplanes.live military
 register "air/quality/v1"           # PurpleAir air quality sensors
-for loc in EYVI EYKA EYPA EYSA EVRA EETN EFHK EPWA ESSA; do
-  register "air/notam/$loc/v1"      # ICAO NOTAMs per airport/FIR
-done
+register "air/notam/v1"             # ICAO NOTAMs worldwide (single topic, location in payload)
 
 # ── LAND ─────────────────────────────────────────────────────────────────────
 register "land/civ/tracks/v1"       # APRS land vehicles

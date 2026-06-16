@@ -32,15 +32,8 @@ _CERT_DIR = os.environ.get("GOAT_CERT_DIR", HERE)
 ICAO_URL      = "https://dataservices.icao.int/api/notams-realtime-list"
 POLL_INTERVAL = 900  # 15 min — NOTAMs can be issued at any time
 
-# Baltic region: Lithuanian, Latvian, Estonian airports + key regional FIRs
-DEFAULT_LOCATIONS = [
-    "EYVI", "EYKA", "EYPA", "EYSA",  # Lithuania: Vilnius, Kaunas, Palanga, Šiauliai
-    "EVRA",                            # Latvia: Riga
-    "EETN",                            # Estonia: Tallinn
-    "EFHK",                            # Finland: Helsinki
-    "EPWA",                            # Poland: Warsaw
-    "ESSA",                            # Sweden: Stockholm Arlanda
-]
+# Empty = worldwide (no airports filter sent to API)
+DEFAULT_LOCATIONS = []
 
 
 def make_config() -> "zenoh.Config":
@@ -58,9 +51,12 @@ def make_config() -> "zenoh.Config":
 
 
 def fetch_notams(api_key: str, locations: list[str]) -> list:
-    url = "{}?api_key={}&airports={}&format=json".format(
-        ICAO_URL, api_key, ",".join(locations)
-    )
+    if locations:
+        url = "{}?api_key={}&airports={}&format=json".format(
+            ICAO_URL, api_key, ",".join(locations)
+        )
+    else:
+        url = "{}?api_key={}&format=json".format(ICAO_URL, api_key)
     req = urllib.request.Request(url, headers={"User-Agent": "efdi-notam-bridge/1.0"})
     try:
         with urllib.request.urlopen(req, timeout=20) as resp:
@@ -105,16 +101,10 @@ def run(args):
         )
 
     session = zenoh.open(make_config())
-    pub_cache: dict[str, object] = {}
+    pub = session.declare_publisher("{}/air/notam/v1".format(ORG))
 
-    def get_pub(location: str):
-        if location not in pub_cache:
-            pub_cache[location] = session.declare_publisher(
-                "{}/air/notam/{}/v1".format(ORG, location)
-            )
-        return pub_cache[location]
-
-    print("NOTAM locations:", args.locations, flush=True)
+    scope = "worldwide" if not args.locations else " ".join(args.locations)
+    print("NOTAM scope:", scope, flush=True)
 
     try:
         while True:
@@ -124,17 +114,15 @@ def run(args):
                 point = normalize(raw)
                 if point is None:
                     continue
-                loc = point["location"]
-                get_pub(loc).put(json.dumps(point).encode())
-                seen.add(loc)
+                pub.put(json.dumps(point).encode())
+                seen.add(point["location"])
             print("Published {} NOTAMs across {} locations".format(
                 len(notams), len(seen)), flush=True)
             time.sleep(args.interval)
     except KeyboardInterrupt:
         pass
     finally:
-        for pub in pub_cache.values():
-            pub.undeclare()
+        pub.undeclare()
         session.close()
 
 
