@@ -105,10 +105,7 @@ def normalize(elem: dict, feature_type: str) -> dict | None:
 
 def run(args):
     session = zenoh.open(make_config())
-    publishers = {
-        ft: session.declare_publisher("{}/geo/osm/{}/v1".format(ORG, ft))
-        for ft, _, _ in FEATURE_QUERIES
-    }
+    pub = session.declare_publisher("{}/land/geo/v1".format(ORG))
 
     try:
         while True:
@@ -116,7 +113,6 @@ def run(args):
                 print("Querying OSM {} ({}/{})…".format(
                     feature_type, tag_key, tag_value), flush=True)
                 elements = overpass_query(tag_key, tag_value, args.bbox)
-                pub = publishers[feature_type]
                 count = 0
                 for elem in elements:
                     point = normalize(elem, feature_type)
@@ -130,8 +126,7 @@ def run(args):
     except KeyboardInterrupt:
         pass
     finally:
-        for pub in publishers.values():
-            pub.undeclare()
+        pub.undeclare()
         session.close()
 
 

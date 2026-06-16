@@ -40,7 +40,7 @@ APRSIS_APP       = "efdi-aprs-bridge/1.0"
 
 DEFAULT_LAT      = 55.17
 DEFAULT_LNG      = 23.88
-DEFAULT_RANGE_KM = 500    # 500 km radius covers Baltic + surrounding area
+DEFAULT_RANGE_KM = 0      # 0 = no filter, worldwide feed
 
 RECONNECT_DELAY_S = 10.0
 
@@ -198,17 +198,48 @@ def parse_packet(line: str) -> dict | None:
 
 
 # ---------------------------------------------------------------------------
+# Symbol-based domain routing
+# Symbol is a 2-char string: table + code, e.g. "/^" = large aircraft
+# ---------------------------------------------------------------------------
+
+# APRS symbol codes (second char) that indicate aircraft
+_AIR_CODES  = set("'^XgOS")   # small aircraft, large aircraft, helicopter, glider, balloon, shuttle
+# Sea vessels
+_SEA_CODES  = set("YsC")      # yacht, ship/powerboat, canoe
+# Land vehicles
+_LAND_CODES = set("><jkuvURfa=")  # car, motorcycle, jeep, trucks, van, bus, RV, ambulance, fire, rail
+
+
+def _route_topic(symbol: str) -> str:
+    code = symbol[1] if len(symbol) >= 2 else ""
+    if code in _AIR_CODES:
+        return "{}/air/civ/tracks/v1".format(ORG)
+    if code in _SEA_CODES:
+        return "{}/sea/civ/tracks/v1".format(ORG)
+    if code in _LAND_CODES:
+        return "{}/land/civ/tracks/v1".format(ORG)
+    return "{}/aprs/tracks/v1".format(ORG)   # catch-all (weather stations, digipeaters, etc.)
+
+
+# ---------------------------------------------------------------------------
 # Main loop
 # ---------------------------------------------------------------------------
 
 def run(args):
-    topic = "{}/aprs/aprs-is/{}".format(ORG, args.topic_suffix)
     filt_desc = "r/{}/{}/{}".format(args.lat, args.lng, args.range_km) if args.range_km else "none (global)"
-    print("Zenoh topic:", topic, flush=True)
     print("APRS-IS server: {}:{} | filter: {}".format(APRSIS_HOST, APRSIS_PORT, filt_desc), flush=True)
 
     session = zenoh.open(make_config())
-    pub = session.declare_publisher(topic)
+    pub_air   = session.declare_publisher("{}/air/civ/tracks/v1".format(ORG))
+    pub_sea   = session.declare_publisher("{}/sea/civ/tracks/v1".format(ORG))
+    pub_land  = session.declare_publisher("{}/land/civ/tracks/v1".format(ORG))
+    pub_misc  = session.declare_publisher("{}/aprs/tracks/v1".format(ORG))
+    _pubs = {
+        "{}/air/civ/tracks/v1".format(ORG):  pub_air,
+        "{}/sea/civ/tracks/v1".format(ORG):  pub_sea,
+        "{}/land/civ/tracks/v1".format(ORG): pub_land,
+        "{}/aprs/tracks/v1".format(ORG):     pub_misc,
+    }
 
     try:
         while True:
@@ -223,9 +254,10 @@ def run(args):
                     track = parse_packet(line)
                     if track is None:
                         continue
+                    topic = _route_topic(track.get("symbol", ""))
                     payload = json.dumps(track)
-                    pub.put(payload.encode())
-                    print("PUB", payload[:120], flush=True)
+                    _pubs[topic].put(payload.encode())
+                    print("PUB {} {}".format(topic.split("/")[-3], payload[:80]), flush=True)
 
             except (EOFError, OSError, TimeoutError) as exc:
                 print("Connection error: {} — reconnecting in {}s".format(
@@ -239,7 +271,8 @@ def run(args):
     except KeyboardInterrupt:
         pass
     finally:
-        pub.undeclare()
+        for pub in _pubs.values():
+            pub.undeclare()
         session.close()
 
 

@@ -128,14 +128,7 @@ def run(args):
         raise SystemExit("PURPLEAIR_KEY not set — get a free key at https://develop.purpleair.com/")
 
     session = zenoh.open(make_config())
-    pub_cache: dict[int, object] = {}
-
-    def get_pub(sensor_id: int):
-        if sensor_id not in pub_cache:
-            pub_cache[sensor_id] = session.declare_publisher(
-                "{}/air/purpleair/{}/v1".format(ORG, sensor_id)
-            )
-        return pub_cache[sensor_id]
+    pub = session.declare_publisher("{}/air/quality/v1".format(ORG))
 
     print("Bounding box:", args.bbox, flush=True)
 
@@ -150,13 +143,12 @@ def run(args):
                 sid = point["sensor_id"]
                 if sid is None:
                     continue
-                get_pub(sid).put(json.dumps(point).encode())
+                pub.put(json.dumps(point).encode())
             time.sleep(args.interval)
     except KeyboardInterrupt:
         pass
     finally:
-        for pub in pub_cache.values():
-            pub.undeclare()
+        pub.undeclare()
         session.close()
 
 
