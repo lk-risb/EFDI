@@ -371,6 +371,30 @@ services:
     healthcheck:
       disable: true
 
+  cat62-bridge:
+    build:
+      context: ./bridge
+    container_name: goat-moon-cat62-bridge
+    network_mode: host
+    restart: unless-stopped
+    depends_on:
+      zenoh-router:
+        condition: service_healthy
+    environment:
+      - GOAT_CERT_DIR=/certs
+      - RADAR_HOST=${RADAR_HOST:-127.0.0.1}
+      - RADAR_PORT=${RADAR_PORT:-30002}
+    command: >
+      python3 /app/cat62_bridge.py
+      --radar-host ${RADAR_HOST:-127.0.0.1}
+      --radar-port ${RADAR_PORT:-30002}
+    volumes:
+      - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
+    healthcheck:
+      disable: true
+    profiles:
+      - radar
+
   sitaware-nvg-bridge:
     build:
       context: ./bridge
