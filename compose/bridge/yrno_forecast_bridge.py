@@ -5,7 +5,7 @@ Polls the Norwegian Meteorological Institute's free forecast API for current
 conditions at configured Baltic/Nordic locations and publishes each as a
 WeatherPoint JSON. No API key — requires a descriptive User-Agent per their ToS.
 
-Zenoh topic:  <ORG>/weather/yr-no/<place>/forecast/v1
+Zenoh topic:  <ORG>/env/weather/forecast/v1/<place>
 Proto schema: weather_point.proto  (message WeatherPoint, package ltu.cis.tracks.v1)
 
 Run:
