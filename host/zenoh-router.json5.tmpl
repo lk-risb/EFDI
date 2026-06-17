@@ -54,6 +54,18 @@
     search_dirs: ["/", "/opt/zenoh/plugins"],
   },
 
+  // In-memory storage — new subscribers get last-known value per topic immediately via get().
+  plugins: {
+    storage_manager: {
+      storages: {
+        efdi_live: {
+          key_expr: "${PARTNER_NAMESPACE}/**",
+          volume: { id: "memory" },
+        },
+      },
+    },
+  },
+
   // Pod-side ACL: default-deny, mTLS-gated. The pod is the partner's own single-tenant box, so
   // this is the partner's own boundary; the load-bearing enforcement is GOAT-SIDE (the ingress
   // gateway + core-router ACL, ADR 1020). We still default-deny here as good hygiene.
