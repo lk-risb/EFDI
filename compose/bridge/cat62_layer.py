@@ -364,15 +364,11 @@ def main():
     ap = argparse.ArgumentParser(description="ASTERIX CAT62 → Zenoh bridge")
     ap.add_argument("--radar-host", default="127.0.0.1", help="Radar TCP host")
     ap.add_argument("--radar-port", type=int, default=30002, help="Radar port")
-    ap.add_argument("--topic-prefix", default="radar/{}".format("__host__"),
-                    help="Middle segment of topic (default: radar/<radar-host>)")
+    ap.add_argument("--topic-prefix", default="air/cat62/asterix/unknown/aircraft",
+                    help="Topic prefix (default: air/cat62/asterix/unknown/aircraft)")
     ap.add_argument("--topic-suffix", default="tracks/v1", help="Topic suffix")
     ap.add_argument("--udp", action="store_true", help="Use UDP instead of TCP")
     args = ap.parse_args()
-
-    if args.topic_prefix == "radar/__host__":
-        label = args.radar_host.replace(".", "-") if not args.udp else "udp-{}".format(args.radar_port)
-        args.topic_prefix = "radar/{}".format(label)
 
     run(args)
 

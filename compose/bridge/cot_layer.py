@@ -11,12 +11,17 @@ Override: --host <ip> --port <port>
 
 For direct UDP multicast (same L2 only): --udp --host 239.2.3.1 --port 6969
 
-Zenoh topics consumed:
-  <ORG>/air/civ/tracks/v1   → CoT a-f-A   (friendly air)
-  <ORG>/air/mil/tracks/v1   → CoT a-n-A   (neutral military air)
-  <ORG>/land/civ/tracks/v1  → CoT a-f-G-U-C (friendly ground vehicle)
-  <ORG>/sea/civ/tracks/v1   → CoT a-f-S-W-C (friendly surface vessel)
-  <ORG>/aprs/tracks/v1      → CoT a-u-G   (unknown ground, unclassified APRS)
+Zenoh topics consumed (5 main categories):
+  AIR:   <ORG>/air/civ/tracks/v1    → CoT a-f-A-C-F / a-h-A-C-F (civil, hostile if RU/BY)
+         <ORG>/air/mil/tracks/v1    → CoT a-n-A-M-F / a-h-A-M-F (military, hostile if RU/BY)
+         <ORG>/air/radar/tracks/v1  → CoT a-u-A     (radar return, unidentified)
+         <ORG>/air/sapient/tracks/v1→ CoT a-u-A     (SAPIENT sensor track)
+  LAND:  <ORG>/land/civ/tracks/v1   → CoT a-f-G-E-V-C (friendly ground vehicle)
+         <ORG>/land/aprs/tracks/v1  → CoT a-n-G-I   (APRS stations / digipeaters / wx)
+         <ORG>/land/nffi/tracks/v1  → CoT a-f-G-U-C (NATO NFFI friendly forces)
+         <ORG>/land/geo/v1          → CoT (OSM aerodrome/port/military, 24h stale)
+  SEA:   <ORG>/sea/civ/tracks/v1    → CoT a-f-S-X-L / a-h-S-X-L (hostile if RU/BY MMSI)
+  SPACE: <ORG>/space/tracks/v1      → CoT a-f-P     (satellite)
 
 Run:
     venv/bin/python3 cot_layer.py                        # TCP → FTS localhost
@@ -89,18 +94,23 @@ def _sea_type(track: dict) -> str:
     return "a-h-S-X-L" if _is_hostile_mmsi(track.get("mmsi", "")) else "a-f-S-X-L"
 
 
-# (topic_suffix, cot_type_or_fn, stale_s)
-# cot_type None means dynamic dispatch (see _aprs_cot_type)
+# Schema: {category}/{vendor}/{protocol}/{affiliation}/{entity_type}/{data_type}/v1
+# Wildcards: ** matches zero-or-more segments, so air/**/civ/aircraft/** catches any
+# vendor+protocol combination under civil air.
 _TOPIC_COT = {
-    "air/civ/tracks/v1":    (_civ_air_type, AIR_STALE_S),   # friendly civil / hostile if RU/BY
-    "air/mil/tracks/v1":    (_mil_air_type, AIR_STALE_S),   # neutral mil / hostile if RU/BY
-    "land/civ/tracks/v1":   ("a-f-G-E-V-C", LAND_STALE_S), # friendly ground vehicle civilian
-    "sea/civ/tracks/v1":    (_sea_type,     SEA_STALE_S),   # friendly vessel / hostile if RU/BY
-    "aprs/tracks/v1":       (None,          LAND_STALE_S),  # dynamic per symbol
-    "space/tracks/v1":      ("a-f-P",       GEO_STALE_S),   # satellite (friendly space)
-    "radar/*/tracks/v1":    ("a-u-A",       AIR_STALE_S),   # unknown air (radar return)
-    "sapient/*/tracks/v1":  ("a-u-A",       AIR_STALE_S),   # SAPIENT sensor track (unknown)
-    "fffi/nffi/tracks/v1":  ("a-f-G-U-C",  LAND_STALE_S),  # NATO NFFI friendly forces
+    # AIR — affiliation slot drives CoT type; ICAO24 classifier overrides for RU/BY
+    "air/**/civ/aircraft/**":    (_civ_air_type,  AIR_STALE_S),
+    "air/**/mil/aircraft/**":    (_mil_air_type,  AIR_STALE_S),
+    "air/**/unknown/**":         ("a-u-A",        AIR_STALE_S),   # radar / SAPIENT returns
+    # LAND — neutral stations, friendly forces, civilian vehicles
+    "land/**/civ/vehicle/**":    ("a-f-G-E-V-C", LAND_STALE_S),
+    "land/**/neutral/station/**":("a-n-G-I",     LAND_STALE_S),
+    "land/**/friendly/unit/**":  ("a-f-G-U-C",  LAND_STALE_S),
+    # SEA — MMSI classifier overrides for RU/BY vessels
+    "sea/**/civ/vessel/**":      (_sea_type,      SEA_STALE_S),
+    "sea/**/mil/vessel/**":      ("a-n-S-W-C",   SEA_STALE_S),   # reserved: neutral mil vessel
+    # SPACE
+    "space/**/civ/satellite/**": ("a-f-P",        GEO_STALE_S),
 }
 
 # APRS symbol table+code → CoT type.  Fixed infrastructure → neutral installation.
@@ -576,19 +586,16 @@ def run(args):
     subs = []
     for suffix, (cot_type, stale_s) in _TOPIC_COT.items():
         key = "{}/{}".format(ORG, suffix)
-        if cot_type is None:
-            subs.append(session.declare_subscriber(
-                key, make_handler(_aprs_cot_type, sender, args.verbose, stale_s=stale_s)))
-            print("SUB {} → [dynamic APRS symbol, stale={}s]".format(key, stale_s), flush=True)
-        else:
-            subs.append(session.declare_subscriber(
-                key, make_handler(cot_type, sender, args.verbose, stale_s=stale_s)))
-            print("SUB {} → {} stale={}s".format(key, cot_type, stale_s), flush=True)
+        fn = cot_type.__name__ if callable(cot_type) else str(cot_type)
+        subs.append(session.declare_subscriber(
+            key, make_handler(cot_type, sender, args.verbose, stale_s=stale_s)))
+        print("SUB {} → {} stale={}s".format(key, fn, stale_s), flush=True)
 
-    # OSM geo features (aerodromes, ports, military bases, railway stations) — 24h stale
-    geo_key = "{}/land/geo/v1".format(ORG)
+    # Geo features (aerodromes, ports, military bases) — 24h stale
+    # Matches: land/{vendor}/{protocol}/neutral/geo/features/v1
+    geo_key = "{}/land/**/neutral/geo/**".format(ORG)
     subs.append(session.declare_subscriber(geo_key, make_geo_handler(sender, args.verbose)))
-    print("SUB {} → [OSM geo features, 24h stale]".format(geo_key), flush=True)
+    print("SUB {} → [geo features, 24h stale]".format(geo_key), flush=True)
 
     print("Bridge running — Ctrl-C to stop", flush=True)
     try:

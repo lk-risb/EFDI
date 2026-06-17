@@ -107,7 +107,7 @@ def normalize(elem: dict, feature_type: str) -> dict | None:
 
 def run(args):
     session = zenoh.open(make_config())
-    pub = session.declare_publisher("{}/land/geo/v1".format(ORG))
+    pub = session.declare_publisher("{}/land/osm/overpass/neutral/geo/features/v1".format(ORG))
 
     try:
         while True:

@@ -103,7 +103,7 @@ def run(args):
         )
 
     session = zenoh.open(make_config())
-    pub = session.declare_publisher("{}/air/notam/v1".format(ORG))
+    pub = session.declare_publisher("{}/air/icao/rest/neutral/notam/notams/v1".format(ORG))
 
     scope = "worldwide" if not args.locations else " ".join(args.locations)
     print("NOTAM scope:", scope, flush=True)
