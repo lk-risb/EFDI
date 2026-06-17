@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+    #!/usr/bin/env python3
 """cot_bridge.py — Zenoh EFDI track topics → TAK Server / ATAK CoT bridge.
 
 Subscribes to all EFDI track topics and forwards position updates as
