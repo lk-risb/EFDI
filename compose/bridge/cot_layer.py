@@ -358,6 +358,7 @@ def _uid(track: dict) -> str:
         ("icao24",    "ICAO"),   # same hex regardless of OpenSky/FR24/airplaneslive
         ("mmsi",      "MMSI"),   # same MMSI from all AIS feeds
         ("sat_id",    "SAT"),    # NORAD catalogue number (n2yo)
+        ("radar_id",  "RAD"),    # CAT-48 PSR track (no Mode-S) — SAC/SIC/track_num
         ("sensor_id", "SENS"),
         ("osm_id",    "OSM"),
     ):
