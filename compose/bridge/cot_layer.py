@@ -414,6 +414,7 @@ def _build_remarks(track: dict, cot_type: str) -> str:
         _row("CALL", (track.get("callsign")      or "").strip().upper() or None)
         _row("ICAO", (track.get("icao24")        or "").strip().upper() or None)
         _row("SQWK", track.get("squawk"))
+        _row("RDR",  track.get("radar_id"))
         _row("HDG",  "{}°".format(int(_course(track))))
         alt_m = _hae(track)
         if alt_m < 9_999_998:
@@ -528,6 +529,7 @@ def _hae(track: dict) -> float:
         ("alt_geom_ft", 0.3048),
         ("baro_alt_m",  1.0),
         ("alt_baro_ft", 0.3048),
+        ("alt_3d_ft",   0.3048),   # CAT-048 I048/110 3D radar height
         ("alt_ft",      0.3048),   # FR24
         ("alt_m",       1.0),
         ("alt_km",      1000.0),   # n2yo satellites
