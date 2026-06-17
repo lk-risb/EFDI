@@ -121,7 +121,7 @@ def run(args):
     session = zenoh.open(make_config())
     publishers = {
         loc["name"]: session.declare_publisher(
-            "{}/env/openmeteo/rest/neutral/weather/current/v1/{}".format(ORG, loc["name"])
+            "{}/env/weather/station/openmeteo/current/{}".format(ORG, loc["name"])
         )
         for loc in args.locations
     }
