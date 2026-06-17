@@ -434,7 +434,7 @@ def decode_cat048_record(data: bytes, pos: int,
 # ---------------------------------------------------------------------------
 
 def _publish(pub, track: dict, verbose: bool):
-    if "lat_deg" not in track and "lon_deg" not in track:
+    if "lat_deg" not in track or "lon_deg" not in track:
         return   # no position — nothing to show on the map
     pub.put(json.dumps(track).encode(), encoding=zenoh.Encoding.APPLICATION_JSON)
     if verbose:
