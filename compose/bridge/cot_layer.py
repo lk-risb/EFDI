@@ -92,12 +92,15 @@ def _sea_type(track: dict) -> str:
 # (topic_suffix, cot_type_or_fn, stale_s)
 # cot_type None means dynamic dispatch (see _aprs_cot_type)
 _TOPIC_COT = {
-    "air/civ/tracks/v1":   (_civ_air_type, AIR_STALE_S),   # friendly civil / hostile if RU/BY
-    "air/mil/tracks/v1":   (_mil_air_type, AIR_STALE_S),   # neutral mil / hostile if RU/BY
-    "land/civ/tracks/v1":  ("a-f-G-E-V-C", LAND_STALE_S), # friendly ground vehicle civilian
-    "sea/civ/tracks/v1":   (_sea_type,     SEA_STALE_S),   # friendly vessel / hostile if RU/BY
-    "aprs/tracks/v1":      (None,          LAND_STALE_S),  # dynamic per symbol
-    "radar/*/tracks/v1":   ("a-u-A",       AIR_STALE_S),   # unknown air (radar return)
+    "air/civ/tracks/v1":    (_civ_air_type, AIR_STALE_S),   # friendly civil / hostile if RU/BY
+    "air/mil/tracks/v1":    (_mil_air_type, AIR_STALE_S),   # neutral mil / hostile if RU/BY
+    "land/civ/tracks/v1":   ("a-f-G-E-V-C", LAND_STALE_S), # friendly ground vehicle civilian
+    "sea/civ/tracks/v1":    (_sea_type,     SEA_STALE_S),   # friendly vessel / hostile if RU/BY
+    "aprs/tracks/v1":       (None,          LAND_STALE_S),  # dynamic per symbol
+    "space/tracks/v1":      ("a-f-P",       GEO_STALE_S),   # satellite (friendly space)
+    "radar/*/tracks/v1":    ("a-u-A",       AIR_STALE_S),   # unknown air (radar return)
+    "sapient/*/tracks/v1":  ("a-u-A",       AIR_STALE_S),   # SAPIENT sensor track (unknown)
+    "fffi/nffi/tracks/v1":  ("a-f-G-U-C",  LAND_STALE_S),  # NATO NFFI friendly forces
 }
 
 # APRS symbol table+code → CoT type.  Fixed infrastructure → neutral installation.
@@ -196,6 +199,8 @@ _COT_ICON_B64 = {
     # Surface vessels
     "a-f-S-X-L":   _icon_png_b64("ship",     _BLUE),
     "a-h-S-X-L":   _icon_png_b64("ship",     _RED),
+    # Space / satellite
+    "a-f-P":       _icon_png_b64("circle",   _BLUE),
     # Ground
     "a-f-G-E-V-C": _icon_png_b64("vehicle",  _BLUE),
     "a-u-G":       _icon_png_b64("circle",   _YELLOW),
@@ -213,17 +218,20 @@ _ISET = "34ae1613-9645-4222-a9d2-e5f243dea2865"
 _COT_ICONSET = {
     "a-f-A-C-F":   "{}/Friendly/Air/Fixed Wing.png".format(_ISET),
     "a-h-A-C-F":   "{}/Hostile/Air/Fixed Wing.png".format(_ISET),
-    "a-n-A-M-F":   "{}/Neutral/Air/Fixed Wing.png".format(_ISET),
-    "a-h-A-M-F":   "{}/Hostile/Air/Fixed Wing.png".format(_ISET),
-    "a-u-A":       "{}/Unknown/Air/Fixed Wing.png".format(_ISET),
+    "a-n-A-M-F":   "{}/Neutral/Air/Military Fixed Wing.png".format(_ISET),
+    "a-h-A-M-F":   "{}/Hostile/Air/Military Fixed Wing.png".format(_ISET),
+    "a-u-A":       "{}/Unknown/Air/Military Fixed Wing.png".format(_ISET),
     "a-u-A-C-F":   "{}/Unknown/Air/Fixed Wing.png".format(_ISET),
     "a-f-G-E-V-C": "{}/Friendly/Land/Vehicle.png".format(_ISET),
     "a-f-S-X-L":   "{}/Friendly/Sea/Vessel.png".format(_ISET),
+    "a-h-S-X-L":   "{}/Hostile/Sea/Vessel.png".format(_ISET),
     "a-u-G":       "{}/Unknown/Land/Generic.png".format(_ISET),
     "a-n-G-I":     "{}/Neutral/Land/Structure.png".format(_ISET),
     "a-f-G-I-B-A": "{}/Friendly/Land/Airfield.png".format(_ISET),
     "a-f-G-I-B-O": "{}/Friendly/Land/Port.png".format(_ISET),
     "a-f-G-I-B-M": "{}/Friendly/Land/Military Base.png".format(_ISET),
+    "a-f-P":       "{}/Friendly/Space/Satellite.png".format(_ISET),
+    "a-f-G-U-C":   "{}/Friendly/Land/Unit.png".format(_ISET),
 }
 
 def make_config() -> "zenoh.Config":
