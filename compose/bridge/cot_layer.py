@@ -589,15 +589,10 @@ def track_to_cot(track: dict, cot_type: str, stale_s: float = COT_STALE_S) -> st
         "le":  "9999999.0",
     })
     detail = ET.SubElement(event, "detail")
-    icon_path = _COT_ICONSET.get(cot_type)
-    icon_b64  = _COT_ICON_B64.get(cot_type)
-    if icon_path and icon_b64:
-        # Both: iconsetpath is primary (ATAK uses it if the file exists),
-        # b64image is fallback for clients that don't have the built-in iconset.
-        ET.SubElement(detail, "usericon", {"iconsetpath": icon_path, "b64image": icon_b64})
-    elif icon_path:
-        ET.SubElement(detail, "usericon", {"iconsetpath": icon_path})
-    elif icon_b64:
+    icon_b64 = _COT_ICON_B64.get(cot_type)
+    if icon_b64:
+        # b64image only — ATAK ignores b64image when iconsetpath is also present
+        # but the iconsetpath file doesn't exist, falling back to the MIL-STD symbol.
         ET.SubElement(detail, "usericon", {"b64image": icon_b64})
     ET.SubElement(detail, "contact", {"callsign": cs})
     ET.SubElement(detail, "track", {
