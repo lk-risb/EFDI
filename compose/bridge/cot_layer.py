@@ -56,6 +56,8 @@ SEA_STALE_S    = 300     # vessels: Class B sends every 30-180s; 5 min covers wo
 LAND_STALE_S   = 120     # ground vehicles and APRS mobiles
 COT_STALE_S    = AIR_STALE_S  # default (air)
 GEO_STALE_S    = 86400   # 24 h for fixed infrastructure (OSM features)
+ENV_STALE_S    = 3600    # weather stations: polled every 15–30 min, 1 h gives plenty of margin
+SENSOR_STALE_S = 1800    # air quality sensors: polled every 10 min, 30 min stale
 RECONNECT_S    = 5
 SEND_TIMEOUT_S = 10
 
@@ -111,6 +113,9 @@ _TOPIC_COT = {
     "sea/**/mil/vessel/**":      ("a-n-S-W-C",   SEA_STALE_S),   # reserved: neutral mil vessel
     # SPACE
     "space/**/civ/satellite/**": ("a-f-P",        GEO_STALE_S),
+    # ENV — weather stations and air quality sensors show as ground icons
+    "env/weather/station/**":    ("a-n-G-I-R",   ENV_STALE_S),
+    "env/air_quality/station/**":("a-n-G-I-R",   SENSOR_STALE_S),
 }
 
 # APRS symbol table+code → CoT type.  Fixed infrastructure → neutral installation.
@@ -168,6 +173,20 @@ def _icon_png_b64(shape: str, rgb: tuple, size: int = 32) -> str:
             return F if (nx / 0.28) ** 2 + (ny / 0.46) ** 2 <= 1.0 else T
         if shape == "vehicle":
             return F if abs(nx / 0.30) ** 4 + abs(ny / 0.22) ** 4 <= 1.0 else T
+        if shape == "tower":
+            # Lattice antenna / radio tower: thin mast + 3 reducing crossbars
+            mast = abs(nx) <= 0.05
+            bar1 = abs(ny + 0.10) <= 0.04 and abs(nx) <= 0.18
+            bar2 = abs(ny + 0.28) <= 0.04 and abs(nx) <= 0.32
+            bar3 = abs(ny + 0.43) <= 0.04 and abs(nx) <= 0.44
+            return F if (mast or bar1 or bar2 or bar3) else T
+        if shape == "radar":
+            # Parabolic dish (upper semicircle arc) + mast + base
+            r2   = nx * nx + (ny + 0.15) ** 2
+            dish = 0.09 <= r2 <= 0.30 and ny <= -0.15
+            mast = abs(nx) <= 0.04 and ny >= -0.15
+            base = abs(ny - 0.42) <= 0.04 and abs(nx) <= 0.20
+            return F if (dish or mast or base) else T
         return F if nx * nx + ny * ny <= 0.18 else T  # circle (unknown)
 
     pixels = [_px(x, y) for y in range(H) for x in range(W)]
@@ -215,6 +234,8 @@ _COT_ICON_B64 = {
     "a-f-G-E-V-C": _icon_png_b64("vehicle",  _BLUE),
     "a-u-G":       _icon_png_b64("circle",   _YELLOW),
     "a-n-G-I":     _icon_png_b64("circle",   _GREEN),
+    "a-n-G-I-R":   _icon_png_b64("tower",    _GREEN),   # Neutral ground installation radio
+    "a-f-G-E-S-R": _icon_png_b64("radar",    _BLUE),    # Friendly ground electronic sensor radar
     "a-f-G-I-B-A": _icon_png_b64("circle",   _BLUE),
     "a-f-G-I-B-O": _icon_png_b64("circle",   _BLUE),
     "a-f-G-I-B-M": _icon_png_b64("circle",   _BLUE),
@@ -242,6 +263,8 @@ _COT_ICONSET = {
     "a-f-G-I-B-M": "{}/Friendly/Land/Military Base.png".format(_ISET),
     "a-f-P":       "{}/Friendly/Space/Satellite.png".format(_ISET),
     "a-f-G-U-C":   "{}/Friendly/Land/Unit.png".format(_ISET),
+    "a-n-G-I-R":   "{}/Neutral/Land/Radio.png".format(_ISET),
+    "a-f-G-E-S-R": "{}/Friendly/Land/Radar.png".format(_ISET),
 }
 
 def make_config() -> "zenoh.Config":
@@ -288,20 +311,23 @@ def _uid(track: dict) -> str:
 
 def _callsign(track: dict, uid: str) -> str:
     # OSM name / ship name → short map label
-    for key in ("name", "ship_name"):
+    for key in ("name", "ship_name", "sensor_name"):
         v = track.get(key)
         if v and str(v).strip():
             return str(v).strip()
-    # Aircraft: "EI-DAC (B738)" or just callsign
+    # Aircraft: prefer "REG (TYPE)" → "CALLSIGN (TYPE)" → "CALLSIGN" → "REG"
     reg   = (track.get("registration") or "").strip()
     atype = (track.get("aircraft_type") or "").strip()
     cs    = (track.get("callsign")      or "").strip()
-    if reg and atype:
-        return "{} ({})".format(reg, atype)
-    if reg:
-        return reg
-    if cs:
-        return cs
+    label = reg or cs
+    if label and atype:
+        return "{} ({})".format(label, atype)
+    if label:
+        return label
+    # Weather point: place name
+    place = (track.get("place_name") or "").strip()
+    if place:
+        return place
     mmsi = track.get("mmsi")
     if mmsi:
         return str(mmsi)
@@ -309,74 +335,110 @@ def _callsign(track: dict, uid: str) -> str:
 
 
 def _build_remarks(track: dict, cot_type: str) -> str:
-    """Build a structured, human-readable info panel for the ATAK callout bubble."""
-    src   = track.get("_src", "?")
-    lines = []
-
+    """Build a structured vertical key-value info panel for the ATAK callout bubble."""
+    src    = track.get("_src", "?")
     parts  = cot_type.split("-")
-    domain = parts[2] if len(parts) > 2 else "?"  # A=air, G=ground, S=sea
+    domain = parts[2] if len(parts) > 2 else "?"
+    lines  = []
+
+    def _row(label: str, value) -> None:
+        if value not in (None, "", 0.0):
+            lines.append("{:<10}{}".format(label + ":", value))
 
     if domain == "A":   # ---- AIR ----------------------------------------
-        ident = " / ".join(filter(None, [
-            (track.get("registration") or "").strip().upper(),
-            (track.get("aircraft_type") or "").strip().upper(),
-            (track.get("callsign") or "").strip().upper(),
-            ("ICAO:" + (track.get("icao24") or "").upper()) if track.get("icao24") else "",
-        ]))
-        if ident:
-            lines.append(ident)
-
-        spd_kts = round(_speed_ms(track) / 0.514444) if _speed_ms(track) else 0
-        hdg     = int(_course(track))
-        alt_m   = _hae(track)
+        _row("REG",  (track.get("registration") or "").strip().upper() or None)
+        _row("TYPE", (track.get("aircraft_type") or "").strip().upper() or None)
+        _row("CALL", (track.get("callsign")      or "").strip().upper() or None)
+        _row("ICAO", (track.get("icao24")        or "").strip().upper() or None)
+        alt_m = _hae(track)
         if alt_m < 9_999_998:
-            alt_ft = int(alt_m / 0.3048)
+            alt_ft  = int(alt_m / 0.3048)
             alt_str = "FL{:03d}".format(alt_ft // 100) if alt_ft > 1000 else "{} ft".format(alt_ft)
         else:
             alt_str = "---"
-        lines.append("ALT {}  SPD {} kts  HDG {}°".format(alt_str, spd_kts, hdg))
-
-        extras = []
-        sq = track.get("squawk")
-        if sq:
-            extras.append("SQWK {}".format(sq))
+        spd = _speed_ms(track)
+        _row("ALT",  alt_str)
+        _row("SPD",  "{} kts".format(round(spd / 0.514444)) if spd else None)
+        _row("HDG",  "{}°".format(int(_course(track))))
+        _row("SQWK", track.get("squawk"))
         if track.get("is_military"):
-            extras.append("MILITARY")
-        if extras:
-            lines.append("  ".join(extras))
+            lines.append("[MILITARY]")
 
     elif domain == "S":  # ---- SEA ----------------------------------------
-        mmsi = track.get("mmsi")
-        name = track.get("ship_name", "").strip()
-        if name and mmsi:
-            lines.append("{} — MMSI {}".format(name, mmsi))
-        elif mmsi:
-            lines.append("MMSI {}".format(mmsi))
-        sog_kts = round(_speed_ms(track) / 0.514444, 1)
-        cog     = int(_course(track))
-        lines.append("SOG {} kts  COG {}°".format(sog_kts, cog))
+        _row("NAME",   track.get("ship_name", "").strip() or None)
+        _row("MMSI",   track.get("mmsi"))
+        _row("CALL",   (track.get("callsign") or "").strip().upper() or None)
+        _row("TYPE",   track.get("ship_type"))
+        _row("SOG",    "{} kts".format(round(_speed_ms(track) / 0.514444, 1)))
+        _row("COG",    "{}°".format(int(_course(track))))
         nav = track.get("nav_status", "").replace("_", " ")
-        if nav:
-            lines.append("STATUS: {}".format(nav))
+        _row("STATUS", nav or None)
 
-    else:               # ---- GROUND / APRS / OSM -------------------------
-        feat = track.get("feature_type")
-        if feat:                              # OSM geo feature
-            lines.append("TYPE: {}".format(feat.upper()))
-            for code in ("icao", "iata"):
-                v = track.get(code)
-                if v:
-                    lines.append("{}: {}".format(code.upper(), v))
-        else:                                 # APRS or ground vehicle
-            sym = track.get("symbol")
-            if sym:
-                lines.append("SYMBOL: {}".format(sym))
-            spd_kts = round(_speed_ms(track) / 0.514444, 1)
-            hdg     = int(_course(track))
-            if spd_kts > 0:
-                lines.append("SPD {} kts  HDG {}°".format(spd_kts, hdg))
+    elif domain == "P":  # ---- SPACE / SATELLITE ---------------------------
+        _row("SAT ID", track.get("sensor_id") or track.get("norad_id"))
+        _row("NAME",   track.get("sat_name")  or track.get("name"))
+        alt_km = _hae(track) / 1000.0
+        _row("ALT",   "{} km".format(round(alt_km)) if alt_km < 9999 else None)
+        spd = _speed_ms(track)
+        _row("SPD",   "{} km/s".format(round(spd / 1000, 2)) if spd else None)
 
-    lines.append("SRC: {}".format(src))
+    else:                # ---- GROUND / ENV / APRS / OSM ------------------
+        if src in ("openmeteo", "meteolt", "yrno", "windy"):   # WEATHER
+            place = (track.get("place_name") or track.get("place_code") or src).upper()
+            lines.append("[WEATHER] {}".format(place))
+            t = track.get("temperature_c")
+            _row("TEMP",     "{} °C".format(round(float(t), 1)) if t is not None else None)
+            ft = track.get("apparent_temperature_c") or track.get("feels_like_c")
+            _row("FEELS",    "{} °C".format(round(float(ft), 1)) if ft is not None else None)
+            rh = track.get("relative_humidity_pct")
+            _row("HUMIDITY", "{}%".format(int(rh)) if rh is not None else None)
+            ws = track.get("wind_speed_ms")
+            wd = track.get("wind_direction_deg")
+            if ws is not None:
+                _row("WIND",  "{} m/s{}".format(round(float(ws), 1),
+                              "  {}°".format(int(wd)) if wd is not None else ""))
+            _row("GUSTS",    "{} m/s".format(round(float(track["wind_gusts_ms"]), 1))
+                             if track.get("wind_gusts_ms") is not None else None)
+            p = track.get("pressure_hpa")
+            _row("PRESSURE", "{} hPa".format(round(float(p), 1)) if p is not None else None)
+            cc = track.get("cloud_cover_pct")
+            _row("CLOUD",    "{}%".format(int(cc)) if cc is not None else None)
+            pr = track.get("precipitation_mm")
+            if pr is not None and float(pr) > 0:
+                _row("PRECIP", "{} mm".format(round(float(pr), 1)))
+
+        elif src == "purpleair":   # AIR QUALITY
+            name = track.get("sensor_name") or "Sensor #{}".format(track.get("sensor_id", "?"))
+            lines.append("[AIR QUALITY] {}".format(name))
+            aqi    = track.get("aqi")
+            aqicat = track.get("aqi_category", "")
+            _row("AQI",      "{} ({})".format(int(aqi), aqicat) if aqi is not None else None)
+            pm25 = track.get("pm25_ugm3")
+            _row("PM2.5",    "{} µg/m³".format(round(float(pm25), 1)) if pm25 is not None else None)
+            pm10 = track.get("pm10_ugm3")
+            _row("PM10",     "{} µg/m³".format(round(float(pm10), 1)) if pm10 is not None else None)
+            pm1  = track.get("pm1_ugm3")
+            _row("PM1",      "{} µg/m³".format(round(float(pm1),  1)) if pm1  is not None else None)
+            t = track.get("temperature_c")
+            _row("TEMP",     "{} °C".format(round(float(t), 1)) if t is not None else None)
+            rh = track.get("relative_humidity_pct")
+            _row("HUMIDITY", "{}%".format(int(rh)) if rh is not None else None)
+            p = track.get("pressure_hpa")
+            _row("PRESSURE", "{} hPa".format(round(float(p), 1)) if p is not None else None)
+
+        else:                      # APRS / OSM / vehicles
+            feat = track.get("feature_type")
+            if feat:               # OSM geo feature
+                _row("TYPE", feat.upper())
+                _row("ICAO", track.get("icao"))
+                _row("IATA", track.get("iata"))
+            else:                  # APRS or vehicle
+                _row("SYM",  track.get("symbol"))
+                spd = _speed_ms(track)
+                _row("SPD",  "{} kts".format(round(spd / 0.514444, 1)) if spd else None)
+                _row("HDG",  "{}°".format(int(_course(track))) if spd else None)
+
+    _row("SRC", src)
     return "\n".join(lines)
 
 
