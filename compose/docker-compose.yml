@@ -356,7 +356,7 @@ services:
       - GOAT_CERT_DIR=/certs
       - ZENOH_LOCAL_ENDPOINT=${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}
     command: >
-      python3 /app/cot_bridge.py
+      python3 /app/cot_layer.py
       --host 239.2.3.1
       --port 6969
       --udp
@@ -380,7 +380,7 @@ services:
       - TAK_HOST=${TAK_HOST:-127.0.0.1}
       - TAK_PORT=${TAK_PORT:-8087}
     command: >
-      python3 /app/cot_bridge.py
+      python3 /app/cot_layer.py
       --host ${TAK_HOST:-127.0.0.1}
       --port ${TAK_PORT:-8087}
     volumes:
@@ -403,7 +403,7 @@ services:
       - RADAR_HOST=${RADAR_HOST:-127.0.0.1}
       - RADAR_PORT=${RADAR_PORT:-30002}
     command: >
-      python3 /app/cat62_bridge.py
+      python3 /app/cat62_layer.py
       --radar-host ${RADAR_HOST:-127.0.0.1}
       --radar-port ${RADAR_PORT:-30002}
     volumes:
@@ -430,7 +430,7 @@ services:
       - SITAWARE_PASS=${SITAWARE_PASS:-}
       - SITAWARE_SOURCE=${SITAWARE_SOURCE:-efdi-live}
     command: >
-      python3 /app/nvg_bridge.py
+      python3 /app/nato_nvg_layer.py
       --url ${SITAWARE_URL:-}
       --user ${SITAWARE_USER:-}
       --password ${SITAWARE_PASS:-}

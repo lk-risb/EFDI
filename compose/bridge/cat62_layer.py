@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""cat62_bridge.py — ASTERIX CAT62 radar TCP→Zenoh bridge.
+"""cat62_layer.py — ASTERIX CAT62 radar TCP→Zenoh bridge.
 
 Reads ASTERIX frames from a radar TCP (or UDP) socket, decodes CAT62
 System Track records, and publishes them as JSON to the EFDI fabric.
@@ -10,7 +10,7 @@ Proto schema: cat62_track.proto  (message Cat62Track, package ltu.cis.tracks.v1)
 Install / run:
     . venv/bin/activate
     pip install eclipse-zenoh   # already installed if you ran first-publisher
-    python3 cat62_bridge.py --radar-host 192.0.2.1 --radar-port 30002
+    python3 cat62_layer.py --radar-host 192.0.2.1 --radar-port 30002
 """
 
 import argparse
