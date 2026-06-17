@@ -88,13 +88,13 @@ def _is_hostile_mmsi(mmsi) -> bool:
     return str(mmsi)[:3] in _HOSTILE_MID
 
 def _civ_air_type(track: dict) -> str:
-    return "a-h-A-C-F" if _is_hostile_icao24(track.get("icao24")) else "a-f-A-C-F"
+    return "a-h-A-C-F" if _is_hostile_icao24(track.get("icao24")) else "a-n-A-C-F"
 
 def _mil_air_type(track: dict) -> str:
     return "a-h-A-M-F" if _is_hostile_icao24(track.get("icao24")) else "a-n-A-M-F"
 
 def _sea_type(track: dict) -> str:
-    return "a-h-S-X-L" if _is_hostile_mmsi(track.get("mmsi", "")) else "a-f-S-X-L"
+    return "a-h-S-X-L" if _is_hostile_mmsi(track.get("mmsi", "")) else "a-n-S-X-L"
 
 
 # Schema: {category}/{vendor}/{protocol}/{affiliation}/{entity_type}/{data_type}/v1
@@ -204,6 +204,14 @@ def _icon_png_b64(shape: str, rgb: tuple, size: int = 32) -> str:
             return F if (nx / 0.28) ** 2 + (ny / 0.46) ** 2 <= 1.0 else T
         if shape == "vehicle":
             return F if abs(nx / 0.30) ** 4 + abs(ny / 0.22) ** 4 <= 1.0 else T
+        if shape == "car":
+            # Top-down car: rectangular body + four wheel-arch ovals at corners
+            body = abs(nx) <= 0.22 and abs(ny) <= 0.40
+            w1 = (nx + 0.28)**2 / 0.009 + (ny + 0.26)**2 / 0.014 <= 1.0
+            w2 = (nx - 0.28)**2 / 0.009 + (ny + 0.26)**2 / 0.014 <= 1.0
+            w3 = (nx + 0.28)**2 / 0.009 + (ny - 0.26)**2 / 0.014 <= 1.0
+            w4 = (nx - 0.28)**2 / 0.009 + (ny - 0.26)**2 / 0.014 <= 1.0
+            return F if (body or w1 or w2 or w3 or w4) else T
         if shape == "satellite":
             # Satellite: rectangular body + two wide solar-panel wings
             body = abs(nx) <= 0.12 and abs(ny) <= 0.12
@@ -254,21 +262,22 @@ _RED    = (220, 20,  20)  # 2525B hostile red
 # ATAK CIV 5.x ignores b64image for recognised 2525B types, so we also set
 # iconsetpath (below) which is honoured regardless of the CoT type.
 _COT_ICON_B64 = {
-    # Civil aircraft — T-shaped commercial silhouette
-    "a-f-A-C-F":   _icon_png_b64("aircraft", _BLUE),
+    # Civil aircraft — T-shaped commercial silhouette, neutral green
+    "a-n-A-C-F":   _icon_png_b64("aircraft", _GREEN),
     "a-h-A-C-F":   _icon_png_b64("aircraft", _RED),
     "a-u-A-C-F":   _icon_png_b64("aircraft", _YELLOW),
     # Military aircraft — swept-wing fighter silhouette
-    "a-n-A-M-F":   _icon_png_b64("fighter",  _GREEN),
+    "a-f-A-M-F":   _icon_png_b64("fighter",  _BLUE),   # allied military (blue)
+    "a-n-A-M-F":   _icon_png_b64("fighter",  _GREEN),  # unknown military (neutral)
     "a-h-A-M-F":   _icon_png_b64("fighter",  _RED),
     "a-u-A":       _icon_png_b64("fighter",  _YELLOW),
-    # Surface vessels
-    "a-f-S-X-L":   _icon_png_b64("ship",     _BLUE),
+    # Surface vessels — neutral green for civilian, red for hostile
+    "a-n-S-X-L":   _icon_png_b64("ship",     _GREEN),
     "a-h-S-X-L":   _icon_png_b64("ship",     _RED),
     # Space / satellite
     "a-f-P":       _icon_png_b64("satellite", _BLUE),
     # Ground
-    "a-f-G-E-V-C": _icon_png_b64("vehicle",  _BLUE),
+    "a-f-G-E-V-C": _icon_png_b64("car",      _BLUE),
     "a-u-G":       _icon_png_b64("circle",   _YELLOW),
     "a-n-G-I":     _icon_png_b64("circle",   _GREEN),
     "a-n-G-I-R":   _icon_png_b64("tower",    _GREEN),   # Neutral ground installation radio
@@ -291,14 +300,15 @@ _COT_ICON_B64 = {
 # 2525B affiliation frame (arc=air, U=sea, box=ground).
 _ISET = "34ae1613-9645-4222-a9d2-e5f243dea2865"
 _COT_ICONSET = {
-    "a-f-A-C-F":   "{}/Friendly/Air/Fixed Wing.png".format(_ISET),
+    "a-n-A-C-F":   "{}/Neutral/Air/Fixed Wing.png".format(_ISET),
     "a-h-A-C-F":   "{}/Hostile/Air/Fixed Wing.png".format(_ISET),
+    "a-f-A-M-F":   "{}/Friendly/Air/Military Fixed Wing.png".format(_ISET),
     "a-n-A-M-F":   "{}/Neutral/Air/Military Fixed Wing.png".format(_ISET),
     "a-h-A-M-F":   "{}/Hostile/Air/Military Fixed Wing.png".format(_ISET),
     "a-u-A":       "{}/Unknown/Air/Military Fixed Wing.png".format(_ISET),
     "a-u-A-C-F":   "{}/Unknown/Air/Fixed Wing.png".format(_ISET),
     "a-f-G-E-V-C": "{}/Friendly/Land/Vehicle.png".format(_ISET),
-    "a-f-S-X-L":   "{}/Friendly/Sea/Vessel.png".format(_ISET),
+    "a-n-S-X-L":   "{}/Neutral/Sea/Vessel.png".format(_ISET),
     "a-h-S-X-L":   "{}/Hostile/Sea/Vessel.png".format(_ISET),
     "a-u-G":       "{}/Unknown/Land/Generic.png".format(_ISET),
     "a-n-G-I":     "{}/Neutral/Land/Structure.png".format(_ISET),
