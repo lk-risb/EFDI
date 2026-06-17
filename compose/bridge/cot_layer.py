@@ -104,9 +104,9 @@ _TOPIC_COT = {
     "air/**/civ/aircraft/**":    (_civ_air_type,  AIR_STALE_S),
     "air/**/mil/aircraft/**":    (_mil_air_type,  AIR_STALE_S),
     "air/**/unknown/**":         ("a-u-A",        AIR_STALE_S),   # radar / SAPIENT returns
-    # LAND — neutral stations, friendly forces, civilian vehicles
+    # LAND — neutral stations (radio/APRS/weather), friendly forces, civilian vehicles
     "land/**/civ/vehicle/**":    ("a-f-G-E-V-C", LAND_STALE_S),
-    "land/**/neutral/station/**":("a-n-G-I",     LAND_STALE_S),
+    "land/**/neutral/station/**":("a-n-G-I-R",   LAND_STALE_S),  # radio tower icon
     "land/**/friendly/unit/**":  ("a-f-G-U-C",  LAND_STALE_S),
     # SEA — MMSI classifier overrides for RU/BY vessels
     "sea/**/civ/vessel/**":      (_sea_type,      SEA_STALE_S),
@@ -173,6 +173,12 @@ def _icon_png_b64(shape: str, rgb: tuple, size: int = 32) -> str:
             return F if (nx / 0.28) ** 2 + (ny / 0.46) ** 2 <= 1.0 else T
         if shape == "vehicle":
             return F if abs(nx / 0.30) ** 4 + abs(ny / 0.22) ** 4 <= 1.0 else T
+        if shape == "satellite":
+            # Satellite: rectangular body + two wide solar-panel wings
+            body = abs(nx) <= 0.12 and abs(ny) <= 0.12
+            panL = -0.46 <= nx <= -0.14 and abs(ny) <= 0.08
+            panR =  0.14 <= nx <=  0.46 and abs(ny) <= 0.08
+            return F if (body or panL or panR) else T
         if shape == "tower":
             # Lattice antenna / radio tower: thin mast + 3 reducing crossbars
             mast = abs(nx) <= 0.05
@@ -229,7 +235,7 @@ _COT_ICON_B64 = {
     "a-f-S-X-L":   _icon_png_b64("ship",     _BLUE),
     "a-h-S-X-L":   _icon_png_b64("ship",     _RED),
     # Space / satellite
-    "a-f-P":       _icon_png_b64("circle",   _BLUE),
+    "a-f-P":       _icon_png_b64("satellite", _BLUE),
     # Ground
     "a-f-G-E-V-C": _icon_png_b64("vehicle",  _BLUE),
     "a-u-G":       _icon_png_b64("circle",   _YELLOW),
@@ -310,8 +316,8 @@ def _uid(track: dict) -> str:
 
 
 def _callsign(track: dict, uid: str) -> str:
-    # OSM name / ship name → short map label
-    for key in ("name", "ship_name", "sensor_name"):
+    # OSM name / ship name / satellite name → short map label
+    for key in ("name", "ship_name", "sat_name", "sensor_name"):
         v = track.get(key)
         if v and str(v).strip():
             return str(v).strip()
@@ -375,12 +381,19 @@ def _build_remarks(track: dict, cot_type: str) -> str:
         _row("STATUS", nav or None)
 
     elif domain == "P":  # ---- SPACE / SATELLITE ---------------------------
-        _row("SAT ID", track.get("sensor_id") or track.get("norad_id"))
-        _row("NAME",   track.get("sat_name")  or track.get("name"))
-        alt_km = _hae(track) / 1000.0
-        _row("ALT",   "{} km".format(round(alt_km)) if alt_km < 9999 else None)
+        _row("SAT ID", track.get("sat_id") or track.get("sensor_id") or track.get("norad_id"))
+        _row("NAME",   track.get("sat_name") or track.get("name"))
+        alt_km = track.get("alt_km")
+        if alt_km is None:
+            raw_m = _hae(track)
+            alt_km = raw_m / 1000.0 if raw_m < 9_999_998 else None
+        _row("ALT",   "{} km".format(round(float(alt_km))) if alt_km is not None else None)
         spd = _speed_ms(track)
         _row("SPD",   "{} km/s".format(round(spd / 1000, 2)) if spd else None)
+        _row("ELEV",  "{}°".format(round(float(track["elevation_deg"]), 1))
+                      if track.get("elevation_deg") is not None else None)
+        _row("AZIM",  "{}°".format(round(float(track["azimuth_deg"]), 1))
+                      if track.get("azimuth_deg") is not None else None)
 
     else:                # ---- GROUND / ENV / APRS / OSM ------------------
         if src in ("openmeteo", "meteolt", "yrno", "windy"):   # WEATHER
@@ -429,9 +442,11 @@ def _build_remarks(track: dict, cot_type: str) -> str:
         else:                      # APRS / OSM / vehicles
             feat = track.get("feature_type")
             if feat:               # OSM geo feature
-                _row("TYPE", feat.upper())
-                _row("ICAO", track.get("icao"))
-                _row("IATA", track.get("iata"))
+                _row("TYPE",    feat.upper())
+                _row("NAME",    track.get("name"))
+                _row("ICAO",    track.get("icao"))
+                _row("IATA",    track.get("iata"))
+                _row("AIRPORT", track.get("airport") or track.get("aerodrome_icao"))
             else:                  # APRS or vehicle
                 _row("SYM",  track.get("symbol"))
                 spd = _speed_ms(track)
@@ -450,6 +465,7 @@ def _hae(track: dict) -> float:
         ("alt_baro_ft", 0.3048),
         ("alt_ft",      0.3048),   # FR24
         ("alt_m",       1.0),
+        ("alt_km",      1000.0),   # n2yo satellites
     ):
         v = track.get(key)
         if v is not None and float(v) != 0:
@@ -508,7 +524,11 @@ def track_to_cot(track: dict, cot_type: str, stale_s: float = COT_STALE_S) -> st
     detail = ET.SubElement(event, "detail")
     icon_path = _COT_ICONSET.get(cot_type)
     icon_b64  = _COT_ICON_B64.get(cot_type)
-    if icon_path:
+    if icon_path and icon_b64:
+        # Both: iconsetpath is primary (ATAK uses it if the file exists),
+        # b64image is fallback for clients that don't have the built-in iconset.
+        ET.SubElement(detail, "usericon", {"iconsetpath": icon_path, "b64image": icon_b64})
+    elif icon_path:
         ET.SubElement(detail, "usericon", {"iconsetpath": icon_path})
     elif icon_b64:
         ET.SubElement(detail, "usericon", {"b64image": icon_b64})
