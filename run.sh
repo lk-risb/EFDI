@@ -24,10 +24,18 @@ mkdir -p "$LOG_DIR" "$PID_DIR"
 # Load .env
 # ---------------------------------------------------------------------------
 if [[ -f "$ENV_FILE" ]]; then
-    set -a
-    # shellcheck disable=SC1090
-    source "$ENV_FILE"
-    set +a
+    # Parse .env manually — split key/value before export so special chars
+    # in values (|, &, ;) are never interpreted as shell operators.
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        line="${line%%$'\r'}"                              # strip Windows CR
+        [[ -z "$line" || "$line" == \#* ]] && continue   # skip blank/comments
+        [[ "$line" != *=* ]] && continue                  # skip lines without =
+        key="${line%%=*}"
+        val="${line#*=}"
+        [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue  # valid var name only
+        printf -v "$key" '%s' "$val"   # set variable safely — no shell re-parsing
+        export "$key"
+    done < "$ENV_FILE"
 else
     echo "WARNING: $ENV_FILE not found — API keys will be missing"
 fi
@@ -81,7 +89,7 @@ start_zenoh() {
         echo "  [start] zenoh-router (Docker)"
         docker compose -f "$SCRIPT_DIR/compose/docker-compose.yml" up -d zenoh-router
         echo -n "  Waiting for zenoh-router healthy"
-        for i in $(seq 1 20); do
+        for _ in $(seq 1 20); do
             sleep 1
             if docker compose -f "$SCRIPT_DIR/compose/docker-compose.yml" ps zenoh-router \
                     --format "{{.Status}}" 2>/dev/null | grep -q "healthy"; then
