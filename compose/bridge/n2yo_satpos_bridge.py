@@ -42,11 +42,11 @@ OBS_ALT = 0.1  # km
 DEFAULT_SATS = [25544, 20580, 40697, 39634, 44713]
 
 _SAT_NAMES = {
-    25544: "ISS (ZARYA)",
-    20580: "HST (Hubble)",
-    40697: "Sentinel-2A",
-    39634: "Sentinel-1A",
-    44713: "Starlink-1007",
+    25544: "SPACE STATION (ISS)",
+    20580: "SPACE TELESCOPE (HST)",
+    40697: "SENTINEL (2A)",
+    39634: "SENTINEL (1A)",
+    44713: "STARLINK (1007)",
 }
 
 
@@ -90,7 +90,7 @@ def normalize(sat_id: int, raw: dict,
         "_ts":          time.time(),
         "_src":         "n2yo",
         "sat_id":       sat_id,
-        "sat_name":     info.get("satname", _SAT_NAMES.get(sat_id, str(sat_id))),
+        "sat_name":     _SAT_NAMES.get(sat_id, info.get("satname", str(sat_id))),
         "lat_deg":      pos.get("satlatitude"),
         "lon_deg":      pos.get("satlongitude"),
         "alt_km":       pos.get("sataltitude"),
