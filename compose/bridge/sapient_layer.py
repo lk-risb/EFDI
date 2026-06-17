@@ -262,7 +262,7 @@ def iter_sapient_frames(sock: socket.socket):
 # ---------------------------------------------------------------------------
 
 def run(args):
-    topic = "{}/sapient/{}/tracks/v1".format(ORG, args.node_id.replace(" ", "-"))
+    topic = "{}/air/sapient/sapient/unknown/aircraft/tracks/v1".format(ORG)
     print("SAPIENT → Zenoh topic:", topic, flush=True)
 
     session = zenoh.open(make_config())
