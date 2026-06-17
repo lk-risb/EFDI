@@ -180,11 +180,37 @@ start_layers() {
         echo "  [skip] cot-tcp — TAK Server not reachable at ${TAK_HOST:-127.0.0.1}:${TAK_PORT:-8087}"
     fi
 
-    # CAT62 radar — only if RADAR_HOST is set and not default placeholder
+    # CAT62 radar — outbound connect to a track server
     if [[ "${RADAR_HOST:-}" && "${RADAR_HOST}" != "127.0.0.1" ]]; then
         start cat62 cat62_layer.py --radar-host "$RADAR_HOST" --radar-port "${RADAR_PORT:-30002}"
     else
         echo "  [skip] cat62 — set RADAR_HOST in .env to enable"
+    fi
+
+    # CAT48/34 radar — inbound listener (Giraffe connects/sends to us)
+    # Set CAT48_PORT to activate. Optional: CAT48_RADAR_LAT/LON for polar→WGS84.
+    # Set CAT48_TCP=1 if the radar uses TCP instead of UDP.
+    if [[ "${CAT48_PORT:-}" ]]; then
+        tcp_flag=""
+        [[ "${CAT48_TCP:-}" == "1" ]] && tcp_flag="--tcp"
+        start cat48 cat48_bridge.py \
+            --port "$CAT48_PORT" \
+            ${tcp_flag:+"$tcp_flag"} \
+            ${CAT48_RADAR_LAT:+--radar-lat "$CAT48_RADAR_LAT"} \
+            ${CAT48_RADAR_LON:+--radar-lon "$CAT48_RADAR_LON"}
+    else
+        echo "  [skip] cat48 — set CAT48_PORT in .env to enable"
+    fi
+
+    # CoT receiver — inbound CoT from external source (e.g. Giraffe radar)
+    # Set COT_RX_PORT to open a listener (they connect to us)
+    # Set COT_RX_HOST to connect outbound (we connect to them, format IP:PORT)
+    if [[ "${COT_RX_PORT:-}" ]]; then
+        start cot-rx cot_receiver_bridge.py --listen "$COT_RX_PORT"
+    elif [[ "${COT_RX_HOST:-}" ]]; then
+        start cot-rx cot_receiver_bridge.py --connect "$COT_RX_HOST"
+    else
+        echo "  [skip] cot-rx — set COT_RX_PORT or COT_RX_HOST in .env to enable"
     fi
 
     # SAPIENT — only if SAPIENT_HOST set
