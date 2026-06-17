@@ -272,7 +272,9 @@ _COT_ICON_B64 = {
     "a-u-G":       _icon_png_b64("circle",   _YELLOW),
     "a-n-G-I":     _icon_png_b64("circle",   _GREEN),
     "a-n-G-I-R":   _icon_png_b64("tower",    _GREEN),   # Neutral ground installation radio
-    "a-f-G-E-S-R": _icon_png_b64("radar",    _BLUE),    # Friendly ground electronic sensor radar
+    "a-n-G-E-S-R": _icon_png_b64("radar",    _GREEN),   # Neutral ground electronic sensor radar (civ ATC)
+    "a-f-G-E-S-R": _icon_png_b64("radar",    _BLUE),    # Friendly ground electronic sensor radar (mil)
+    "a-h-G-E-S-R": _icon_png_b64("radar",    _RED),     # Hostile ground electronic sensor radar
     "a-f-G-I-B-A": _icon_png_b64("circle",   _BLUE),
     "a-f-G-I-B-O": _icon_png_b64("circle",   _BLUE),
     "a-f-G-I-B-M": _icon_png_b64("circle",   _BLUE),
@@ -311,7 +313,9 @@ _COT_ICONSET = {
     "a-f-P":       "{}/Friendly/Space/Satellite.png".format(_ISET),
     "a-f-G-U-C":   "{}/Friendly/Land/Unit.png".format(_ISET),
     "a-n-G-I-R":   "{}/Neutral/Land/Radio.png".format(_ISET),
+    "a-n-G-E-S-R": "{}/Neutral/Land/Radar.png".format(_ISET),
     "a-f-G-E-S-R": "{}/Friendly/Land/Radar.png".format(_ISET),
+    "a-h-G-E-S-R": "{}/Hostile/Land/Radar.png".format(_ISET),
 }
 
 def make_config() -> "zenoh.Config":
@@ -500,7 +504,6 @@ def _build_remarks(track: dict, cot_type: str) -> str:
             else:                  # APRS or vehicle
                 _row("SYM",  track.get("symbol"))
                 spd = _speed_ms(track)
-                _row("SPD (kt)",   "{} kt".format(round(spd / 0.514444, 1)) if spd else None)
                 _row("SPD (km/h)", "{} km/h".format(round(spd * 3.6, 1)) if spd else None)
                 _row("HDG",  "{}°".format(int(_course(track))) if spd else None)
 
@@ -677,7 +680,7 @@ def make_handler(cot_type_or_fn, sender, verbose: bool, stale_s: float = COT_STA
         # ATC towers / ground vehicles show up in ADS-B with "TWR", "GND" etc.
         # Reclassify as neutral ground radar/radio station instead of aircraft.
         if _is_ground_station(track):
-            cot_type = "a-f-G-E-S-R"   # ATC installation (radar/control)
+            cot_type = "a-n-G-E-S-R"   # civilian ATC installation (neutral radar)
             stale_s_used = LAND_STALE_S
         else:
             cot_type = cot_type_or_fn(track) if callable(cot_type_or_fn) else cot_type_or_fn
