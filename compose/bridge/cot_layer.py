@@ -1,5 +1,5 @@
     #!/usr/bin/env python3
-"""cot_bridge.py — Zenoh EFDI track topics → TAK Server / ATAK CoT bridge.
+"""cot_layer.py — Zenoh EFDI track topics → TAK Server / ATAK CoT bridge.
 
 Subscribes to all EFDI track topics and forwards position updates as
 Cursor-on-Target (CoT) XML to a TAK Server (FreeTAKServer) over TCP.
@@ -19,9 +19,9 @@ Zenoh topics consumed:
   <ORG>/aprs/tracks/v1      → CoT a-u-G   (unknown ground, unclassified APRS)
 
 Run:
-    venv/bin/python3 cot_bridge.py                        # TCP → FTS localhost
-    venv/bin/python3 cot_bridge.py --host 100.64.59.10   # TCP → remote FTS
-    venv/bin/python3 cot_bridge.py --udp --host 239.2.3.1 --port 6969  # UDP multicast
+    venv/bin/python3 cot_layer.py                        # TCP → FTS localhost
+    venv/bin/python3 cot_layer.py --host 100.64.59.10   # TCP → remote FTS
+    venv/bin/python3 cot_layer.py --udp --host 239.2.3.1 --port 6969  # UDP multicast
 """
 
 import argparse
