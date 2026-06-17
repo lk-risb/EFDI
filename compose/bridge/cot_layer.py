@@ -411,13 +411,15 @@ def _build_remarks(track: dict, cot_type: str) -> str:
 
     def _row(label: str, value) -> None:
         if value not in (None, "", 0.0):
-            lines.append("{:<12}{}".format(label + ": ", value))
+            lines.append("{}: {}".format(label, value))
 
     if domain == "A":   # ---- AIR ----------------------------------------
         _row("REG",  (track.get("registration") or "").strip().upper() or None)
         _row("TYPE", (track.get("aircraft_type") or "").strip().upper() or None)
         _row("CALL", (track.get("callsign")      or "").strip().upper() or None)
         _row("ICAO", (track.get("icao24")        or "").strip().upper() or None)
+        _row("SQWK", track.get("squawk"))
+        _row("HDG",  "{}°".format(int(_course(track))))
         alt_m = _hae(track)
         if alt_m < 9_999_998:
             alt_ft  = int(alt_m / 0.3048)
@@ -433,8 +435,6 @@ def _build_remarks(track: dict, cot_type: str) -> str:
         if spd:
             _row("SPD (kt)",   "{} kt".format(round(spd / 0.514444)))
             _row("SPD (km/h)", "{} km/h".format(round(spd * 3.6)))
-        _row("HDG",  "{}°".format(int(_course(track))))
-        _row("SQWK", track.get("squawk"))
         if track.get("is_military"):
             lines.append("[MILITARY]")
 
