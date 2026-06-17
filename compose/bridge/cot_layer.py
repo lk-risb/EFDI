@@ -149,11 +149,13 @@ _APRS_SYM_COT = {
 def _aprs_cot_type(track: dict) -> str:
     return _APRS_SYM_COT.get(track.get("symbol", ""), "a-u-G")
 
-# OSM feature_type → CoT type for fixed infrastructure (default = friendly/neutral)
+# OSM feature_type → CoT type for fixed infrastructure.
+# Civilian features are neutral (a-n-) so they never get flipped to hostile.
+# Military is friendly (a-f-) so _geo_cot_type() can flip RU/BY bases to hostile.
 _OSM_COT = {
-    "aerodrome": "a-f-G-I-B-A",  # friendly ground installation base aerodrome
-    "port":      "a-f-G-I-B-O",  # friendly ground installation base offloading
-    "military":  "a-f-G-I-B-M",  # friendly ground installation base military
+    "aerodrome": "a-n-G-I-B-A",  # neutral aerodrome (civilian shared infrastructure)
+    "port":      "a-n-G-I-B-O",  # neutral port
+    "military":  "a-f-G-I-B-M",  # friendly military base → flipped to hostile for RU/BY
     "station":   "a-n-G-I",      # neutral ground installation (railway)
 }
 
@@ -177,15 +179,18 @@ def _geo_cot_type(track: dict, base_type: str) -> str:
     except (TypeError, ValueError):
         return base_type
 
-    # Belarus
+    # Belarus (precise national bbox)
     if 51.25 <= lat <= 56.18 and 23.16 <= lon <= 32.78:
         return base_type.replace("a-f-", "a-h-", 1)
-    # Kaliningrad Oblast (Russian exclave between Lithuania and Poland)
-    if 54.00 <= lat <= 55.35 and 19.40 <= lon <= 22.90:
+    # Kaliningrad Oblast — tighter than the full administrative bbox to avoid
+    # catching Klaipeda (LT) at lon ~21°E / lat ~55.7°N; the oblast stays south
+    # of 55.3°N and east of ~19.6°E, with Lithuania starting at ~22°E in the
+    # extreme south — keep east boundary at 22.3°E to stay clear of LT border.
+    if 54.10 <= lat <= 55.25 and 19.60 <= lon <= 22.30:
         return base_type.replace("a-f-", "a-h-", 1)
-    # Russia proper (east of Belarus, within operational bbox)
-    # Conservative: lon >= 32.5°E AND lat >= 55°N avoids Ukraine/Moldova
-    if lat >= 55.0 and lon >= 32.5:
+    # Russia proper east of Belarus — lon >= 32.8°E and lat >= 56°N avoids
+    # Ukraine (max ~52.4°N) and keeps clear of the Baltic states (max lon ~28°E).
+    if lat >= 56.0 and lon >= 32.8:
         return base_type.replace("a-f-", "a-h-", 1)
 
     return base_type
@@ -292,6 +297,8 @@ _COT_ICON_B64 = {
     "a-f-G-I-B-A": _icon_png_b64("circle",   _BLUE),
     "a-f-G-I-B-O": _icon_png_b64("circle",   _BLUE),
     "a-f-G-I-B-M": _icon_png_b64("circle",   _BLUE),
+    "a-n-G-I-B-A": _icon_png_b64("circle",   _GREEN),
+    "a-n-G-I-B-O": _icon_png_b64("circle",   _GREEN),
     "a-h-G-I-B-A": _icon_png_b64("circle",   _RED),
     "a-h-G-I-B-O": _icon_png_b64("circle",   _RED),
     "a-h-G-I-B-M": _icon_png_b64("circle",   _RED),
@@ -317,6 +324,8 @@ _COT_ICONSET = {
     "a-f-G-I-B-A": "{}/Friendly/Land/Airfield.png".format(_ISET),
     "a-f-G-I-B-O": "{}/Friendly/Land/Port.png".format(_ISET),
     "a-f-G-I-B-M": "{}/Friendly/Land/Military Base.png".format(_ISET),
+    "a-n-G-I-B-A": "{}/Neutral/Land/Airfield.png".format(_ISET),
+    "a-n-G-I-B-O": "{}/Neutral/Land/Port.png".format(_ISET),
     "a-h-G-I-B-A": "{}/Hostile/Land/Airfield.png".format(_ISET),
     "a-h-G-I-B-O": "{}/Hostile/Land/Port.png".format(_ISET),
     "a-h-G-I-B-M": "{}/Hostile/Land/Military Base.png".format(_ISET),
@@ -402,7 +411,7 @@ def _build_remarks(track: dict, cot_type: str) -> str:
 
     def _row(label: str, value) -> None:
         if value not in (None, "", 0.0):
-            lines.append("{:<10}{}".format(label + ":", value))
+            lines.append("{:<12}{}".format(label + ": ", value))
 
     if domain == "A":   # ---- AIR ----------------------------------------
         _row("REG",  (track.get("registration") or "").strip().upper() or None)
@@ -417,9 +426,13 @@ def _build_remarks(track: dict, cot_type: str) -> str:
             alt_str = "---"
             alt_m   = None
         spd = _speed_ms(track)
-        _row("ALT",  alt_str)
-        _row("RALT", "{} m".format(int(alt_m)) if alt_m is not None else None)
-        _row("SPD",  "{} kts".format(round(spd / 0.514444)) if spd else None)
+        _row("ALT (FL)",  alt_str)
+        if alt_m is not None:
+            _row("ALT (ft)", "{} ft".format(int(alt_m / 0.3048)))
+            _row("ALT (m)",  "{} m".format(int(alt_m)))
+        if spd:
+            _row("SPD (kt)",   "{} kt".format(round(spd / 0.514444)))
+            _row("SPD (km/h)", "{} km/h".format(round(spd * 3.6)))
         _row("HDG",  "{}°".format(int(_course(track))))
         _row("SQWK", track.get("squawk"))
         if track.get("is_military"):
