@@ -43,11 +43,9 @@ MIL_INTERVAL  = 5    # military endpoint — same rate as civil
 MAX_RADIUS = 250  # nm — enforced by airplanes.live API (403 above this)
 POLL_CENTERS = [
     (57.0, 22.0),   # Baltic / Scandinavia
-    (52.0, 20.0),   # Central Europe / Poland
-    (48.0, 35.0),   # Ukraine / Black Sea
-    (41.0, 29.0),   # Turkey / Caucasus
-    (35.0, 38.0),   # Levant / Syria
-    (33.0, 45.0),   # Iraq / Iran
+    (53.0, 28.0),   # Belarus / western Ukraine
+    (48.0, 32.0),   # Ukraine / Black Sea
+    (44.0, 36.0),   # Crimea / eastern Black Sea
 ]
 
 
