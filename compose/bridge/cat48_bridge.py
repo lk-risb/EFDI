@@ -468,7 +468,14 @@ def _handle_stream(frame_iter, pub, radar_lat, radar_lon, verbose):
             while pos < len(data):
                 track, pos = decode_cat048_record(data, pos, radar_lat, radar_lon)
                 if len(track) > 2:   # more than just _ts + _src
+                    if verbose and "lat_deg" not in track:
+                        ident = track.get("icao24") or track.get("radar_id") or "PSR"
+                        print("CAT-048 {} no-position (set radar-lat/lon)".format(ident), flush=True)
                     _publish(pub, track, verbose)
+
+        elif verbose:
+            print("UNKNOWN cat=0x{:02x} len={}  hex={}".format(
+                cat, len(data), data[:16].hex()), flush=True)
 
 
 # ---------------------------------------------------------------------------
