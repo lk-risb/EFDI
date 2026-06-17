@@ -110,8 +110,8 @@ def normalize(ac: dict, is_military: bool) -> dict | None:
 
 def run(args):
     session = zenoh.open(make_config())
-    pub_tracks = session.declare_publisher("{}/air/civ/tracks/v1".format(ORG))
-    pub_mil    = session.declare_publisher("{}/air/mil/tracks/v1".format(ORG))
+    pub_tracks = session.declare_publisher("{}/air/airplaneslive/adsb/civ/aircraft/tracks/v1".format(ORG))
+    pub_mil    = session.declare_publisher("{}/air/airplaneslive/adsb/mil/aircraft/tracks/v1".format(ORG))
 
     url_mil = "{}/mil".format(BASE_URL)
     print("airplanes.live: {} centers radius={}nm  poll={}s".format(

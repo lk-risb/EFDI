@@ -217,12 +217,12 @@ _LAND_CODES = set("><jkuvURfa=")  # car, motorcycle, jeep, trucks, van, bus, RV,
 def _route_topic(symbol: str) -> str:
     code = symbol[1] if len(symbol) >= 2 else ""
     if code in _AIR_CODES:
-        return "{}/air/civ/tracks/v1".format(ORG)
+        return "{}/air/aprs-is/aprs/civ/aircraft/tracks/v1".format(ORG)
     if code in _SEA_CODES:
-        return "{}/sea/civ/tracks/v1".format(ORG)
+        return "{}/sea/aprs-is/aprs/civ/vessel/tracks/v1".format(ORG)
     if code in _LAND_CODES:
-        return "{}/land/civ/tracks/v1".format(ORG)
-    return "{}/land/aprs/tracks/v1".format(ORG)   # catch-all (weather stations, digipeaters, etc.)
+        return "{}/land/aprs-is/aprs/civ/vehicle/tracks/v1".format(ORG)
+    return "{}/land/aprs-is/aprs/neutral/station/tracks/v1".format(ORG)   # digipeaters / wx / home
 
 
 # ---------------------------------------------------------------------------
@@ -234,15 +234,15 @@ def run(args):
     print("APRS-IS server: {}:{} | filter: {}".format(APRSIS_HOST, APRSIS_PORT, filt_desc), flush=True)
 
     session = zenoh.open(make_config())
-    pub_air   = session.declare_publisher("{}/air/civ/tracks/v1".format(ORG))
-    pub_sea   = session.declare_publisher("{}/sea/civ/tracks/v1".format(ORG))
-    pub_land  = session.declare_publisher("{}/land/civ/tracks/v1".format(ORG))
-    pub_misc  = session.declare_publisher("{}/land/aprs/tracks/v1".format(ORG))
+    pub_air   = session.declare_publisher("{}/air/aprs-is/aprs/civ/aircraft/tracks/v1".format(ORG))
+    pub_sea   = session.declare_publisher("{}/sea/aprs-is/aprs/civ/vessel/tracks/v1".format(ORG))
+    pub_land  = session.declare_publisher("{}/land/aprs-is/aprs/civ/vehicle/tracks/v1".format(ORG))
+    pub_misc  = session.declare_publisher("{}/land/aprs-is/aprs/neutral/station/tracks/v1".format(ORG))
     _pubs = {
-        "{}/air/civ/tracks/v1".format(ORG):       pub_air,
-        "{}/sea/civ/tracks/v1".format(ORG):       pub_sea,
-        "{}/land/civ/tracks/v1".format(ORG):      pub_land,
-        "{}/land/aprs/tracks/v1".format(ORG):     pub_misc,
+        "{}/air/aprs-is/aprs/civ/aircraft/tracks/v1".format(ORG):     pub_air,
+        "{}/sea/aprs-is/aprs/civ/vessel/tracks/v1".format(ORG):       pub_sea,
+        "{}/land/aprs-is/aprs/civ/vehicle/tracks/v1".format(ORG):     pub_land,
+        "{}/land/aprs-is/aprs/neutral/station/tracks/v1".format(ORG): pub_misc,
     }
 
     try:

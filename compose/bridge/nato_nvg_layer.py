@@ -48,13 +48,18 @@ NVG_VERSION = "2.0.2"
 REFRESH_S   = 10    # re-PUT all live tracks at this interval
 STALE_S     = 120   # delete tracks older than this
 
-# APP-6(B) SIDC codes per topic domain
+# APP-6(B) SIDC codes — keyed by new schema wildcard patterns.
+# ** matches zero-or-more Zenoh path segments.
 _TOPIC_SIDC = {
-    "air/civ/tracks/v1":  "SFAPCF----E----",  # Friendly Air Fixed Wing
-    "air/mil/tracks/v1":  "SNAPCF----E----",  # Neutral Air Fixed Wing (military, unknown affil.)
-    "land/civ/tracks/v1": "SFGPUCV---E----",  # Friendly Ground Combat Vehicle
-    "sea/civ/tracks/v1":  "SFSPXF----E----",  # Friendly Sea Surface Combatant
-    "aprs/tracks/v1":     "SUGPU-----E----",  # Unknown Ground Unit (unclassified APRS)
+    "air/**/civ/aircraft/**":    "SFAPCF----E----",  # Friendly Air Fixed Wing (civil)
+    "air/**/mil/aircraft/**":    "SNAPCF----E----",  # Neutral Air Fixed Wing (military)
+    "air/**/unknown/**":         "SUAPCF----E----",  # Unknown Air (radar / SAPIENT)
+    "land/**/civ/vehicle/**":    "SFGPUCV---E----",  # Friendly Ground Vehicle
+    "land/**/neutral/station/**":"SFGP------E----",  # Neutral Ground Installation
+    "land/**/friendly/unit/**":  "SFGPU-----E----",  # Friendly Ground Unit (NFFI)
+    "sea/**/civ/vessel/**":      "SFSPXF----E----",  # Friendly Sea Surface
+    "sea/**/mil/vessel/**":      "SNSPXF----E----",  # Neutral Sea Surface (military)
+    "space/**/civ/satellite/**": "SFPAP-----E----",  # Friendly Space (satellite)
 }
 
 

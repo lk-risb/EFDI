@@ -105,7 +105,7 @@ def run(args):
         raise SystemExit("HERE_KEY not set — get a free key at https://developer.here.com/")
 
     session = zenoh.open(make_config())
-    pub = session.declare_publisher("{}/land/traffic/v1".format(ORG))
+    pub = session.declare_publisher("{}/land/here/rest/civ/vehicle/tracks/v1".format(ORG))
     print("HERE Traffic bbox:", args.bbox, "  interval:", args.interval, "s", flush=True)
 
     try:

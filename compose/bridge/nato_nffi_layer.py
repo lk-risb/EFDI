@@ -214,7 +214,7 @@ def iter_frames_newline(sock: socket.socket):
 # ---------------------------------------------------------------------------
 
 def run(args):
-    topic = "{}/fffi/nffi/tracks/v1".format(ORG)
+    topic = "{}/land/nato/nffi/friendly/unit/tracks/v1".format(ORG)
     print("NFFI → Zenoh topic:", topic, flush=True)
 
     session = zenoh.open(make_config())
