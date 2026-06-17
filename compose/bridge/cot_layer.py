@@ -54,13 +54,48 @@ GEO_STALE_S    = 86400   # 24 h for fixed infrastructure (OSM features)
 RECONNECT_S    = 5
 SEND_TIMEOUT_S = 10
 
-# (topic_suffix, cot_type_or_None, stale_s)
+# ---------------------------------------------------------------------------
+# Hostile-state classifiers
+# ICAO 24-bit address ranges and MMSI Maritime Identification Digits (MID)
+# for states designated hostile in the Eastern NATO flank scenario.
+# ---------------------------------------------------------------------------
+
+# (lo, hi) inclusive hex ranges of ICAO 24-bit addresses
+_HOSTILE_ICAO_RANGES = [
+    (0x140000, 0x17FFFF),  # Russia
+    (0x510000, 0x5103FF),  # Belarus
+]
+
+# First 3 digits of MMSI = MID (ITU)
+_HOSTILE_MID = {"273", "374"}   # 273 = Russia, 374 = Belarus
+
+def _is_hostile_icao24(icao24) -> bool:
+    try:
+        n = int(str(icao24), 16)
+        return any(lo <= n <= hi for lo, hi in _HOSTILE_ICAO_RANGES)
+    except (ValueError, TypeError):
+        return False
+
+def _is_hostile_mmsi(mmsi) -> bool:
+    return str(mmsi)[:3] in _HOSTILE_MID
+
+def _civ_air_type(track: dict) -> str:
+    return "a-h-A-C-F" if _is_hostile_icao24(track.get("icao24")) else "a-f-A-C-F"
+
+def _mil_air_type(track: dict) -> str:
+    return "a-h-A-M-F" if _is_hostile_icao24(track.get("icao24")) else "a-n-A-M-F"
+
+def _sea_type(track: dict) -> str:
+    return "a-h-S-X-L" if _is_hostile_mmsi(track.get("mmsi", "")) else "a-f-S-X-L"
+
+
+# (topic_suffix, cot_type_or_fn, stale_s)
 # cot_type None means dynamic dispatch (see _aprs_cot_type)
 _TOPIC_COT = {
-    "air/civ/tracks/v1":   ("a-f-A-C-F",  AIR_STALE_S),   # friendly civil fixed wing
-    "air/mil/tracks/v1":   ("a-n-A-M-F",  AIR_STALE_S),   # neutral military fixed wing
+    "air/civ/tracks/v1":   (_civ_air_type, AIR_STALE_S),   # friendly civil / hostile if RU/BY
+    "air/mil/tracks/v1":   (_mil_air_type, AIR_STALE_S),   # neutral mil / hostile if RU/BY
     "land/civ/tracks/v1":  ("a-f-G-E-V-C", LAND_STALE_S), # friendly ground vehicle civilian
-    "sea/civ/tracks/v1":   ("a-f-S-X-L",  SEA_STALE_S),   # friendly surface non-combat large
+    "sea/civ/tracks/v1":   (_sea_type,     SEA_STALE_S),   # friendly vessel / hostile if RU/BY
     "aprs/tracks/v1":      (None,          LAND_STALE_S),  # dynamic per symbol
     "radar/*/tracks/v1":   ("a-u-A",       AIR_STALE_S),   # unknown air (radar return)
 }
@@ -106,10 +141,16 @@ def _icon_png_b64(shape: str, rgb: tuple, size: int = 32) -> str:
         nx = (x - cx) / W
         ny = (y - cy) / H   # positive = down
         if shape == "aircraft":
+            # T-shape: narrow fuselage, straight wings, horizontal tail
             body  = (nx / 0.07) ** 2 + (ny / 0.45) ** 2 <= 1.0
             wings = abs(ny + 0.05) <= 0.13 and abs(nx) <= 0.46
             tail  = abs(ny - 0.30) <= 0.08 and abs(nx) <= 0.22
             return F if (body or wings or tail) else T
+        if shape == "fighter":
+            # Delta/swept wing — wide at mid-body, tapering to nose and tail
+            swept = abs(nx) <= max(0.0, 0.44 - abs(ny + 0.08) * 0.78)
+            body  = (nx / 0.05) ** 2 + (ny / 0.46) ** 2 <= 1.0
+            return F if (swept or body) else T
         if shape == "ship":
             return F if (nx / 0.28) ** 2 + (ny / 0.46) ** 2 <= 1.0 else T
         if shape == "vehicle":
@@ -138,17 +179,25 @@ def _icon_png_b64(shape: str, rgb: tuple, size: int = 32) -> str:
 _BLUE   = (0, 116, 217)   # 2525B friendly blue
 _GREEN  = (0, 164, 0)     # 2525B neutral green
 _YELLOW = (255, 215, 0)   # 2525B unknown yellow
+_RED    = (220, 20,  20)  # 2525B hostile red
 
 # b64image fallback — used when ATAK doesn't have the iconset installed.
 # ATAK CIV 5.x ignores b64image for recognised 2525B types, so we also set
 # iconsetpath (below) which is honoured regardless of the CoT type.
 _COT_ICON_B64 = {
+    # Civil aircraft — T-shaped commercial silhouette
     "a-f-A-C-F":   _icon_png_b64("aircraft", _BLUE),
-    "a-n-A-M-F":   _icon_png_b64("aircraft", _GREEN),
-    "a-u-A":       _icon_png_b64("aircraft", _YELLOW),
+    "a-h-A-C-F":   _icon_png_b64("aircraft", _RED),
     "a-u-A-C-F":   _icon_png_b64("aircraft", _YELLOW),
-    "a-f-G-E-V-C": _icon_png_b64("vehicle",  _BLUE),
+    # Military aircraft — swept-wing fighter silhouette
+    "a-n-A-M-F":   _icon_png_b64("fighter",  _GREEN),
+    "a-h-A-M-F":   _icon_png_b64("fighter",  _RED),
+    "a-u-A":       _icon_png_b64("fighter",  _YELLOW),
+    # Surface vessels
     "a-f-S-X-L":   _icon_png_b64("ship",     _BLUE),
+    "a-h-S-X-L":   _icon_png_b64("ship",     _RED),
+    # Ground
+    "a-f-G-E-V-C": _icon_png_b64("vehicle",  _BLUE),
     "a-u-G":       _icon_png_b64("circle",   _YELLOW),
     "a-n-G-I":     _icon_png_b64("circle",   _GREEN),
     "a-f-G-I-B-A": _icon_png_b64("circle",   _BLUE),
@@ -163,7 +212,9 @@ _COT_ICON_B64 = {
 _ISET = "34ae1613-9645-4222-a9d2-e5f243dea2865"
 _COT_ICONSET = {
     "a-f-A-C-F":   "{}/Friendly/Air/Fixed Wing.png".format(_ISET),
+    "a-h-A-C-F":   "{}/Hostile/Air/Fixed Wing.png".format(_ISET),
     "a-n-A-M-F":   "{}/Neutral/Air/Fixed Wing.png".format(_ISET),
+    "a-h-A-M-F":   "{}/Hostile/Air/Fixed Wing.png".format(_ISET),
     "a-u-A":       "{}/Unknown/Air/Fixed Wing.png".format(_ISET),
     "a-u-A-C-F":   "{}/Unknown/Air/Fixed Wing.png".format(_ISET),
     "a-f-G-E-V-C": "{}/Friendly/Land/Vehicle.png".format(_ISET),
@@ -174,7 +225,6 @@ _COT_ICONSET = {
     "a-f-G-I-B-O": "{}/Friendly/Land/Port.png".format(_ISET),
     "a-f-G-I-B-M": "{}/Friendly/Land/Military Base.png".format(_ISET),
 }
-
 
 def make_config() -> "zenoh.Config":
     conf = zenoh.Config()
