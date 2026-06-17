@@ -218,7 +218,8 @@ def _build_remarks(track: dict, cot_type: str) -> str:
     src   = track.get("_src", "?")
     lines = []
 
-    domain = cot_type[2] if len(cot_type) > 2 else "?"  # A=air, G=ground, S=sea
+    parts  = cot_type.split("-")
+    domain = parts[2] if len(parts) > 2 else "?"  # A=air, G=ground, S=sea
 
     if domain == "A":   # ---- AIR ----------------------------------------
         ident = " / ".join(filter(None, [
