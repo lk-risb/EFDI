@@ -57,26 +57,26 @@ SEND_TIMEOUT_S = 10
 # (topic_suffix, cot_type_or_None, stale_s)
 # cot_type None means dynamic dispatch (see _aprs_cot_type)
 _TOPIC_COT = {
-    "air/civ/tracks/v1":   ("a-f-A",       AIR_STALE_S),
-    "air/mil/tracks/v1":   ("a-n-A",       AIR_STALE_S),
-    "land/civ/tracks/v1":  ("a-f-G-U-C",  LAND_STALE_S),
-    "sea/civ/tracks/v1":   ("a-f-S-W-C",  SEA_STALE_S),
+    "air/civ/tracks/v1":   ("a-f-A-C-F",  AIR_STALE_S),   # friendly civil fixed wing
+    "air/mil/tracks/v1":   ("a-n-A-M-F",  AIR_STALE_S),   # neutral military fixed wing
+    "land/civ/tracks/v1":  ("a-f-G-E-V-C", LAND_STALE_S), # friendly ground vehicle civilian
+    "sea/civ/tracks/v1":   ("a-f-S-X-L",  SEA_STALE_S),   # friendly surface non-combat large
     "aprs/tracks/v1":      (None,          LAND_STALE_S),  # dynamic per symbol
-    "radar/*/tracks/v1":   ("a-u-A",       AIR_STALE_S),
+    "radar/*/tracks/v1":   ("a-u-A",       AIR_STALE_S),   # unknown air (radar return)
 }
 
 # APRS symbol table+code → CoT type.  Fixed infrastructure → neutral installation.
 # Aircraft/balloon symbols → unknown air.  Everything else → unknown ground.
 _APRS_SYM_COT = {
-    "/-":  "a-n-G-I",      # house / home
-    "/#":  "a-n-G-E-V-R",  # digipeater relay
-    "/&":  "a-n-G-E-V-R",  # iGate relay
-    "/_":  "a-n-G-I",      # weather station
-    "/r":  "a-n-G-I",      # antenna / tower
-    "/^":  "a-u-A",        # aircraft
-    "/O":  "a-u-A",        # balloon
+    "/-":  "a-n-G-I",      # house / home installation
+    "/#":  "a-n-G-I",      # digipeater → neutral ground installation (tower)
+    "/&":  "a-n-G-I",      # iGate → neutral ground installation (tower)
+    "/_":  "a-n-G-I",      # weather station installation
+    "/r":  "a-n-G-I",      # antenna / tower installation
+    "/^":  "a-u-A-C-F",    # civil aircraft (unknown)
+    "/O":  "a-u-A",        # balloon / airship
     "\\_": "a-n-G-I",      # alternate-table weather
-    "\\#": "a-n-G-E-V-R",  # alternate-table digipeater
+    "\\#": "a-n-G-I",      # alternate-table digipeater
 }
 
 def _aprs_cot_type(track: dict) -> str:
