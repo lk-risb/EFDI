@@ -139,13 +139,40 @@ _BLUE   = (0, 116, 217)   # 2525B friendly blue
 _GREEN  = (0, 164, 0)     # 2525B neutral green
 _YELLOW = (255, 215, 0)   # 2525B unknown yellow
 
+# b64image fallback — used when ATAK doesn't have the iconset installed.
+# ATAK CIV 5.x ignores b64image for recognised 2525B types, so we also set
+# iconsetpath (below) which is honoured regardless of the CoT type.
 _COT_ICON_B64 = {
-    "a-f-A":     _icon_png_b64("aircraft", _BLUE),
-    "a-n-A":     _icon_png_b64("aircraft", _GREEN),
-    "a-u-A":     _icon_png_b64("aircraft", _YELLOW),
-    "a-f-G-U-C": _icon_png_b64("vehicle",  _BLUE),
-    "a-f-S-W-C": _icon_png_b64("ship",     _BLUE),
-    "a-u-G":     _icon_png_b64("circle",   _YELLOW),
+    "a-f-A-C-F":   _icon_png_b64("aircraft", _BLUE),
+    "a-n-A-M-F":   _icon_png_b64("aircraft", _GREEN),
+    "a-u-A":       _icon_png_b64("aircraft", _YELLOW),
+    "a-u-A-C-F":   _icon_png_b64("aircraft", _YELLOW),
+    "a-f-G-E-V-C": _icon_png_b64("vehicle",  _BLUE),
+    "a-f-S-X-L":   _icon_png_b64("ship",     _BLUE),
+    "a-u-G":       _icon_png_b64("circle",   _YELLOW),
+    "a-n-G-I":     _icon_png_b64("circle",   _GREEN),
+    "a-f-G-I-B-A": _icon_png_b64("circle",   _BLUE),
+    "a-f-G-I-B-O": _icon_png_b64("circle",   _BLUE),
+    "a-f-G-I-B-M": _icon_png_b64("circle",   _BLUE),
+}
+
+# Primary icon path — references the MIL-STD-2525B iconset pre-installed in
+# ATAK CIV 5.x.  ATAK renders iconsetpath even when CoT type is standard 2525B,
+# giving the correct inner function symbol (plane, ship silhouette) inside the
+# 2525B affiliation frame (arc=air, U=sea, box=ground).
+_ISET = "34ae1613-9645-4222-a9d2-e5f243dea2865"
+_COT_ICONSET = {
+    "a-f-A-C-F":   "{}/Friendly/Air/Fixed Wing.png".format(_ISET),
+    "a-n-A-M-F":   "{}/Neutral/Air/Fixed Wing.png".format(_ISET),
+    "a-u-A":       "{}/Unknown/Air/Fixed Wing.png".format(_ISET),
+    "a-u-A-C-F":   "{}/Unknown/Air/Fixed Wing.png".format(_ISET),
+    "a-f-G-E-V-C": "{}/Friendly/Land/Vehicle.png".format(_ISET),
+    "a-f-S-X-L":   "{}/Friendly/Sea/Vessel.png".format(_ISET),
+    "a-u-G":       "{}/Unknown/Land/Generic.png".format(_ISET),
+    "a-n-G-I":     "{}/Neutral/Land/Structure.png".format(_ISET),
+    "a-f-G-I-B-A": "{}/Friendly/Land/Airfield.png".format(_ISET),
+    "a-f-G-I-B-O": "{}/Friendly/Land/Port.png".format(_ISET),
+    "a-f-G-I-B-M": "{}/Friendly/Land/Military Base.png".format(_ISET),
 }
 
 
@@ -349,8 +376,11 @@ def track_to_cot(track: dict, cot_type: str, stale_s: float = COT_STALE_S) -> st
         "le":  "9999999.0",
     })
     detail = ET.SubElement(event, "detail")
-    icon_b64 = _COT_ICON_B64.get(cot_type)
-    if icon_b64:
+    icon_path = _COT_ICONSET.get(cot_type)
+    icon_b64  = _COT_ICON_B64.get(cot_type)
+    if icon_path:
+        ET.SubElement(detail, "usericon", {"iconsetpath": icon_path})
+    elif icon_b64:
         ET.SubElement(detail, "usericon", {"b64image": icon_b64})
     ET.SubElement(detail, "contact", {"callsign": cs})
     ET.SubElement(detail, "track", {
