@@ -1,0 +1,222 @@
+  #!/usr/bin/env bash
+# run.sh — start all EFDI bridges as background scripts (no Docker required).
+# The Zenoh router is still started via Docker (single container, compiled binary).
+#
+# Usage:
+#   ./run.sh            # start everything
+#   ./run.sh bridges    # bridges only (skip zenoh — already running)
+#   ./run.sh layers     # layers only (cot, cat62, sapient, nffi, nvg)
+#
+# Logs go to logs/<name>.log  PIDs saved to .pids/
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BRIDGE_DIR="$SCRIPT_DIR/compose/bridge"
+ENV_FILE="$SCRIPT_DIR/compose/.env"
+VENV="$BRIDGE_DIR/venv"
+LOG_DIR="$SCRIPT_DIR/logs"
+PID_DIR="$SCRIPT_DIR/.pids"
+
+mkdir -p "$LOG_DIR" "$PID_DIR"
+
+# ---------------------------------------------------------------------------
+# Load .env
+# ---------------------------------------------------------------------------
+if [[ -f "$ENV_FILE" ]]; then
+    set -a
+    # shellcheck disable=SC1090
+    source "$ENV_FILE"
+    set +a
+else
+    echo "WARNING: $ENV_FILE not found — API keys will be missing"
+fi
+
+export ZENOH_LOCAL_ENDPOINT="${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}"
+export GOAT_CERT_DIR="${BUNDLE_DIR:-$HOME/goat-bundle}"
+
+# ---------------------------------------------------------------------------
+# Venv setup
+# ---------------------------------------------------------------------------
+if [[ ! -x "$VENV/bin/python3" ]]; then
+    echo "Creating venv at $VENV …"
+    python3 -m venv "$VENV"
+    "$VENV/bin/pip" install --quiet eclipse-zenoh==1.9.0
+    echo "Venv ready."
+fi
+PYTHON="$VENV/bin/python3"
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+start() {
+    local name="$1"; shift
+    local script="$1"; shift
+    local pid_file="$PID_DIR/$name.pid"
+
+    if [[ -f "$pid_file" ]] && kill -0 "$(cat "$pid_file")" 2>/dev/null; then
+        echo "  [skip] $name already running (pid $(cat "$pid_file"))"
+        return
+    fi
+
+    "$PYTHON" "$BRIDGE_DIR/$script" "$@" \
+        >> "$LOG_DIR/$name.log" 2>&1 &
+    echo $! > "$pid_file"
+    echo "  [start] $name  (pid $!)"
+}
+
+skip_if_no_key() {
+    local key_val="${!1:-}"
+    [[ -z "$key_val" ]]
+}
+
+# ---------------------------------------------------------------------------
+# Zenoh router — one Docker container, everything else is native
+# ---------------------------------------------------------------------------
+start_zenoh() {
+    if docker compose -f "$SCRIPT_DIR/compose/docker-compose.yml" ps zenoh-router \
+            --format "{{.Status}}" 2>/dev/null | grep -q "healthy\|Up"; then
+        echo "  [skip] zenoh-router already running"
+    else
+        echo "  [start] zenoh-router (Docker)"
+        docker compose -f "$SCRIPT_DIR/compose/docker-compose.yml" up -d zenoh-router
+        echo -n "  Waiting for zenoh-router healthy"
+        for i in $(seq 1 20); do
+            sleep 1
+            if docker compose -f "$SCRIPT_DIR/compose/docker-compose.yml" ps zenoh-router \
+                    --format "{{.Status}}" 2>/dev/null | grep -q "healthy"; then
+                echo " OK"
+                return
+            fi
+            echo -n "."
+        done
+        echo " timeout — continuing anyway"
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# Source bridges (external data → Zenoh)
+# ---------------------------------------------------------------------------
+start_bridges() {
+    echo ""
+    echo "=== Source bridges ==="
+
+    start airplaneslive airplaneslive_adsb_bridge.py
+
+    if skip_if_no_key AISSTREAM_KEY; then
+        echo "  [skip] aisstream — AISSTREAM_KEY not set"
+    else
+        start aisstream aisstream_ws_bridge.py --apikey "$AISSTREAM_KEY"
+    fi
+
+    start aprs aprsis_bridge.py
+
+    if skip_if_no_key FR24_KEY; then
+        echo "  [skip] fr24 — FR24_KEY not set"
+    else
+        start fr24 fr24_live_bridge.py --key "$FR24_KEY"
+    fi
+
+    start opensky opensky_states_bridge.py
+    start openmeteo openmeteo_forecast_bridge.py
+    start meteolt meteolt_forecast_bridge.py
+    start yrno yrno_forecast_bridge.py
+    start osm osm_overpass_bridge.py
+
+    if skip_if_no_key N2YO_KEY; then
+        echo "  [skip] n2yo — N2YO_KEY not set"
+    else
+        start n2yo n2yo_satpos_bridge.py --key "$N2YO_KEY"
+    fi
+
+    if skip_if_no_key PURPLEAIR_KEY; then
+        echo "  [skip] purpleair — PURPLEAIR_KEY not set"
+    else
+        start purpleair purpleair_sensor_bridge.py --key "$PURPLEAIR_KEY"
+    fi
+
+    if skip_if_no_key WINDY_KEY; then
+        echo "  [skip] windy — WINDY_KEY not set"
+    else
+        start windy windy_forecast_bridge.py --key "$WINDY_KEY"
+    fi
+
+    if skip_if_no_key HERE_KEY; then
+        echo "  [skip] here-traffic — HERE_KEY not set"
+    else
+        start here-traffic here_traffic_bridge.py --key "$HERE_KEY"
+    fi
+
+    if skip_if_no_key ICAO_NOTAM_KEY; then
+        echo "  [skip] notam — ICAO_NOTAM_KEY not set"
+    else
+        start notam icao_notam_bridge.py --key "$ICAO_NOTAM_KEY"
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# Protocol layers (Zenoh → TAK / external systems)
+# ---------------------------------------------------------------------------
+start_layers() {
+    echo ""
+    echo "=== Protocol layers ==="
+
+    # CoT → ATAK UDP multicast (no TAK Server needed)
+    start cot-udp cot_layer.py --udp --host 239.2.3.1 --port 6969
+
+    # CoT → FreeTAKServer TCP (only if TAK_HOST is set to something reachable)
+    if [[ "${TAK_HOST:-127.0.0.1}" != "127.0.0.1" ]] || \
+       nc -z "${TAK_HOST:-127.0.0.1}" "${TAK_PORT:-8087}" 2>/dev/null; then
+        start cot-tcp cot_layer.py --host "${TAK_HOST:-127.0.0.1}" --port "${TAK_PORT:-8087}"
+    else
+        echo "  [skip] cot-tcp — TAK Server not reachable at ${TAK_HOST:-127.0.0.1}:${TAK_PORT:-8087}"
+    fi
+
+    # CAT62 radar — only if RADAR_HOST is set and not default placeholder
+    if [[ "${RADAR_HOST:-}" && "${RADAR_HOST}" != "127.0.0.1" ]]; then
+        start cat62 cat62_layer.py --radar-host "$RADAR_HOST" --radar-port "${RADAR_PORT:-30002}"
+    else
+        echo "  [skip] cat62 — set RADAR_HOST in .env to enable"
+    fi
+
+    # SAPIENT — only if SAPIENT_HOST set
+    if [[ "${SAPIENT_HOST:-}" ]]; then
+        start sapient sapient_layer.py --host "$SAPIENT_HOST" --port "${SAPIENT_PORT:-7001}"
+    else
+        echo "  [skip] sapient — set SAPIENT_HOST in .env to enable"
+    fi
+
+    # NATO NFFI — only if NFFI_HOST set
+    if [[ "${NFFI_HOST:-}" ]]; then
+        start nffi nato_nffi_layer.py --host "$NFFI_HOST" --port "${NFFI_PORT:-7010}"
+    else
+        echo "  [skip] nffi — set NFFI_HOST in .env to enable"
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
+MODE="${1:-all}"
+
+case "$MODE" in
+    all)
+        start_zenoh
+        start_bridges
+        start_layers
+        ;;
+    bridges)
+        start_bridges
+        ;;
+    layers)
+        start_layers
+        ;;
+    *)
+        echo "Usage: $0 [all|bridges|layers]"
+        exit 1
+        ;;
+esac
+
+echo ""
+echo "Logs: $LOG_DIR/"
+echo "Stop: ./stop.sh"
