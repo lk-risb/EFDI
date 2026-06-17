@@ -99,8 +99,30 @@ def overpass_query(tag_key: str, tag_value: str, bbox: tuple) -> list:
     return []
 
 
+_MAJOR_AERODROME_TYPES = frozenset([
+    "international", "national", "regional", "military",
+])
+
+def _is_publishable(feature_type: str, tags: dict) -> bool:
+    """Skip small/private aerodromes; keep major civilian airports and all military."""
+    if feature_type != "aerodrome":
+        return True  # ports, military areas, stations always pass
+    # Any ICAO or IATA code → scheduled/major airport
+    if tags.get("icao") or tags.get("iata"):
+        return True
+    # Explicit aerodrome type tag
+    if tags.get("aerodrome:type", "").lower() in _MAJOR_AERODROME_TYPES:
+        return True
+    # military use tag
+    if tags.get("military") or tags.get("landuse") == "military":
+        return True
+    return False
+
+
 def normalize(elem: dict, feature_type: str) -> dict | None:
     tags = elem.get("tags", {})
+    if not _is_publishable(feature_type, tags):
+        return None
     # Node → direct lat/lon; way → center
     if elem["type"] == "node":
         lat, lon = elem.get("lat"), elem.get("lon")
