@@ -22,6 +22,8 @@ import time
 import urllib.error
 import urllib.request
 
+RETRY_DELAYS = (30, 60, 120)   # retry 504/timeout up to 3 times
+
 import zenoh
 
 ROUTER = "tls/zenoh.efdi.netbird.efdi-backbone.net:7447"
@@ -37,8 +39,10 @@ POLL_INTERVAL = 43200  # 12 h — OSM features don't change often
 BBOX = (41.0, 14.0, 62.0, 45.0)
 
 # Features to query: (feature_type, OSM tag key, OSM tag value)
+# Multiple rows with the same feature_type are merged (de-duplicated by osm_id).
 FEATURE_QUERIES = [
-    ("aerodrome", "aeroway",  "aerodrome"),
+    ("aerodrome", "aeroway",  "aerodrome"),   # standard ICAO-tagged airports
+    ("aerodrome", "aeroway",  "airport"),     # older/deprecated OSM tagging still in use
     ("port",      "harbour",  "yes"),
     ("military",  "landuse",  "military"),
     ("station",   "railway",  "station"),
@@ -61,9 +65,14 @@ def make_config() -> "zenoh.Config":
 
 
 def overpass_query(tag_key: str, tag_value: str, bbox: tuple) -> list:
-    """Return list of OSM elements matching tag within bbox."""
+    """Return OSM elements matching tag within bbox; retries on 504/timeout."""
     s, w, n, e = bbox
-    q = '[out:json][timeout:30];(node["{}"="{}"]({},{},{},{});way["{}"="{}"]({},{},{},{}););out center;'.format(
+    q = ('[out:json][timeout:60];'
+         '(node["{}"="{}"]({},{},{},{});'
+         'way["{}"="{}"]({},{},{},{});'
+         'relation["{}"="{}"]({},{},{},{}););'
+         'out center tags;').format(
+        tag_key, tag_value, s, w, n, e,
         tag_key, tag_value, s, w, n, e,
         tag_key, tag_value, s, w, n, e,
     )
@@ -72,12 +81,22 @@ def overpass_query(tag_key: str, tag_value: str, bbox: tuple) -> list:
         data=q.encode(),
         headers={"User-Agent": "efdi-osm-bridge/1.0", "Content-Type": "text/plain"},
     )
-    try:
-        with urllib.request.urlopen(req, timeout=35) as resp:
-            return json.loads(resp.read().decode()).get("elements", [])
-    except (urllib.error.URLError, urllib.error.HTTPError, json.JSONDecodeError) as exc:
-        print("Overpass error ({}/{}): {}".format(tag_key, tag_value, exc), flush=True)
-        return []
+    for attempt, delay in enumerate((*RETRY_DELAYS, None), start=1):
+        try:
+            with urllib.request.urlopen(req, timeout=65) as resp:
+                return json.loads(resp.read().decode()).get("elements", [])
+        except urllib.error.HTTPError as exc:
+            if exc.code == 504 and delay is not None:
+                print("Overpass 504 ({}/{}) attempt {} — retry in {}s".format(
+                    tag_key, tag_value, attempt, delay), flush=True)
+                time.sleep(delay)
+            else:
+                print("Overpass HTTP error ({}/{}): {}".format(tag_key, tag_value, exc), flush=True)
+                return []
+        except (urllib.error.URLError, json.JSONDecodeError) as exc:
+            print("Overpass error ({}/{}): {}".format(tag_key, tag_value, exc), flush=True)
+            return []
+    return []
 
 
 def normalize(elem: dict, feature_type: str) -> dict | None:
@@ -90,6 +109,13 @@ def normalize(elem: dict, feature_type: str) -> dict | None:
         lat, lon = center.get("lat"), center.get("lon")
     if lat is None or lon is None:
         return None
+    # Extract country code: try several common OSM tags
+    country_code = (
+        tags.get("addr:country") or
+        tags.get("is_in:country_code") or
+        tags.get("country_code") or
+        ""
+    ).strip().upper()[:2]
     return {
         "_ts":          time.time(),
         "_src":         "osm",
@@ -101,6 +127,7 @@ def normalize(elem: dict, feature_type: str) -> dict | None:
         "name":         tags.get("name", tags.get("name:en", "")),
         "iata":         tags.get("iata", ""),
         "icao":         tags.get("icao", ""),
+        "country_code": country_code,
         "tags_json":    json.dumps(tags, ensure_ascii=False),
     }
 
@@ -111,16 +138,22 @@ def run(args):
 
     try:
         while True:
+            seen: dict[str, set] = {}   # feature_type → set of osm_ids already published
             for feature_type, tag_key, tag_value in FEATURE_QUERIES:
                 print("Querying OSM {} ({}/{})…".format(
                     feature_type, tag_key, tag_value), flush=True)
                 elements = overpass_query(tag_key, tag_value, args.bbox)
+                published = seen.setdefault(feature_type, set())
                 count = 0
                 for elem in elements:
+                    eid = (elem.get("type", "?"), elem.get("id"))
+                    if eid in published:
+                        continue   # skip duplicates from alternate tag queries
                     point = normalize(elem, feature_type)
                     if point is None:
                         continue
                     pub.put(json.dumps(point).encode(), encoding=zenoh.Encoding.APPLICATION_JSON)
+                    published.add(eid)
                     count += 1
                 print("PUB osm/{}: {} features".format(feature_type, count), flush=True)
                 time.sleep(5)  # polite gap between Overpass queries
