@@ -130,7 +130,7 @@ def run(args):
         raise SystemExit("PURPLEAIR_KEY not set — get a free key at https://develop.purpleair.com/")
 
     session = zenoh.open(make_config())
-    pub = session.declare_publisher("{}/env/purpleair/rest/neutral/sensor/sensors/v1".format(ORG))
+    pub = session.declare_publisher("{}/env/air_quality/station/purpleair/sensors".format(ORG))
 
     print("Bounding box:", args.bbox, flush=True)
 
