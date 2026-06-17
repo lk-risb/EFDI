@@ -192,12 +192,96 @@ def _uid(track: dict) -> str:
 
 
 def _callsign(track: dict, uid: str) -> str:
-    # OSM name first, then ship_name (AIS), tail number, flight callsign, MMSI
-    for key in ("name", "ship_name", "registration", "callsign", "mmsi"):
+    # OSM name / ship name → short map label
+    for key in ("name", "ship_name"):
         v = track.get(key)
         if v and str(v).strip():
             return str(v).strip()
+    # Aircraft: "EI-DAC (B738)" or just callsign
+    reg   = (track.get("registration") or "").strip()
+    atype = (track.get("aircraft_type") or "").strip()
+    cs    = (track.get("callsign")      or "").strip()
+    if reg and atype:
+        return "{} ({})".format(reg, atype)
+    if reg:
+        return reg
+    if cs:
+        return cs
+    mmsi = track.get("mmsi")
+    if mmsi:
+        return str(mmsi)
     return uid[-12:]
+
+
+def _build_remarks(track: dict, cot_type: str) -> str:
+    """Build a structured, human-readable info panel for the ATAK callout bubble."""
+    src   = track.get("_src", "?")
+    lines = []
+
+    domain = cot_type[2] if len(cot_type) > 2 else "?"  # A=air, G=ground, S=sea
+
+    if domain == "A":   # ---- AIR ----------------------------------------
+        ident = " / ".join(filter(None, [
+            (track.get("registration") or "").strip().upper(),
+            (track.get("aircraft_type") or "").strip().upper(),
+            (track.get("callsign") or "").strip().upper(),
+            ("ICAO:" + (track.get("icao24") or "").upper()) if track.get("icao24") else "",
+        ]))
+        if ident:
+            lines.append(ident)
+
+        spd_kts = round(_speed_ms(track) / 0.514444) if _speed_ms(track) else 0
+        hdg     = int(_course(track))
+        alt_m   = _hae(track)
+        if alt_m < 9_999_998:
+            alt_ft = int(alt_m / 0.3048)
+            alt_str = "FL{:03d}".format(alt_ft // 100) if alt_ft > 1000 else "{} ft".format(alt_ft)
+        else:
+            alt_str = "---"
+        lines.append("ALT {}  SPD {} kts  HDG {}°".format(alt_str, spd_kts, hdg))
+
+        extras = []
+        sq = track.get("squawk")
+        if sq:
+            extras.append("SQWK {}".format(sq))
+        if track.get("is_military"):
+            extras.append("MILITARY")
+        if extras:
+            lines.append("  ".join(extras))
+
+    elif domain == "S":  # ---- SEA ----------------------------------------
+        mmsi = track.get("mmsi")
+        name = track.get("ship_name", "").strip()
+        if name and mmsi:
+            lines.append("{} — MMSI {}".format(name, mmsi))
+        elif mmsi:
+            lines.append("MMSI {}".format(mmsi))
+        sog_kts = round(_speed_ms(track) / 0.514444, 1)
+        cog     = int(_course(track))
+        lines.append("SOG {} kts  COG {}°".format(sog_kts, cog))
+        nav = track.get("nav_status", "").replace("_", " ")
+        if nav:
+            lines.append("STATUS: {}".format(nav))
+
+    else:               # ---- GROUND / APRS / OSM -------------------------
+        feat = track.get("feature_type")
+        if feat:                              # OSM geo feature
+            lines.append("TYPE: {}".format(feat.upper()))
+            for code in ("icao", "iata"):
+                v = track.get(code)
+                if v:
+                    lines.append("{}: {}".format(code.upper(), v))
+        else:                                 # APRS or ground vehicle
+            sym = track.get("symbol")
+            if sym:
+                lines.append("SYMBOL: {}".format(sym))
+            spd_kts = round(_speed_ms(track) / 0.514444, 1)
+            hdg     = int(_course(track))
+            if spd_kts > 0:
+                lines.append("SPD {} kts  HDG {}°".format(spd_kts, hdg))
+
+    lines.append("SRC: {}".format(src))
+    return "\n".join(lines)
 
 
 def _hae(track: dict) -> float:
@@ -272,12 +356,7 @@ def track_to_cot(track: dict, cot_type: str, stale_s: float = COT_STALE_S) -> st
         "speed":  str(_speed_ms(track)),
         "course": str(_course(track)),
     })
-    remarks = ["src:{}".format(track.get("_src", "?"))]
-    for key in ("icao24", "mmsi", "registration", "aircraft_type", "squawk", "is_military"):
-        v = track.get(key)
-        if v not in (None, "", False):
-            remarks.append("{}:{}".format(key, v))
-    ET.SubElement(detail, "remarks").text = " | ".join(remarks)
+    ET.SubElement(detail, "remarks").text = _build_remarks(track, cot_type)
 
     return '<?xml version="1.0" encoding="UTF-8"?>' + ET.tostring(event, encoding="unicode")
 
