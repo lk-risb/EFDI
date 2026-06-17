@@ -46,18 +46,23 @@ _CERT_DIR = os.environ.get("GOAT_CERT_DIR", HERE)
 # inside the compose stack. Falls back to the remote router for standalone use.
 _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", ROUTER)
 
-COT_STALE_S    = 20      # fast-refresh; 4× airplaneslive poll (5s)
-GEO_STALE_S    = 86400  # 24 h for fixed infrastructure (OSM features)
+AIR_STALE_S    = 30      # aircraft: ADS-B every 5-15s, 30s gives 2-6× margin
+SEA_STALE_S    = 300     # vessels: Class B sends every 30-180s; 5 min covers worst case
+LAND_STALE_S   = 120     # ground vehicles and APRS mobiles
+COT_STALE_S    = AIR_STALE_S  # default (air)
+GEO_STALE_S    = 86400   # 24 h for fixed infrastructure (OSM features)
 RECONNECT_S    = 5
 SEND_TIMEOUT_S = 10
 
+# (topic_suffix, cot_type_or_None, stale_s)
+# cot_type None means dynamic dispatch (see _aprs_cot_type)
 _TOPIC_COT = {
-    "air/civ/tracks/v1":   "a-f-A",
-    "air/mil/tracks/v1":   "a-n-A",
-    "land/civ/tracks/v1":  "a-f-G-U-C",
-    "sea/civ/tracks/v1":   "a-f-S-W-C",
-    "aprs/tracks/v1":      None,         # dynamic per APRS symbol — see _aprs_cot_type()
-    "radar/*/tracks/v1":   "a-u-A",      # ASTERIX CAT62 fused radar tracks
+    "air/civ/tracks/v1":   ("a-f-A",       AIR_STALE_S),
+    "air/mil/tracks/v1":   ("a-n-A",       AIR_STALE_S),
+    "land/civ/tracks/v1":  ("a-f-G-U-C",  LAND_STALE_S),
+    "sea/civ/tracks/v1":   ("a-f-S-W-C",  SEA_STALE_S),
+    "aprs/tracks/v1":      (None,          LAND_STALE_S),  # dynamic per symbol
+    "radar/*/tracks/v1":   ("a-u-A",       AIR_STALE_S),
 }
 
 # APRS symbol table+code → CoT type.  Fixed infrastructure → neutral installation.
@@ -168,11 +173,18 @@ def _ts(ts: float) -> str:
 
 
 def _uid(track: dict) -> str:
-    src = track.get("_src", "efdi")
-    for key in ("icao24", "mmsi", "sensor_id", "osm_id"):
+    # Use the stable radio identifier — source-agnostic so the same
+    # aircraft/vessel reported by multiple APIs merges to one ATAK point.
+    for key, prefix in (
+        ("icao24",    "ICAO"),   # same hex regardless of OpenSky/FR24/airplaneslive
+        ("mmsi",      "MMSI"),   # same MMSI from all AIS feeds
+        ("sensor_id", "SENS"),
+        ("osm_id",    "OSM"),
+    ):
         v = track.get(key)
         if v:
-            return "EFDI-{}-{}".format(src, str(v).upper())
+            return "EFDI-{}-{}".format(prefix, str(v).upper())
+    src = track.get("_src", "efdi")
     cs = (track.get("callsign") or "").strip()
     if cs:
         return "EFDI-{}-{}".format(src, cs)
@@ -394,15 +406,16 @@ def run(args):
 
     session = zenoh.open(make_config())
     subs = []
-    for suffix, cot_type in _TOPIC_COT.items():
+    for suffix, (cot_type, stale_s) in _TOPIC_COT.items():
         key = "{}/{}".format(ORG, suffix)
         if cot_type is None:
-            # APRS: dynamic CoT type from symbol field
-            subs.append(session.declare_subscriber(key, make_handler(_aprs_cot_type, sender, args.verbose)))
-            print("SUB {} → [dynamic APRS symbol]".format(key), flush=True)
+            subs.append(session.declare_subscriber(
+                key, make_handler(_aprs_cot_type, sender, args.verbose, stale_s=stale_s)))
+            print("SUB {} → [dynamic APRS symbol, stale={}s]".format(key, stale_s), flush=True)
         else:
-            subs.append(session.declare_subscriber(key, make_handler(cot_type, sender, args.verbose)))
-            print("SUB {} → {}".format(key, cot_type), flush=True)
+            subs.append(session.declare_subscriber(
+                key, make_handler(cot_type, sender, args.verbose, stale_s=stale_s)))
+            print("SUB {} → {} stale={}s".format(key, cot_type, stale_s), flush=True)
 
     # OSM geo features (aerodromes, ports, military bases, railway stations) — 24h stale
     geo_key = "{}/land/geo/v1".format(ORG)
