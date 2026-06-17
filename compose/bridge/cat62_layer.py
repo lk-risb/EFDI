@@ -344,7 +344,7 @@ def run(args):
                         if len(track) <= 1:  # only _ts
                             continue
                         payload = json.dumps(track)
-                        pub.put(payload.encode())
+                        pub.put(payload.encode(), encoding=zenoh.Encoding.APPLICATION_JSON)
                         print("PUB", payload[:120], flush=True)
 
             except (EOFError, ConnectionRefusedError, OSError) as exc:
