@@ -118,6 +118,20 @@ _TOPIC_COT = {
     "env/air_quality/station/**":("a-n-G-I-R",   SENSOR_STALE_S),
 }
 
+# ATC / ground-station callsigns that appear in ADS-B feeds.
+# Transponders belonging to ATC towers, ground vehicles, ATIS etc. show flight ID "TWR",
+# "GND", "ATIS" etc.  We reclassify them as neutral ground radar/radio stations instead
+# of aircraft so they don't pollute the air picture.
+_ATC_EXACT  = frozenset(["TWR", "GND", "ATIS", "APP", "DEP", "APCH", "CTR", "OPS",
+                          "RAMP", "CARGO", "FUEL", "FIRE", "MAINT", "VAGON"])
+_ATC_SUFFIX = ("TWR", "GND", "ATIS", "APP", "CTR")
+
+def _is_ground_station(track: dict) -> bool:
+    cs = (track.get("callsign") or "").strip().upper()
+    if cs in _ATC_EXACT:
+        return True
+    return any(cs.endswith(s) for s in _ATC_SUFFIX) and len(cs) <= 8
+
 # APRS symbol table+code → CoT type.  Fixed infrastructure → neutral installation.
 # Aircraft/balloon symbols → unknown air.  Everything else → unknown ground.
 _APRS_SYM_COT = {
@@ -135,13 +149,46 @@ _APRS_SYM_COT = {
 def _aprs_cot_type(track: dict) -> str:
     return _APRS_SYM_COT.get(track.get("symbol", ""), "a-u-G")
 
-# OSM feature_type → CoT type for fixed infrastructure
+# OSM feature_type → CoT type for fixed infrastructure (default = friendly/neutral)
 _OSM_COT = {
     "aerodrome": "a-f-G-I-B-A",  # friendly ground installation base aerodrome
     "port":      "a-f-G-I-B-O",  # friendly ground installation base offloading
     "military":  "a-f-G-I-B-M",  # friendly ground installation base military
     "station":   "a-n-G-I",      # neutral ground installation (railway)
 }
+
+# ISO 3166-1 alpha-2 country codes of hostile states in this scenario
+_HOSTILE_CC = {"RU", "BY"}
+
+def _geo_cot_type(track: dict, base_type: str) -> str:
+    """Flip friendly (a-f-) to hostile (a-h-) for features in RU/BY territory."""
+    if not base_type.startswith("a-f-"):
+        return base_type  # neutral/unknown types stay unchanged
+
+    # Primary: country_code tag extracted by the OSM bridge
+    cc = (track.get("country_code") or "").upper()
+    if cc in _HOSTILE_CC:
+        return base_type.replace("a-f-", "a-h-", 1)
+
+    # Fallback: tight bounding boxes for cases where OSM tag is missing
+    try:
+        lat = float(track.get("lat_deg", 0))
+        lon = float(track.get("lon_deg", 0))
+    except (TypeError, ValueError):
+        return base_type
+
+    # Belarus
+    if 51.25 <= lat <= 56.18 and 23.16 <= lon <= 32.78:
+        return base_type.replace("a-f-", "a-h-", 1)
+    # Kaliningrad Oblast (Russian exclave between Lithuania and Poland)
+    if 54.00 <= lat <= 55.35 and 19.40 <= lon <= 22.90:
+        return base_type.replace("a-f-", "a-h-", 1)
+    # Russia proper (east of Belarus, within operational bbox)
+    # Conservative: lon >= 32.5°E AND lat >= 55°N avoids Ukraine/Moldova
+    if lat >= 55.0 and lon >= 32.5:
+        return base_type.replace("a-f-", "a-h-", 1)
+
+    return base_type
 
 # ---------------------------------------------------------------------------
 # Embedded icon generator — stdlib only, no Pillow needed.
@@ -245,6 +292,9 @@ _COT_ICON_B64 = {
     "a-f-G-I-B-A": _icon_png_b64("circle",   _BLUE),
     "a-f-G-I-B-O": _icon_png_b64("circle",   _BLUE),
     "a-f-G-I-B-M": _icon_png_b64("circle",   _BLUE),
+    "a-h-G-I-B-A": _icon_png_b64("circle",   _RED),
+    "a-h-G-I-B-O": _icon_png_b64("circle",   _RED),
+    "a-h-G-I-B-M": _icon_png_b64("circle",   _RED),
 }
 
 # Primary icon path — references the MIL-STD-2525B iconset pre-installed in
@@ -267,6 +317,9 @@ _COT_ICONSET = {
     "a-f-G-I-B-A": "{}/Friendly/Land/Airfield.png".format(_ISET),
     "a-f-G-I-B-O": "{}/Friendly/Land/Port.png".format(_ISET),
     "a-f-G-I-B-M": "{}/Friendly/Land/Military Base.png".format(_ISET),
+    "a-h-G-I-B-A": "{}/Hostile/Land/Airfield.png".format(_ISET),
+    "a-h-G-I-B-O": "{}/Hostile/Land/Port.png".format(_ISET),
+    "a-h-G-I-B-M": "{}/Hostile/Land/Military Base.png".format(_ISET),
     "a-f-P":       "{}/Friendly/Space/Satellite.png".format(_ISET),
     "a-f-G-U-C":   "{}/Friendly/Land/Unit.png".format(_ISET),
     "a-n-G-I-R":   "{}/Neutral/Land/Radio.png".format(_ISET),
@@ -362,8 +415,10 @@ def _build_remarks(track: dict, cot_type: str) -> str:
             alt_str = "FL{:03d}".format(alt_ft // 100) if alt_ft > 1000 else "{} ft".format(alt_ft)
         else:
             alt_str = "---"
+            alt_m   = None
         spd = _speed_ms(track)
         _row("ALT",  alt_str)
+        _row("RALT", "{} m".format(int(alt_m)) if alt_m is not None else None)
         _row("SPD",  "{} kts".format(round(spd / 0.514444)) if spd else None)
         _row("HDG",  "{}°".format(int(_course(track))))
         _row("SQWK", track.get("squawk"))
@@ -623,8 +678,15 @@ def make_handler(cot_type_or_fn, sender, verbose: bool, stale_s: float = COT_STA
             track = json.loads(bytes(sample.payload).decode())
         except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
             return
-        cot_type = cot_type_or_fn(track) if callable(cot_type_or_fn) else cot_type_or_fn
-        xml = track_to_cot(track, cot_type, stale_s=stale_s)
+        # ATC towers / ground vehicles show up in ADS-B with "TWR", "GND" etc.
+        # Reclassify as neutral ground radar/radio station instead of aircraft.
+        if _is_ground_station(track):
+            cot_type = "a-f-G-E-S-R"   # ATC installation (radar/control)
+            stale_s_used = LAND_STALE_S
+        else:
+            cot_type = cot_type_or_fn(track) if callable(cot_type_or_fn) else cot_type_or_fn
+            stale_s_used = stale_s
+        xml = track_to_cot(track, cot_type, stale_s=stale_s_used)
         if xml is None:
             return
         sender.send(xml)
@@ -635,20 +697,24 @@ def make_handler(cot_type_or_fn, sender, verbose: bool, stale_s: float = COT_STA
 
 
 def make_geo_handler(sender, verbose: bool):
-    """Handler for OSM land/geo/v1 — maps feature_type to CoT type with 24h stale."""
+    """Handler for OSM land/geo features — maps feature_type to CoT type with 24h stale.
+    Hostile country (RU/BY) features are flipped to a-h- affiliation."""
     def handler(sample):
         try:
             track = json.loads(bytes(sample.payload).decode())
         except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
             return
         feature_type = track.get("feature_type", "")
-        cot_type = _OSM_COT.get(feature_type, "a-n-G-I")
+        base_type = _OSM_COT.get(feature_type, "a-n-G-I")
+        cot_type  = _geo_cot_type(track, base_type)
         xml = track_to_cot(track, cot_type, stale_s=GEO_STALE_S)
         if xml is None:
             return
         sender.send(xml)
         if verbose:
-            print("CoT {} {} {}".format(cot_type, feature_type, track.get("name", "?")), flush=True)
+            cc = track.get("country_code", "??")
+            print("CoT {} {} {} [{}]".format(
+                cot_type, feature_type, track.get("name", "?"), cc), flush=True)
     return handler
 
 
