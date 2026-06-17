@@ -522,11 +522,13 @@ def main():
                     help="Port to listen on (default: 30048)")
     ap.add_argument("--tcp", action="store_true",
                     help="Use TCP server mode instead of UDP (default: UDP)")
-    ap.add_argument("--radar-lat", type=float,
-                    default=float(os.environ.get("CAT48_RADAR_LAT", "0")),
+    def _env_float(key):
+        v = os.environ.get(key, "").strip()
+        return float(v) if v else 0.0
+
+    ap.add_argument("--radar-lat", type=float, default=_env_float("CAT48_RADAR_LAT"),
                     help="Radar antenna latitude for polar→WGS84 conversion")
-    ap.add_argument("--radar-lon", type=float,
-                    default=float(os.environ.get("CAT48_RADAR_LON", "0")),
+    ap.add_argument("--radar-lon", type=float, default=_env_float("CAT48_RADAR_LON"),
                     help="Radar antenna longitude for polar→WGS84 conversion")
     ap.add_argument("--verbose", "-v", action="store_true")
     args = ap.parse_args()
