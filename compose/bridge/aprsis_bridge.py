@@ -222,7 +222,7 @@ def _route_topic(symbol: str) -> str:
         return "{}/sea/civ/tracks/v1".format(ORG)
     if code in _LAND_CODES:
         return "{}/land/civ/tracks/v1".format(ORG)
-    return "{}/aprs/tracks/v1".format(ORG)   # catch-all (weather stations, digipeaters, etc.)
+    return "{}/land/aprs/tracks/v1".format(ORG)   # catch-all (weather stations, digipeaters, etc.)
 
 
 # ---------------------------------------------------------------------------
@@ -237,12 +237,12 @@ def run(args):
     pub_air   = session.declare_publisher("{}/air/civ/tracks/v1".format(ORG))
     pub_sea   = session.declare_publisher("{}/sea/civ/tracks/v1".format(ORG))
     pub_land  = session.declare_publisher("{}/land/civ/tracks/v1".format(ORG))
-    pub_misc  = session.declare_publisher("{}/aprs/tracks/v1".format(ORG))
+    pub_misc  = session.declare_publisher("{}/land/aprs/tracks/v1".format(ORG))
     _pubs = {
-        "{}/air/civ/tracks/v1".format(ORG):  pub_air,
-        "{}/sea/civ/tracks/v1".format(ORG):  pub_sea,
-        "{}/land/civ/tracks/v1".format(ORG): pub_land,
-        "{}/aprs/tracks/v1".format(ORG):     pub_misc,
+        "{}/air/civ/tracks/v1".format(ORG):       pub_air,
+        "{}/sea/civ/tracks/v1".format(ORG):       pub_sea,
+        "{}/land/civ/tracks/v1".format(ORG):      pub_land,
+        "{}/land/aprs/tracks/v1".format(ORG):     pub_misc,
     }
 
     try:
