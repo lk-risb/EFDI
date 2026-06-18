@@ -220,6 +220,15 @@ start_layers() {
         echo "  [skip] cat20 — set CAT20_PORT in .env to enable"
     fi
 
+    # SitaWare — REST poll for unit positions (friendly force tracking)
+    if [[ "${SITAWARE_URL:-}" ]]; then
+        sitaware_flags=""
+        [[ "${SITAWARE_DISCOVER:-}" == "1" ]] && sitaware_flags="--discover"
+        start sitaware sitaware_bridge.py ${sitaware_flags:+"$sitaware_flags"}
+    else
+        echo "  [skip] sitaware — set SITAWARE_URL in .env to enable"
+    fi
+
     # CoT receiver — inbound CoT from external source (e.g. Giraffe radar)
     # Set COT_RX_PORT to open a listener (they connect to us)
     # Set COT_RX_HOST to connect outbound (we connect to them, format IP:PORT)
