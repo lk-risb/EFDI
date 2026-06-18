@@ -397,21 +397,29 @@ def _uid(track: dict) -> str:
 
 
 def _callsign(track: dict, uid: str) -> str:
-    # OSM name / ship name / satellite name → short map label
+    # Named features (OSM, vessels, satellites)
     for key in ("name", "ship_name", "sat_name", "sensor_name"):
         v = track.get(key)
         if v and str(v).strip():
             return str(v).strip()
-    # Aircraft: prefer "REG (TYPE)" → "CALLSIGN (TYPE)" → "CALLSIGN" → "REG"
-    reg   = (track.get("registration") or "").strip()
-    atype = (track.get("aircraft_type") or "").strip()
-    cs    = (track.get("callsign")      or "").strip()
-    label = reg or cs
+    # Aircraft label priority: REG > TRK-# > callsign
+    reg       = (track.get("registration") or "").strip()
+    atype     = (track.get("aircraft_type") or "").strip()
+    cs        = (track.get("callsign")      or "").strip()
+    track_num = track.get("track_num")
+    if reg:
+        label = reg
+    elif track_num is not None:
+        label = "TRK-{}".format(track_num)
+    else:
+        label = cs
     if label and atype:
         return "{} ({})".format(label, atype)
     if label:
         return label
-    # Weather point: place name
+    if atype:
+        return atype
+    # Other entity types
     place = (track.get("place_name") or "").strip()
     if place:
         return place
@@ -439,6 +447,10 @@ def _build_remarks(track: dict, cot_type: str) -> str:
             m = int((tod % 3600) // 60)
             s = tod % 60
             _row("TOD", "{:02d}:{:02d}:{:04.1f} UTC".format(h, m, s))
+        else:
+            ts = track.get("_ts")
+            if ts:
+                _row("TIME", datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%H:%M:%S UTC"))
         lat = track.get("lat_deg")
         lon = track.get("lon_deg")
         if lat is not None and lon is not None:
@@ -457,8 +469,6 @@ def _build_remarks(track: dict, cot_type: str) -> str:
         _row("HDG",  "{}°".format(int(_course(track))))
         if track.get("range_nm") is not None:
             _row("AZM", "{}°".format(round(track.get("azimuth_deg", 0), 1)))
-            _row("RNG (nm)", "{} nm".format(round(track["range_nm"], 1)))
-            _row("RNG (km)", "{} km".format(round(track["range_nm"] * 1.852, 1)))
         alt_m = _hae(track)
         if alt_m < 9_999_998:
             alt_ft  = int(alt_m / 0.3048)
@@ -467,13 +477,16 @@ def _build_remarks(track: dict, cot_type: str) -> str:
             alt_str = "---"
             alt_m   = None
         spd = _speed_ms(track)
+        if spd:
+            _row("SPD (kt)",   "{} kt".format(round(spd / 0.514444)))
+            _row("SPD (km/h)", "{} km/h".format(round(spd * 3.6)))
         _row("ALT",  alt_str)
         if alt_m is not None:
             _row("ALT (ft)", "{} ft".format(int(alt_m / 0.3048)))
             _row("ALT (m)",  "{} m".format(int(alt_m)))
-        if spd:
-            _row("SPD (kt)",   "{} kt".format(round(spd / 0.514444)))
-            _row("SPD (km/h)", "{} km/h".format(round(spd * 3.6)))
+        if track.get("range_nm") is not None:
+            _row("RNG (nm)", "{} nm".format(round(track["range_nm"], 1)))
+            _row("RNG (km)", "{} km".format(round(track["range_nm"] * 1.852, 1)))
         vr = track.get("vertical_rate_ms")
         if vr is not None:
             vr_ms  = round(float(vr), 1)
