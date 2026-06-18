@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""cat48_bridge.py — ASTERIX CAT-048 / CAT-034 listener → Zenoh bridge.
+"""asterix_bridge.py — ASTERIX CAT-048 / CAT-034 listener → Zenoh bridge.
 
 Listens for ASTERIX data from a surveillance radar (e.g. Saab Giraffe AMB)
 and publishes decoded radar tracks to the EFDI Zenoh fabric.
@@ -35,11 +35,11 @@ Zenoh topic:
 
 Run:
     # UDP listener on port 30048, radar site at Vilnius
-    venv/bin/python3 cat48_bridge.py --port 30048 \\
+    venv/bin/python3 asterix_bridge.py --port 30048 \\
         --radar-lat 54.687 --radar-lon 25.279
 
     # TCP server
-    venv/bin/python3 cat48_bridge.py --port 30048 --tcp
+    venv/bin/python3 asterix_bridge.py --port 30048 --tcp
 
 Activate in .env:
     CAT48_PORT=30048

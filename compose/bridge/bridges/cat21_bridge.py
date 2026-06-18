@@ -85,7 +85,7 @@ def _netbird_ip() -> str:
 
 
 # ---------------------------------------------------------------------------
-# ASTERIX framing (identical to cat48_bridge)
+# ASTERIX framing (identical to asterix_bridge)
 # ---------------------------------------------------------------------------
 
 def _recv_exact(sock, n):
