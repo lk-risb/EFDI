@@ -97,24 +97,29 @@ def _sea_type(track: dict) -> str:
     return "a-h-S-X-L" if _is_hostile_mmsi(track.get("mmsi", "")) else "a-n-S-X-L"
 
 
-# ADS-B internet relay sources — position and kinematics come from these, but they
-# are identity-only enrichment for the fusion bridge. Block direct-to-ATAK flow;
-# they must arrive via track_fusion_bridge → air/fused/** with radar kinematics.
+# Sources that must NOT reach ATAK directly — they must pass through
+# track_fusion_bridge first so the marker contains merged data.
+#
+# ADS-B relay sources: identity-only enrichment inputs, blocked until fused.
 _ADS_B_RELAY_SOURCES = frozenset({"opensky", "fr24", "airplaneslive"})
+# Raw sensor sources: kinematics are good but no identity; fusion adds REG/ICAO/SQWK.
+# Blocked here because fusion ALWAYS re-publishes every radar track to air/fused/**,
+# so every contact still appears — just once, with merged data.
+_RAW_SENSOR_SOURCES = frozenset({"ASTERIX CAT-48", "ASTERIX CAT-20"})
 
 # Schema: {category}/{vendor}/{protocol}/{affiliation}/{entity_type}/{data_type}/v1
 # Wildcards: ** matches zero-or-more segments, so air/**/civ/aircraft/** catches any
 # vendor+protocol combination under civil air.
+# NOTE: air/fused/** is caught by the broad air/** wildcards below — no separate
+# fused entries needed. The broad wildcards also catch SAPIENT / Link-16 / cot-rx
+# that don't go through the radar fusion path.
 _TOPIC_COT = {
     # AIR — affiliation slot drives CoT type; ICAO24 classifier overrides for RU/BY
+    # Covers fused tracks (air/fused/**) + SAPIENT + Link-16 + cot-rx.
+    # Raw CAT-48 / CAT-20 are dropped by _RAW_SENSOR_SOURCES check in make_handler.
     "air/**/civ/aircraft/**":    (_civ_air_type,  AIR_STALE_S),
     "air/**/mil/aircraft/**":    (_mil_air_type,  AIR_STALE_S),
-    "air/**/unknown/**":         ("a-u-A-C-F",    AIR_STALE_S),   # radar / SAPIENT returns — fixed-wing renders as aircraft shape, not cloud
-    # FUSED — radar position + open-source identity merged by track_fusion_bridge.py
-    # civ = cooperative contact identified via ICAO/squawk; hostile check still applies
-    # unknown = PSR-only, no transponder match — radar-only contact
-    "air/fused/civ/aircraft/**":     (_civ_air_type, AIR_STALE_S),
-    "air/fused/unknown/aircraft/**": ("a-u-A-C-F",   AIR_STALE_S),
+    "air/**/unknown/**":         ("a-u-A-C-F",    AIR_STALE_S),
     # LAND — full affiliation matrix for SitaWare / NFFI / APRS
     "land/**/civ/vehicle/**":    ("a-f-G-E-V-C", LAND_STALE_S),
     "land/**/neutral/station/**":("a-n-G-I-R",   LAND_STALE_S),
@@ -748,10 +753,11 @@ def make_handler(cot_type_or_fn, sender, verbose: bool, stale_s: float = COT_STA
             track = json.loads(bytes(sample.payload).decode())
         except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
             return
-        # ADS-B relay sources (opensky, fr24, airplaneslive) must not reach ATAK
-        # directly — they are identity-only inputs for track_fusion_bridge.
-        # Fused output arrives via air/fused/** with radar kinematics.
-        if track.get("_src") in _ADS_B_RELAY_SOURCES:
+        # Block raw sensor and ADS-B relay sources — both must pass through
+        # track_fusion_bridge first. Fusion always re-publishes to air/fused/**,
+        # so every contact still appears; just once, with merged data, no duplicates.
+        src = track.get("_src", "")
+        if src in _ADS_B_RELAY_SOURCES or src in _RAW_SENSOR_SOURCES:
             return
         # ATC towers / ground vehicles show up in ADS-B with "TWR", "GND" etc.
         # Reclassify as neutral ground radar/radio station instead of aircraft.
