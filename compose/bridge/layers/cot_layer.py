@@ -622,6 +622,7 @@ def _build_remarks(track: dict, cot_type: str) -> str:
 
         # ── IFF / MODES ──
         _r("MODE 1 (NATO MIL ID)", track.get("mode1"), iff_l)
+        _r("MODE 2", track.get("mode2"), iff_l)
         _r("MODE 3 (SQUAWK)", track.get("squawk"), iff_l)
         iff = track.get("iff", "")
         if iff == "friendly":
@@ -635,6 +636,16 @@ def _build_remarks(track: dict, cot_type: str) -> str:
             iff_l.append("[!!! EMERGENCY: {} !!!]".format(_EMERGENCY_SQUAWK[sq_str]))
         if track.get("mil_emergency"):
             iff_l.append("[!!! MILITARY EMERGENCY !!!]")
+        com = track.get("com_capability")
+        if com:
+            iff_l.append("COM: capability-{}{}".format(
+                com, "  ARC:25ft" if track.get("altitude_25ft") else ""))
+        lt = track.get("link_tech")
+        if lt:
+            iff_l.append("LINK: {}".format(" / ".join(lt)))
+        ec_str = track.get("emitter_category_str")
+        if ec_str:
+            iff_l.append("EMITTER: {}".format(ec_str))
 
         # ── KINEMATICS ──
         tod = track.get("tod_s")
@@ -663,16 +674,23 @@ def _build_remarks(track: dict, cot_type: str) -> str:
             alt_ft = int(alt_m / 0.3048)
             alt_fl = "FL{:03d}".format(alt_ft // 100) if alt_ft > 1000 else "{} ft".format(alt_ft)
             kinem_l.append("ALT: {}  ({} ft / {} m)".format(alt_fl, alt_ft, int(alt_m)))
-        baro_vr = track.get("baro_vr_fpm"); vr_ms = track.get("vertical_rate_ms")
+        baro_vr = track.get("baro_vr_fpm")
+        geo_vr  = track.get("geo_vr_fpm")
+        vr_ms   = track.get("vertical_rate_ms")
         vt = track.get("vertical_trend", "")
         if baro_vr is not None:
             vfpm = baro_vr; vms = baro_vr / 196.85
+            vr_label = "V/S"
+        elif geo_vr is not None:
+            vfpm = geo_vr; vms = geo_vr / 196.85
+            vr_label = "GEO V/S"
         elif vr_ms is not None:
             vfpm = int(float(vr_ms) * 196.85); vms = float(vr_ms)
+            vr_label = "V/S"
         else:
-            vfpm = None
+            vfpm = None; vr_label = "V/S"
         if vfpm is not None:
-            vs = "V/S: {:+d} ft/min / {:+.1f} m/s".format(vfpm, vms)
+            vs = "{}: {:+d} ft/min / {:+.1f} m/s".format(vr_label, vfpm, vms)
             kinem_l.append(vs + ("  ({})".format(vt.upper()) if vt else ""))
         elif vt:
             kinem_l.append("CDM: {}".format(vt.upper()))
@@ -694,6 +712,43 @@ def _build_remarks(track: dict, cot_type: str) -> str:
             kinem_l.append("{}: {} kt / {} km/h".format(lbl, gs_kt, gs_kmh))
         if mach is not None:
             kinem_l.append("MACH: {:.3f}".format(mach))
+        # Magnetic heading (if differs from track by more than 2°)
+        mag_hdg = track.get("mag_hdg_deg")
+        if mag_hdg is not None:
+            diff = abs(mag_hdg - hdg)
+            if diff > 180: diff = 360 - diff
+            if diff > 2:
+                kinem_l.append("MAG HDG: {}°".format(round(mag_hdg, 1)))
+        # Doppler speed
+        dop = track.get("doppler_kt")
+        if dop is not None:
+            kinem_l.append("DOPPLER: {:+.0f} kt".format(dop))
+        # Selected altitude
+        sel_alt = track.get("selected_alt_ft")
+        if sel_alt is not None:
+            src_lbl = track.get("selected_alt_source", "")
+            fl_lbl  = "FL{:03d}".format(abs(sel_alt) // 100) if abs(sel_alt) > 1000 else "{} ft".format(sel_alt)
+            kinem_l.append("SEL ALT: {}{}".format(
+                fl_lbl, "  ({})".format(src_lbl) if src_lbl else ""))
+        fin_alt = track.get("final_alt_ft")
+        if fin_alt is not None:
+            fl_lbl = "FL{:03d}".format(abs(fin_alt) // 100) if abs(fin_alt) > 1000 else "{} ft".format(fin_alt)
+            kinem_l.append("FINAL ALT: {}".format(fl_lbl))
+        # Wind / temperature from ADS-B met
+        ws = track.get("wind_speed_kt"); wd = track.get("wind_dir_deg"); tc = track.get("temp_c")
+        if ws is not None or wd is not None:
+            parts = []
+            if wd is not None: parts.append("{}°".format(int(wd)))
+            if ws is not None: parts.append("{} kt".format(round(ws, 1)))
+            line = "WIND: {}".format(" / ".join(parts))
+            if tc is not None: line += "  T: {}°C".format(round(tc, 1))
+            kinem_l.append(line)
+        elif tc is not None:
+            kinem_l.append("T: {}°C".format(round(tc, 1)))
+        # Track angle rate
+        tar = track.get("track_angle_rate_degs")
+        if tar is not None and abs(tar) >= 0.05:
+            kinem_l.append("TRACK RATE: {:+.2f} °/s".format(tar))
 
         # ── RADAR ──
         rng = track.get("range_nm"); azm = track.get("azimuth_deg")
@@ -705,6 +760,21 @@ def _build_remarks(track: dict, cot_type: str) -> str:
             radar_l.append("RCS: {} dBm   RSSI: {} dBFS".format(rcs, rssi))
         elif rcs  is not None: radar_l.append("RCS: {} dBm".format(rcs))
         elif rssi is not None: radar_l.append("RSSI: {} dBFS".format(rssi))
+        # Track quality / accuracy
+        sx = track.get("track_sigma_x_nm"); sh = track.get("track_sigma_h_ft")
+        if sx is not None or sh is not None:
+            acc_parts = []
+            if sx is not None:
+                sy = track.get("track_sigma_y_nm")
+                acc_parts.append("±{:.3f} nm".format(max(sx, sy) if sy is not None else sx))
+            if sh is not None: acc_parts.append("±{} ft".format(sh))
+            radar_l.append("ACC: {}".format("  ".join(acc_parts)))
+        # Track update ages (CAT-062 I062/290)
+        ages = []
+        for sensor_key, label in (("psr","PSR"),("ssr","SSR"),("ads","ADS"),("mds","MDS")):
+            v = track.get("track_age_{}_s".format(sensor_key))
+            if v is not None: ages.append("{}: {}s".format(label, round(v, 1)))
+        if ages: radar_l.append("AGE — {}".format("  ".join(ages)))
         sac_t = track.get("sac"); sic_t = track.get("sic")
         if rng is not None and sac_t is not None:
             radar_l.append("SAC/SIC: {}/{}".format(sac_t, sic_t))
@@ -727,6 +797,18 @@ def _build_remarks(track: dict, cot_type: str) -> str:
                     radar_l.append("CAL: AZ {:+.3f}°  RNG {:+.3f} nm".format(ae, re))
 
         # ── STATUS ──
+        if track.get("spi"):
+            status_l.append("[⚠ SPI IDENT]")
+        sense = track.get("acas_ra_sense")
+        if sense:
+            status_l.append("[⚠ ACAS RA: {}]".format(sense))
+        elif track.get("acas_ra_active"):
+            status_l.append("[⚠ ACAS RA ACTIVE]")
+        em_str = track.get("emergency_str")
+        if em_str:
+            status_l.append("[⚠ EMERGENCY: {}]".format(em_str))
+        if track.get("msaw"):         status_l.append("[MSAW]")
+        if track.get("squawk_garbled"): status_l.append("[SQUAWK GARBLED]")
         if track.get("on_ground"):    status_l.append("[ON GROUND]")
         if track.get("is_military"):  status_l.append("[MILITARY]")
         if track.get("track_ghost"):  status_l.append("[GHOST TARGET]")
@@ -736,10 +818,30 @@ def _build_remarks(track: dict, cot_type: str) -> str:
         if track.get("_extrap"):      status_l.append("[DEAD RECKONED]")
         status_l.append("SRC: {}".format(src))
 
+        # ── FLIGHT PLAN ──
+        fp_l = []
+        fp_cs    = track.get("fp_callsign")
+        ac_type  = (track.get("aircraft_type") or "").strip().upper() or None
+        wtc      = track.get("wake_turb_cat")
+        dep      = (track.get("departure_icao") or "").strip() or None
+        dst      = (track.get("destination_icao") or "").strip() or None
+        cfl      = track.get("cleared_fl")
+        if fp_cs or ac_type:
+            line = []
+            if fp_cs:  line.append("FLT: {}".format(fp_cs))
+            if ac_type: line.append("TYPE: {}".format(ac_type))
+            if wtc:    line.append("WTC: {}".format(wtc))
+            fp_l.append("  ".join(line))
+        if dep or dst:
+            fp_l.append("DEP: {} → DST: {}".format(dep or "----", dst or "----"))
+        if cfl is not None:
+            fp_l.append("CFL: FL{:03d}".format(int(cfl)))
+
         _sec("IDENTITY",   ident_l)
         _sec("IFF / MODES", iff_l)
         _sec("KINEMATICS", kinem_l)
         _sec("RADAR",      radar_l)
+        _sec("FLIGHT PLAN", fp_l)
         _sec("STATUS",     status_l)
 
     elif domain == "S":  # ---- SEA ----------------------------------------
