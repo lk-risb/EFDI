@@ -598,11 +598,11 @@ def _build_remarks(track: dict, cot_type: str) -> str:
         spd = _speed_ms(track)
         ias = track.get("airspeed_ms")
         if ias is not None:
-            _row("AIR (kt)",   "{} kt".format(round(float(ias) / 0.514444)))
-            _row("AIR (km/h)", "{} km/h".format(round(float(ias) * 3.6)))
+            _row("AIR SPD (kt)",   "{} kt".format(round(float(ias) / 0.514444)))
+            _row("AIR SPD (km/h)", "{} km/h".format(round(float(ias) * 3.6)))
         if spd:
-            _row("GND (kt)",   "{} kt".format(round(spd / 0.514444)))
-            _row("GND (km/h)", "{} km/h".format(round(spd * 3.6)))
+            _row("GND SPD (kt)",   "{} kt".format(round(spd / 0.514444)))
+            _row("GND SPD (km/h)", "{} km/h".format(round(spd * 3.6)))
         _row("ALT",  alt_str)
         if alt_m is not None:
             _row("ALT (ft)", "{} ft".format(int(alt_m / 0.3048)))
