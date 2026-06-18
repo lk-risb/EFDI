@@ -1243,6 +1243,30 @@ def make_handler(cot_type_or_fn, sender, verbose: bool, stale_s: float = COT_STA
     return handler
 
 
+def make_radar_status_handler(sender, verbose: bool):
+    """Handler for CAT-34 radar sensor status topics.
+    Stores status for AIR stat card enrichment and forwards a CoT radar-site marker."""
+    def handler(sample):
+        try:
+            track = json.loads(bytes(sample.payload).decode())
+        except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
+            return
+        sac = track.get("sac"); sic = track.get("sic")
+        if sac is not None:
+            key = "{}-{}".format(sac, sic if sic is not None else 0)
+            with _radar_status_lock:
+                _radar_status[key] = track
+        xml = track_to_cot(track, "a-n-G-E-S-R", stale_s=LAND_STALE_S * 2)
+        if xml:
+            sender.send(xml)
+        if verbose:
+            print("CoT a-n-G-E-S-R {}  psr={} ssr={} mds={}".format(
+                track.get("sensor_name", "RADAR"),
+                track.get("psr_status", "-"), track.get("ssr_status", "-"),
+                track.get("mds_status", "-")), flush=True)
+    return handler
+
+
 def make_geo_handler(sender, verbose: bool):
     """Handler for OSM land/geo features — maps feature_type to CoT type with 24h stale.
     Hostile country (RU/BY) features are flipped to a-h- affiliation."""
@@ -1292,6 +1316,12 @@ def run(args):
     geo_key = "{}/land/**/neutral/geo/**".format(ORG)
     subs.append(session.declare_subscriber(geo_key, make_geo_handler(sender, args.verbose)))
     print("SUB {} → [geo features, 24h stale]".format(geo_key), flush=True)
+
+    # Radar sensor site status (CAT-34) — updates _radar_status dict + renders CoT marker
+    radar_key = "{}/land/asterix/cat34/neutral/radar/**".format(ORG)
+    subs.append(session.declare_subscriber(radar_key,
+                make_radar_status_handler(sender, args.verbose)))
+    print("SUB {} → [radar sensor sites]".format(radar_key), flush=True)
 
     print("Bridge running — Ctrl-C to stop", flush=True)
     try:
