@@ -168,6 +168,8 @@ _TOPIC_COT = {
     # ENV — weather stations and air quality sensors show as ground icons
     "env/weather/station/**":    ("a-n-G-I-R",   ENV_STALE_S),
     "env/air_quality/station/**":("a-n-G-I-R",   SENSOR_STALE_S),
+    # RADAR SENSOR SITES — CAT-34 status publishes here; rendered as radar marker + stat card
+    "land/**/neutral/radar/**":  ("a-n-G-E-S-R", LAND_STALE_S * 2),
 }
 
 # ATC / ground-station callsigns that appear in ADS-B feeds.
