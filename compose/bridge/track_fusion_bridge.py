@@ -261,17 +261,18 @@ class TrackFuser:
         method = adsb.get("_fusion_method", "icao-exact")
 
         if _RADAR_PREF:
-            # Start with ADS-B, overwrite with radar fields
-            fused.update(adsb)
-            for k in _RADAR_FIELDS:
-                if k in radar:
-                    fused[k] = radar[k]
-        else:
-            # Start with radar, overwrite with ADS-B fields
+            # Radar is authoritative for all kinematics — start from radar entirely,
+            # then layer on only the identity fields from ADS-B.
             fused.update(radar)
             for k in _ID_FIELDS:
                 if k in adsb:
                     fused[k] = adsb[k]
+        else:
+            # ADS-B pref: start from ADS-B, overwrite kinematics with radar
+            fused.update(adsb)
+            for k in _RADAR_FIELDS:
+                if k in radar:
+                    fused[k] = radar[k]
 
         # Always use the fresher timestamp
         fused["_ts"]  = max(radar.get("_ts", 0), adsb.get("_ts", 0))
