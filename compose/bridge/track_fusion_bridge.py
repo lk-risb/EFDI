@@ -22,6 +22,27 @@ Fusion strategy (in priority order):
        AND the age difference is within 30 s, merge identities.
        Marks the track as "probable" rather than confirmed.
 
+Cross-radar handoff (same-protocol, PSR-only targets):
+  When multiple radars of the same type (e.g., two CAT-48 sites) cover overlapping
+  areas, a PSR-only target crossing the boundary would otherwise create two separate
+  ATAK markers. The fusion bridge prevents this by:
+
+    Overlap zone (both radars tracking):
+      Both tracks are within FUSION_HANDOFF_NM (default 2 NM) after dead-reckoning
+      each to a common time, AND their headings agree within 45°.
+      → Both share the primary radar's radar_id.  Single ATAK marker updated by
+        whichever radar sent the most recent report.
+
+    Handoff (target leaves primary radar's coverage):
+      Primary track ages out of the cache.  The surviving secondary is promoted:
+      its radar_id becomes the new stable ID.  One ATAK UID change occurs at this
+      moment; the marker then stays stable under the new radar.
+
+    Mode-S targets are unaffected — ICAO24 is a global stable key across all radars.
+
+Config:
+  FUSION_HANDOFF_NM=2.0   Max distance for cross-radar PSR association
+
 Fused tracks are published to:
   <ORG>/air/fused/<affiliation>/aircraft/tracks/v1
 → cot_layer.py picks these up and shows them in ATAK with full identity.
@@ -56,9 +77,13 @@ HERE      = os.path.dirname(os.path.abspath(__file__))
 _CERT_DIR = os.environ.get("GOAT_CERT_DIR", HERE)
 _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", ROUTER)
 
-_SPATIAL_NM  = float(os.environ.get("FUSION_SPATIAL_NM",  "2.0"))
-_MAX_AGE_S   = float(os.environ.get("FUSION_MAX_AGE_S",   "60"))
-_RADAR_PREF  = os.environ.get("FUSION_RADAR_PREF", "1") != "0"
+_SPATIAL_NM      = float(os.environ.get("FUSION_SPATIAL_NM",  "2.0"))
+_MAX_AGE_S       = float(os.environ.get("FUSION_MAX_AGE_S",   "60"))
+_RADAR_PREF      = os.environ.get("FUSION_RADAR_PREF", "1") != "0"
+
+# Cross-radar handoff — PSR-only targets seen by multiple radars simultaneously
+_HANDOFF_NM      = float(os.environ.get("FUSION_HANDOFF_NM",  "2.0"))  # spatial tolerance
+_HANDOFF_HDG_TOL = 45.0   # heading difference tolerance in degrees
 
 TOPIC_FUSED  = "{}/air/fused/{}/aircraft/tracks/v1"
 
@@ -109,6 +134,22 @@ def make_config() -> "zenoh.Config":
     return conf
 
 
+def _extrapolate_pos(lat, lon, speed_ms, heading_deg, dt_s):
+    """Dead-reckon lat/lon forward by dt_s seconds. Returns (lat, lon) unchanged if no speed."""
+    if lat is None or lon is None or not speed_ms:
+        return lat, lon
+    d  = speed_ms * dt_s
+    R  = 6_371_000.0
+    az = math.radians(heading_deg or 0)
+    la = math.radians(lat)
+    lo = math.radians(lon)
+    la2 = math.asin(math.sin(la) * math.cos(d / R) +
+                    math.cos(la) * math.sin(d / R) * math.cos(az))
+    lo2 = lo + math.atan2(math.sin(az) * math.sin(d / R) * math.cos(la),
+                          math.cos(d / R) - math.sin(la) * math.sin(la2))
+    return math.degrees(la2), math.degrees(lo2)
+
+
 def _haversine_nm(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     R = 3440.065   # Earth radius in NM
     dlat = math.radians(lat2 - lat1)
@@ -149,6 +190,13 @@ class TrackFuser:
         self._radar_by_icao:  dict[str, str] = {}
         # squawk → list of adsb uids
         self._adsb_by_squawk: dict[str, list] = {}
+        # PSR cross-radar handoff: uid → primary_uid (stable ID across radar boundaries)
+        # Key = any radar uid; value = whichever radar uid was first to own this target.
+        # When the primary ages out, the surviving secondary is promoted automatically.
+        self._radar_primary: dict[str, str] = {}
+        # Periodic age-out: ensures _radar_by_icao is cleaned even when radar goes
+        # silent (no on_radar() calls), so ADS-B fallback kicks in automatically.
+        self._start_age_timer()
 
     # ------------------------------------------------------------------
     # Ingest handlers
@@ -161,13 +209,110 @@ class TrackFuser:
             return
         topic = str(sample.key_expr)
         self._age_out()
+        now = time.time()
         with self._lock:
             uid = _uid_of(track)
-            self._radar_tracks[uid] = {"track": track, "topic": topic, "ts": time.time()}
+            self._radar_tracks[uid] = {"track": track, "topic": topic, "ts": now}
             icao = track.get("icao24", "").strip().lower()
             if icao:
                 self._radar_by_icao[icao] = uid
+
+            # Cross-radar handoff for PSR-only targets
+            primary_uid = self._cross_radar_associate(track, uid, now)
+            if primary_uid != uid:
+                # Borrow the primary radar's radar_id so cot_layer produces the
+                # same ATAK UID throughout the overlap and across the handoff.
+                primary_entry = self._radar_tracks.get(primary_uid)
+                if primary_entry and primary_entry["track"].get("radar_id"):
+                    track = dict(track)
+                    track["radar_id"] = primary_entry["track"]["radar_id"]
+                    if self._verbose:
+                        print("HANDOFF {} → {}".format(
+                            uid, primary_uid), flush=True)
+
         self._fuse_and_publish(track, topic)
+
+    def _start_age_timer(self):
+        self._age_out()
+        t = threading.Timer(_MAX_AGE_S / 2, self._start_age_timer)
+        t.daemon = True
+        t.start()
+
+    # ------------------------------------------------------------------
+    # Cross-radar handoff (PSR-only targets)
+    # ------------------------------------------------------------------
+
+    def _cross_radar_associate(self, track: dict, uid: str, now: float) -> str:
+        """Called under self._lock.
+
+        For PSR-only targets (no ICAO24): search all other-radar tracks for a
+        spatially + kinematically consistent match.  If found, both tracks share
+        the same primary uid → same radar_id in the fused output → single ATAK
+        marker throughout the overlap zone and across the handoff boundary.
+
+        Returns the stable primary uid to use for fused publication.
+        """
+        # Mode-S: already stable by ICAO — no cross-radar association needed
+        if track.get("icao24"):
+            return uid
+
+        r_lat = track.get("lat_deg")
+        r_lon = track.get("lon_deg")
+        if r_lat is None or r_lon is None:
+            return self._radar_primary.setdefault(uid, uid)
+
+        r_sac = track.get("sac")
+        r_sic = track.get("sic")
+        r_hdg = track.get("heading_deg")
+
+        best_d       = _HANDOFF_NM
+        best_primary = None
+
+        for other_uid, entry in self._radar_tracks.items():
+            if other_uid == uid:
+                continue
+            other = entry["track"]
+            # Same radar — skip (different tracks on the same sensor are not handoffs)
+            if other.get("sac") == r_sac and other.get("sic") == r_sic:
+                continue
+            # Mode-S tracks have their own stable ID — don't pull them into PSR handoff
+            if other.get("icao24"):
+                continue
+            dt = now - entry["ts"]
+            if dt > _MAX_AGE_S:
+                continue
+
+            # Extrapolate the other track forward to align timestamps
+            o_lat, o_lon = _extrapolate_pos(
+                other.get("lat_deg"), other.get("lon_deg"),
+                other.get("speed_ms", 0) or 0,
+                other.get("heading_deg", 0) or 0,
+                dt)
+            if o_lat is None:
+                continue
+
+            d = _haversine_nm(r_lat, r_lon, o_lat, o_lon)
+            if d >= best_d:
+                continue
+
+            # Heading consistency gate (skip if headings diverge > tolerance)
+            o_hdg = other.get("heading_deg")
+            if r_hdg is not None and o_hdg is not None:
+                diff = abs(r_hdg - o_hdg) % 360
+                if diff > 180:
+                    diff = 360 - diff
+                if diff > _HANDOFF_HDG_TOL:
+                    continue
+
+            best_d       = d
+            best_primary = self._radar_primary.get(other_uid, other_uid)
+
+        if best_primary is not None:
+            self._radar_primary[uid] = best_primary
+        else:
+            self._radar_primary.setdefault(uid, uid)
+
+        return self._radar_primary[uid]
 
     def on_adsb(self, sample):
         try:
@@ -175,6 +320,7 @@ class TrackFuser:
         except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
             return
         topic = str(sample.key_expr)
+        self._age_out()   # clean stale radar entries before checking coverage
         radar_covers = False
         with self._lock:
             uid = _uid_of(track)
@@ -319,11 +465,33 @@ class TrackFuser:
                        if now - v["ts"] > _MAX_AGE_S]
             stale_a = [k for k, v in self._adsb_tracks.items()
                        if now - v["ts"] > _MAX_AGE_S]
+            stale_set = set(stale_r)
+
             for k in stale_r:
                 entry = self._radar_tracks.pop(k)
                 icao = entry["track"].get("icao24", "").strip().lower()
                 if icao and self._radar_by_icao.get(icao) == k:
                     del self._radar_by_icao[icao]
+
+                # Cross-radar handoff promotion:
+                # If k was a primary, elect the first surviving secondary as the
+                # new primary so the ATAK marker transfers cleanly.
+                if self._radar_primary.get(k) == k:
+                    new_primary = None
+                    for other_uid, p in list(self._radar_primary.items()):
+                        if p == k and other_uid not in stale_set and other_uid in self._radar_tracks:
+                            new_primary = other_uid
+                            break
+                    if new_primary:
+                        # Repoint every uid that referenced old primary → new primary
+                        for uid2 in list(self._radar_primary):
+                            if self._radar_primary[uid2] == k:
+                                self._radar_primary[uid2] = new_primary
+                        self._radar_primary[new_primary] = new_primary
+                        if self._verbose:
+                            print("HANDOFF promote {} → {}".format(k, new_primary), flush=True)
+                self._radar_primary.pop(k, None)
+
             for k in stale_a:
                 entry = self._adsb_tracks.pop(k)
                 icao = entry["track"].get("icao24", "").strip().lower()
