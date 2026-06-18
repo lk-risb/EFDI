@@ -1297,7 +1297,31 @@ def _make_cat021_handler(pub):
 
 
 def _make_cat034_handler(pub_sensor, radar_lat, radar_lon, radar_name):
-    _first_seen: dict[str, float] = {}
+    _first_seen:  dict[str, float] = {}
+    _sweep:       dict[str, dict]  = {}   # key → {north_ts, rotation_s, status}
+    _sweep_lock   = threading.Lock()
+    _sweep_active: set[str]        = set()
+
+    def _sweep_thread(key: str):
+        """Publish radar beam CoT at 5 Hz using dead-reckoned antenna azimuth."""
+        while True:
+            time.sleep(0.2)
+            with _sweep_lock:
+                s = _sweep.get(key)
+            if s is None:
+                return
+            rot = s.get("rotation_s")
+            if not rot:
+                continue
+            # Stop animating if no north marker for > 3 rotations (radar offline)
+            if time.time() - s["north_ts"] > rot * 3:
+                continue
+            az = (time.time() - s["north_ts"]) / rot * 360.0 % 360.0
+            payload = dict(s["status"])
+            payload["sweep_azimuth_deg"] = round(az, 1)
+            payload["_ts"] = time.time()
+            pub_sensor.put(json.dumps(payload).encode(),
+                           encoding=zenoh.Encoding.APPLICATION_JSON)
 
     def _h(data: bytes, verbose: bool):
         msg = decode_cat034(data)
@@ -1317,10 +1341,15 @@ def _make_cat034_handler(pub_sensor, radar_lat, radar_lon, radar_name):
                 msg.get("collimation_az_deg", "-"),
                 msg.get("collimation_rng_nm", "-"),
             ), flush=True)
-        if mtype == "north_marker" and pub_sensor and radar_lat and radar_lon:
-            sac = msg.get("sac", 0); sic = msg.get("sic", 0)
-            key = "{}-{}".format(sac, sic)
-            now = time.time()
+
+        if not (pub_sensor and radar_lat and radar_lon):
+            return
+
+        sac = msg.get("sac", 0); sic = msg.get("sic", 0)
+        key = "{}-{}".format(sac, sic)
+        now = time.time()
+
+        if mtype == "north_marker":
             _first_seen.setdefault(key, now)
             status = {
                 "_src":        "ASTERIX CAT-34",
@@ -1332,15 +1361,38 @@ def _make_cat034_handler(pub_sensor, radar_lat, radar_lon, radar_name):
                 "lon_deg":     radar_lon,
                 "online_since": _first_seen[key],
             }
-            # Keep tod_s as 'radar_clock_s' — avoids _track_age() comparing
-            # radar's local clock against UTC (shows wrong "23h ago" otherwise).
             for k, v in msg.items():
                 if k == "tod_s":
                     status["radar_clock_s"] = v
                 else:
                     status[k] = v
+
+            with _sweep_lock:
+                existing = _sweep.get(key, {})
+                _sweep[key] = {
+                    "north_ts":   now,
+                    "rotation_s": rot or existing.get("rotation_s", 4.0),
+                    "status":     status,
+                }
+                start_thread = key not in _sweep_active
+                _sweep_active.add(key)
+
+            # Publish the full status update (no sweep azimuth — just the site marker)
             pub_sensor.put(json.dumps(status).encode(),
                            encoding=zenoh.Encoding.APPLICATION_JSON)
+
+            if start_thread:
+                threading.Thread(target=_sweep_thread, args=(key,),
+                                  daemon=True).start()
+
+        elif mtype == "sector_crossing":
+            # Re-sync virtual north_ts so azimuth stays accurate between north markers
+            sector_deg = msg.get("sector_deg", 0.0)
+            with _sweep_lock:
+                s = _sweep.get(key)
+                if s and s.get("rotation_s"):
+                    s["north_ts"] = now - sector_deg / 360.0 * s["rotation_s"]
+
     return _h
 
 
