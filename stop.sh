@@ -34,8 +34,8 @@ stop_zenoh() {
 }
 
 _OPEN_API_BRIDGES=(airplaneslive aisstream aprs fr24 opensky openmeteo meteolt yrno osm n2yo purpleair windy here-traffic notam)
-_GIRAFFE_BRIDGES=(cat48 cat21 cat20 link16)
-_LAYERS=(cot-udp cot-tcp cat62 cat48 cat21 cat20 link16 sapient nffi sitaware)
+_GIRAFFE_BRIDGES=(cat48 cat21 cat20 link16 mavlink vmf cot-rx)
+_LAYERS=(cot-udp cot-tcp cat62 cat48 cat21 cat20 link16 mavlink vmf cot-rx track-fusion sapient nffi sitaware stanag4586)
 
 case "$MODE" in
     all)
