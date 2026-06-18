@@ -64,7 +64,7 @@ HERE      = os.path.dirname(os.path.abspath(__file__))
 _CERT_DIR = os.environ.get("GOAT_CERT_DIR", HERE)
 _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", ROUTER)
 
-TOPIC = "{}/air/cat48/asterix/unknown/aircraft/tracks/v1".format(ORG)
+TOPIC = "{}/air/asterix/cat48/unknown/aircraft/tracks/v1".format(ORG)
 
 CAT_034 = 0x22   # decimal 34
 CAT_048 = 0x30   # decimal 48
@@ -308,7 +308,7 @@ def decode_cat048_record(data: bytes, pos: int,
     Returns (track_dict, new_pos).
     """
     fspec, pos = parse_fspec(data, pos)
-    track = {"_ts": time.time(), "_src": "cat48"}
+    track = {"_ts": time.time(), "_src": "ASTERIX CAT-48"}
 
     for frn, present in enumerate(fspec):
         if not present:

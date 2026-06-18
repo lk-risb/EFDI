@@ -104,14 +104,23 @@ _TOPIC_COT = {
     # AIR — affiliation slot drives CoT type; ICAO24 classifier overrides for RU/BY
     "air/**/civ/aircraft/**":    (_civ_air_type,  AIR_STALE_S),
     "air/**/mil/aircraft/**":    (_mil_air_type,  AIR_STALE_S),
-    "air/**/unknown/**":         ("a-u-A",        AIR_STALE_S),   # radar / SAPIENT returns
-    # LAND — neutral stations (radio/APRS/weather), friendly forces, civilian vehicles
+    "air/**/unknown/**":         ("a-u-A-C-F",    AIR_STALE_S),   # radar / SAPIENT returns — fixed-wing renders as aircraft shape, not cloud
+    # LAND — full affiliation matrix for SitaWare / NFFI / APRS
     "land/**/civ/vehicle/**":    ("a-f-G-E-V-C", LAND_STALE_S),
-    "land/**/neutral/station/**":("a-n-G-I-R",   LAND_STALE_S),  # radio tower icon
-    "land/**/friendly/unit/**":  ("a-f-G-U-C",  LAND_STALE_S),
-    # SEA — MMSI classifier overrides for RU/BY vessels
+    "land/**/neutral/station/**":("a-n-G-I-R",   LAND_STALE_S),
+    "land/**/friendly/unit/**":  ("a-f-G-U-C",   LAND_STALE_S),
+    "land/**/hostile/unit/**":   ("a-h-G-U-C",   LAND_STALE_S),
+    "land/**/neutral/unit/**":   ("a-n-G-U-C",   LAND_STALE_S),
+    "land/**/unknown/unit/**":   ("a-u-G-U-C",   LAND_STALE_S),
+    # AIR — full affiliation matrix
+    "air/**/friendly/aircraft/**": ("a-f-A-M-F", AIR_STALE_S),
+    "air/**/hostile/aircraft/**":  ("a-h-A-M-F", AIR_STALE_S),
+    # SEA — full affiliation matrix
     "sea/**/civ/vessel/**":      (_sea_type,      SEA_STALE_S),
-    "sea/**/mil/vessel/**":      ("a-n-S-W-C",   SEA_STALE_S),   # reserved: neutral mil vessel
+    "sea/**/mil/vessel/**":      ("a-n-S-W-C",   SEA_STALE_S),
+    "sea/**/friendly/vessel/**": ("a-f-S-X-L",   SEA_STALE_S),
+    "sea/**/hostile/vessel/**":  ("a-h-S-X-L",   SEA_STALE_S),
+    "sea/**/neutral/vessel/**":  ("a-n-S-X-L",   SEA_STALE_S),
     # SPACE
     "space/**/civ/satellite/**": ("a-f-P",        SAT_STALE_S),
     # ENV — weather stations and air quality sensors show as ground icons
@@ -415,6 +424,16 @@ def _build_remarks(track: dict, cot_type: str) -> str:
         _row("ICAO", (track.get("icao24")        or "").strip().upper() or None)
         _row("SQWK", track.get("squawk"))
         _row("RDR",  track.get("radar_id"))
+        if track.get("range_nm") is not None:
+            tod = track.get("tod_s")
+            if tod is not None:
+                h = int(tod // 3600) % 24
+                m = int((tod % 3600) // 60)
+                s = tod % 60
+                _row("TOD", "{:02d}:{:02d}:{:04.1f} UTC".format(h, m, s))
+            _row("RNG", "{} NM".format(round(track["range_nm"], 1)))
+            _row("AZM", "{}°".format(round(track.get("azimuth_deg", 0), 1)))
+            _row("SAC/SIC", "{}/{}".format(track.get("sac", "?"), track.get("sic", "?")))
         _row("HDG",  "{}°".format(int(_course(track))))
         alt_m = _hae(track)
         if alt_m < 9_999_998:
