@@ -1297,10 +1297,28 @@ def _make_cat021_handler(pub):
 
 
 def _make_cat034_handler(pub_sensor, radar_lat, radar_lon, radar_name):
-    _first_seen:  dict[str, float] = {}
-    _sweep:       dict[str, dict]  = {}   # key → {north_ts, rotation_s, status}
-    _sweep_lock   = threading.Lock()
-    _sweep_active: set[str]        = set()
+    _first_seen:   dict[str, float] = {}
+    _sweep:        dict[str, dict]  = {}   # key → {north_ts, rotation_s, status}
+    _sweep_lock    = threading.Lock()
+    _sweep_active: set[str]         = set()
+    _keepalive:    dict[str, dict]  = {}   # key → last full status
+    _keepalive_active: set[str]     = set()
+    _ka_lock       = threading.Lock()
+    KEEPALIVE_S    = 60   # republish site marker every 60 s so ATAK never loses it
+
+    def _keepalive_thread(key: str):
+        """Republish the last known full status every KEEPALIVE_S seconds.
+        This keeps the ATAK radar site marker alive even when the radar is offline."""
+        while True:
+            time.sleep(KEEPALIVE_S)
+            with _ka_lock:
+                status = _keepalive.get(key)
+            if status is None:
+                return
+            payload = dict(status)
+            payload["_ts"] = time.time()
+            pub_sensor.put(json.dumps(payload).encode(),
+                           encoding=zenoh.Encoding.APPLICATION_JSON)
 
     def _sweep_thread(key: str):
         """Publish radar beam CoT at 5 Hz using dead-reckoned antenna azimuth."""
@@ -1377,12 +1395,21 @@ def _make_cat034_handler(pub_sensor, radar_lat, radar_lon, radar_name):
                 start_thread = key not in _sweep_active
                 _sweep_active.add(key)
 
+            # Update keepalive store and start keepalive thread on first north marker
+            with _ka_lock:
+                _keepalive[key] = status
+                start_ka = key not in _keepalive_active
+                _keepalive_active.add(key)
+
             # Publish the full status update (no sweep azimuth — just the site marker)
             pub_sensor.put(json.dumps(status).encode(),
                            encoding=zenoh.Encoding.APPLICATION_JSON)
 
             if start_thread:
                 threading.Thread(target=_sweep_thread, args=(key,),
+                                  daemon=True).start()
+            if start_ka:
+                threading.Thread(target=_keepalive_thread, args=(key,),
                                   daemon=True).start()
 
         elif mtype == "sector_crossing":
