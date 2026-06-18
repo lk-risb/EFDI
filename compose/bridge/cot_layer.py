@@ -552,8 +552,15 @@ def _build_remarks(track: dict, cot_type: str) -> str:
         if lat is not None and lon is not None:
             _row("LAT", "{:.5f}°".format(round(lat, 5)))
             _row("LON", "{:.5f}°".format(round(lon, 5)))
-        _row("REG",    (track.get("registration") or "").strip().upper() or None)
-        _row("M1",     track.get("mode1"))           # NATO Mode-1 military ID (octal)
+        _row("REG",              (track.get("registration") or "").strip().upper() or None)
+        _row("M1 (NATO MIL ID)", track.get("mode1"))
+        iff = track.get("iff", "")
+        if iff == "friendly":
+            _row("IFF (Mode-4)", "FRIENDLY")
+        elif iff == "unknown":
+            _row("IFF (Mode-4)", "UNKNOWN")
+        elif iff == "no_reply":
+            _row("IFF (Mode-4)", "NO REPLY")
         _row("TYPE",   (track.get("aircraft_type") or "").strip().upper() or None)
         _row("CALL",   (track.get("callsign")      or "").strip().upper() or None)
         _row("ICAO",   (track.get("icao24")        or "").strip().upper() or None)
@@ -561,13 +568,6 @@ def _build_remarks(track: dict, cot_type: str) -> str:
         sq_str = str(track.get("squawk") or "")
         if sq_str in _EMERGENCY_SQUAWK:
             lines.append("[!!! EMERGENCY: {} !!!]".format(_EMERGENCY_SQUAWK[sq_str]))
-        iff = track.get("iff", "")
-        if iff == "friendly":
-            lines.append("[IFF: FRIENDLY]")
-        elif iff == "unknown":
-            lines.append("[IFF: UNKNOWN]")
-        elif iff == "no_reply":
-            lines.append("[IFF: NO REPLY]")
         _row("ROUTE",  track.get("route"))
         _row("FLAG",   track.get("origin_country"))
         opr = (track.get("operating_as") or track.get("painted_as") or "").strip()
@@ -607,9 +607,6 @@ def _build_remarks(track: dict, cot_type: str) -> str:
         if alt_m is not None:
             _row("ALT (ft)", "{} ft".format(int(alt_m / 0.3048)))
             _row("ALT (m)",  "{} m".format(int(alt_m)))
-        if track.get("range_nm") is not None:
-            _row("RNG (nm)", "{} nm".format(round(track["range_nm"], 1)))
-            _row("RNG (km)", "{} km".format(round(track["range_nm"] * 1.852, 1)))
         # Vertical rate — prefer Mode-S baro VR, fall back to ADS-B vertical_rate_ms
         baro_vr = track.get("baro_vr_fpm")
         vr_ms   = track.get("vertical_rate_ms")
@@ -622,6 +619,9 @@ def _build_remarks(track: dict, cot_type: str) -> str:
         vt = track.get("vertical_trend")
         if vt:
             _row("CDM", vt.upper())
+        if track.get("range_nm") is not None:
+            _row("RNG (nm)", "{} nm".format(round(track["range_nm"], 1)))
+            _row("RNG (km)", "{} km".format(round(track["range_nm"] * 1.852, 1)))
         rcs = track.get("rcs_dbm")
         if rcs is not None:
             _row("RCS", "{} dBm".format(rcs))
