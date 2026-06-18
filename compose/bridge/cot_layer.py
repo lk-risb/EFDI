@@ -34,6 +34,7 @@ import base64
 import json
 import math
 import os
+import re
 import socket
 import struct
 import threading
@@ -43,6 +44,14 @@ import zlib
 from datetime import datetime, timezone
 
 import zenoh
+
+try:
+    import mgrs as _mgrs_lib
+    _MGRS    = _mgrs_lib.MGRS()
+    _MGRS_RE = re.compile(r'^(\d{1,2}[A-Z])([A-Z]{2})(.*)$')
+except Exception:
+    _MGRS = None
+    _MGRS_RE = None
 
 ROUTER    = "tls/zenoh.efdi.netbird.efdi-backbone.net:7447"
 ORG       = "1851281db70ccc0409dad4ecfc874cf5"
@@ -383,6 +392,49 @@ def _extrapolate_pos(lat: float, lon: float, speed_ms: float,
 
 
 
+def _mgrs_lines(lat: float, lon: float) -> list[str]:
+    """Return MGRS at 1km / 100m / 10m / 1m precision as formatted strings."""
+    if _MGRS is None:
+        return []
+    try:
+        out = []
+        for prec, label in ((2, "1km"), (3, "100m"), (4, "10m"), (5, "1m")):
+            raw = _MGRS.toMGRS(lat, lon, MGRSPrecision=prec)
+            m = _MGRS_RE.match(raw)
+            if m:
+                gzd, sq, en = m.groups()
+                n   = len(en) // 2
+                raw = "{} {} {} {}".format(gzd, sq, en[:n], en[n:])
+            out.append("MGRS ({}): {}".format(label, raw))
+        return out
+    except Exception:
+        return []
+
+
+def _track_age(track: dict) -> str:
+    """Return a human-readable age string like '(4s ago)' or '(1m 23s ago)'."""
+    tod = track.get("tod_s")
+    ts  = track.get("_ts")
+    now = time.time()
+    if tod is not None:
+        now_dt  = datetime.now(tz=timezone.utc)
+        now_tod = now_dt.hour * 3600 + now_dt.minute * 60 + now_dt.second + now_dt.microsecond / 1e6
+        age_s   = now_tod - float(tod)
+        if age_s < 0:
+            age_s += 86400
+    elif ts is not None:
+        age_s = now - float(ts)
+    else:
+        return ""
+    age_s = max(0.0, age_s)
+    if age_s < 60:
+        return "({:.0f}s ago)".format(age_s)
+    elif age_s < 3600:
+        return "({}m {}s ago)".format(int(age_s // 60), int(age_s % 60))
+    else:
+        return "({}h {}m ago)".format(int(age_s // 3600), int((age_s % 3600) // 60))
+
+
 def _start_dr_thread(sender):
     """Background thread: dead-reckon contacts that haven't sent a real update."""
     def _loop():
@@ -582,17 +634,20 @@ def _build_remarks(track: dict, cot_type: str) -> str:
 
         # ── KINEMATICS ──
         tod = track.get("tod_s")
+        age = _track_age(track)
         if tod is not None:
             h = int(tod // 3600) % 24; m = int((tod % 3600) // 60); s = tod % 60
-            kinem_l.append("TOD: {:02d}:{:02d}:{:04.1f} UTC".format(h, m, s))
+            kinem_l.append("TOD: {:02d}:{:02d}:{:04.1f} UTC  {}".format(h, m, s, age).rstrip())
         else:
             ts = track.get("_ts")
             if ts:
-                kinem_l.append("TIME: {}".format(
-                    datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%H:%M:%S UTC")))
+                kinem_l.append("TIME: {}  {}".format(
+                    datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%H:%M:%S UTC"), age).rstrip())
         lat = track.get("lat_deg"); lon = track.get("lon_deg")
         if lat is not None: kinem_l.append("LAT: {:.5f}°".format(round(lat, 5)))
         if lon is not None: kinem_l.append("LON: {:.5f}°".format(round(lon, 5)))
+        if lat is not None and lon is not None:
+            kinem_l.extend(_mgrs_lines(lat, lon))
         hdg  = _course(track)
         roll = track.get("roll_deg")
         if roll is not None:
