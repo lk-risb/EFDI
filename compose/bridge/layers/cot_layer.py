@@ -78,6 +78,22 @@ _DR_MIN_MS   = 5.15  # don't extrapolate below ~10 kt (5.15 m/s)
 
 # Emergency squawk codes (ICAO Annex 10)
 _EMERGENCY_SQUAWK = {"7500": "HIJACK", "7600": "COMMS FAILURE", "7700": "MAYDAY"}
+
+# NATO Mode 1 mission-type codes (5-bit, displayed as 2-digit octal 00–37)
+_MODE1_LABEL = {
+    "00": "default",         "01": "air defense",     "02": "interceptor",
+    "03": "ground attack",   "04": "close air support","05": "interdiction",
+    "06": "deep strike",     "07": "anti-sub",
+    "10": "fighter",         "11": "attack",          "12": "transport",
+    "13": "reconnaissance",  "14": "electronic warfare","15": "tanker",
+    "16": "helicopter",      "17": "search & rescue",
+    "20": "maritime patrol", "21": "training",        "22": "VIP/government",
+    "23": "cargo",           "24": "utility",         "25": "liaison",
+    "26": "admin",           "27": "reserved",
+    "30": "UAV",             "31": "AWACS/AEW",       "32": "refuelling",
+    "33": "medevac",         "34": "special ops",     "35": "mine countermeasures",
+    "36": "test/evaluation", "37": "reserved",
+}
 # AIS nav status values that indicate vessel distress
 _DISTRESS_NAV = frozenset({"aground", "not_under_command", "not under command"})
 
@@ -621,7 +637,12 @@ def _build_remarks(track: dict, cot_type: str) -> str:
         _r("UAV",   track.get("mav_type"), ident_l)
 
         # ── IFF / MODES ──
-        _r("MODE 1 (NATO MIL ID)", track.get("mode1"), iff_l)
+        m1 = track.get("mode1")
+        if m1 is not None:
+            m1_str = str(m1)
+            label  = _MODE1_LABEL.get(m1_str.zfill(2))
+            iff_l.append("MODE 1 (NATO MIL ID): {}{}".format(
+                m1_str, " ({})".format(label) if label else ""))
         _r("MODE 2", track.get("mode2"), iff_l)
         _r("MODE 3 (SQUAWK)", track.get("squawk"), iff_l)
         iff = track.get("iff", "")
@@ -957,7 +978,31 @@ def _build_remarks(track: dict, cot_type: str) -> str:
 
         if track.get("sensor_type") == "radar":   # ---- RADAR SENSOR SITE ----
             sensor_l = []; status_l = []; calib_l = []; stats_l = []
-            if time_str: sensor_l.append("TIME: {}".format(time_str))
+            # Show wall-clock update time (use _ts, not radar's local tod_s)
+            ts_r = track.get("_ts")
+            if ts_r:
+                age_r = time.time() - float(ts_r)
+                if age_r < 60:
+                    age_str = "({:.0f}s ago)".format(age_r)
+                else:
+                    age_str = "({}m {}s ago)".format(int(age_r // 60), int(age_r % 60))
+                sensor_l.append("TIME: {}  {}".format(
+                    datetime.fromtimestamp(float(ts_r), tz=timezone.utc).strftime("%H:%M:%S UTC"),
+                    age_str))
+            # Show radar's own clock (may differ from UTC due to local timezone)
+            radar_clk = track.get("radar_clock_s")
+            if radar_clk is not None:
+                h = int(radar_clk // 3600) % 24; m = int((radar_clk % 3600) // 60); s = radar_clk % 60
+                sensor_l.append("RADAR CLOCK: {:02d}:{:02d}:{:04.1f}".format(h, m, s))
+            # Online duration
+            first = track.get("online_since")
+            if first is not None:
+                up_s = time.time() - float(first)
+                if up_s < 3600:
+                    up_str = "{}m {:02d}s".format(int(up_s // 60), int(up_s % 60))
+                else:
+                    up_str = "{}h {:02d}m".format(int(up_s // 3600), int((up_s % 3600) // 60))
+                sensor_l.append("ONLINE: {}".format(up_str))
             sac = track.get("sac"); sic = track.get("sic")
             if sac is not None: sensor_l.append("SAC/SIC: {}/{}".format(sac, sic))
             nm = track.get("sensor_name")
