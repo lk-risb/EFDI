@@ -97,6 +97,11 @@ def _sea_type(track: dict) -> str:
     return "a-h-S-X-L" if _is_hostile_mmsi(track.get("mmsi", "")) else "a-n-S-X-L"
 
 
+# ADS-B internet relay sources — position and kinematics come from these, but they
+# are identity-only enrichment for the fusion bridge. Block direct-to-ATAK flow;
+# they must arrive via track_fusion_bridge → air/fused/** with radar kinematics.
+_ADS_B_RELAY_SOURCES = frozenset({"opensky", "fr24", "airplaneslive"})
+
 # Schema: {category}/{vendor}/{protocol}/{affiliation}/{entity_type}/{data_type}/v1
 # Wildcards: ** matches zero-or-more segments, so air/**/civ/aircraft/** catches any
 # vendor+protocol combination under civil air.
@@ -432,7 +437,7 @@ def _build_remarks(track: dict, cot_type: str) -> str:
         _row("OPR",  opr or None)
         _row("FLAG", track.get("origin_country"))
         _row("UAV",  track.get("mav_type"))
-        _row("RDR",  track.get("radar_id"))
+        _row("RDR (code)", track.get("radar_id"))
         if track.get("range_nm") is not None:
             tod = track.get("tod_s")
             if tod is not None:
@@ -440,7 +445,7 @@ def _build_remarks(track: dict, cot_type: str) -> str:
                 m = int((tod % 3600) // 60)
                 s = tod % 60
                 _row("TOD", "{:02d}:{:02d}:{:04.1f} UTC".format(h, m, s))
-            _row("RNG (NM)", "{} NM".format(round(track["range_nm"], 1)))
+            _row("RNG (nm)", "{} nm".format(round(track["range_nm"], 1)))
             _row("RNG (km)", "{} km".format(round(track["range_nm"] * 1.852, 1)))
             _row("AZM", "{}°".format(round(track.get("azimuth_deg", 0), 1)))
             _row("SAC/SIC", "{}/{}".format(track.get("sac", "?"), track.get("sic", "?")))
@@ -462,8 +467,10 @@ def _build_remarks(track: dict, cot_type: str) -> str:
             _row("SPD (km/h)", "{} km/h".format(round(spd * 3.6)))
         vr = track.get("vertical_rate_ms")
         if vr is not None:
+            vr_ms  = round(float(vr), 1)
             vr_fpm = int(float(vr) * 196.85)
-            _row("V/S", "{:+d} ft/min".format(vr_fpm))
+            _row("V/S (ft/min)", "{:+d} ft/min".format(vr_fpm))
+            _row("V/S (m/s)",   "{:+.1f} m/s".format(vr_ms))
         if track.get("on_ground"):
             lines.append("[ON GROUND]")
         if track.get("is_military"):
@@ -740,6 +747,11 @@ def make_handler(cot_type_or_fn, sender, verbose: bool, stale_s: float = COT_STA
         try:
             track = json.loads(bytes(sample.payload).decode())
         except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
+            return
+        # ADS-B relay sources (opensky, fr24, airplaneslive) must not reach ATAK
+        # directly — they are identity-only inputs for track_fusion_bridge.
+        # Fused output arrives via air/fused/** with radar kinematics.
+        if track.get("_src") in _ADS_B_RELAY_SOURCES:
             return
         # ATC towers / ground vehicles show up in ADS-B with "TWR", "GND" etc.
         # Reclassify as neutral ground radar/radio station instead of aircraft.
