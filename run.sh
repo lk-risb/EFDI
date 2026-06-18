@@ -182,44 +182,30 @@ start_layers() {
         echo "  [skip] cot-tcp — TAK Server not reachable at ${TAK_HOST:-127.0.0.1}:${TAK_PORT:-8087}"
     fi
 
-    # CAT62 radar — outbound connect to a track server
-    if [[ "${RADAR_HOST:-}" && "${RADAR_HOST}" != "127.0.0.1" ]]; then
-        start cat62 layers/cat62_layer.py --radar-host "$RADAR_HOST" --radar-port "${RADAR_PORT:-30002}"
-    else
-        echo "  [skip] cat62 — set RADAR_HOST in .env to enable"
-    fi
-
-    # CAT48/34 radar — inbound listener (Giraffe connects/sends to us)
-    # Set CAT48_PORT to activate. Optional: CAT48_RADAR_LAT/LON for polar→WGS84.
-    # Set CAT48_TCP=1 if the radar uses TCP instead of UDP.
+    # Unified ASTERIX bridge (CAT-048/34 + CAT-021 + CAT-020 + CAT-062)
+    _ax=()
     if [[ "${CAT48_PORT:-}" ]]; then
-        tcp_flag=""
-        [[ "${CAT48_TCP:-}" == "1" ]] && tcp_flag="--tcp"
-        start cat48 bridges/asterix_bridge.py \
-            --port "$CAT48_PORT" \
-            ${tcp_flag:+"$tcp_flag"} \
-            ${CAT48_RADAR_LAT:+--radar-lat "$CAT48_RADAR_LAT"} \
-            ${CAT48_RADAR_LON:+--radar-lon "$CAT48_RADAR_LON"}
-    else
-        echo "  [skip] cat48 — set CAT48_PORT in .env to enable"
+        _ax+=(--cat48-port "$CAT48_PORT")
+        [[ "${CAT48_TCP:-}" == "1" ]]    && _ax+=(--cat48-tcp)
+        [[ "${CAT48_RADAR_LAT:-}" ]]     && _ax+=(--radar-lat "$CAT48_RADAR_LAT")
+        [[ "${CAT48_RADAR_LON:-}" ]]     && _ax+=(--radar-lon "$CAT48_RADAR_LON")
+        [[ "${CAT48_RADAR_NAME:-}" ]]    && _ax+=(--radar-name "$CAT48_RADAR_NAME")
     fi
-
-    # CAT-021 ADS-B — inbound ASTERIX from a Mode-S ground station
     if [[ "${CAT21_PORT:-}" ]]; then
-        tcp21=""
-        [[ "${CAT21_TCP:-}" == "1" ]] && tcp21="--tcp"
-        start cat21 bridges/cat21_bridge.py --port "$CAT21_PORT" ${tcp21:+"$tcp21"}
-    else
-        echo "  [skip] cat21 — set CAT21_PORT in .env to enable"
+        _ax+=(--cat21-port "$CAT21_PORT")
+        [[ "${CAT21_TCP:-}" == "1" ]]    && _ax+=(--cat21-tcp)
     fi
-
-    # CAT-020 MLAT — inbound ASTERIX from a multilateration network
     if [[ "${CAT20_PORT:-}" ]]; then
-        tcp20=""
-        [[ "${CAT20_TCP:-}" == "1" ]] && tcp20="--tcp"
-        start cat20 bridges/cat20_bridge.py --port "$CAT20_PORT" ${tcp20:+"$tcp20"}
+        _ax+=(--cat20-port "$CAT20_PORT")
+        [[ "${CAT20_TCP:-}" == "1" ]]    && _ax+=(--cat20-tcp)
+    fi
+    if [[ "${RADAR_HOST:-}" && "${RADAR_HOST}" != "127.0.0.1" ]]; then
+        _ax+=(--cat62-host "$RADAR_HOST" --cat62-port "${RADAR_PORT:-30002}")
+    fi
+    if [[ ${#_ax[@]} -gt 0 ]]; then
+        start asterix bridges/asterix_bridge.py "${_ax[@]}"
     else
-        echo "  [skip] cat20 — set CAT20_PORT in .env to enable"
+        echo "  [skip] asterix — set CAT48/CAT21/CAT20_PORT or RADAR_HOST in .env to enable"
     fi
 
     # SitaWare — REST poll for unit positions (friendly force tracking)
@@ -274,32 +260,27 @@ start_giraffe_bridges() {
     echo ""
     echo "=== Giraffe sensor bridges ==="
 
+    # Unified ASTERIX bridge (CAT-048/34 + CAT-021 + CAT-020)
+    _ax=()
     if [[ "${CAT48_PORT:-}" ]]; then
-        tcp_flag=""
-        [[ "${CAT48_TCP:-}" == "1" ]] && tcp_flag="--tcp"
-        start cat48 bridges/asterix_bridge.py \
-            --port "$CAT48_PORT" \
-            ${tcp_flag:+"$tcp_flag"} \
-            ${CAT48_RADAR_LAT:+--radar-lat "$CAT48_RADAR_LAT"} \
-            ${CAT48_RADAR_LON:+--radar-lon "$CAT48_RADAR_LON"}
-    else
-        echo "  [skip] cat48 — set CAT48_PORT in .env to enable"
+        _ax+=(--cat48-port "$CAT48_PORT")
+        [[ "${CAT48_TCP:-}" == "1" ]]    && _ax+=(--cat48-tcp)
+        [[ "${CAT48_RADAR_LAT:-}" ]]     && _ax+=(--radar-lat "$CAT48_RADAR_LAT")
+        [[ "${CAT48_RADAR_LON:-}" ]]     && _ax+=(--radar-lon "$CAT48_RADAR_LON")
+        [[ "${CAT48_RADAR_NAME:-}" ]]    && _ax+=(--radar-name "$CAT48_RADAR_NAME")
     fi
-
     if [[ "${CAT21_PORT:-}" ]]; then
-        tcp21=""
-        [[ "${CAT21_TCP:-}" == "1" ]] && tcp21="--tcp"
-        start cat21 bridges/cat21_bridge.py --port "$CAT21_PORT" ${tcp21:+"$tcp21"}
-    else
-        echo "  [skip] cat21 — set CAT21_PORT in .env to enable"
+        _ax+=(--cat21-port "$CAT21_PORT")
+        [[ "${CAT21_TCP:-}" == "1" ]]    && _ax+=(--cat21-tcp)
     fi
-
     if [[ "${CAT20_PORT:-}" ]]; then
-        tcp20=""
-        [[ "${CAT20_TCP:-}" == "1" ]] && tcp20="--tcp"
-        start cat20 bridges/cat20_bridge.py --port "$CAT20_PORT" ${tcp20:+"$tcp20"}
+        _ax+=(--cat20-port "$CAT20_PORT")
+        [[ "${CAT20_TCP:-}" == "1" ]]    && _ax+=(--cat20-tcp)
+    fi
+    if [[ ${#_ax[@]} -gt 0 ]]; then
+        start asterix bridges/asterix_bridge.py "${_ax[@]}"
     else
-        echo "  [skip] cat20 — set CAT20_PORT in .env to enable"
+        echo "  [skip] asterix — set CAT48/CAT21/CAT20_PORT in .env to enable"
     fi
 
     if [[ "${LINK16_PORT:-}" ]]; then
