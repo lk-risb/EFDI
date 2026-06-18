@@ -4,5 +4,5 @@ FROM python:3.12-slim
 RUN apt-get update && apt-get install -y --no-install-recommends gcc g++ libffi-dev && rm -rf /var/lib/apt/lists/*
 RUN pip install --no-cache-dir eclipse-zenoh==1.9.0 copernicusmarine
 WORKDIR /app
-COPY cmems_bridge.py ./
+COPY bridges/cmems_marine_bridge.py ./
 CMD ["python3", "/app/cmems_bridge.py"]
