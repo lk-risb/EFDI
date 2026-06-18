@@ -82,7 +82,8 @@ _ADSB_TOPICS = [
 
 # Fields that carry identity (we prefer ADS-B values for these)
 _ID_FIELDS = ("callsign", "registration", "aircraft_type", "icao24",
-              "squawk", "origin", "destination", "operator")
+              "squawk", "origin", "destination", "operator",
+              "route", "rssi_db")
 
 # ADS-B fields taken as supplement only when radar cannot provide them
 _ADSB_SUPPLEMENT = ("vertical_rate_ms",)
