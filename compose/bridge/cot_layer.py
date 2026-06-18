@@ -537,255 +537,319 @@ def _build_remarks(track: dict, cot_type: str) -> str:
             lines.append("{}: {}".format(label, value))
 
     if domain == "A":   # ---- AIR ----------------------------------------
+        ident_l = []; iff_l = []; kinem_l = []; radar_l = []; status_l = []
+
+        def _sec(title, buf):
+            if buf:
+                lines.append("─── {} ───".format(title))
+                lines.extend(buf)
+
+        def _r(label, value, buf):
+            if value not in (None, "", 0.0):
+                buf.append("{}: {}".format(label, value))
+
+        # ── IDENTITY ──
+        cs_raw  = (track.get("callsign")      or "").strip().upper()
+        atype   = (track.get("aircraft_type") or "").strip().upper()
+        cs_disp = "{} ({})".format(cs_raw, atype) if cs_raw and atype else (cs_raw or atype or None)
+        if track.get("track_num") is not None:
+            _r("TRK", track["track_num"], ident_l)
+        if cs_disp:
+            ident_l.append("CS: {}".format(cs_disp))
+        _r("REG",   (track.get("registration") or "").strip().upper() or None, ident_l)
+        _r("ICAO",  (track.get("icao24")       or "").strip().upper() or None, ident_l)
+        _r("FLAG",  track.get("origin_country"), ident_l)
+        opr = (track.get("operating_as") or track.get("painted_as") or "").strip()
+        _r("OPR",   opr or None, ident_l)
+        _r("ROUTE", track.get("route"),    ident_l)
+        _r("UAV",   track.get("mav_type"), ident_l)
+
+        # ── IFF / MODES ──
+        _r("MODE 1 (NATO MIL ID)", track.get("mode1"), iff_l)
+        _r("MODE 3 (SQUAWK)", track.get("squawk"), iff_l)
+        iff = track.get("iff", "")
+        if iff == "friendly":
+            iff_l.append("MODE 4 (IFF): FRIENDLY")
+        elif iff == "unknown":
+            iff_l.append("MODE 4 (IFF): UNKNOWN")
+        elif iff == "no_reply":
+            iff_l.append("MODE 4 (IFF): NO REPLY")
+        sq_str = str(track.get("squawk") or "")
+        if sq_str in _EMERGENCY_SQUAWK:
+            iff_l.append("[!!! EMERGENCY: {} !!!]".format(_EMERGENCY_SQUAWK[sq_str]))
+        if track.get("mil_emergency"):
+            iff_l.append("[!!! MILITARY EMERGENCY !!!]")
+
+        # ── KINEMATICS ──
         tod = track.get("tod_s")
         if tod is not None:
-            h = int(tod // 3600) % 24
-            m = int((tod % 3600) // 60)
-            s = tod % 60
-            _row("TOD", "{:02d}:{:02d}:{:04.1f} UTC".format(h, m, s))
+            h = int(tod // 3600) % 24; m = int((tod % 3600) // 60); s = tod % 60
+            kinem_l.append("TOD: {:02d}:{:02d}:{:04.1f} UTC".format(h, m, s))
         else:
             ts = track.get("_ts")
             if ts:
-                _row("TIME", datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%H:%M:%S UTC"))
-        lat = track.get("lat_deg")
-        lon = track.get("lon_deg")
-        if lat is not None and lon is not None:
-            _row("LAT", "{:.5f}°".format(round(lat, 5)))
-            _row("LON", "{:.5f}°".format(round(lon, 5)))
-        _row("REG",              (track.get("registration") or "").strip().upper() or None)
-        _row("M1 (NATO MIL ID)", track.get("mode1"))
-        iff = track.get("iff", "")
-        if iff == "friendly":
-            _row("IFF (Mode-4)", "FRIENDLY")
-        elif iff == "unknown":
-            _row("IFF (Mode-4)", "UNKNOWN")
-        elif iff == "no_reply":
-            _row("IFF (Mode-4)", "NO REPLY")
-        _row("TYPE",   (track.get("aircraft_type") or "").strip().upper() or None)
-        _row("CALL",   (track.get("callsign")      or "").strip().upper() or None)
-        _row("ICAO",   (track.get("icao24")        or "").strip().upper() or None)
-        _row("SQWK",   track.get("squawk"))
-        sq_str = str(track.get("squawk") or "")
-        if sq_str in _EMERGENCY_SQUAWK:
-            lines.append("[!!! EMERGENCY: {} !!!]".format(_EMERGENCY_SQUAWK[sq_str]))
-        _row("ROUTE",  track.get("route"))
-        _row("FLAG",   track.get("origin_country"))
-        opr = (track.get("operating_as") or track.get("painted_as") or "").strip()
-        _row("OPR",    opr or None)
-        _row("UAV",    track.get("mav_type"))
-        _row("HDG",    "{}°".format(int(_course(track))))
-        if track.get("range_nm") is not None:
-            _row("AZM", "{}°".format(round(track.get("azimuth_deg", 0), 1)))
-        if track.get("roll_deg") is not None:
-            _row("ROLL", "{:+.1f}°".format(track["roll_deg"]))
+                kinem_l.append("TIME: {}".format(
+                    datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%H:%M:%S UTC")))
+        lat = track.get("lat_deg"); lon = track.get("lon_deg")
+        if lat is not None: kinem_l.append("LAT: {:.5f}°".format(round(lat, 5)))
+        if lon is not None: kinem_l.append("LON: {:.5f}°".format(round(lon, 5)))
+        hdg  = _course(track)
+        roll = track.get("roll_deg")
+        if roll is not None:
+            kinem_l.append("HDG: {}°   ROLL: {:+.1f}°".format(int(hdg), roll))
+        else:
+            kinem_l.append("HDG: {}°".format(int(hdg)))
         alt_m = _hae(track)
         if alt_m < 9_999_998:
-            alt_ft  = int(alt_m / 0.3048)
-            alt_str = "FL{:03d}".format(alt_ft // 100) if alt_ft > 1000 else "{} ft".format(alt_ft)
-        else:
-            alt_str = "---"
-            alt_m   = None
-        spd = _speed_ms(track)
-        ias_mavlink = track.get("airspeed_ms")
-        tas_kt = track.get("tas_kt")
-        ias_kt = track.get("ias_kt")
-        mach   = track.get("mach")
-        if ias_mavlink is not None:
-            _row("AIR SPD (kt)",   "{} kt".format(round(float(ias_mavlink) / 0.514444)))
-            _row("AIR SPD (km/h)", "{} km/h".format(round(float(ias_mavlink) * 3.6)))
-        if tas_kt is not None:
-            _row("TAS", "{} kt".format(int(tas_kt)))
-        if ias_kt is not None:
-            _row("IAS", "{} kt".format(int(ias_kt)))
-        if mach is not None:
-            _row("MACH", "{:.3f}".format(mach))
-        if spd:
-            spd_label = "GND SPD" if ias_mavlink is not None else "SPD"
-            _row("{} (kt)".format(spd_label),   "{} kt".format(round(spd / 0.514444)))
-            _row("{} (km/h)".format(spd_label), "{} km/h".format(round(spd * 3.6)))
-        _row("ALT",  alt_str)
-        if alt_m is not None:
-            _row("ALT (ft)", "{} ft".format(int(alt_m / 0.3048)))
-            _row("ALT (m)",  "{} m".format(int(alt_m)))
-        # Vertical rate — prefer Mode-S baro VR, fall back to ADS-B vertical_rate_ms
-        baro_vr = track.get("baro_vr_fpm")
-        vr_ms   = track.get("vertical_rate_ms")
+            alt_ft = int(alt_m / 0.3048)
+            alt_fl = "FL{:03d}".format(alt_ft // 100) if alt_ft > 1000 else "{} ft".format(alt_ft)
+            kinem_l.append("ALT: {}  ({} ft / {} m)".format(alt_fl, alt_ft, int(alt_m)))
+        baro_vr = track.get("baro_vr_fpm"); vr_ms = track.get("vertical_rate_ms")
+        vt = track.get("vertical_trend", "")
         if baro_vr is not None:
-            _row("V/S (ft/min)", "{:+d} ft/min".format(baro_vr))
-            _row("V/S (m/s)",    "{:+.1f} m/s".format(baro_vr / 196.85))
+            vfpm = baro_vr; vms = baro_vr / 196.85
         elif vr_ms is not None:
-            _row("V/S (ft/min)", "{:+d} ft/min".format(int(float(vr_ms) * 196.85)))
-            _row("V/S (m/s)",    "{:+.1f} m/s".format(round(float(vr_ms), 1)))
-        vt = track.get("vertical_trend")
-        if vt:
-            _row("CDM", vt.upper())
-        if track.get("range_nm") is not None:
-            _row("RNG (nm)", "{} nm".format(round(track["range_nm"], 1)))
-            _row("RNG (km)", "{} km".format(round(track["range_nm"] * 1.852, 1)))
-        rcs = track.get("rcs_dbm")
-        if rcs is not None:
-            _row("RCS", "{} dBm".format(rcs))
-        rssi = track.get("rssi_db")
-        if rssi is not None:
-            _row("RSSI", "{} dBFS".format(rssi))
-        if track.get("on_ground"):
-            lines.append("[ON GROUND]")
-        if track.get("mil_emergency"):
-            lines.append("[!!! MILITARY EMERGENCY !!!]")
-        if track.get("is_military"):
-            lines.append("[MILITARY]")
-        if track.get("track_ghost"):
-            lines.append("[GHOST TARGET]")
-        if track.get("track_tentative"):
-            lines.append("[TENTATIVE]")
-        if track.get("track_end"):
-            lines.append("[COASTING]")
-        if track.get("track_manoeuvre"):
-            lines.append("[MANOEUVRE]")
-        if track.get("_extrap"):
-            lines.append("[DEAD RECKONED]")
-        if track.get("track_num") is not None:
-            _row("TRK #", track["track_num"])
-        if track.get("range_nm") is not None:
-            _row("SAC/SIC", "{}/{}".format(track.get("sac", "?"), track.get("sic", "?")))
-        _row("RDR (code)", track.get("radar_id"))
+            vfpm = int(float(vr_ms) * 196.85); vms = float(vr_ms)
+        else:
+            vfpm = None
+        if vfpm is not None:
+            vs = "V/S: {:+d} ft/min / {:+.1f} m/s".format(vfpm, vms)
+            kinem_l.append(vs + ("  ({})".format(vt.upper()) if vt else ""))
+        elif vt:
+            kinem_l.append("CDM: {}".format(vt.upper()))
+        spd = _speed_ms(track)
+        ias_mav = track.get("airspeed_ms")
+        tas_kt  = track.get("tas_kt")
+        ias_kt  = track.get("ias_kt")
+        mach    = track.get("mach")
+        if ias_mav is not None:
+            kinem_l.append("AIR SPD: {} kt / {} km/h".format(
+                round(float(ias_mav) / 0.514444), round(float(ias_mav) * 3.6)))
+        if tas_kt is not None:
+            kinem_l.append("TAS: {} kt / {} km/h".format(int(tas_kt), int(tas_kt * 1.852)))
+        if ias_kt is not None:
+            kinem_l.append("IAS: {} kt / {} km/h".format(int(ias_kt), int(ias_kt * 1.852)))
+        if spd:
+            gs_kt = round(spd / 0.514444); gs_kmh = round(spd * 3.6)
+            lbl = "GS" if (tas_kt or ias_kt or ias_mav) else "SPD"
+            kinem_l.append("{}: {} kt / {} km/h".format(lbl, gs_kt, gs_kmh))
+        if mach is not None:
+            kinem_l.append("MACH: {:.3f}".format(mach))
+
+        # ── RADAR ──
+        rng = track.get("range_nm"); azm = track.get("azimuth_deg")
+        if rng is not None:
+            radar_l.append("RNG: {} nm / {} km   AZM: {}°".format(
+                round(rng, 1), round(rng * 1.852, 1), round(azm or 0, 1)))
+        rcs = track.get("rcs_dbm"); rssi = track.get("rssi_db")
+        if rcs is not None and rssi is not None:
+            radar_l.append("RCS: {} dBm   RSSI: {} dBFS".format(rcs, rssi))
+        elif rcs  is not None: radar_l.append("RCS: {} dBm".format(rcs))
+        elif rssi is not None: radar_l.append("RSSI: {} dBFS".format(rssi))
+        if rng is not None and track.get("sac") is not None:
+            radar_l.append("SAC/SIC: {}/{}".format(track.get("sac"), track.get("sic")))
+        if track.get("radar_id"):
+            radar_l.append("RDR: {}".format(track["radar_id"]))
+
+        # ── STATUS ──
+        if track.get("on_ground"):    status_l.append("[ON GROUND]")
+        if track.get("is_military"):  status_l.append("[MILITARY]")
+        if track.get("track_ghost"):  status_l.append("[GHOST TARGET]")
+        if track.get("track_tentative"): status_l.append("[TENTATIVE]")
+        if track.get("track_end"):    status_l.append("[COASTING]")
+        if track.get("track_manoeuvre"): status_l.append("[MANOEUVRE]")
+        if track.get("_extrap"):      status_l.append("[DEAD RECKONED]")
+        status_l.append("SRC: {}".format(src))
+
+        _sec("IDENTITY",   ident_l)
+        _sec("IFF / MODES", iff_l)
+        _sec("KINEMATICS", kinem_l)
+        _sec("RADAR",      radar_l)
+        _sec("STATUS",     status_l)
 
     elif domain == "S":  # ---- SEA ----------------------------------------
+        def _sec(title, buf):
+            if buf:
+                lines.append("─── {} ───".format(title))
+                lines.extend(buf)
+        ident_l = []; kinem_l = []; status_l = []
+
+        # IDENTITY
         ts = track.get("_ts")
         if ts:
-            _row("TIME", datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%H:%M:%S UTC"))
-        lat = track.get("lat_deg")
-        lon = track.get("lon_deg")
-        if lat is not None and lon is not None:
-            _row("LAT", "{:.5f}°".format(round(lat, 5)))
-            _row("LON", "{:.5f}°".format(round(lon, 5)))
-        _row("NAME",  (track.get("ship_name") or "").strip() or None)
-        _row("MMSI",  track.get("mmsi"))
-        _row("IMO",   track.get("imo"))
-        _row("CALL",  (track.get("callsign") or "").strip().upper() or None)
-        _row("TYPE",  track.get("ship_type"))
-        _row("FLAG",  track.get("flag") or track.get("origin_country") or None)
-        _row("DEST",  (track.get("destination") or "").strip() or None)
-        _row("ETA",   track.get("eta"))
-        length = track.get("length_m")
-        beam   = track.get("beam_m")
+            ident_l.append("TIME: {}".format(
+                datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%H:%M:%S UTC")))
+        _r = lambda lbl, v, b: b.append("{}: {}".format(lbl, v)) if v not in (None, "", 0.0) else None
+        _r("NAME", (track.get("ship_name") or "").strip() or None, ident_l)
+        _r("MMSI", track.get("mmsi"), ident_l)
+        _r("IMO",  track.get("imo"),  ident_l)
+        _r("CALL", (track.get("callsign") or "").strip().upper() or None, ident_l)
+        _r("TYPE", track.get("ship_type"), ident_l)
+        _r("FLAG", track.get("flag") or track.get("origin_country") or None, ident_l)
+        _r("DEST", (track.get("destination") or "").strip() or None, ident_l)
+        _r("ETA",  track.get("eta"), ident_l)
+        length = track.get("length_m"); beam = track.get("beam_m")
         if length:
-            dim_str = "{} m".format(int(length))
-            if beam:
-                dim_str = "{} × {} m".format(int(length), int(beam))
-            _row("DIM",   dim_str)
+            _r("DIM", "{} × {} m".format(int(length), int(beam)) if beam else "{} m".format(int(length)), ident_l)
         if track.get("draft_m"):
-            _row("DRAFT", "{} m".format(round(float(track["draft_m"]), 1)))
-        hdg = track.get("heading_deg")
-        cog = track.get("cog_deg")
+            ident_l.append("DRAFT: {} m".format(round(float(track["draft_m"]), 1)))
+
+        # KINEMATICS
+        lat = track.get("lat_deg"); lon = track.get("lon_deg")
+        if lat is not None: kinem_l.append("LAT: {:.5f}°".format(round(lat, 5)))
+        if lon is not None: kinem_l.append("LON: {:.5f}°".format(round(lon, 5)))
+        hdg = track.get("heading_deg"); cog = track.get("cog_deg")
         if hdg is not None and cog is not None and abs(hdg - cog) > 5:
-            _row("HDG", "{}° (bow)".format(int(hdg)))
-            _row("COG", "{}° (track)".format(int(cog)))
+            kinem_l.append("HDG: {}° (bow)   COG: {}° (track)".format(int(hdg), int(cog)))
         else:
-            _row("COG", "{}°".format(int(cog or hdg or 0)))
+            kinem_l.append("COG: {}°".format(int(cog or hdg or 0)))
         sog = _speed_ms(track)
-        _row("SOG (kt)",   "{} kt".format(round(sog / 0.514444, 1)) if sog else None)
-        _row("SOG (km/h)", "{} km/h".format(round(sog * 3.6, 1)) if sog else None)
+        if sog:
+            kinem_l.append("SOG: {} kt / {} km/h".format(
+                round(sog / 0.514444, 1), round(sog * 3.6, 1)))
         nav = track.get("nav_status", "").replace("_", " ")
-        _row("STATUS", nav or None)
+        if nav: kinem_l.append("STATUS: {}".format(nav))
         nav_key = track.get("nav_status", "").lower().replace(" ", "_")
         if nav_key in _DISTRESS_NAV:
-            lines.append("[!!! DISTRESS: {} !!!]".format(nav.upper()))
+            status_l.append("[!!! DISTRESS: {} !!!]".format(nav.upper()))
+        status_l.append("SRC: {}".format(src))
+
+        _sec("IDENTITY",   ident_l)
+        _sec("KINEMATICS", kinem_l)
+        _sec("STATUS",     status_l)
 
     elif domain == "P":  # ---- SPACE / SATELLITE ---------------------------
+        def _sec(title, buf):
+            if buf:
+                lines.append("─── {} ───".format(title))
+                lines.extend(buf)
+        ident_l = []; kinem_l = []
+
         ts = track.get("_ts")
         if ts:
-            _row("TIME", datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%H:%M:%S UTC"))
-        lat = track.get("lat_deg")
-        lon = track.get("lon_deg")
-        if lat is not None and lon is not None:
-            _row("LAT", "{:.5f}°".format(round(lat, 5)))
-            _row("LON", "{:.5f}°".format(round(lon, 5)))
-        _row("SAT ID", track.get("sat_id") or track.get("sensor_id") or track.get("norad_id"))
-        _row("NAME",   track.get("sat_name") or track.get("name"))
-        _row("ELEV",  "{}°".format(round(float(track["elevation_deg"]), 1))
-                      if track.get("elevation_deg") is not None else None)
-        _row("AZIM",  "{}°".format(round(float(track["azimuth_deg"]), 1))
-                      if track.get("azimuth_deg") is not None else None)
+            ident_l.append("TIME: {}".format(
+                datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%H:%M:%S UTC")))
+        _r = lambda lbl, v, b: b.append("{}: {}".format(lbl, v)) if v not in (None, "", 0.0) else None
+        _r("NORAD", track.get("sat_id") or track.get("sensor_id") or track.get("norad_id"), ident_l)
+        _r("NAME",  track.get("sat_name") or track.get("name"), ident_l)
+
+        lat = track.get("lat_deg"); lon = track.get("lon_deg")
+        if lat is not None: kinem_l.append("LAT: {:.5f}°".format(round(lat, 5)))
+        if lon is not None: kinem_l.append("LON: {:.5f}°".format(round(lon, 5)))
+        el = track.get("elevation_deg"); az = track.get("azimuth_deg")
+        if el is not None and az is not None:
+            kinem_l.append("ELEV: {}°   AZIM: {}°".format(round(float(el), 1), round(float(az), 1)))
+        elif el is not None: kinem_l.append("ELEV: {}°".format(round(float(el), 1)))
         alt_km = track.get("alt_km")
         if alt_km is None:
             raw_m = _hae(track)
             alt_km = raw_m / 1000.0 if raw_m < 9_999_998 else None
-        _row("ALT",   "{} km".format(round(float(alt_km))) if alt_km is not None else None)
+        if alt_km is not None:
+            kinem_l.append("ALT: {} km ({} m)".format(
+                round(float(alt_km)), int(float(alt_km) * 1000)))
         spd = _speed_ms(track)
-        _row("SPD",   "{} km/s".format(round(spd / 1000, 2)) if spd else None)
+        if spd:
+            kinem_l.append("SPD: {} km/s ({} km/h)".format(
+                round(spd / 1000, 2), round(spd * 3.6)))
+        kinem_l.append("SRC: {}".format(src))
+
+        _sec("IDENTITY",   ident_l)
+        _sec("KINEMATICS", kinem_l)
 
     else:                # ---- GROUND / ENV / APRS / OSM ------------------
+        def _sec(title, buf):
+            if buf:
+                lines.append("─── {} ───".format(title))
+                lines.extend(buf)
+        _r = lambda lbl, v, b: b.append("{}: {}".format(lbl, v)) if v not in (None, "", 0.0) else None
+
         ts = track.get("_ts")
-        if ts:
-            _row("TIME", datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%H:%M:%S UTC"))
-        lat = track.get("lat_deg")
-        lon = track.get("lon_deg")
-        if lat is not None and lon is not None:
-            _row("LAT", "{:.5f}°".format(round(lat, 5)))
-            _row("LON", "{:.5f}°".format(round(lon, 5)))
+        time_str = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%H:%M:%S UTC") if ts else None
+        lat = track.get("lat_deg"); lon = track.get("lon_deg")
 
         if src in ("openmeteo", "meteolt", "yrno", "windy"):   # WEATHER
             place = (track.get("place_name") or track.get("place_code") or src).upper()
-            lines.append("[WEATHER] {}".format(place))
-            t = track.get("temperature_c")
-            _row("TEMP",     "{} °C".format(round(float(t), 1)) if t is not None else None)
-            ft = track.get("apparent_temperature_c") or track.get("feels_like_c")
-            _row("FEELS",    "{} °C".format(round(float(ft), 1)) if ft is not None else None)
+            ident_l = []; env_l = []
+            if time_str: ident_l.append("TIME: {}".format(time_str))
+            ident_l.append("STATION: {}".format(place))
+            if lat is not None: ident_l.append("LAT: {:.5f}°".format(round(lat, 5)))
+            if lon is not None: ident_l.append("LON: {:.5f}°".format(round(lon, 5)))
+            t = track.get("temperature_c"); ft = track.get("apparent_temperature_c") or track.get("feels_like_c")
+            if t is not None:
+                feels = "  (feels {} °C)".format(round(float(ft), 1)) if ft is not None else ""
+                env_l.append("TEMP: {} °C{}".format(round(float(t), 1), feels))
             rh = track.get("relative_humidity_pct")
-            _row("HUMIDITY", "{}%".format(int(rh)) if rh is not None else None)
-            ws = track.get("wind_speed_ms")
-            wd = track.get("wind_direction_deg")
+            if rh is not None: env_l.append("HUMIDITY: {}%".format(int(rh)))
+            ws = track.get("wind_speed_ms"); wd = track.get("wind_direction_deg")
+            wg = track.get("wind_gusts_ms")
             if ws is not None:
-                _row("WIND",  "{} m/s{}".format(round(float(ws), 1),
-                              "  {}°".format(int(wd)) if wd is not None else ""))
-            _row("GUSTS",    "{} m/s".format(round(float(track["wind_gusts_ms"]), 1))
-                             if track.get("wind_gusts_ms") is not None else None)
+                wind = "WIND: {} m/s".format(round(float(ws), 1))
+                if wd is not None: wind += "  {}°".format(int(wd))
+                if wg is not None: wind += "  (gusts {} m/s)".format(round(float(wg), 1))
+                env_l.append(wind)
             p = track.get("pressure_hpa")
-            _row("PRESSURE", "{} hPa".format(round(float(p), 1)) if p is not None else None)
+            if p is not None: env_l.append("PRESSURE: {} hPa".format(round(float(p), 1)))
             cc = track.get("cloud_cover_pct")
-            _row("CLOUD",    "{}%".format(int(cc)) if cc is not None else None)
+            if cc is not None: env_l.append("CLOUD: {}%".format(int(cc)))
             pr = track.get("precipitation_mm")
             if pr is not None and float(pr) > 0:
-                _row("PRECIP", "{} mm".format(round(float(pr), 1)))
+                env_l.append("PRECIP: {} mm".format(round(float(pr), 1)))
+            env_l.append("SRC: {}".format(src))
+            _sec("WEATHER",     ident_l)
+            _sec("CONDITIONS",  env_l)
 
         elif src == "purpleair":   # AIR QUALITY
             name = track.get("sensor_name") or "Sensor #{}".format(track.get("sensor_id", "?"))
-            lines.append("[AIR QUALITY] {}".format(name))
-            aqi    = track.get("aqi")
-            aqicat = track.get("aqi_category", "")
-            _row("AQI",      "{} ({})".format(int(aqi), aqicat) if aqi is not None else None)
-            pm25 = track.get("pm25_ugm3")
-            _row("PM2.5",    "{} µg/m³".format(round(float(pm25), 1)) if pm25 is not None else None)
-            pm10 = track.get("pm10_ugm3")
-            _row("PM10",     "{} µg/m³".format(round(float(pm10), 1)) if pm10 is not None else None)
-            pm1  = track.get("pm1_ugm3")
-            _row("PM1",      "{} µg/m³".format(round(float(pm1),  1)) if pm1  is not None else None)
-            t = track.get("temperature_c")
-            _row("TEMP",     "{} °C".format(round(float(t), 1)) if t is not None else None)
-            rh = track.get("relative_humidity_pct")
-            _row("HUMIDITY", "{}%".format(int(rh)) if rh is not None else None)
+            ident_l = []; env_l = []
+            if time_str: ident_l.append("TIME: {}".format(time_str))
+            ident_l.append("SENSOR: {}".format(name))
+            if lat is not None: ident_l.append("LAT: {:.5f}°".format(round(lat, 5)))
+            if lon is not None: ident_l.append("LON: {:.5f}°".format(round(lon, 5)))
+            aqi = track.get("aqi"); aqicat = track.get("aqi_category", "")
+            if aqi is not None:
+                env_l.append("AQI: {} ({})".format(int(aqi), aqicat) if aqicat else "AQI: {}".format(int(aqi)))
+            for key, label in (("pm25_ugm3", "PM2.5"), ("pm10_ugm3", "PM10"), ("pm1_ugm3", "PM1")):
+                v = track.get(key)
+                if v is not None: env_l.append("{}: {} µg/m³".format(label, round(float(v), 1)))
+            t = track.get("temperature_c"); rh = track.get("relative_humidity_pct")
+            if t  is not None: env_l.append("TEMP: {} °C".format(round(float(t), 1)))
+            if rh is not None: env_l.append("HUMIDITY: {}%".format(int(rh)))
             p = track.get("pressure_hpa")
-            _row("PRESSURE", "{} hPa".format(round(float(p), 1)) if p is not None else None)
+            if p  is not None: env_l.append("PRESSURE: {} hPa".format(round(float(p), 1)))
+            env_l.append("SRC: {}".format(src))
+            _sec("AIR QUALITY", ident_l)
+            _sec("READINGS",    env_l)
 
         else:                      # APRS / OSM / vehicles
             feat = track.get("feature_type")
             if feat:               # OSM geo feature
+                ident_l = []
+                if time_str: ident_l.append("TIME: {}".format(time_str))
                 feat_label = {"aerodrome": "AERODROME", "port": "PORT",
                               "military": "MILITARY BASE", "station": "STATION"}.get(feat, feat.upper())
-                _row("TYPE", feat_label)
-                _row("NAME", track.get("name"))
-                _row("ICAO", track.get("icao") or track.get("aerodrome_icao"))
-                _row("IATA", track.get("iata"))
-                _row("COUNTRY", (track.get("country_code") or "").upper() or None)
+                ident_l.append("TYPE: {}".format(feat_label))
+                _r("NAME",    track.get("name"),    ident_l)
+                _r("ICAO",    track.get("icao") or track.get("aerodrome_icao"), ident_l)
+                _r("IATA",    track.get("iata"),    ident_l)
+                _r("COUNTRY", (track.get("country_code") or "").upper() or None, ident_l)
+                if lat is not None: ident_l.append("LAT: {:.5f}°".format(round(lat, 5)))
+                if lon is not None: ident_l.append("LON: {:.5f}°".format(round(lon, 5)))
+                ident_l.append("SRC: {}".format(src))
+                _sec("GEO FEATURE", ident_l)
             else:                  # APRS or vehicle
-                _row("CALL", (track.get("callsign") or "").strip().upper() or None)
-                _row("HDG",  "{}°".format(int(_course(track))) if _speed_ms(track) else None)
+                ident_l = []; kinem_l = []
+                if time_str: ident_l.append("TIME: {}".format(time_str))
+                _r("CALL", (track.get("callsign") or "").strip().upper() or None, ident_l)
+                if lat is not None: ident_l.append("LAT: {:.5f}°".format(round(lat, 5)))
+                if lon is not None: ident_l.append("LON: {:.5f}°".format(round(lon, 5)))
                 spd = _speed_ms(track)
-                _row("SPD (kt)",   "{} kt".format(round(spd / 0.514444, 1)) if spd else None)
-                _row("SPD (km/h)", "{} km/h".format(round(spd * 3.6, 1)) if spd else None)
-
-    _row("SRC", src)
+                if spd:
+                    kinem_l.append("HDG: {}°".format(int(_course(track))))
+                    kinem_l.append("SPD: {} kt / {} km/h".format(
+                        round(spd / 0.514444, 1), round(spd * 3.6, 1)))
+                kinem_l.append("SRC: {}".format(src))
+                _sec("IDENTITY",   ident_l)
+                _sec("KINEMATICS", kinem_l)
     return "\n".join(lines)
 
 
