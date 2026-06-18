@@ -112,11 +112,12 @@ class _Vehicle:
         # <ffffhH: airspeed, groundspeed, alt, climb, heading, throttle
         if len(payload) < 20:
             return
-        _, gs, _, _, hdg, _ = struct.unpack_from("<ffffhH", payload)
+        _, gs, alt, climb, hdg, _ = struct.unpack_from("<ffffhH", payload)
         if "speed_ms" not in self.track:
             self.track["speed_ms"] = round(float(gs), 2)
         if "heading_deg" not in self.track:
             self.track["heading_deg"] = float(hdg)
+        self.track["vertical_rate_ms"] = round(float(climb), 2)
 
     def topic(self) -> str:
         return "{}/air/mavlink/uav/civ/aircraft/tracks/v1".format(ORG)

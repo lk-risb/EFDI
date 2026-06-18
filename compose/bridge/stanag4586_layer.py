@@ -153,6 +153,8 @@ def _decode_vehicle_state(body: bytes, instance: int) -> dict | None:
         track["heading_deg"] = round(heading % 360, 1)
     if speed >= 0:
         track["speed_ms"] = round(speed, 2)
+    if abs(vspeed) < 1000:
+        track["vertical_rate_ms"] = round(vspeed, 2)
     if len(body) >= 60:
         fuel = struct.unpack_from("<f", body, 56)[0]
         if 0.0 <= fuel <= 1.0:
