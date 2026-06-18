@@ -84,6 +84,9 @@ _ADSB_TOPICS = [
 _ID_FIELDS = ("callsign", "registration", "aircraft_type", "icao24",
               "squawk", "origin", "destination", "operator")
 
+# ADS-B fields taken as supplement only when radar cannot provide them
+_ADSB_SUPPLEMENT = ("vertical_rate_ms",)
+
 # Fields where radar is the authority (position, kinematics)
 _RADAR_FIELDS = ("lat_deg", "lon_deg", "alt_m", "alt_baro_ft", "alt_3d_ft",
                  "speed_ms", "heading_deg", "range_nm", "azimuth_deg",
@@ -266,6 +269,11 @@ class TrackFuser:
             fused.update(radar)
             for k in _ID_FIELDS:
                 if k in adsb:
+                    fused[k] = adsb[k]
+            # Supplement: take kinematic fields from ADS-B only if radar cannot
+            # provide them (e.g. vertical rate — not available in CAT-48).
+            for k in _ADSB_SUPPLEMENT:
+                if k not in fused and k in adsb:
                     fused[k] = adsb[k]
         else:
             # ADS-B pref: start from ADS-B, overwrite kinematics with radar
