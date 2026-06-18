@@ -1297,6 +1297,8 @@ def _make_cat021_handler(pub):
 
 
 def _make_cat034_handler(pub_sensor, radar_lat, radar_lon, radar_name):
+    _first_seen: dict[str, float] = {}
+
     def _h(data: bytes, verbose: bool):
         msg = decode_cat034(data)
         if not msg:
@@ -1317,16 +1319,26 @@ def _make_cat034_handler(pub_sensor, radar_lat, radar_lon, radar_name):
             ), flush=True)
         if mtype == "north_marker" and pub_sensor and radar_lat and radar_lon:
             sac = msg.get("sac", 0); sic = msg.get("sic", 0)
+            key = "{}-{}".format(sac, sic)
+            now = time.time()
+            _first_seen.setdefault(key, now)
             status = {
                 "_src":        "ASTERIX CAT-34",
-                "_ts":         time.time(),
+                "_ts":         now,
                 "sensor_type": "radar",
                 "sensor_id":   "CAT34-{}-{}".format(sac, sic),
                 "sensor_name": radar_name or "RADAR SAC{}/SIC{}".format(sac, sic),
                 "lat_deg":     radar_lat,
                 "lon_deg":     radar_lon,
+                "online_since": _first_seen[key],
             }
-            status.update(msg)
+            # Keep tod_s as 'radar_clock_s' — avoids _track_age() comparing
+            # radar's local clock against UTC (shows wrong "23h ago" otherwise).
+            for k, v in msg.items():
+                if k == "tod_s":
+                    status["radar_clock_s"] = v
+                else:
+                    status[k] = v
             pub_sensor.put(json.dumps(status).encode(),
                            encoding=zenoh.Encoding.APPLICATION_JSON)
     return _h
