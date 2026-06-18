@@ -185,6 +185,50 @@ def _decode_callsign(raw: bytes) -> str:
                    for i in range(5, -1, -1)).rstrip()
 
 
+def _decode_bds50(mb: bytes) -> dict:
+    """BDS 5,0 Track and Turn Report — 56-bit Mode-S register."""
+    v = int.from_bytes(mb[:7], "big")
+    def _bit(n):  return (v >> (56 - n)) & 1
+    def _uns(a, b): return (v >> (56 - b)) & ((1 << (b - a + 1)) - 1)
+    def _sgn(a, b):
+        w = b - a + 1; r = _uns(a, b)
+        return r - (1 << w) if r >= (1 << (w - 1)) else r
+    out = {}
+    if _bit(1):
+        out["roll_deg"] = round(_sgn(2, 11) * 45.0 / 512.0, 1)
+    if _bit(12):
+        out["true_track_deg"] = round(_sgn(13, 22) * 90.0 / 512.0 % 360, 1)
+    if _bit(23):
+        out["bds_gs_kt"] = round(_uns(24, 33) * 2.0, 0)
+    if _bit(34):
+        out["track_rate_degs"] = round(_sgn(35, 44) * 8.0 / 256.0, 2)
+    if _bit(45):
+        out["tas_kt"] = round(_uns(46, 55) * 2.0, 0)
+    return out
+
+
+def _decode_bds60(mb: bytes) -> dict:
+    """BDS 6,0 Heading and Speed Report — 56-bit Mode-S register."""
+    v = int.from_bytes(mb[:7], "big")
+    def _bit(n):  return (v >> (56 - n)) & 1
+    def _uns(a, b): return (v >> (56 - b)) & ((1 << (b - a + 1)) - 1)
+    def _sgn(a, b):
+        w = b - a + 1; r = _uns(a, b)
+        return r - (1 << w) if r >= (1 << (w - 1)) else r
+    out = {}
+    if _bit(1):
+        out["mag_hdg_deg"] = round(_sgn(2, 11) * 90.0 / 512.0 % 360, 1)
+    if _bit(12):
+        out["ias_kt"] = _uns(13, 22)
+    if _bit(23):
+        out["mach"] = round(_uns(24, 34) * 2.048 / 2048.0, 3)
+    if _bit(35):
+        out["baro_vr_fpm"] = _sgn(36, 46) * 32
+    if _bit(47):
+        out["ivv_fpm"] = _sgn(48, 56) * 32
+    return out
+
+
 def _polar_to_wgs84(radar_lat: float, radar_lon: float,
                     range_nm: float, azimuth_deg: float):
     """Convert slant-polar radar plot to WGS-84 lat/lon (haversine forward)."""
@@ -324,7 +368,19 @@ def decode_cat048_record(data: bytes, pos: int,
             track["tod_s"] = raw / 128.0; pos += 3
 
         elif frn == 2:                  # I048/020  Target Report Descriptor (FX)
-            pos = _skip_fx_field(data, pos)
+            if pos >= len(data): return track, len(data)
+            b = data[pos]; pos += 1
+            if b & 0x10: track["simulated"] = True              # SIM
+            if b & 0x01:                                         # FX → second byte
+                if pos >= len(data): return track, len(data)
+                b = data[pos]; pos += 1
+                if b & 0x80: track["on_ground"]    = True       # GBS
+                if b & 0x40: track["mil_emergency"] = True      # ME
+                foe = (b >> 3) & 0x03                           # FOE/FRI bits 5-4
+                if foe: track["iff"] = ("", "friendly", "unknown", "no_reply")[foe]
+                while b & 0x01:                                  # skip further FX
+                    if pos >= len(data): break
+                    b = data[pos]; pos += 1
 
         elif frn == 3:                  # I048/040  Slant Polar Coordinates
             if pos + 4 > len(data): return track, len(data)
@@ -378,8 +434,19 @@ def decode_cat048_record(data: bytes, pos: int,
             if pos + 6 > len(data): return track, len(data)
             track["callsign"] = _decode_callsign(data[pos:pos+6]); pos += 6
 
-        elif frn == 9:                  # I048/250  Mode-S MB Data (variable, complex BDS)
-            break                       # skip — compound/variable length
+        elif frn == 9:                  # I048/250  Mode-S MB Data (REP × 8-byte records)
+            if pos >= len(data): return track, len(data)
+            rep = data[pos]; pos += 1
+            for _ in range(rep):
+                if pos + 8 > len(data): break
+                mb   = bytes(data[pos:pos + 7])
+                bds  = data[pos + 7]; pos += 8
+                bds1 = (bds >> 4) & 0x0F
+                bds2 = bds & 0x0F
+                if bds1 == 5 and bds2 == 0:
+                    track.update(_decode_bds50(mb))
+                elif bds1 == 6 and bds2 == 0:
+                    track.update(_decode_bds60(mb))
 
         elif frn == 10:                 # I048/161  Track Number
             if pos + 2 > len(data): return track, len(data)
@@ -400,7 +467,22 @@ def decode_cat048_record(data: bytes, pos: int,
             pos += 4
 
         elif frn == 13:                 # I048/170  Track Status (FX variable)
-            pos = _skip_fx_field(data, pos)
+            if pos >= len(data): return track, len(data)
+            b = data[pos]; pos += 1
+            if b & 0x80: track["track_tentative"]  = True           # CNF
+            if b & 0x10: track["track_doubtful"]   = True           # DOU
+            if b & 0x08: track["track_manoeuvre"]  = True           # MAH
+            cdm = (b & 0x06) >> 1                                    # CDM bits 3-2
+            if   cdm == 1: track["vertical_trend"] = "climbing"
+            elif cdm == 2: track["vertical_trend"] = "descending"
+            if b & 0x01:                                             # FX → second byte
+                if pos >= len(data): return track, len(data)
+                b = data[pos]; pos += 1
+                if b & 0x80: track["track_end"]   = True            # TRE (coasting)
+                if b & 0x40: track["track_ghost"]  = True           # GHO
+                while b & 0x01:                                      # skip further FX
+                    if pos >= len(data): break
+                    b = data[pos]; pos += 1
 
         elif frn == 14:                 # I048/210  Track Quality  4 bytes
             pos += 4
@@ -418,8 +500,16 @@ def decode_cat048_record(data: bytes, pos: int,
             if pos + 2 > len(data): return track, len(data)
             track["alt_3d_ft"] = _s16(data[pos:pos+2]) * 25; pos += 2
 
-        elif frn == 19:                 # I048/120  Radial Doppler (compound)
-            break
+        elif frn == 19:                 # I048/120  Radial Doppler (compound) — skip
+            if pos >= len(data): return track, len(data)
+            psf = data[pos]; pos += 1
+            if psf & 0x80: pos += 2                              # CAL: 2 bytes
+            if psf & 0x40:                                       # RDS: REP × 6 bytes
+                if pos < len(data):
+                    pos += 1 + data[pos] * 6
+            while psf & 0x01:                                    # skip further FX
+                if pos >= len(data): break
+                psf = data[pos]; pos += 1
 
         elif frn == 20:                 # I048/230  Comms/ACAS  2 bytes
             pos += 2
