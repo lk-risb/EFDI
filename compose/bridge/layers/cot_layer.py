@@ -1211,7 +1211,21 @@ def track_to_cot(track: dict, cot_type: str, stale_s: float = COT_STALE_S) -> st
         "speed":  str(spd_cot),
         "course": str(crs_cot),
     })
-    if spd_cot > 0:
+    sweep_az = track.get("sweep_azimuth_deg")
+    if sweep_az is not None:
+        # Radar dish sweep: narrow 5° beam rotating around the site
+        rot = track.get("rotation_s", 4.0)
+        rng = int(track.get("radar_range_m", 200_000))
+        ET.SubElement(detail, "sensor", {
+            "vfov": "1", "hfov": "5",
+            "range": str(rng),
+            "azimuth": str(int(round(float(sweep_az)))),
+            "model": "Generic", "ranges": "0",
+            "type": "radar",
+            "displayMagneticReference": "0",
+            "stockTool": "false",
+        })
+    elif spd_cot > 0:
         ET.SubElement(detail, "sensor", {
             "vfov": "45", "hfov": "360",
             "range": "0", "azimuth": str(int(crs_cot)),
@@ -1402,8 +1416,16 @@ def make_radar_status_handler(sender, verbose: bool):
         if sac is not None:
             key = "{}-{}".format(sac, sic if sic is not None else 0)
             with _radar_status_lock:
-                _radar_status[key] = track
-        xml = track_to_cot(track, "a-n-G-E-S-R", stale_s=LAND_STALE_S * 2)
+                # Only update enrichment store from full status (not sweep ticks)
+                if "sweep_azimuth_deg" not in track:
+                    _radar_status[key] = track
+        # Sweep ticks: short stale so wedge disappears if rotation stops
+        if "sweep_azimuth_deg" in track:
+            rot = float(track.get("rotation_s") or 4.0)
+            stale = max(rot * 2, 5.0)
+        else:
+            stale = LAND_STALE_S * 2
+        xml = track_to_cot(track, "a-n-G-E-S-R", stale_s=stale)
         if xml:
             sender.send(xml)
         if verbose:
