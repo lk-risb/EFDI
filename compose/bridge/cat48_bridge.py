@@ -351,7 +351,23 @@ def decode_cat048_record(data: bytes, pos: int,
             track["alt_baro_ft"] = round(raw * 0.25 * 100); pos += 2
 
         elif frn == 6:                  # I048/130  Radar Plot Characteristics (compound)
-            break                       # compound — stop; remaining fields unrecoverable
+            # Primary subfield: bits 7-1 indicate sub-item presence, bit 0 = FX
+            if pos >= len(data): break
+            psf = data[pos]; pos += 1
+            while True:
+                if psf & 0x80: pos += 1                         # SRL: 1 byte
+                if psf & 0x40: pos += 1                         # SRR: 1 byte
+                if psf & 0x20:                                   # SAM: SSR amplitude (signed dBm)
+                    if pos < len(data):
+                        track["rcs_dbm"] = struct.unpack_from("b", data, pos)[0]
+                    pos += 1
+                if psf & 0x10: pos += 1                         # PRL: 1 byte
+                if psf & 0x08: pos += 1                         # PAM: PSR amplitude (signed dBm)
+                if psf & 0x04: pos += 2                         # RPD: 2 bytes
+                if psf & 0x02: pos += 2                         # APD: 2 bytes
+                if not (psf & 0x01): break                      # FX=0 → end of compound
+                if pos >= len(data): break
+                psf = data[pos]; pos += 1
 
         elif frn == 7:                  # I048/220  Aircraft Address (Mode-S ICAO)
             if pos + 3 > len(data): return track, len(data)

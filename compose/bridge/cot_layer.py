@@ -31,7 +31,9 @@ Run:
 
 import argparse
 import base64
+import collections
 import json
+import math
 import os
 import socket
 import struct
@@ -61,6 +63,23 @@ ENV_STALE_S    = 3600    # weather stations: polled every 15–30 min, 1 h gives
 SENSOR_STALE_S = 1800    # air quality sensors: polled every 10 min, 30 min stale
 RECONNECT_S    = 5
 SEND_TIMEOUT_S = 10
+
+# Track breadcrumb trail — last N real positions per UID, shown as ghost dots
+_TRAIL_MAX   = 5     # positions kept per contact
+# Dead-reckoning — extrapolate position forward when sensor updates stop
+_DR_TICK_S   = 2.0   # extrapolation interval (seconds)
+_DR_MIN_MS   = 5.15  # don't extrapolate below ~10 kt (5.15 m/s)
+
+# Emergency squawk codes (ICAO Annex 10)
+_EMERGENCY_SQUAWK = {"7500": "HIJACK", "7600": "COMMS FAILURE", "7700": "MAYDAY"}
+# AIS nav status values that indicate vessel distress
+_DISTRESS_NAV = frozenset({"aground", "not_under_command", "not under command"})
+
+# Module-level stores — initialised once, shared across all handler threads
+_trail_lock  = threading.Lock()
+_trail_store: dict[str, collections.deque] = {}
+_dr_lock     = threading.Lock()
+_dr_store:   dict[str, dict] = {}
 
 # ---------------------------------------------------------------------------
 # Hostile-state classifiers
@@ -352,6 +371,69 @@ _COT_ICONSET = {
     "a-h-G-E-S-R": "{}/Hostile/Land/Radar.png".format(_ISET),
 }
 
+def _extrapolate_pos(lat: float, lon: float, speed_ms: float,
+                     heading_deg: float, dt_s: float) -> tuple[float, float]:
+    d  = speed_ms * dt_s
+    R  = 6_371_000.0
+    az = math.radians(heading_deg)
+    la = math.radians(lat)
+    lo = math.radians(lon)
+    la2 = math.asin(math.sin(la) * math.cos(d / R) +
+                    math.cos(la) * math.sin(d / R) * math.cos(az))
+    lo2 = lo + math.atan2(math.sin(az) * math.sin(d / R) * math.cos(la),
+                          math.cos(d / R) - math.sin(la) * math.sin(la2))
+    return math.degrees(la2), math.degrees(lo2)
+
+
+def _trail_cot(uid: str, lat: float, lon: float,
+               time_now: float, stale: float, cot_type: str) -> str:
+    """Minimal CoT for a breadcrumb ghost — same type, no remarks, how=h-g."""
+    event = ET.Element("event", {
+        "version": "2.0", "uid": uid, "type": cot_type,
+        "how": "h-g", "time": _ts(time_now),
+        "start": _ts(time_now), "stale": _ts(stale),
+    })
+    ET.SubElement(event, "point", {
+        "lat": str(round(lat, 6)), "lon": str(round(lon, 6)),
+        "hae": "9999999.0", "ce": "9999999.0", "le": "9999999.0",
+    })
+    ET.SubElement(ET.SubElement(event, "detail"), "contact", {"callsign": ""})
+    return '<?xml version="1.0" encoding="UTF-8"?>' + ET.tostring(event, encoding="unicode")
+
+
+def _start_dr_thread(sender):
+    """Background thread: dead-reckon contacts that haven't sent a real update."""
+    def _loop():
+        while True:
+            time.sleep(_DR_TICK_S)
+            now = time.time()
+            with _dr_lock:
+                items = list(_dr_store.items())
+            for uid, st in items:
+                age    = now - st["base_ts"]
+                max_dr = st["stale_s"] * 0.85
+                if age < _DR_TICK_S or age > max_dr:
+                    continue
+                spd = _speed_ms(st["track"])
+                if spd < _DR_MIN_MS:
+                    continue
+                hdg  = _course(st["track"])
+                blat = st["base_lat"]
+                blon = st["base_lon"]
+                if blat is None or blon is None:
+                    continue
+                elat, elon = _extrapolate_pos(blat, blon, spd, hdg, age)
+                et = dict(st["track"])
+                et["lat_deg"] = elat
+                et["lon_deg"] = elon
+                et["_ts"]     = now
+                et["_extrap"] = True
+                xml = track_to_cot(et, st["cot_type"], stale_s=_DR_TICK_S * 3)
+                if xml:
+                    sender.send(xml)
+    threading.Thread(target=_loop, daemon=True).start()
+
+
 def make_config() -> "zenoh.Config":
     conf = zenoh.Config()
     conf.insert_json5("mode", '"client"')
@@ -461,6 +543,9 @@ def _build_remarks(track: dict, cot_type: str) -> str:
         _row("CALL",  (track.get("callsign")      or "").strip().upper() or None)
         _row("ICAO",  (track.get("icao24")        or "").strip().upper() or None)
         _row("SQWK",  track.get("squawk"))
+        sq_str = str(track.get("squawk") or "")
+        if sq_str in _EMERGENCY_SQUAWK:
+            lines.append("[!!! EMERGENCY: {} !!!]".format(_EMERGENCY_SQUAWK[sq_str]))
         _row("ROUTE", track.get("route"))
         _row("FLAG",  track.get("origin_country"))
         opr = (track.get("operating_as") or track.get("painted_as") or "").strip()
@@ -493,6 +578,9 @@ def _build_remarks(track: dict, cot_type: str) -> str:
             vr_fpm = int(float(vr) * 196.85)
             _row("V/S (ft/min)", "{:+d} ft/min".format(vr_fpm))
             _row("V/S (m/s)",   "{:+.1f} m/s".format(vr_ms))
+        rcs = track.get("rcs_dbm")
+        if rcs is not None:
+            _row("RCS", "{} dBm".format(rcs))
         rssi = track.get("rssi_db")
         if rssi is not None:
             _row("RSSI", "{} dBFS".format(rssi))
@@ -500,6 +588,8 @@ def _build_remarks(track: dict, cot_type: str) -> str:
             lines.append("[ON GROUND]")
         if track.get("is_military"):
             lines.append("[MILITARY]")
+        if track.get("_extrap"):
+            lines.append("[DEAD RECKONED]")
         fused_src = track.get("_src", "")
         if " + " in fused_src:
             lines.append("[FUSED: {}]".format(fused_src))
@@ -547,6 +637,9 @@ def _build_remarks(track: dict, cot_type: str) -> str:
         _row("SOG (km/h)", "{} km/h".format(round(sog * 3.6, 1)) if sog else None)
         nav = track.get("nav_status", "").replace("_", " ")
         _row("STATUS", nav or None)
+        nav_key = track.get("nav_status", "").lower().replace(" ", "_")
+        if nav_key in _DISTRESS_NAV:
+            lines.append("[!!! DISTRESS: {} !!!]".format(nav.upper()))
 
     elif domain == "P":  # ---- SPACE / SATELLITE ---------------------------
         ts = track.get("_ts")
@@ -818,15 +911,47 @@ def make_handler(cot_type_or_fn, sender, verbose: bool, stale_s: float = COT_STA
         # ATC towers / ground vehicles show up in ADS-B with "TWR", "GND" etc.
         # Reclassify as neutral ground radar/radio station instead of aircraft.
         if _is_ground_station(track):
-            cot_type = "a-n-G-E-S-R"   # civilian ATC installation (neutral radar)
+            cot_type     = "a-n-G-E-S-R"
             stale_s_used = LAND_STALE_S
         else:
-            cot_type = cot_type_or_fn(track) if callable(cot_type_or_fn) else cot_type_or_fn
+            cot_type     = cot_type_or_fn(track) if callable(cot_type_or_fn) else cot_type_or_fn
             stale_s_used = stale_s
+            # Emergency squawk → force red hostile so it stands out immediately
+            sq = str(track.get("squawk") or "")
+            if sq in _EMERGENCY_SQUAWK and "-A-" in cot_type:
+                cot_type = "a-h-A-C-F"
+
         xml = track_to_cot(track, cot_type, stale_s=stale_s_used)
         if xml is None:
             return
         sender.send(xml)
+
+        # Trail breadcrumbs — skip for extrapolated updates (prevents feedback)
+        uid = _uid(track)
+        lat = track.get("lat_deg")
+        lon = track.get("lon_deg")
+        now = float(track.get("_ts", time.time()))
+        if lat is not None and lon is not None and not track.get("_extrap"):
+            with _trail_lock:
+                if uid not in _trail_store:
+                    _trail_store[uid] = collections.deque(maxlen=_TRAIL_MAX)
+                prev = list(_trail_store[uid])
+                _trail_store[uid].append((lat, lon, now))
+            ghost_stale = now + stale_s_used * 2
+            for idx, (tlat, tlon, _tts) in enumerate(prev):
+                sender.send(_trail_cot(
+                    "{}-T{}".format(uid, idx), tlat, tlon, now, ghost_stale, cot_type))
+            # Update dead-reckoning state
+            with _dr_lock:
+                _dr_store[uid] = {
+                    "track":    track,
+                    "cot_type": cot_type,
+                    "stale_s":  stale_s_used,
+                    "base_ts":  now,
+                    "base_lat": lat,
+                    "base_lon": lon,
+                }
+
         if verbose:
             cs = track.get("callsign") or track.get("registration") or track.get("mmsi") or "?"
             print("CoT {} {}".format(cot_type, cs), flush=True)
@@ -868,6 +993,7 @@ def run(args):
         print("CoT → TCP {}:{} (TAK Server)".format(args.host, args.port), flush=True)
 
     session = zenoh.open(make_config())
+    _start_dr_thread(sender)
     subs = []
     for suffix, (cot_type, stale_s) in _TOPIC_COT.items():
         key = "{}/{}".format(ORG, suffix)

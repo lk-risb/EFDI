@@ -76,20 +76,22 @@ def normalize(flight: dict) -> dict | None:
     if lat is None or lon is None:
         return None
     return {
-        "_ts":          time.time(),
-        "_src":         "fr24",
-        "fr24_id":      flight.get("fr24_id", flight.get("id", "")),
-        "callsign":     (flight.get("callsign") or "").strip(),
-        "registration": (flight.get("reg") or "").strip(),
+        "_ts":           time.time(),
+        "_src":          "fr24",
+        "icao24":        (flight.get("hex") or "").strip().lower(),
+        "fr24_id":       flight.get("fr24_id", flight.get("id", "")),
+        "callsign":      (flight.get("callsign") or "").strip(),
+        "registration":  (flight.get("reg") or "").strip(),
         "aircraft_type": (flight.get("type") or "").strip(),
-        "lat_deg":      lat,
-        "lon_deg":      lon,
-        "alt_ft":       int(flight.get("alt", 0) or 0),
-        "speed_kts":    int(flight.get("speed", 0) or 0),
-        "heading_deg":  int(flight.get("heading", 0) or 0),
-        "on_ground":    bool(flight.get("on_ground", False)),
-        "painted_as":   (flight.get("painted_as") or "").strip(),
-        "operating_as": (flight.get("operating_as") or "").strip(),
+        "lat_deg":       lat,
+        "lon_deg":       lon,
+        "alt_ft":        int(flight.get("alt", 0) or 0),
+        "speed_kts":     int(flight.get("speed", 0) or 0),
+        "heading_deg":   int(flight.get("heading", 0) or 0),
+        "squawk":        (flight.get("squawk") or ""),
+        "on_ground":     bool(flight.get("on_ground", False)),
+        "painted_as":    (flight.get("painted_as") or "").strip(),
+        "operating_as":  (flight.get("operating_as") or "").strip(),
     }
 
 
