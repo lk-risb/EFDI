@@ -433,28 +433,32 @@ def _build_remarks(track: dict, cot_type: str) -> str:
             lines.append("{}: {}".format(label, value))
 
     if domain == "A":   # ---- AIR ----------------------------------------
-        _row("REG",  (track.get("registration") or "").strip().upper() or None)
-        _row("TYPE", (track.get("aircraft_type") or "").strip().upper() or None)
-        _row("CALL", (track.get("callsign")      or "").strip().upper() or None)
-        _row("ICAO", (track.get("icao24")        or "").strip().upper() or None)
-        _row("SQWK", track.get("squawk"))
+        tod = track.get("tod_s")
+        if tod is not None:
+            h = int(tod // 3600) % 24
+            m = int((tod % 3600) // 60)
+            s = tod % 60
+            _row("TOD", "{:02d}:{:02d}:{:04.1f} UTC".format(h, m, s))
+        lat = track.get("lat_deg")
+        lon = track.get("lon_deg")
+        if lat is not None and lon is not None:
+            _row("LAT", "{:.5f}°".format(round(lat, 5)))
+            _row("LON", "{:.5f}°".format(round(lon, 5)))
+        _row("REG",   (track.get("registration") or "").strip().upper() or None)
+        _row("TYPE",  (track.get("aircraft_type") or "").strip().upper() or None)
+        _row("CALL",  (track.get("callsign")      or "").strip().upper() or None)
+        _row("ICAO",  (track.get("icao24")        or "").strip().upper() or None)
+        _row("SQWK",  track.get("squawk"))
+        _row("ROUTE", track.get("route"))
+        _row("FLAG",  track.get("origin_country"))
         opr = (track.get("operating_as") or track.get("painted_as") or "").strip()
-        _row("OPR",  opr or None)
-        _row("FLAG", track.get("origin_country"))
-        _row("UAV",  track.get("mav_type"))
-        _row("RDR (code)", track.get("radar_id"))
+        _row("OPR",   opr or None)
+        _row("UAV",   track.get("mav_type"))
+        _row("HDG",  "{}°".format(int(_course(track))))
         if track.get("range_nm") is not None:
-            tod = track.get("tod_s")
-            if tod is not None:
-                h = int(tod // 3600) % 24
-                m = int((tod % 3600) // 60)
-                s = tod % 60
-                _row("TOD", "{:02d}:{:02d}:{:04.1f} UTC".format(h, m, s))
+            _row("AZM", "{}°".format(round(track.get("azimuth_deg", 0), 1)))
             _row("RNG (nm)", "{} nm".format(round(track["range_nm"], 1)))
             _row("RNG (km)", "{} km".format(round(track["range_nm"] * 1.852, 1)))
-            _row("AZM", "{}°".format(round(track.get("azimuth_deg", 0), 1)))
-            _row("SAC/SIC", "{}/{}".format(track.get("sac", "?"), track.get("sic", "?")))
-        _row("HDG",  "{}°".format(int(_course(track))))
         alt_m = _hae(track)
         if alt_m < 9_999_998:
             alt_ft  = int(alt_m / 0.3048)
@@ -476,6 +480,9 @@ def _build_remarks(track: dict, cot_type: str) -> str:
             vr_fpm = int(float(vr) * 196.85)
             _row("V/S (ft/min)", "{:+d} ft/min".format(vr_fpm))
             _row("V/S (m/s)",   "{:+.1f} m/s".format(vr_ms))
+        rssi = track.get("rssi_db")
+        if rssi is not None:
+            _row("RSSI", "{} dBFS".format(rssi))
         if track.get("on_ground"):
             lines.append("[ON GROUND]")
         if track.get("is_military"):
@@ -483,13 +490,29 @@ def _build_remarks(track: dict, cot_type: str) -> str:
         fused_src = track.get("_src", "")
         if " + " in fused_src:
             lines.append("[FUSED: {}]".format(fused_src))
+        if track.get("track_num") is not None:
+            _row("TRK #", track["track_num"])
+        if track.get("range_nm") is not None:
+            _row("SAC/SIC", "{}/{}".format(track.get("sac", "?"), track.get("sic", "?")))
+        _row("RDR (code)", track.get("radar_id"))
 
     elif domain == "S":  # ---- SEA ----------------------------------------
+        ts = track.get("_ts")
+        if ts:
+            _row("TIME", datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%H:%M:%S UTC"))
+        lat = track.get("lat_deg")
+        lon = track.get("lon_deg")
+        if lat is not None and lon is not None:
+            _row("LAT", "{:.5f}°".format(round(lat, 5)))
+            _row("LON", "{:.5f}°".format(round(lon, 5)))
         _row("NAME",  (track.get("ship_name") or "").strip() or None)
         _row("MMSI",  track.get("mmsi"))
         _row("IMO",   track.get("imo"))
         _row("CALL",  (track.get("callsign") or "").strip().upper() or None)
         _row("TYPE",  track.get("ship_type"))
+        _row("FLAG",  track.get("flag") or track.get("origin_country") or None)
+        _row("DEST",  (track.get("destination") or "").strip() or None)
+        _row("ETA",   track.get("eta"))
         length = track.get("length_m")
         beam   = track.get("beam_m")
         if length:
@@ -499,11 +522,6 @@ def _build_remarks(track: dict, cot_type: str) -> str:
             _row("DIM",   dim_str)
         if track.get("draft_m"):
             _row("DRAFT", "{} m".format(round(float(track["draft_m"]), 1)))
-        _row("DEST",  (track.get("destination") or "").strip() or None)
-        _row("ETA",   track.get("eta"))
-        sog = _speed_ms(track)
-        _row("SOG (kt)",   "{} kt".format(round(sog / 0.514444, 1)) if sog else None)
-        _row("SOG (km/h)", "{} km/h".format(round(sog * 3.6, 1)) if sog else None)
         hdg = track.get("heading_deg")
         cog = track.get("cog_deg")
         if hdg is not None and cog is not None and abs(hdg - cog) > 5:
@@ -511,12 +529,27 @@ def _build_remarks(track: dict, cot_type: str) -> str:
             _row("COG", "{}° (track)".format(int(cog)))
         else:
             _row("COG", "{}°".format(int(cog or hdg or 0)))
+        sog = _speed_ms(track)
+        _row("SOG (kt)",   "{} kt".format(round(sog / 0.514444, 1)) if sog else None)
+        _row("SOG (km/h)", "{} km/h".format(round(sog * 3.6, 1)) if sog else None)
         nav = track.get("nav_status", "").replace("_", " ")
         _row("STATUS", nav or None)
 
     elif domain == "P":  # ---- SPACE / SATELLITE ---------------------------
+        ts = track.get("_ts")
+        if ts:
+            _row("TIME", datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%H:%M:%S UTC"))
+        lat = track.get("lat_deg")
+        lon = track.get("lon_deg")
+        if lat is not None and lon is not None:
+            _row("LAT", "{:.5f}°".format(round(lat, 5)))
+            _row("LON", "{:.5f}°".format(round(lon, 5)))
         _row("SAT ID", track.get("sat_id") or track.get("sensor_id") or track.get("norad_id"))
         _row("NAME",   track.get("sat_name") or track.get("name"))
+        _row("ELEV",  "{}°".format(round(float(track["elevation_deg"]), 1))
+                      if track.get("elevation_deg") is not None else None)
+        _row("AZIM",  "{}°".format(round(float(track["azimuth_deg"]), 1))
+                      if track.get("azimuth_deg") is not None else None)
         alt_km = track.get("alt_km")
         if alt_km is None:
             raw_m = _hae(track)
@@ -524,12 +557,17 @@ def _build_remarks(track: dict, cot_type: str) -> str:
         _row("ALT",   "{} km".format(round(float(alt_km))) if alt_km is not None else None)
         spd = _speed_ms(track)
         _row("SPD",   "{} km/s".format(round(spd / 1000, 2)) if spd else None)
-        _row("ELEV",  "{}°".format(round(float(track["elevation_deg"]), 1))
-                      if track.get("elevation_deg") is not None else None)
-        _row("AZIM",  "{}°".format(round(float(track["azimuth_deg"]), 1))
-                      if track.get("azimuth_deg") is not None else None)
 
     else:                # ---- GROUND / ENV / APRS / OSM ------------------
+        ts = track.get("_ts")
+        if ts:
+            _row("TIME", datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%H:%M:%S UTC"))
+        lat = track.get("lat_deg")
+        lon = track.get("lon_deg")
+        if lat is not None and lon is not None:
+            _row("LAT", "{:.5f}°".format(round(lat, 5)))
+            _row("LON", "{:.5f}°".format(round(lon, 5)))
+
         if src in ("openmeteo", "meteolt", "yrno", "windy"):   # WEATHER
             place = (track.get("place_name") or track.get("place_code") or src).upper()
             lines.append("[WEATHER] {}".format(place))
@@ -582,10 +620,12 @@ def _build_remarks(track: dict, cot_type: str) -> str:
                 _row("IATA",    track.get("iata"))
                 _row("AIRPORT", track.get("airport") or track.get("aerodrome_icao"))
             else:                  # APRS or vehicle
+                _row("CALL", (track.get("callsign") or "").strip().upper() or None)
                 _row("SYM",  track.get("symbol"))
+                _row("HDG",  "{}°".format(int(_course(track))) if _speed_ms(track) else None)
                 spd = _speed_ms(track)
+                _row("SPD (kt)",   "{} kt".format(round(spd / 0.514444, 1)) if spd else None)
                 _row("SPD (km/h)", "{} km/h".format(round(spd * 3.6, 1)) if spd else None)
-                _row("HDG",  "{}°".format(int(_course(track))) if spd else None)
 
     _row("SRC", src)
     return "\n".join(lines)
