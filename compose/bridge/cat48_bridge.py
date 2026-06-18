@@ -517,8 +517,9 @@ def decode_cat048_record(data: bytes, pos: int,
         elif frn == 21:                 # I048/260  ACAS RA Report  7 bytes
             pos += 7
 
-        elif frn == 22:                 # I048/055  Mode-1  1 byte
-            pos += 1
+        elif frn == 22:                 # I048/055  Mode-1  NATO military identity (6-bit octal)
+            if pos >= len(data): return track, len(data)
+            track["mode1"] = "{:02o}".format(data[pos] & 0x3F); pos += 1
 
         elif frn == 23:                 # I048/050  Mode-2  2 bytes
             pos += 2
