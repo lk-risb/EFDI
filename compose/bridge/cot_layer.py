@@ -31,7 +31,6 @@ Run:
 
 import argparse
 import base64
-import collections
 import json
 import math
 import os
@@ -64,8 +63,6 @@ SENSOR_STALE_S = 1800    # air quality sensors: polled every 10 min, 30 min stal
 RECONNECT_S    = 5
 SEND_TIMEOUT_S = 10
 
-# Track breadcrumb trail — last N real positions per UID, shown as ghost dots
-_TRAIL_MAX   = 5     # positions kept per contact
 # Dead-reckoning — extrapolate position forward when sensor updates stop
 _DR_TICK_S   = 2.0   # extrapolation interval (seconds)
 _DR_MIN_MS   = 5.15  # don't extrapolate below ~10 kt (5.15 m/s)
@@ -76,8 +73,6 @@ _EMERGENCY_SQUAWK = {"7500": "HIJACK", "7600": "COMMS FAILURE", "7700": "MAYDAY"
 _DISTRESS_NAV = frozenset({"aground", "not_under_command", "not under command"})
 
 # Module-level stores — initialised once, shared across all handler threads
-_trail_lock  = threading.Lock()
-_trail_store: dict[str, collections.deque] = {}
 _dr_lock     = threading.Lock()
 _dr_store:   dict[str, dict] = {}
 _alert_lock  = threading.Lock()
@@ -387,21 +382,6 @@ def _extrapolate_pos(lat: float, lon: float, speed_ms: float,
     return math.degrees(la2), math.degrees(lo2)
 
 
-def _trail_cot(uid: str, lat: float, lon: float,
-               time_now: float, stale: float, cot_type: str) -> str:
-    """Minimal CoT for a breadcrumb ghost — same type, no remarks, how=h-g."""
-    event = ET.Element("event", {
-        "version": "2.0", "uid": uid, "type": cot_type,
-        "how": "h-g", "time": _ts(time_now),
-        "start": _ts(time_now), "stale": _ts(stale),
-    })
-    ET.SubElement(event, "point", {
-        "lat": str(round(lat, 6)), "lon": str(round(lon, 6)),
-        "hae": "9999999.0", "ce": "9999999.0", "le": "9999999.0",
-    })
-    ET.SubElement(ET.SubElement(event, "detail"), "contact", {"callsign": ""})
-    return '<?xml version="1.0" encoding="UTF-8"?>' + ET.tostring(event, encoding="unicode")
-
 
 def _start_dr_thread(sender):
     """Background thread: dead-reckon contacts that haven't sent a real update."""
@@ -601,8 +581,9 @@ def _build_remarks(track: dict, cot_type: str) -> str:
             _row("AIR SPD (kt)",   "{} kt".format(round(float(ias) / 0.514444)))
             _row("AIR SPD (km/h)", "{} km/h".format(round(float(ias) * 3.6)))
         if spd:
-            _row("GND SPD (kt)",   "{} kt".format(round(spd / 0.514444)))
-            _row("GND SPD (km/h)", "{} km/h".format(round(spd * 3.6)))
+            spd_label = "GND SPD" if ias is not None else "SPD"
+            _row("{} (kt)".format(spd_label),   "{} kt".format(round(spd / 0.514444)))
+            _row("{} (km/h)".format(spd_label), "{} km/h".format(round(spd * 3.6)))
         _row("ALT",  alt_str)
         if alt_m is not None:
             _row("ALT (ft)", "{} ft".format(int(alt_m / 0.3048)))
@@ -758,14 +739,15 @@ def _build_remarks(track: dict, cot_type: str) -> str:
         else:                      # APRS / OSM / vehicles
             feat = track.get("feature_type")
             if feat:               # OSM geo feature
-                _row("TYPE",    feat.upper())
-                _row("NAME",    track.get("name"))
-                _row("ICAO",    track.get("icao"))
-                _row("IATA",    track.get("iata"))
-                _row("AIRPORT", track.get("airport") or track.get("aerodrome_icao"))
+                feat_label = {"aerodrome": "AERODROME", "port": "PORT",
+                              "military": "MILITARY BASE", "station": "STATION"}.get(feat, feat.upper())
+                _row("TYPE", feat_label)
+                _row("NAME", track.get("name"))
+                _row("ICAO", track.get("icao") or track.get("aerodrome_icao"))
+                _row("IATA", track.get("iata"))
+                _row("COUNTRY", (track.get("country_code") or "").upper() or None)
             else:                  # APRS or vehicle
                 _row("CALL", (track.get("callsign") or "").strip().upper() or None)
-                _row("SYM",  track.get("symbol"))
                 _row("HDG",  "{}°".format(int(_course(track))) if _speed_ms(track) else None)
                 spd = _speed_ms(track)
                 _row("SPD (kt)",   "{} kt".format(round(spd / 0.514444, 1)) if spd else None)
@@ -847,10 +829,21 @@ def track_to_cot(track: dict, cot_type: str, stale_s: float = COT_STALE_S) -> st
         # but the iconsetpath file doesn't exist, falling back to the MIL-STD symbol.
         ET.SubElement(detail, "usericon", {"b64image": icon_b64})
     ET.SubElement(detail, "contact", {"callsign": cs})
+    spd_cot = _speed_ms(track)
+    crs_cot = _course(track)
     ET.SubElement(detail, "track", {
-        "speed":  str(_speed_ms(track)),
-        "course": str(_course(track)),
+        "speed":  str(spd_cot),
+        "course": str(crs_cot),
     })
+    if spd_cot > 0:
+        ET.SubElement(detail, "sensor", {
+            "vfov": "45", "hfov": "360",
+            "range": "0", "azimuth": str(int(crs_cot)),
+            "model": "Generic", "ranges": "0",
+            "type": "radar",
+            "displayMagneticReference": "0",
+            "stockTool": "false",
+        })
     ET.SubElement(detail, "remarks").text = _build_remarks(track, cot_type)
 
     return '<?xml version="1.0" encoding="UTF-8"?>' + ET.tostring(event, encoding="unicode")
@@ -999,22 +992,12 @@ def make_handler(cot_type_or_fn, sender, verbose: bool, stale_s: float = COT_STA
             return
         sender.send(xml)
 
-        # Trail breadcrumbs — skip for extrapolated updates (prevents feedback)
+        # Update dead-reckoning state (skip extrapolated updates to prevent feedback)
         uid = _uid(track)
         lat = track.get("lat_deg")
         lon = track.get("lon_deg")
         now = float(track.get("_ts", time.time()))
         if lat is not None and lon is not None and not track.get("_extrap"):
-            with _trail_lock:
-                if uid not in _trail_store:
-                    _trail_store[uid] = collections.deque(maxlen=_TRAIL_MAX)
-                prev = list(_trail_store[uid])
-                _trail_store[uid].append((lat, lon, now))
-            ghost_stale = now + stale_s_used * 2
-            for idx, (tlat, tlon, _tts) in enumerate(prev):
-                sender.send(_trail_cot(
-                    "{}-T{}".format(uid, idx), tlat, tlon, now, ghost_stale, cot_type))
-            # Update dead-reckoning state
             with _dr_lock:
                 _dr_store[uid] = {
                     "track":    track,
