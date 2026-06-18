@@ -609,9 +609,6 @@ def _build_remarks(track: dict, cot_type: str) -> str:
             lines.append("[MILITARY]")
         if track.get("_extrap"):
             lines.append("[DEAD RECKONED]")
-        fused_src = track.get("_src", "")
-        if " + " in fused_src:
-            lines.append("[FUSED: {}]".format(fused_src))
         if track.get("track_num") is not None:
             _row("TRK #", track["track_num"])
         if track.get("range_nm") is not None:
