@@ -705,10 +705,26 @@ def _build_remarks(track: dict, cot_type: str) -> str:
             radar_l.append("RCS: {} dBm   RSSI: {} dBFS".format(rcs, rssi))
         elif rcs  is not None: radar_l.append("RCS: {} dBm".format(rcs))
         elif rssi is not None: radar_l.append("RSSI: {} dBFS".format(rssi))
-        if rng is not None and track.get("sac") is not None:
-            radar_l.append("SAC/SIC: {}/{}".format(track.get("sac"), track.get("sic")))
+        sac_t = track.get("sac"); sic_t = track.get("sic")
+        if rng is not None and sac_t is not None:
+            radar_l.append("SAC/SIC: {}/{}".format(sac_t, sic_t))
         if track.get("radar_id"):
             radar_l.append("RDR: {}".format(track["radar_id"]))
+        # Enrich with live CAT-34 sensor status if available
+        if sac_t is not None:
+            with _radar_status_lock:
+                rs = _radar_status.get("{}-{}".format(sac_t, sic_t or 0))
+            if rs:
+                parts = []
+                for k, lbl in (("psr_status","PSR"),("ssr_status","SSR"),("mds_status","MDS")):
+                    v = rs.get(k, "")
+                    if v and v not in ("", "not_present", "not_operational"):
+                        parts.append("{}: {}".format(lbl, v[:4].upper()))
+                if parts: radar_l.append("  ".join(parts))
+                if rs.get("sys_nogo"): radar_l.append("[SENSOR DEGRADED]")
+                ae = rs.get("collimation_az_deg"); re = rs.get("collimation_rng_nm")
+                if ae is not None and re is not None and (abs(ae) > 0.001 or abs(re) > 0.001):
+                    radar_l.append("CAL: AZ {:+.3f}°  RNG {:+.3f} nm".format(ae, re))
 
         # ── STATUS ──
         if track.get("on_ground"):    status_l.append("[ON GROUND]")
@@ -837,7 +853,46 @@ def _build_remarks(track: dict, cot_type: str) -> str:
             time_str = None
         lat = track.get("lat_deg"); lon = track.get("lon_deg")
 
-        if src in ("openmeteo", "meteolt", "yrno", "windy"):   # WEATHER
+        if track.get("sensor_type") == "radar":   # ---- RADAR SENSOR SITE ----
+            sensor_l = []; status_l = []; calib_l = []; stats_l = []
+            if time_str: sensor_l.append("TIME: {}".format(time_str))
+            sac = track.get("sac"); sic = track.get("sic")
+            if sac is not None: sensor_l.append("SAC/SIC: {}/{}".format(sac, sic))
+            nm = track.get("sensor_name")
+            if nm: sensor_l.append("NAME: {}".format(nm))
+            if lat is not None: sensor_l.append("LAT: {:.5f}°".format(round(lat, 5)))
+            if lon is not None: sensor_l.append("LON: {:.5f}°".format(round(lon, 5)))
+            if lat is not None and lon is not None:
+                sensor_l.extend(_mgrs_lines(lat, lon))
+            rot = track.get("rotation_s")
+            if rot: sensor_l.append("ROTATION: {}s/rev  ({:.1f} RPM)".format(
+                round(rot, 1), 60.0 / rot))
+            # STATUS
+            for k, lbl in (("psr_status","PSR"), ("ssr_status","SSR"), ("mds_status","MODE-S")):
+                v = track.get(k)
+                if v: status_l.append("{}: {}".format(lbl, v.upper().replace("_"," ")))
+            if track.get("sys_nogo"):        status_l.append("[SYSTEM DEGRADED]")
+            if track.get("sys_ovl_rdp"):     status_l.append("[RDP OVERLOAD]")
+            if track.get("sys_ovl_xmt"):     status_l.append("[TX OVERLOAD]")
+            if track.get("sys_tsv_invalid"): status_l.append("[TIME SOURCE INVALID]")
+            red = track.get("reduction_level")
+            if red: status_l.append("REDUCTION LEVEL: {}".format(red))
+            status_l.append("SRC: {}".format(src))
+            # CALIBRATION
+            ae = track.get("collimation_az_deg"); re = track.get("collimation_rng_nm")
+            if ae is not None: calib_l.append("AZ ERROR:  {:+.4f}°".format(ae))
+            if re is not None: calib_l.append("RNG ERROR: {:+.4f} nm".format(re))
+            # STATISTICS
+            count_lbl = {"psr":"PSR","ssr":"SSR","psr_ssr":"PSR+SSR","all":"ALL",
+                         "mode5":"MODE-5","mil_id":"MIL ID"}
+            for typ, cnt in sorted((track.get("msg_counts") or {}).items()):
+                stats_l.append("{}: {} tracks".format(count_lbl.get(typ, typ.upper()), cnt))
+            _sec("SENSOR",      sensor_l)
+            _sec("STATUS",      status_l)
+            _sec("CALIBRATION", calib_l)
+            _sec("STATISTICS",  stats_l)
+
+        elif src in ("openmeteo", "meteolt", "yrno", "windy"):   # WEATHER
             place = (track.get("place_name") or track.get("place_code") or src).upper()
             ident_l = []; env_l = []
             if time_str: ident_l.append("TIME: {}".format(time_str))
