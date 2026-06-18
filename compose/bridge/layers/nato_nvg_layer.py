@@ -54,7 +54,7 @@ _TOPIC_SIDC = {
     "air/**/civ/aircraft/**":        "SFAPCF----E----",  # Neutral Air Fixed Wing (civil ADS-B)
     "air/**/mil/aircraft/**":        "SNAPCF----E----",  # Neutral Air Fixed Wing (military)
     "air/**/unknown/**":             "SUAPCF----E----",  # Unknown Air (radar / SAPIENT, no ID)
-    # Fused tracks (radar + open-source identity merged by track_fusion_bridge.py)
+    # Fused tracks (radar + open-source identity merged by track_fusion_layer.py)
     "air/fused/civ/aircraft/**":     "SNAPCF----E----",  # Identified cooperative contact
     "air/fused/unknown/aircraft/**": "SUAPCF----E----",  # PSR-only — no transponder match
     "land/**/civ/vehicle/**":        "SFGPUCV---E----",  # Friendly Ground Vehicle
