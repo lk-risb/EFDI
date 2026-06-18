@@ -185,7 +185,7 @@ _TOPIC_COT = {
     "env/weather/station/**":    ("a-n-G-I-R",   ENV_STALE_S),
     "env/air_quality/station/**":("a-n-G-I-R",   SENSOR_STALE_S),
     # RADAR SENSOR SITES — CAT-34 status publishes here; rendered as radar marker + stat card
-    "land/**/neutral/radar/**":  ("a-n-G-E-S-R", LAND_STALE_S * 2),
+    "land/**/neutral/radar/**":  ("a-f-G-E-S-R", LAND_STALE_S * 2),
 }
 
 # ATC / ground-station callsigns that appear in ADS-B feeds.
@@ -1212,14 +1212,24 @@ def track_to_cot(track: dict, cot_type: str, stale_s: float = COT_STALE_S) -> st
         "course": str(crs_cot),
     })
     sweep_az = track.get("sweep_azimuth_deg")
+    rng = int(track.get("radar_range_m", 200_000))
     if sweep_az is not None:
         # Radar dish sweep: narrow 5° beam rotating around the site
-        rot = track.get("rotation_s", 4.0)
-        rng = int(track.get("radar_range_m", 200_000))
         ET.SubElement(detail, "sensor", {
             "vfov": "1", "hfov": "5",
             "range": str(rng),
             "azimuth": str(int(round(float(sweep_az)))),
+            "model": "Generic", "ranges": "0",
+            "type": "radar",
+            "displayMagneticReference": "0",
+            "stockTool": "false",
+        })
+    elif track.get("sensor_type") == "radar":
+        # Static radar site: show full 360° coverage circle
+        ET.SubElement(detail, "sensor", {
+            "vfov": "90", "hfov": "360",
+            "range": str(rng),
+            "azimuth": "0",
             "model": "Generic", "ranges": "0",
             "type": "radar",
             "displayMagneticReference": "0",
@@ -1419,17 +1429,21 @@ def make_radar_status_handler(sender, verbose: bool):
                 # Only update enrichment store from full status (not sweep ticks)
                 if "sweep_azimuth_deg" not in track:
                     _radar_status[key] = track
-        # Sweep ticks: short stale so wedge disappears if rotation stops
         if "sweep_azimuth_deg" in track:
+            # Sweep tick: send a SEPARATE beam entity (different UID) so the site
+            # marker keeps its permanent 360° coverage ring at the same time.
             rot = float(track.get("rotation_s") or 4.0)
-            stale = max(rot * 2, 5.0)
+            beam_track = dict(track)
+            beam_track["sensor_id"] = "BEAM-" + str(track.get("sensor_id", "RADAR"))
+            beam_track["sensor_name"] = (track.get("sensor_name") or "RADAR") + " BEAM"
+            xml = track_to_cot(beam_track, "a-f-G-E-S-R", stale_s=max(rot * 0.6, 1.0))
         else:
-            stale = LAND_STALE_S * 2
-        xml = track_to_cot(track, "a-n-G-E-S-R", stale_s=stale)
+            # Full status: site marker with permanent 360° coverage ring
+            xml = track_to_cot(track, "a-f-G-E-S-R", stale_s=LAND_STALE_S * 2)
         if xml:
             sender.send(xml)
         if verbose:
-            print("CoT a-n-G-E-S-R {}  psr={} ssr={} mds={}".format(
+            print("CoT a-f-G-E-S-R {}  psr={} ssr={} mds={}".format(
                 track.get("sensor_name", "RADAR"),
                 track.get("psr_status", "-"), track.get("ssr_status", "-"),
                 track.get("mds_status", "-")), flush=True)
