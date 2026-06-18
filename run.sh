@@ -195,7 +195,7 @@ start_layers() {
     if [[ "${CAT48_PORT:-}" ]]; then
         tcp_flag=""
         [[ "${CAT48_TCP:-}" == "1" ]] && tcp_flag="--tcp"
-        start cat48 bridges/cat48_bridge.py \
+        start cat48 bridges/asterix_bridge.py \
             --port "$CAT48_PORT" \
             ${tcp_flag:+"$tcp_flag"} \
             ${CAT48_RADAR_LAT:+--radar-lat "$CAT48_RADAR_LAT"} \
@@ -277,7 +277,7 @@ start_giraffe_bridges() {
     if [[ "${CAT48_PORT:-}" ]]; then
         tcp_flag=""
         [[ "${CAT48_TCP:-}" == "1" ]] && tcp_flag="--tcp"
-        start cat48 bridges/cat48_bridge.py \
+        start cat48 bridges/asterix_bridge.py \
             --port "$CAT48_PORT" \
             ${tcp_flag:+"$tcp_flag"} \
             ${CAT48_RADAR_LAT:+--radar-lat "$CAT48_RADAR_LAT"} \

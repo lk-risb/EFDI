@@ -21,7 +21,7 @@ import socket
 
 LOCAL_PORT = 30002          # port the Giraffe sends ASTERIX to on this PC
 DEST_IP    = "100.64.59.142"  # moon-pod NetBird IP
-DEST_PORT  = 30048          # cat48_bridge listening port on moon-pod
+DEST_PORT  = 30048          # asterix_bridge listening port on moon-pod
 
 
 def main():
