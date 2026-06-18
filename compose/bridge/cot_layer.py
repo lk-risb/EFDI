@@ -732,8 +732,9 @@ def _build_remarks(track: dict, cot_type: str) -> str:
         # IDENTITY
         ts = track.get("_ts")
         if ts:
-            ident_l.append("TIME: {}".format(
-                datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%H:%M:%S UTC")))
+            age = _track_age(track)
+            ident_l.append("TIME: {}  {}".format(
+                datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%H:%M:%S UTC"), age).rstrip())
         _r = lambda lbl, v, b: b.append("{}: {}".format(lbl, v)) if v not in (None, "", 0.0) else None
         _r("NAME", (track.get("ship_name") or "").strip() or None, ident_l)
         _r("MMSI", track.get("mmsi"), ident_l)
@@ -753,6 +754,8 @@ def _build_remarks(track: dict, cot_type: str) -> str:
         lat = track.get("lat_deg"); lon = track.get("lon_deg")
         if lat is not None: kinem_l.append("LAT: {:.5f}°".format(round(lat, 5)))
         if lon is not None: kinem_l.append("LON: {:.5f}°".format(round(lon, 5)))
+        if lat is not None and lon is not None:
+            kinem_l.extend(_mgrs_lines(lat, lon))
         hdg = track.get("heading_deg"); cog = track.get("cog_deg")
         if hdg is not None and cog is not None and abs(hdg - cog) > 5:
             kinem_l.append("HDG: {}° (bow)   COG: {}° (track)".format(int(hdg), int(cog)))
@@ -782,8 +785,9 @@ def _build_remarks(track: dict, cot_type: str) -> str:
 
         ts = track.get("_ts")
         if ts:
-            ident_l.append("TIME: {}".format(
-                datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%H:%M:%S UTC")))
+            age = _track_age(track)
+            ident_l.append("TIME: {}  {}".format(
+                datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%H:%M:%S UTC"), age).rstrip())
         _r = lambda lbl, v, b: b.append("{}: {}".format(lbl, v)) if v not in (None, "", 0.0) else None
         _r("NORAD", track.get("sat_id") or track.get("sensor_id") or track.get("norad_id"), ident_l)
         _r("NAME",  track.get("sat_name") or track.get("name"), ident_l)
@@ -791,6 +795,8 @@ def _build_remarks(track: dict, cot_type: str) -> str:
         lat = track.get("lat_deg"); lon = track.get("lon_deg")
         if lat is not None: kinem_l.append("LAT: {:.5f}°".format(round(lat, 5)))
         if lon is not None: kinem_l.append("LON: {:.5f}°".format(round(lon, 5)))
+        if lat is not None and lon is not None:
+            kinem_l.extend(_mgrs_lines(lat, lon))
         el = track.get("elevation_deg"); az = track.get("azimuth_deg")
         if el is not None and az is not None:
             kinem_l.append("ELEV: {}°   AZIM: {}°".format(round(float(el), 1), round(float(az), 1)))
@@ -819,7 +825,12 @@ def _build_remarks(track: dict, cot_type: str) -> str:
         _r = lambda lbl, v, b: b.append("{}: {}".format(lbl, v)) if v not in (None, "", 0.0) else None
 
         ts = track.get("_ts")
-        time_str = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%H:%M:%S UTC") if ts else None
+        if ts:
+            age      = _track_age(track)
+            time_str = ("{}  {}".format(
+                datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%H:%M:%S UTC"), age)).rstrip()
+        else:
+            time_str = None
         lat = track.get("lat_deg"); lon = track.get("lon_deg")
 
         if src in ("openmeteo", "meteolt", "yrno", "windy"):   # WEATHER
@@ -829,6 +840,8 @@ def _build_remarks(track: dict, cot_type: str) -> str:
             ident_l.append("STATION: {}".format(place))
             if lat is not None: ident_l.append("LAT: {:.5f}°".format(round(lat, 5)))
             if lon is not None: ident_l.append("LON: {:.5f}°".format(round(lon, 5)))
+            if lat is not None and lon is not None:
+                ident_l.extend(_mgrs_lines(lat, lon))
             t = track.get("temperature_c"); ft = track.get("apparent_temperature_c") or track.get("feels_like_c")
             if t is not None:
                 feels = "  (feels {} °C)".format(round(float(ft), 1)) if ft is not None else ""
@@ -860,6 +873,8 @@ def _build_remarks(track: dict, cot_type: str) -> str:
             ident_l.append("SENSOR: {}".format(name))
             if lat is not None: ident_l.append("LAT: {:.5f}°".format(round(lat, 5)))
             if lon is not None: ident_l.append("LON: {:.5f}°".format(round(lon, 5)))
+            if lat is not None and lon is not None:
+                ident_l.extend(_mgrs_lines(lat, lon))
             aqi = track.get("aqi"); aqicat = track.get("aqi_category", "")
             if aqi is not None:
                 env_l.append("AQI: {} ({})".format(int(aqi), aqicat) if aqicat else "AQI: {}".format(int(aqi)))
@@ -889,6 +904,8 @@ def _build_remarks(track: dict, cot_type: str) -> str:
                 _r("COUNTRY", (track.get("country_code") or "").upper() or None, ident_l)
                 if lat is not None: ident_l.append("LAT: {:.5f}°".format(round(lat, 5)))
                 if lon is not None: ident_l.append("LON: {:.5f}°".format(round(lon, 5)))
+                if lat is not None and lon is not None:
+                    ident_l.extend(_mgrs_lines(lat, lon))
                 ident_l.append("SRC: {}".format(src))
                 _sec("GEO FEATURE", ident_l)
             else:                  # APRS or vehicle
@@ -897,6 +914,8 @@ def _build_remarks(track: dict, cot_type: str) -> str:
                 _r("CALL", (track.get("callsign") or "").strip().upper() or None, ident_l)
                 if lat is not None: ident_l.append("LAT: {:.5f}°".format(round(lat, 5)))
                 if lon is not None: ident_l.append("LON: {:.5f}°".format(round(lon, 5)))
+                if lat is not None and lon is not None:
+                    ident_l.extend(_mgrs_lines(lat, lon))
                 spd = _speed_ms(track)
                 if spd:
                     kinem_l.append("HDG: {}°".format(int(_course(track))))
