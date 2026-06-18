@@ -202,6 +202,24 @@ start_layers() {
         echo "  [skip] cat48 — set CAT48_PORT in .env to enable"
     fi
 
+    # CAT-021 ADS-B — inbound ASTERIX from a Mode-S ground station
+    if [[ "${CAT21_PORT:-}" ]]; then
+        tcp21=""
+        [[ "${CAT21_TCP:-}" == "1" ]] && tcp21="--tcp"
+        start cat21 cat21_bridge.py --port "$CAT21_PORT" ${tcp21:+"$tcp21"}
+    else
+        echo "  [skip] cat21 — set CAT21_PORT in .env to enable"
+    fi
+
+    # CAT-020 MLAT — inbound ASTERIX from a multilateration network
+    if [[ "${CAT20_PORT:-}" ]]; then
+        tcp20=""
+        [[ "${CAT20_TCP:-}" == "1" ]] && tcp20="--tcp"
+        start cat20 cat20_bridge.py --port "$CAT20_PORT" ${tcp20:+"$tcp20"}
+    else
+        echo "  [skip] cat20 — set CAT20_PORT in .env to enable"
+    fi
+
     # CoT receiver — inbound CoT from external source (e.g. Giraffe radar)
     # Set COT_RX_PORT to open a listener (they connect to us)
     # Set COT_RX_HOST to connect outbound (we connect to them, format IP:PORT)
