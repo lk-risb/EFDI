@@ -1,11 +1,13 @@
-  #!/usr/bin/env bash
-# run.sh — start all EFDI bridges as background scripts (no Docker required).
+#!/usr/bin/env bash
+# run.sh — start EFDI bridges as background scripts (no Docker required).
 # The Zenoh router is still started via Docker (single container, compiled binary).
 #
 # Usage:
-#   ./run.sh            # start everything
-#   ./run.sh bridges    # bridges only (skip zenoh — already running)
-#   ./run.sh layers     # layers only (cot, cat62, sapient, nffi, nvg)
+#   ./run.sh            # giraffe mode (default) — radar/Link-16 sensors + CoT-UDP only
+#   ./run.sh giraffe    # same as above — CAT-48/21/20, Link-16, cot-udp
+#   ./run.sh all        # everything — all open-API bridges + all layers
+#   ./run.sh bridges    # open-API bridges only (skip zenoh + layers)
+#   ./run.sh layers     # all protocol layers only (cot, cat62, sapient, nffi, …)
 #
 # Logs go to logs/<name>.log  PIDs saved to .pids/
 
@@ -253,14 +255,89 @@ start_layers() {
     else
         echo "  [skip] nffi — set NFFI_HOST in .env to enable"
     fi
+
+    # Link 16 JREAP-C — inbound UDP/TCP listener
+    # Set LINK16_PORT to activate. Set LINK16_TCP=1 for TCP mode.
+    if [[ "${LINK16_PORT:-}" ]]; then
+        tcp16=""
+        [[ "${LINK16_TCP:-}" == "1" ]] && tcp16="--tcp"
+        start link16 link16_bridge.py --port "$LINK16_PORT" ${tcp16:+"$tcp16"}
+    else
+        echo "  [skip] link16 — set LINK16_PORT in .env to enable"
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# Giraffe-only subset: ASTERIX + Link-16 inbound bridges, then CoT-UDP out
+# ---------------------------------------------------------------------------
+start_giraffe_bridges() {
+    echo ""
+    echo "=== Giraffe sensor bridges ==="
+
+    if [[ "${CAT48_PORT:-}" ]]; then
+        tcp_flag=""
+        [[ "${CAT48_TCP:-}" == "1" ]] && tcp_flag="--tcp"
+        start cat48 cat48_bridge.py \
+            --port "$CAT48_PORT" \
+            ${tcp_flag:+"$tcp_flag"} \
+            ${CAT48_RADAR_LAT:+--radar-lat "$CAT48_RADAR_LAT"} \
+            ${CAT48_RADAR_LON:+--radar-lon "$CAT48_RADAR_LON"}
+    else
+        echo "  [skip] cat48 — set CAT48_PORT in .env to enable"
+    fi
+
+    if [[ "${CAT21_PORT:-}" ]]; then
+        tcp21=""
+        [[ "${CAT21_TCP:-}" == "1" ]] && tcp21="--tcp"
+        start cat21 cat21_bridge.py --port "$CAT21_PORT" ${tcp21:+"$tcp21"}
+    else
+        echo "  [skip] cat21 — set CAT21_PORT in .env to enable"
+    fi
+
+    if [[ "${CAT20_PORT:-}" ]]; then
+        tcp20=""
+        [[ "${CAT20_TCP:-}" == "1" ]] && tcp20="--tcp"
+        start cat20 cat20_bridge.py --port "$CAT20_PORT" ${tcp20:+"$tcp20"}
+    else
+        echo "  [skip] cat20 — set CAT20_PORT in .env to enable"
+    fi
+
+    if [[ "${LINK16_PORT:-}" ]]; then
+        tcp16=""
+        [[ "${LINK16_TCP:-}" == "1" ]] && tcp16="--tcp"
+        start link16 link16_bridge.py --port "$LINK16_PORT" ${tcp16:+"$tcp16"}
+    else
+        echo "  [skip] link16 — set LINK16_PORT in .env to enable"
+    fi
+}
+
+start_giraffe_layers() {
+    echo ""
+    echo "=== Protocol layers (radar → CoT) ==="
+
+    # CoT → ATAK UDP multicast
+    start cot-udp cot_layer.py --udp --host 239.2.3.1 --port 6969
+
+    # CoT → FreeTAKServer TCP (only if reachable)
+    if [[ "${TAK_HOST:-127.0.0.1}" != "127.0.0.1" ]] || \
+       nc -z "${TAK_HOST:-127.0.0.1}" "${TAK_PORT:-8087}" 2>/dev/null; then
+        start cot-tcp cot_layer.py --host "${TAK_HOST:-127.0.0.1}" --port "${TAK_PORT:-8087}"
+    else
+        echo "  [skip] cot-tcp — TAK Server not reachable at ${TAK_HOST:-127.0.0.1}:${TAK_PORT:-8087}"
+    fi
 }
 
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
-MODE="${1:-all}"
+MODE="${1:-giraffe}"
 
 case "$MODE" in
+    giraffe)
+        start_zenoh
+        start_giraffe_bridges
+        start_giraffe_layers
+        ;;
     all)
         start_zenoh
         start_bridges
@@ -273,7 +350,7 @@ case "$MODE" in
         start_layers
         ;;
     *)
-        echo "Usage: $0 [all|bridges|layers]"
+        echo "Usage: $0 [giraffe|all|bridges|layers]"
         exit 1
         ;;
 esac
