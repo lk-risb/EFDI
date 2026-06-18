@@ -423,6 +423,10 @@ def _build_remarks(track: dict, cot_type: str) -> str:
         _row("CALL", (track.get("callsign")      or "").strip().upper() or None)
         _row("ICAO", (track.get("icao24")        or "").strip().upper() or None)
         _row("SQWK", track.get("squawk"))
+        opr = (track.get("operating_as") or track.get("painted_as") or "").strip()
+        _row("OPR",  opr or None)
+        _row("FLAG", track.get("origin_country"))
+        _row("UAV",  track.get("mav_type"))
         _row("RDR",  track.get("radar_id"))
         if track.get("range_nm") is not None:
             tod = track.get("tod_s")
@@ -443,25 +447,52 @@ def _build_remarks(track: dict, cot_type: str) -> str:
             alt_str = "---"
             alt_m   = None
         spd = _speed_ms(track)
-        _row("ALT (FL)",  alt_str)
+        _row("ALT",  alt_str)
         if alt_m is not None:
             _row("ALT (ft)", "{} ft".format(int(alt_m / 0.3048)))
             _row("ALT (m)",  "{} m".format(int(alt_m)))
         if spd:
             _row("SPD (kt)",   "{} kt".format(round(spd / 0.514444)))
             _row("SPD (km/h)", "{} km/h".format(round(spd * 3.6)))
+        vr = track.get("vertical_rate_ms")
+        if vr is not None:
+            vr_fpm = int(float(vr) * 196.85)
+            _row("V/S", "{:+d} ft/min".format(vr_fpm))
+        if track.get("on_ground"):
+            lines.append("[ON GROUND]")
         if track.get("is_military"):
             lines.append("[MILITARY]")
+        fused_src = track.get("_src", "")
+        if " + " in fused_src:
+            lines.append("[FUSED: {}]".format(fused_src))
 
     elif domain == "S":  # ---- SEA ----------------------------------------
-        _row("NAME",   track.get("ship_name", "").strip() or None)
-        _row("MMSI",   track.get("mmsi"))
-        _row("CALL",   (track.get("callsign") or "").strip().upper() or None)
-        _row("TYPE",   track.get("ship_type"))
+        _row("NAME",  (track.get("ship_name") or "").strip() or None)
+        _row("MMSI",  track.get("mmsi"))
+        _row("IMO",   track.get("imo"))
+        _row("CALL",  (track.get("callsign") or "").strip().upper() or None)
+        _row("TYPE",  track.get("ship_type"))
+        length = track.get("length_m")
+        beam   = track.get("beam_m")
+        if length:
+            dim_str = "{} m".format(int(length))
+            if beam:
+                dim_str = "{} × {} m".format(int(length), int(beam))
+            _row("DIM",   dim_str)
+        if track.get("draft_m"):
+            _row("DRAFT", "{} m".format(round(float(track["draft_m"]), 1)))
+        _row("DEST",  (track.get("destination") or "").strip() or None)
+        _row("ETA",   track.get("eta"))
         sog = _speed_ms(track)
-        _row("SOG (kt)",    "{} kt".format(round(sog / 0.514444, 1)) if sog else None)
-        _row("SOG (km/h)",  "{} km/h".format(round(sog * 3.6, 1)) if sog else None)
-        _row("COG",    "{}°".format(int(_course(track))))
+        _row("SOG (kt)",   "{} kt".format(round(sog / 0.514444, 1)) if sog else None)
+        _row("SOG (km/h)", "{} km/h".format(round(sog * 3.6, 1)) if sog else None)
+        hdg = track.get("heading_deg")
+        cog = track.get("cog_deg")
+        if hdg is not None and cog is not None and abs(hdg - cog) > 5:
+            _row("HDG", "{}° (bow)".format(int(hdg)))
+            _row("COG", "{}° (track)".format(int(cog)))
+        else:
+            _row("COG", "{}°".format(int(cog or hdg or 0)))
         nav = track.get("nav_status", "").replace("_", " ")
         _row("STATUS", nav or None)
 
