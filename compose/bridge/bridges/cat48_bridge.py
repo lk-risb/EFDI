@@ -64,7 +64,8 @@ HERE      = os.path.dirname(os.path.abspath(__file__))
 _CERT_DIR = os.environ.get("GOAT_CERT_DIR", HERE)
 _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", ROUTER)
 
-TOPIC = "{}/air/asterix/cat48/unknown/aircraft/tracks/v1".format(ORG)
+TOPIC        = "{}/air/asterix/cat48/unknown/aircraft/tracks/v1".format(ORG)
+TOPIC_SENSOR = "{}/land/asterix/cat34/neutral/radar/status/v1".format(ORG)
 
 CAT_034 = 0x22   # decimal 34
 CAT_048 = 0x30   # decimal 48
@@ -268,9 +269,66 @@ def _polar_to_wgs84(radar_lat: float, radar_lon: float,
 _MSG_TYPES_034 = {1: "north_marker", 2: "sector_crossing",
                   3: "geo_filter",   4: "jamming_strobe"}
 
+# I034/070 message-type codes → human label
+_COUNT_LABELS = {
+    0: "no_detection", 1: "psr", 2: "ssr",  3: "psr_ssr",
+    4: "all",          5: "no_det_psr", 6: "no_det_ssr", 7: "mode5",
+    11: "mil_id",
+}
+
+
+def _decode_i034_050(data: bytes, pos: int) -> tuple[dict, int]:
+    """I034/050 System Configuration and Status — compound."""
+    out = {}
+    if pos >= len(data):
+        return out, pos
+    sf = data[pos]; pos += 1
+    if sf & 0x80:                           # COM sub-field (1 byte)
+        if pos >= len(data): return out, pos
+        com = data[pos]; pos += 1
+        out["sys_nogo"]        = bool(com & 0x80)  # 0=operational, 1=degraded
+        out["sys_ovl_rdp"]     = bool(com & 0x10)  # RDP overload
+        out["sys_ovl_xmt"]     = bool(com & 0x08)  # TX overload
+        out["sys_tsv_invalid"] = bool(com & 0x02)  # time source invalid
+    for key, mask in (("psr_status", 0x20), ("ssr_status", 0x10), ("mds_status", 0x08)):
+        if sf & mask:                       # PSR / SSR / MDS sub-field (1 byte each)
+            if pos >= len(data): return out, pos
+            b = data[pos]; pos += 1
+            an = (b & 0x60) >> 5            # bits 7-6: operative state
+            out[key] = ("not_operational", "operational", "degraded", "test")[an]
+            if b & 0x10: out[key.replace("status", "overload")] = True
+    while sf & 0x01:                        # FX extension — skip unknown sub-fields
+        if pos >= len(data): break
+        sf = data[pos]; pos += 1
+        for mask in (0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02):
+            if (sf & mask) and pos < len(data): pos += 1
+    return out, pos
+
+
+def _decode_i034_060(data: bytes, pos: int) -> tuple[dict, int]:
+    """I034/060 System Processing Mode — compound (COM sub-field: RED level)."""
+    out = {}
+    if pos >= len(data):
+        return out, pos
+    sf = data[pos]; pos += 1
+    if sf & 0x80:                           # COM sub-field
+        if pos >= len(data): return out, pos
+        com = data[pos]; pos += 1
+        red = (com & 0xE0) >> 5             # bits 8-6: reduction condition 0-7
+        if red: out["reduction_level"] = red
+    for mask in (0x20, 0x10, 0x08):         # PSR / SSR / MDS sub-fields (1 byte, skip)
+        if sf & mask:
+            if pos < len(data): pos += 1
+    while sf & 0x01:
+        if pos >= len(data): break
+        sf = data[pos]; pos += 1
+        for mask in (0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02):
+            if (sf & mask) and pos < len(data): pos += 1
+    return out, pos
+
 
 def decode_cat034(data: bytes) -> dict | None:
-    """Decode one CAT-034 message. Returns status dict or None on error."""
+    """Decode one CAT-034 message payload. Returns full status dict or None."""
     if len(data) < 1:
         return None
     fspec, pos = parse_fspec(data, 0)
@@ -279,30 +337,58 @@ def decode_cat034(data: bytes) -> dict | None:
     for frn, present in enumerate(fspec):
         if not present:
             continue
-        if frn == 0:                    # I034/010  SAC/SIC
+        if frn == 0:                    # I034/010  SAC/SIC (2 bytes)
             if pos + 2 > len(data): break
             msg["sac"] = data[pos]; msg["sic"] = data[pos + 1]; pos += 2
-        elif frn == 1:                  # I034/000  Message Type
+        elif frn == 1:                  # I034/000  Message Type (1 byte)
             if pos + 1 > len(data): break
             msg["msg_type"] = _MSG_TYPES_034.get(data[pos], data[pos]); pos += 1
-        elif frn == 2:                  # I034/030  Time of Day
+        elif frn == 2:                  # I034/030  Time of Day (3 bytes, 1/128 s)
             if pos + 3 > len(data): break
             raw = (data[pos] << 16) | (data[pos+1] << 8) | data[pos+2]
             msg["tod_s"] = raw / 128.0; pos += 3
-        elif frn == 3:                  # I034/020  Sector Number
+        elif frn == 3:                  # I034/020  Sector Number (1 byte, 360/256 °)
             if pos + 1 > len(data): break
-            msg["sector_deg"] = data[pos] * 360.0 / 256.0; pos += 1
-        elif frn == 4:                  # I034/041  Antenna Rotation Period
+            msg["sector_deg"] = round(data[pos] * 360.0 / 256.0, 2); pos += 1
+        elif frn == 4:                  # I034/041  Antenna Rotation Period (2 bytes, 1/128 s)
             if pos + 2 > len(data): break
-            msg["rotation_s"] = _u16(data[pos:pos+2]) / 128.0; pos += 2
-        elif frn in (5, 6, 7, 11):     # compound fields — stop parsing
-            break
-        elif frn == 8:                  # I034/100  Generic Polar Window  8 bytes
+            msg["rotation_s"] = round(_u16(data[pos:pos+2]) / 128.0, 2); pos += 2
+        elif frn == 5:                  # I034/050  System Configuration (compound)
+            extra, pos = _decode_i034_050(data, pos)
+            msg.update(extra)
+        elif frn == 6:                  # I034/060  System Processing Mode (compound)
+            extra, pos = _decode_i034_060(data, pos)
+            msg.update(extra)
+        elif frn == 7:                  # I034/070  Message Count Values (REP × 2 bytes)
+            if pos >= len(data): break
+            rep = data[pos]; pos += 1
+            counts = {}
+            for _ in range(rep):
+                if pos + 2 > len(data): break
+                word = _u16(data[pos:pos+2]); pos += 2
+                counts[_COUNT_LABELS.get((word >> 11) & 0x1F,
+                                          "type{}".format((word >> 11) & 0x1F))] = word & 0x7FF
+            if counts: msg["msg_counts"] = counts
+        elif frn == 8:                  # I034/100  Generic Polar Window (8 bytes)
+            if pos + 8 > len(data): break
             pos += 8
-        elif frn == 9:                  # I034/110  Data Filter  1 byte
+        elif frn == 9:                  # I034/110  Data Filter (1 byte)
+            if pos + 1 > len(data): break
             pos += 1
-        elif frn == 11:                 # I034/090  Collimation Error  2 bytes
-            pos += 2
+        elif frn == 10:                 # I034/120  3D-Range and Azimuth (compound, skip)
+            if pos >= len(data): break
+            sf = data[pos]; pos += 1
+            if sf & 0x80 and pos + 2 <= len(data): pos += 2  # D1: High Range
+            if sf & 0x40 and pos + 2 <= len(data): pos += 2  # D2: Transmitted Azimuth
+            while sf & 0x01:
+                if pos >= len(data): break
+                sf = data[pos]; pos += 1
+                for m in (0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02):
+                    if (sf & m) and pos + 2 <= len(data): pos += 2
+        elif frn == 11:                 # I034/090  Collimation Error (4 bytes)
+            if pos + 4 > len(data): break
+            msg["collimation_rng_nm"] = round(_s16(data[pos:pos+2]) / 128.0, 4);   pos += 2
+            msg["collimation_az_deg"] = round(_s16(data[pos:pos+2]) * 360.0 / 65536.0, 4); pos += 2
         else:
             break
     return msg if msg else None
@@ -556,19 +642,41 @@ def _publish(pub, track: dict, verbose: bool):
         ), flush=True)
 
 
-def _handle_stream(frame_iter, pub, radar_lat, radar_lon, verbose):
+def _handle_stream(frame_iter, pub, pub_sensor,
+                   radar_lat, radar_lon, radar_name, verbose):
     for cat, data in frame_iter:
         if cat == CAT_034:
             msg = decode_cat034(data)
-            if msg and verbose:
-                mtype = msg.get("msg_type", "?")
-                tod   = msg.get("tod_s")
-                rot   = msg.get("rotation_s")
-                print("CAT-034 {} tod={} rot={}s".format(
+            if not msg:
+                continue
+            mtype = msg.get("msg_type", "?")
+            tod   = msg.get("tod_s")
+            rot   = msg.get("rotation_s")
+            if verbose:
+                print("CAT-034 {} tod={} rot={}s psr={} ssr={} mds={} cal_az={} cal_rng={}".format(
                     mtype,
-                    "{:.2f}".format(tod) if tod else "-",
-                    "{:.2f}".format(rot) if rot else "-",
+                    "{:.2f}".format(tod)  if tod else "-",
+                    "{:.2f}".format(rot)  if rot else "-",
+                    msg.get("psr_status", "-"), msg.get("ssr_status", "-"),
+                    msg.get("mds_status", "-"),
+                    msg.get("collimation_az_deg", "-"),
+                    msg.get("collimation_rng_nm", "-"),
                 ), flush=True)
+            # Publish radar site position + status on every north_marker (once per rotation)
+            if mtype == "north_marker" and pub_sensor and radar_lat and radar_lon:
+                sac = msg.get("sac", 0); sic = msg.get("sic", 0)
+                status = {
+                    "_src":        "ASTERIX CAT-34",
+                    "_ts":         time.time(),
+                    "sensor_type": "radar",
+                    "sensor_id":   "CAT34-{}-{}".format(sac, sic),
+                    "sensor_name": radar_name or "RADAR SAC{}/SIC{}".format(sac, sic),
+                    "lat_deg":     radar_lat,
+                    "lon_deg":     radar_lon,
+                }
+                status.update(msg)
+                pub_sensor.put(json.dumps(status).encode(),
+                               encoding=zenoh.Encoding.APPLICATION_JSON)
 
         elif cat == CAT_048:
             pos = 0
@@ -589,20 +697,22 @@ def _handle_stream(frame_iter, pub, radar_lat, radar_lon, verbose):
 # Transport modes
 # ---------------------------------------------------------------------------
 
-def run_udp(port: int, pub, radar_lat, radar_lon, verbose):
+def run_udp(port: int, pub, pub_sensor, radar_lat, radar_lon, radar_name, verbose):
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     sock.bind(("0.0.0.0", port))
     our_ip = _netbird_ip()
     print("CAT-48/34 UDP listening on 0.0.0.0:{}".format(port), flush=True)
     print("Tell Giraffe crew: send ASTERIX to {}:{} (UDP)".format(our_ip, port), flush=True)
-    _handle_stream(iter_frames_udp(sock), pub, radar_lat, radar_lon, verbose)
+    _handle_stream(iter_frames_udp(sock), pub, pub_sensor,
+                   radar_lat, radar_lon, radar_name, verbose)
 
 
-def _tcp_client(conn, addr, pub, radar_lat, radar_lon, verbose):
+def _tcp_client(conn, addr, pub, pub_sensor, radar_lat, radar_lon, radar_name, verbose):
     print("CAT-48/34 TCP connected: {}".format(addr), flush=True)
     try:
-        _handle_stream(iter_frames_tcp(conn), pub, radar_lat, radar_lon, verbose)
+        _handle_stream(iter_frames_tcp(conn), pub, pub_sensor,
+                       radar_lat, radar_lon, radar_name, verbose)
     except EOFError:
         pass
     finally:
@@ -610,7 +720,7 @@ def _tcp_client(conn, addr, pub, radar_lat, radar_lon, verbose):
         print("CAT-48/34 TCP disconnected: {}".format(addr), flush=True)
 
 
-def run_tcp(port: int, pub, radar_lat, radar_lon, verbose):
+def run_tcp(port: int, pub, pub_sensor, radar_lat, radar_lon, radar_name, verbose):
     srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     srv.bind(("0.0.0.0", port))
@@ -621,7 +731,8 @@ def run_tcp(port: int, pub, radar_lat, radar_lon, verbose):
     while True:
         conn, addr = srv.accept()
         t = threading.Thread(target=_tcp_client,
-                             args=(conn, addr, pub, radar_lat, radar_lon, verbose),
+                             args=(conn, addr, pub, pub_sensor,
+                                   radar_lat, radar_lon, radar_name, verbose),
                              daemon=True)
         t.start()
 
@@ -644,30 +755,37 @@ def main():
                     help="Radar antenna latitude for polar→WGS84 conversion")
     ap.add_argument("--radar-lon", type=float, default=_env_float("CAT48_RADAR_LON"),
                     help="Radar antenna longitude for polar→WGS84 conversion")
+    ap.add_argument("--radar-name", default=os.environ.get("CAT48_RADAR_NAME", ""),
+                    help="Human-readable name for this radar site (shown in ATAK marker)")
     ap.add_argument("--verbose", "-v", action="store_true")
     args = ap.parse_args()
 
-    radar_lat = args.radar_lat if args.radar_lat != 0.0 else None
-    radar_lon = args.radar_lon if args.radar_lon != 0.0 else None
+    radar_lat  = args.radar_lat  if args.radar_lat  != 0.0 else None
+    radar_lon  = args.radar_lon  if args.radar_lon  != 0.0 else None
+    radar_name = args.radar_name or None
 
     if radar_lat is None:
         print("WARNING: --radar-lat/--radar-lon not set. "
               "Polar plots will have no WGS-84 position. "
               "Only Mode-S tracks with ICAO position will be visible.", flush=True)
 
-    session = zenoh.open(make_config())
-    pub = session.declare_publisher(TOPIC)
-    print("Zenoh topic:", TOPIC, flush=True)
+    session    = zenoh.open(make_config())
+    pub        = session.declare_publisher(TOPIC)
+    pub_sensor = session.declare_publisher(TOPIC_SENSOR) if radar_lat else None
+    print("Zenoh track  topic:", TOPIC, flush=True)
+    if pub_sensor:
+        print("Zenoh sensor topic:", TOPIC_SENSOR, flush=True)
 
     try:
         if args.tcp:
-            run_tcp(args.port, pub, radar_lat, radar_lon, args.verbose)
+            run_tcp(args.port, pub, pub_sensor, radar_lat, radar_lon, radar_name, args.verbose)
         else:
-            run_udp(args.port, pub, radar_lat, radar_lon, args.verbose)
+            run_udp(args.port, pub, pub_sensor, radar_lat, radar_lon, radar_name, args.verbose)
     except KeyboardInterrupt:
         pass
     finally:
         pub.undeclare()
+        if pub_sensor: pub_sensor.undeclare()
         session.close()
 
 
