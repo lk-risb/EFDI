@@ -80,6 +80,8 @@ _trail_lock  = threading.Lock()
 _trail_store: dict[str, collections.deque] = {}
 _dr_lock     = threading.Lock()
 _dr_store:   dict[str, dict] = {}
+_alert_lock  = threading.Lock()
+_alerted:    set = set()   # uids currently in a known emergency state (no re-alert)
 
 # ---------------------------------------------------------------------------
 # Hostile-state classifiers
@@ -434,6 +436,38 @@ def _start_dr_thread(sender):
     threading.Thread(target=_loop, daemon=True).start()
 
 
+def _send_geochat_alert(sender, uid: str, lat: float, lon: float, message: str):
+    """Send a GeoChat broadcast to All Chat Rooms — shows as a popup on every ATAK device."""
+    now    = time.time()
+    msg_id = "{}-ALERT-{:.0f}".format(uid, now)
+    event  = ET.Element("event", {
+        "version": "2.0",
+        "uid":     "GeoChat.EFDI.ALL.{}".format(msg_id),
+        "type":    "b-t-f",
+        "how":     "m-g",
+        "time":    _ts(now), "start": _ts(now), "stale": _ts(now + 300),
+    })
+    ET.SubElement(event, "point", {
+        "lat": str(round(lat, 6)), "lon": str(round(lon, 6)),
+        "hae": "9999999.0", "ce": "9999999.0", "le": "9999999.0",
+    })
+    detail = ET.SubElement(event, "detail")
+    chat = ET.SubElement(detail, "__chat", {
+        "parent": "TeamTalk", "groupOwner": "false",
+        "messageId": msg_id, "chatroom": "All Chat Rooms",
+        "id": "All Chat Rooms", "senderCallsign": "EFDI-ALERT",
+    })
+    ET.SubElement(chat, "chatgrp", {
+        "uid0": "EFDI-ALERT", "uid1": "All Chat Rooms", "id": "All Chat Rooms",
+    })
+    ET.SubElement(detail, "link", {"uid": "EFDI-ALERT", "type": "a-n-G-I", "relation": "p-p"})
+    ET.SubElement(detail, "remarks", {
+        "source": "EFDI-ALERT", "to": "All Chat Rooms", "time": _ts(now),
+    }).text = message
+    ET.SubElement(detail, "__serverdestination", {"destinations": "All Chat Rooms"})
+    sender.send('<?xml version="1.0" encoding="UTF-8"?>' + ET.tostring(event, encoding="unicode"))
+
+
 def make_config() -> "zenoh.Config":
     conf = zenoh.Config()
     conf.insert_json5("mode", '"client"')
@@ -562,9 +596,13 @@ def _build_remarks(track: dict, cot_type: str) -> str:
             alt_str = "---"
             alt_m   = None
         spd = _speed_ms(track)
+        ias = track.get("airspeed_ms")
+        if ias is not None:
+            _row("AIR (kt)",   "{} kt".format(round(float(ias) / 0.514444)))
+            _row("AIR (km/h)", "{} km/h".format(round(float(ias) * 3.6)))
         if spd:
-            _row("SPD (kt)",   "{} kt".format(round(spd / 0.514444)))
-            _row("SPD (km/h)", "{} km/h".format(round(spd * 3.6)))
+            _row("GND (kt)",   "{} kt".format(round(spd / 0.514444)))
+            _row("GND (km/h)", "{} km/h".format(round(spd * 3.6)))
         _row("ALT",  alt_str)
         if alt_m is not None:
             _row("ALT (ft)", "{} ft".format(int(alt_m / 0.3048)))
@@ -916,10 +954,45 @@ def make_handler(cot_type_or_fn, sender, verbose: bool, stale_s: float = COT_STA
         else:
             cot_type     = cot_type_or_fn(track) if callable(cot_type_or_fn) else cot_type_or_fn
             stale_s_used = stale_s
-            # Emergency squawk → force red hostile so it stands out immediately
+            # Emergency squawk → force red hostile + one-shot GeoChat alert
             sq = str(track.get("squawk") or "")
             if sq in _EMERGENCY_SQUAWK and "-A-" in cot_type:
                 cot_type = "a-h-A-C-F"
+                uid_now = _uid(track)
+                with _alert_lock:
+                    fire = uid_now not in _alerted
+                    _alerted.add(uid_now)
+                if fire:
+                    lat_a = track.get("lat_deg", 0)
+                    lon_a = track.get("lon_deg", 0)
+                    cs_a  = (track.get("callsign") or track.get("registration") or
+                             track.get("icao24") or "UNKNOWN").upper()
+                    alt_a = int(_hae(track) / 0.3048)
+                    msg   = "[{}] {} {} - squawk {} - FL{} - {:.3f}/{:.3f}".format(
+                        _EMERGENCY_SQUAWK[sq], sq, cs_a, sq,
+                        alt_a // 100, lat_a, lon_a)
+                    _send_geochat_alert(sender, uid_now, lat_a, lon_a, msg)
+            else:
+                # Clear alert state when squawk returns to normal
+                uid_now = _uid(track)
+                with _alert_lock:
+                    _alerted.discard(uid_now)
+
+        # Ship distress alert (nav_status)
+        nav_key = str(track.get("nav_status") or "").lower().replace(" ", "_")
+        if nav_key in _DISTRESS_NAV and "-S-" in cot_type:
+            uid_now = _uid(track)
+            with _alert_lock:
+                fire = uid_now not in _alerted
+                _alerted.add(uid_now)
+            if fire:
+                lat_s  = track.get("lat_deg", 0)
+                lon_s  = track.get("lon_deg", 0)
+                name_s = (track.get("ship_name") or str(track.get("mmsi") or "VESSEL")).upper()
+                msg    = "[SOS] {} - {} - MMSI {} - {:.3f}/{:.3f}".format(
+                    nav_key.upper().replace("_", " "), name_s,
+                    track.get("mmsi", "?"), lat_s, lon_s)
+                _send_geochat_alert(sender, uid_now, lat_s, lon_s, msg)
 
         xml = track_to_cot(track, cot_type, stale_s=stale_s_used)
         if xml is None:
