@@ -53,6 +53,29 @@ _NAV_STATUS = {
     8: "under_way_sailing", 15: "not_defined",
 }
 
+# AIS ship type codes → readable label (class groups via //10)
+_SHIP_TYPE_CLASS = {
+    2: "WIG", 3: "Fishing / Towing", 4: "High Speed",
+    5: "Special craft", 6: "Passenger", 7: "Cargo",
+    8: "Tanker", 9: "Other",
+}
+_SHIP_TYPE_EXACT = {
+    30: "Fishing", 31: "Towing", 32: "Towing (large)", 36: "Sailing",
+    37: "Pleasure craft", 50: "Pilot vessel", 51: "Search & Rescue",
+    52: "Tug", 53: "Port tender", 54: "Anti-pollution", 55: "Law enforcement",
+    58: "Medical transport", 59: "Non-combatant", 79: "Cargo (hazardous)",
+    89: "Tanker (hazardous)",
+}
+
+def _ship_type_label(code: int) -> str:
+    if code in _SHIP_TYPE_EXACT:
+        return _SHIP_TYPE_EXACT[code]
+    cls = _SHIP_TYPE_CLASS.get(code // 10)
+    return "{} ({})".format(cls, code) if cls else "Type {}".format(code)
+
+# Static data cache: MMSI → enrichment dict (from AIS Type 5 / Type 24)
+_STATIC: dict[str, dict] = {}
+
 
 # ---------------------------------------------------------------------------
 # Minimal stdlib WebSocket client
@@ -140,7 +163,58 @@ def normalize(msg: dict) -> dict | None:
     meta     = msg.get("MetaData", {})
     msg_type = msg.get("MessageType", "")
     inner    = msg.get("Message", {}).get(msg_type, {})
+    mmsi_raw = meta.get("MMSI") or inner.get("Mmsi")
+    mmsi_key = str(mmsi_raw) if mmsi_raw else None
 
+    # --- Static data (AIS Type 5 / Type 24) — cache and return None (no position) ---
+    if msg_type == "ShipStaticData":
+        if not mmsi_key:
+            return None
+        static = {}
+        imo = inner.get("ImoNumber")
+        if imo:
+            static["imo"] = str(imo)
+        cs = (inner.get("CallSign") or "").strip()
+        if cs:
+            static["callsign"] = cs
+        name = (meta.get("ShipName") or inner.get("Name") or "").strip()
+        if name:
+            static["ship_name"] = name
+        ship_type = inner.get("Type")
+        if ship_type is not None:
+            try:
+                static["ship_type"] = _ship_type_label(int(ship_type))
+                static["ship_type_code"] = int(ship_type)
+            except (ValueError, TypeError):
+                pass
+        dim = inner.get("Dimension") or {}
+        a = dim.get("A", 0); b = dim.get("B", 0)
+        c = dim.get("C", 0); d = dim.get("D", 0)
+        length = (a or 0) + (b or 0)
+        beam   = (c or 0) + (d or 0)
+        if length > 0:
+            static["length_m"] = length
+        if beam > 0:
+            static["beam_m"] = beam
+        draft = inner.get("Draught")
+        if draft:
+            try:
+                static["draft_m"] = round(float(draft), 1)
+            except (ValueError, TypeError):
+                pass
+        dest = (inner.get("Destination") or "").strip()
+        if dest and dest not in ("", "NOWHERE", "@@@@@@@@@", "NO DEST"):
+            static["destination"] = dest
+        eta = inner.get("Eta") or {}
+        mo = eta.get("Month", 0); dy = eta.get("Day", 0)
+        hr = eta.get("Hour", 0);  mi = eta.get("Minute", 0)
+        if mo and dy:
+            static["eta"] = "{:02d}-{:02d} {:02d}:{:02d} UTC".format(mo, dy, hr, mi)
+        if static:
+            _STATIC[mmsi_key] = static
+        return None   # no position in static messages
+
+    # --- Position reports ---
     lat = meta.get("latitude") or inner.get("Latitude")
     lon = meta.get("longitude") or inner.get("Longitude")
     if lat is None or lon is None:
@@ -149,7 +223,7 @@ def normalize(msg: dict) -> dict | None:
     track = {
         "_ts":      time.time(),
         "_src":     "aisstream",
-        "mmsi":     meta.get("MMSI") or inner.get("Mmsi"),
+        "mmsi":     mmsi_raw,
         "msg_type": msg_type,
         "lat_deg":  round(float(lat), 6),
         "lon_deg":  round(float(lon), 6),
@@ -179,6 +253,11 @@ def normalize(msg: dict) -> dict | None:
     if t:
         track["time_utc"] = t
 
+    # Merge any static data we have for this MMSI
+    if mmsi_key and mmsi_key in _STATIC:
+        for k, v in _STATIC[mmsi_key].items():
+            track.setdefault(k, v)
+
     return track
 
 
@@ -201,6 +280,7 @@ def run(args):
             "PositionReport",
             "ExtendedClassBPositionReport",
             "StandardClassBPositionReport",
+            "ShipStaticData",          # AIS Type 5/24 — IMO, callsign, dims, dest
         ],
     })
 
