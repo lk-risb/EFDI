@@ -144,6 +144,8 @@ class TrackFuser:
         self._adsb_tracks:  dict[str, dict] = {}
         # icao24 → uid in adsb_tracks
         self._adsb_by_icao:   dict[str, str] = {}
+        # icao24 → uid in radar_tracks (for fast coverage check in on_adsb)
+        self._radar_by_icao:  dict[str, str] = {}
         # squawk → list of adsb uids
         self._adsb_by_squawk: dict[str, list] = {}
 
@@ -161,6 +163,9 @@ class TrackFuser:
         with self._lock:
             uid = _uid_of(track)
             self._radar_tracks[uid] = {"track": track, "topic": topic, "ts": time.time()}
+            icao = track.get("icao24", "").strip().lower()
+            if icao:
+                self._radar_by_icao[icao] = uid
         self._fuse_and_publish(track, topic)
 
     def on_adsb(self, sample):
@@ -169,17 +174,30 @@ class TrackFuser:
         except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
             return
         topic = str(sample.key_expr)
+        radar_covers = False
         with self._lock:
             uid = _uid_of(track)
             self._adsb_tracks[uid] = {"track": track, "topic": topic, "ts": time.time()}
             icao = track.get("icao24", "").strip().lower()
             if icao:
                 self._adsb_by_icao[icao] = uid
+                radar_covers = icao in self._radar_by_icao
             sq = track.get("squawk", "")
             if sq and sq not in ("0000", "7500", "7600", "7700"):
                 self._adsb_by_squawk.setdefault(sq, [])
                 if uid not in self._adsb_by_squawk[sq]:
                     self._adsb_by_squawk[sq].append(uid)
+
+        if not radar_covers:
+            # No radar covering this aircraft — publish ADS-B track as fallback so
+            # it appears in ATAK. When radar picks it up, the fused track takes over
+            # seamlessly (same ICAO-based UID, same marker in ATAK).
+            pub_topic = TOPIC_FUSED.format(ORG, "civ")
+            self._session.put(pub_topic, json.dumps(track).encode(),
+                              encoding=zenoh.Encoding.APPLICATION_JSON)
+            if self._verbose:
+                ident = track.get("callsign") or track.get("icao24") or "?"
+                print("ADSB fallback [no radar] {}".format(ident), flush=True)
 
     # ------------------------------------------------------------------
     # Fusion logic
@@ -301,7 +319,10 @@ class TrackFuser:
             stale_a = [k for k, v in self._adsb_tracks.items()
                        if now - v["ts"] > _MAX_AGE_S]
             for k in stale_r:
-                del self._radar_tracks[k]
+                entry = self._radar_tracks.pop(k)
+                icao = entry["track"].get("icao24", "").strip().lower()
+                if icao and self._radar_by_icao.get(icao) == k:
+                    del self._radar_by_icao[icao]
             for k in stale_a:
                 entry = self._adsb_tracks.pop(k)
                 icao = entry["track"].get("icao24", "").strip().lower()
