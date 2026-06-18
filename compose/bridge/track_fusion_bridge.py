@@ -189,8 +189,11 @@ class TrackFuser:
         else:
             fused, method = dict(radar), "radar-only"
 
-        aff = _aff_of(radar, radar_topic)
-        topic = TOPIC_FUSED.format(ORG, aff)
+        # Matched tracks are cooperative (have a transponder) → civil slot
+        # so cot_layer.py's _civ_air_type() can check ICAO hostile ranges.
+        # Unmatched radar-only contacts stay unknown.
+        aff_slot = "civ" if adsb is not None else "unknown"
+        topic = TOPIC_FUSED.format(ORG, aff_slot)
         self._session.put(topic, json.dumps(fused).encode(),
                           encoding=zenoh.Encoding.APPLICATION_JSON)
         if self._verbose:

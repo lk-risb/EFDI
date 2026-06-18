@@ -105,6 +105,11 @@ _TOPIC_COT = {
     "air/**/civ/aircraft/**":    (_civ_air_type,  AIR_STALE_S),
     "air/**/mil/aircraft/**":    (_mil_air_type,  AIR_STALE_S),
     "air/**/unknown/**":         ("a-u-A-C-F",    AIR_STALE_S),   # radar / SAPIENT returns — fixed-wing renders as aircraft shape, not cloud
+    # FUSED — radar position + open-source identity merged by track_fusion_bridge.py
+    # civ = cooperative contact identified via ICAO/squawk; hostile check still applies
+    # unknown = PSR-only, no transponder match — radar-only contact
+    "air/fused/civ/aircraft/**":     (_civ_air_type, AIR_STALE_S),
+    "air/fused/unknown/aircraft/**": ("a-u-A-C-F",   AIR_STALE_S),
     # LAND — full affiliation matrix for SitaWare / NFFI / APRS
     "land/**/civ/vehicle/**":    ("a-f-G-E-V-C", LAND_STALE_S),
     "land/**/neutral/station/**":("a-n-G-I-R",   LAND_STALE_S),
@@ -435,7 +440,8 @@ def _build_remarks(track: dict, cot_type: str) -> str:
                 m = int((tod % 3600) // 60)
                 s = tod % 60
                 _row("TOD", "{:02d}:{:02d}:{:04.1f} UTC".format(h, m, s))
-            _row("RNG", "{} NM".format(round(track["range_nm"], 1)))
+            _row("RNG (NM)", "{} NM".format(round(track["range_nm"], 1)))
+            _row("RNG (km)", "{} km".format(round(track["range_nm"] * 1.852, 1)))
             _row("AZM", "{}°".format(round(track.get("azimuth_deg", 0), 1)))
             _row("SAC/SIC", "{}/{}".format(track.get("sac", "?"), track.get("sic", "?")))
         _row("HDG",  "{}°".format(int(_course(track))))

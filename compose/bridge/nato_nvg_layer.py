@@ -51,15 +51,18 @@ STALE_S     = 120   # delete tracks older than this
 # APP-6(B) SIDC codes — keyed by new schema wildcard patterns.
 # ** matches zero-or-more Zenoh path segments.
 _TOPIC_SIDC = {
-    "air/**/civ/aircraft/**":    "SFAPCF----E----",  # Friendly Air Fixed Wing (civil)
-    "air/**/mil/aircraft/**":    "SNAPCF----E----",  # Neutral Air Fixed Wing (military)
-    "air/**/unknown/**":         "SUAPCF----E----",  # Unknown Air (radar / SAPIENT)
-    "land/**/civ/vehicle/**":    "SFGPUCV---E----",  # Friendly Ground Vehicle
-    "land/**/neutral/station/**":"SFGP------E----",  # Neutral Ground Installation
-    "land/**/friendly/unit/**":  "SFGPU-----E----",  # Friendly Ground Unit (NFFI)
-    "sea/**/civ/vessel/**":      "SFSPXF----E----",  # Friendly Sea Surface
-    "sea/**/mil/vessel/**":      "SNSPXF----E----",  # Neutral Sea Surface (military)
-    "space/**/civ/satellite/**": "SFPAP-----E----",  # Friendly Space (satellite)
+    "air/**/civ/aircraft/**":        "SFAPCF----E----",  # Neutral Air Fixed Wing (civil ADS-B)
+    "air/**/mil/aircraft/**":        "SNAPCF----E----",  # Neutral Air Fixed Wing (military)
+    "air/**/unknown/**":             "SUAPCF----E----",  # Unknown Air (radar / SAPIENT, no ID)
+    # Fused tracks (radar + open-source identity merged by track_fusion_bridge.py)
+    "air/fused/civ/aircraft/**":     "SNAPCF----E----",  # Identified cooperative contact
+    "air/fused/unknown/aircraft/**": "SUAPCF----E----",  # PSR-only — no transponder match
+    "land/**/civ/vehicle/**":        "SFGPUCV---E----",  # Friendly Ground Vehicle
+    "land/**/neutral/station/**":    "SFGP------E----",  # Neutral Ground Installation
+    "land/**/friendly/unit/**":      "SFGPU-----E----",  # Friendly Ground Unit (NFFI)
+    "sea/**/civ/vessel/**":          "SFSPXF----E----",  # Friendly Sea Surface
+    "sea/**/mil/vessel/**":          "SNSPXF----E----",  # Neutral Sea Surface (military)
+    "space/**/civ/satellite/**":     "SFPAP-----E----",  # Friendly Space (satellite)
 }
 
 
