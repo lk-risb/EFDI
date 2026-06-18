@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""track_fusion_bridge.py — Multi-source track correlation and enrichment.
+"""track_fusion_layer.py — Multi-source track correlation and enrichment.
 
 Subscribes to all air track topics in the EFDI Zenoh fabric, correlates
 tracks from multiple sensors, and publishes enriched fused tracks.
@@ -58,8 +58,8 @@ Config (compose/.env):
   FUSION_RADAR_PREF=1      Set 0 to prefer ADS-B position (e.g. for GPS accuracy)
 
 Run:
-  venv/bin/python3 track_fusion_bridge.py
-  venv/bin/python3 track_fusion_bridge.py --verbose
+  venv/bin/python3 track_fusion_layer.py
+  venv/bin/python3 track_fusion_layer.py --verbose
 """
 
 import argparse

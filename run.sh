@@ -111,56 +111,56 @@ start_bridges() {
     echo ""
     echo "=== Source bridges ==="
 
-    start airplaneslive airplaneslive_adsb_bridge.py
+    start airplaneslive bridges/airplaneslive_adsb_bridge.py
 
     if skip_if_no_key AISSTREAM_KEY; then
         echo "  [skip] aisstream — AISSTREAM_KEY not set"
     else
-        start aisstream aisstream_ws_bridge.py --apikey "$AISSTREAM_KEY"
+        start aisstream bridges/aisstream_ws_bridge.py --apikey "$AISSTREAM_KEY"
     fi
 
-    start aprs aprsis_bridge.py
+    start aprs bridges/aprsis_bridge.py
 
     if skip_if_no_key FR24_KEY; then
         echo "  [skip] fr24 — FR24_KEY not set"
     else
-        start fr24 fr24_live_bridge.py --key "$FR24_KEY"
+        start fr24 bridges/fr24_live_bridge.py --key "$FR24_KEY"
     fi
 
-    start opensky opensky_states_bridge.py
-    start openmeteo openmeteo_forecast_bridge.py
-    start meteolt meteolt_forecast_bridge.py
-    start yrno yrno_forecast_bridge.py
-    start osm osm_overpass_bridge.py
+    start opensky bridges/opensky_states_bridge.py
+    start openmeteo bridges/openmeteo_forecast_bridge.py
+    start meteolt bridges/meteolt_forecast_bridge.py
+    start yrno bridges/yrno_forecast_bridge.py
+    start osm bridges/osm_overpass_bridge.py
 
     if skip_if_no_key N2YO_KEY; then
         echo "  [skip] n2yo — N2YO_KEY not set"
     else
-        start n2yo n2yo_satpos_bridge.py --key "$N2YO_KEY"
+        start n2yo bridges/n2yo_satpos_bridge.py --key "$N2YO_KEY"
     fi
 
     if skip_if_no_key PURPLEAIR_KEY; then
         echo "  [skip] purpleair — PURPLEAIR_KEY not set"
     else
-        start purpleair purpleair_sensor_bridge.py --key "$PURPLEAIR_KEY"
+        start purpleair bridges/purpleair_sensor_bridge.py --key "$PURPLEAIR_KEY"
     fi
 
     if skip_if_no_key WINDY_KEY; then
         echo "  [skip] windy — WINDY_KEY not set"
     else
-        start windy windy_forecast_bridge.py --key "$WINDY_KEY"
+        start windy bridges/windy_forecast_bridge.py --key "$WINDY_KEY"
     fi
 
     if skip_if_no_key HERE_KEY; then
         echo "  [skip] here-traffic — HERE_KEY not set"
     else
-        start here-traffic here_traffic_bridge.py --key "$HERE_KEY"
+        start here-traffic bridges/here_traffic_bridge.py --key "$HERE_KEY"
     fi
 
     if skip_if_no_key ICAO_NOTAM_KEY; then
         echo "  [skip] notam — ICAO_NOTAM_KEY not set"
     else
-        start notam icao_notam_bridge.py --key "$ICAO_NOTAM_KEY"
+        start notam bridges/icao_notam_bridge.py --key "$ICAO_NOTAM_KEY"
     fi
 }
 
@@ -172,19 +172,19 @@ start_layers() {
     echo "=== Protocol layers ==="
 
     # CoT → ATAK UDP multicast (no TAK Server needed)
-    start cot-udp cot_layer.py --udp --host 239.2.3.1 --port 6969
+    start cot-udp layers/cot_layer.py --udp --host 239.2.3.1 --port 6969
 
     # CoT → FreeTAKServer TCP (only if TAK_HOST is set to something reachable)
     if [[ "${TAK_HOST:-127.0.0.1}" != "127.0.0.1" ]] || \
        nc -z "${TAK_HOST:-127.0.0.1}" "${TAK_PORT:-8087}" 2>/dev/null; then
-        start cot-tcp cot_layer.py --host "${TAK_HOST:-127.0.0.1}" --port "${TAK_PORT:-8087}"
+        start cot-tcp layers/cot_layer.py --host "${TAK_HOST:-127.0.0.1}" --port "${TAK_PORT:-8087}"
     else
         echo "  [skip] cot-tcp — TAK Server not reachable at ${TAK_HOST:-127.0.0.1}:${TAK_PORT:-8087}"
     fi
 
     # CAT62 radar — outbound connect to a track server
     if [[ "${RADAR_HOST:-}" && "${RADAR_HOST}" != "127.0.0.1" ]]; then
-        start cat62 cat62_layer.py --radar-host "$RADAR_HOST" --radar-port "${RADAR_PORT:-30002}"
+        start cat62 layers/cat62_layer.py --radar-host "$RADAR_HOST" --radar-port "${RADAR_PORT:-30002}"
     else
         echo "  [skip] cat62 — set RADAR_HOST in .env to enable"
     fi
@@ -195,7 +195,7 @@ start_layers() {
     if [[ "${CAT48_PORT:-}" ]]; then
         tcp_flag=""
         [[ "${CAT48_TCP:-}" == "1" ]] && tcp_flag="--tcp"
-        start cat48 cat48_bridge.py \
+        start cat48 bridges/cat48_bridge.py \
             --port "$CAT48_PORT" \
             ${tcp_flag:+"$tcp_flag"} \
             ${CAT48_RADAR_LAT:+--radar-lat "$CAT48_RADAR_LAT"} \
@@ -208,7 +208,7 @@ start_layers() {
     if [[ "${CAT21_PORT:-}" ]]; then
         tcp21=""
         [[ "${CAT21_TCP:-}" == "1" ]] && tcp21="--tcp"
-        start cat21 cat21_bridge.py --port "$CAT21_PORT" ${tcp21:+"$tcp21"}
+        start cat21 bridges/cat21_bridge.py --port "$CAT21_PORT" ${tcp21:+"$tcp21"}
     else
         echo "  [skip] cat21 — set CAT21_PORT in .env to enable"
     fi
@@ -217,7 +217,7 @@ start_layers() {
     if [[ "${CAT20_PORT:-}" ]]; then
         tcp20=""
         [[ "${CAT20_TCP:-}" == "1" ]] && tcp20="--tcp"
-        start cat20 cat20_bridge.py --port "$CAT20_PORT" ${tcp20:+"$tcp20"}
+        start cat20 bridges/cat20_bridge.py --port "$CAT20_PORT" ${tcp20:+"$tcp20"}
     else
         echo "  [skip] cat20 — set CAT20_PORT in .env to enable"
     fi
@@ -226,7 +226,7 @@ start_layers() {
     if [[ "${SITAWARE_URL:-}" ]]; then
         sitaware_flags=""
         [[ "${SITAWARE_DISCOVER:-}" == "1" ]] && sitaware_flags="--discover"
-        start sitaware sitaware_bridge.py ${sitaware_flags:+"$sitaware_flags"}
+        start sitaware bridges/sitaware_bridge.py ${sitaware_flags:+"$sitaware_flags"}
     else
         echo "  [skip] sitaware — set SITAWARE_URL in .env to enable"
     fi
@@ -235,23 +235,23 @@ start_layers() {
     # Set COT_RX_PORT to open a listener (they connect to us)
     # Set COT_RX_HOST to connect outbound (we connect to them, format IP:PORT)
     if [[ "${COT_RX_PORT:-}" ]]; then
-        start cot-rx cot_receiver_bridge.py --listen "$COT_RX_PORT"
+        start cot-rx layers/cot_receiver_bridge.py --listen "$COT_RX_PORT"
     elif [[ "${COT_RX_HOST:-}" ]]; then
-        start cot-rx cot_receiver_bridge.py --connect "$COT_RX_HOST"
+        start cot-rx layers/cot_receiver_bridge.py --connect "$COT_RX_HOST"
     else
         echo "  [skip] cot-rx — set COT_RX_PORT or COT_RX_HOST in .env to enable"
     fi
 
     # SAPIENT — only if SAPIENT_HOST set
     if [[ "${SAPIENT_HOST:-}" ]]; then
-        start sapient sapient_layer.py --host "$SAPIENT_HOST" --port "${SAPIENT_PORT:-7001}"
+        start sapient layers/sapient_layer.py --host "$SAPIENT_HOST" --port "${SAPIENT_PORT:-7001}"
     else
         echo "  [skip] sapient — set SAPIENT_HOST in .env to enable"
     fi
 
     # NATO NFFI — only if NFFI_HOST set
     if [[ "${NFFI_HOST:-}" ]]; then
-        start nffi nato_nffi_layer.py --host "$NFFI_HOST" --port "${NFFI_PORT:-7010}"
+        start nffi layers/nato_nffi_layer.py --host "$NFFI_HOST" --port "${NFFI_PORT:-7010}"
     else
         echo "  [skip] nffi — set NFFI_HOST in .env to enable"
     fi
@@ -261,7 +261,7 @@ start_layers() {
     if [[ "${LINK16_PORT:-}" ]]; then
         tcp16=""
         [[ "${LINK16_TCP:-}" == "1" ]] && tcp16="--tcp"
-        start link16 link16_bridge.py --port "$LINK16_PORT" ${tcp16:+"$tcp16"}
+        start link16 bridges/link16_bridge.py --port "$LINK16_PORT" ${tcp16:+"$tcp16"}
     else
         echo "  [skip] link16 — set LINK16_PORT in .env to enable"
     fi
@@ -277,7 +277,7 @@ start_giraffe_bridges() {
     if [[ "${CAT48_PORT:-}" ]]; then
         tcp_flag=""
         [[ "${CAT48_TCP:-}" == "1" ]] && tcp_flag="--tcp"
-        start cat48 cat48_bridge.py \
+        start cat48 bridges/cat48_bridge.py \
             --port "$CAT48_PORT" \
             ${tcp_flag:+"$tcp_flag"} \
             ${CAT48_RADAR_LAT:+--radar-lat "$CAT48_RADAR_LAT"} \
@@ -289,7 +289,7 @@ start_giraffe_bridges() {
     if [[ "${CAT21_PORT:-}" ]]; then
         tcp21=""
         [[ "${CAT21_TCP:-}" == "1" ]] && tcp21="--tcp"
-        start cat21 cat21_bridge.py --port "$CAT21_PORT" ${tcp21:+"$tcp21"}
+        start cat21 bridges/cat21_bridge.py --port "$CAT21_PORT" ${tcp21:+"$tcp21"}
     else
         echo "  [skip] cat21 — set CAT21_PORT in .env to enable"
     fi
@@ -297,7 +297,7 @@ start_giraffe_bridges() {
     if [[ "${CAT20_PORT:-}" ]]; then
         tcp20=""
         [[ "${CAT20_TCP:-}" == "1" ]] && tcp20="--tcp"
-        start cat20 cat20_bridge.py --port "$CAT20_PORT" ${tcp20:+"$tcp20"}
+        start cat20 bridges/cat20_bridge.py --port "$CAT20_PORT" ${tcp20:+"$tcp20"}
     else
         echo "  [skip] cat20 — set CAT20_PORT in .env to enable"
     fi
@@ -305,7 +305,7 @@ start_giraffe_bridges() {
     if [[ "${LINK16_PORT:-}" ]]; then
         tcp16=""
         [[ "${LINK16_TCP:-}" == "1" ]] && tcp16="--tcp"
-        start link16 link16_bridge.py --port "$LINK16_PORT" ${tcp16:+"$tcp16"}
+        start link16 bridges/link16_bridge.py --port "$LINK16_PORT" ${tcp16:+"$tcp16"}
     else
         echo "  [skip] link16 — set LINK16_PORT in .env to enable"
     fi
@@ -313,7 +313,7 @@ start_giraffe_bridges() {
     if [[ "${MAVLINK_PORT:-}" ]]; then
         tcp_mav=""
         [[ "${MAVLINK_TCP:-}" == "1" ]] && tcp_mav="--tcp"
-        start mavlink mavlink_bridge.py --port "$MAVLINK_PORT" ${tcp_mav:+"$tcp_mav"}
+        start mavlink bridges/mavlink_bridge.py --port "$MAVLINK_PORT" ${tcp_mav:+"$tcp_mav"}
     else
         echo "  [skip] mavlink — set MAVLINK_PORT in .env to enable"
     fi
@@ -321,15 +321,15 @@ start_giraffe_bridges() {
     if [[ "${VMF_PORT:-}" ]]; then
         tcp_vmf=""
         [[ "${VMF_TCP:-}" == "1" ]] && tcp_vmf="--tcp"
-        start vmf vmf_bridge.py --port "$VMF_PORT" ${tcp_vmf:+"$tcp_vmf"}
+        start vmf bridges/vmf_bridge.py --port "$VMF_PORT" ${tcp_vmf:+"$tcp_vmf"}
     else
         echo "  [skip] vmf — set VMF_PORT in .env to enable"
     fi
 
     if [[ "${COT_RX_PORT:-}" ]]; then
-        start cot-rx cot_receiver_bridge.py --listen "$COT_RX_PORT"
+        start cot-rx layers/cot_receiver_bridge.py --listen "$COT_RX_PORT"
     elif [[ "${COT_RX_HOST:-}" ]]; then
-        start cot-rx cot_receiver_bridge.py --connect "$COT_RX_HOST"
+        start cot-rx layers/cot_receiver_bridge.py --connect "$COT_RX_HOST"
     else
         echo "  [skip] cot-rx — set COT_RX_PORT or COT_RX_HOST in .env to enable"
     fi
@@ -340,22 +340,22 @@ start_giraffe_layers() {
     echo "=== Protocol layers (radar → CoT) ==="
 
     # CoT → ATAK UDP multicast
-    start cot-udp cot_layer.py --udp --host 239.2.3.1 --port 6969
+    start cot-udp layers/cot_layer.py --udp --host 239.2.3.1 --port 6969
 
     # CoT → FreeTAKServer TCP (only if reachable)
     if [[ "${TAK_HOST:-127.0.0.1}" != "127.0.0.1" ]] || \
        nc -z "${TAK_HOST:-127.0.0.1}" "${TAK_PORT:-8087}" 2>/dev/null; then
-        start cot-tcp cot_layer.py --host "${TAK_HOST:-127.0.0.1}" --port "${TAK_PORT:-8087}"
+        start cot-tcp layers/cot_layer.py --host "${TAK_HOST:-127.0.0.1}" --port "${TAK_PORT:-8087}"
     else
         echo "  [skip] cot-tcp — TAK Server not reachable at ${TAK_HOST:-127.0.0.1}:${TAK_PORT:-8087}"
     fi
 
     # Track fusion — always start in giraffe mode (correlates radar + any ADS-B)
-    start track-fusion track_fusion_bridge.py
+    start track-fusion layers/track_fusion_layer.py
 
     # STANAG 4586 UAS interface — only if VSM host is configured
     if [[ "${STANAG4586_HOST:-}" ]]; then
-        start stanag4586 stanag4586_layer.py --host "$STANAG4586_HOST" --port "${STANAG4586_PORT:-4586}"
+        start stanag4586 layers/stanag4586_layer.py --host "$STANAG4586_HOST" --port "${STANAG4586_PORT:-4586}"
     else
         echo "  [skip] stanag4586 — set STANAG4586_HOST in .env to enable"
     fi
