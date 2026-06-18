@@ -86,6 +86,8 @@ _dr_lock     = threading.Lock()
 _dr_store:   dict[str, dict] = {}
 _alert_lock  = threading.Lock()
 _alerted:    set = set()   # uids currently in a known emergency state (no re-alert)
+_radar_status_lock = threading.Lock()
+_radar_status: dict[str, dict] = {}   # "sac-sic" → latest CAT-34 status dict
 
 # ---------------------------------------------------------------------------
 # Hostile-state classifiers
