@@ -753,11 +753,14 @@ def make_handler(cot_type_or_fn, sender, verbose: bool, stale_s: float = COT_STA
             track = json.loads(bytes(sample.payload).decode())
         except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
             return
-        # Block raw sensor and ADS-B relay sources — both must pass through
-        # track_fusion_bridge first. Fusion always re-publishes to air/fused/**,
-        # so every contact still appears; just once, with merged data, no duplicates.
+        # Raw sensor sources and ADS-B relay sources must pass through
+        # track_fusion_bridge before reaching ATAK.  Exception: anything arriving
+        # on an air/fused/** topic was already processed by the fusion bridge and
+        # must be allowed through — this includes ADS-B fallback tracks that the
+        # fusion bridge publishes when no radar is covering that aircraft.
         src = track.get("_src", "")
-        if src in _ADS_B_RELAY_SOURCES or src in _RAW_SENSOR_SOURCES:
+        key = str(sample.key_expr)
+        if "/fused/" not in key and (src in _ADS_B_RELAY_SOURCES or src in _RAW_SENSOR_SOURCES):
             return
         # ATC towers / ground vehicles show up in ADS-B with "TWR", "GND" etc.
         # Reclassify as neutral ground radar/radio station instead of aircraft.
