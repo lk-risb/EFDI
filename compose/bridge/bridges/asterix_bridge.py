@@ -1540,6 +1540,12 @@ def main():
                     help="Radar antenna longitude")
     ap.add_argument("--radar-name", default=os.environ.get("CAT48_RADAR_NAME", ""),
                     help="Radar site name for ATAK marker label")
+    ap.add_argument("--radar-sac", type=int,
+                    default=int(os.environ.get("CAT48_RADAR_SAC", 0) or 0),
+                    help="Radar SAC (source area code) for startup site marker")
+    ap.add_argument("--radar-sic", type=int,
+                    default=int(os.environ.get("CAT48_RADAR_SIC", 0) or 0),
+                    help="Radar SIC (source identification code) for startup site marker")
 
     # CAT-021 ADS-B inbound
     ap.add_argument("--cat21-port", type=int,
