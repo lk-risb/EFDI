@@ -309,6 +309,30 @@ start_giraffe_bridges() {
     else
         echo "  [skip] link16 — set LINK16_PORT in .env to enable"
     fi
+
+    if [[ "${MAVLINK_PORT:-}" ]]; then
+        tcp_mav=""
+        [[ "${MAVLINK_TCP:-}" == "1" ]] && tcp_mav="--tcp"
+        start mavlink mavlink_bridge.py --port "$MAVLINK_PORT" ${tcp_mav:+"$tcp_mav"}
+    else
+        echo "  [skip] mavlink — set MAVLINK_PORT in .env to enable"
+    fi
+
+    if [[ "${VMF_PORT:-}" ]]; then
+        tcp_vmf=""
+        [[ "${VMF_TCP:-}" == "1" ]] && tcp_vmf="--tcp"
+        start vmf vmf_bridge.py --port "$VMF_PORT" ${tcp_vmf:+"$tcp_vmf"}
+    else
+        echo "  [skip] vmf — set VMF_PORT in .env to enable"
+    fi
+
+    if [[ "${COT_RX_PORT:-}" ]]; then
+        start cot-rx cot_receiver_bridge.py --listen "$COT_RX_PORT"
+    elif [[ "${COT_RX_HOST:-}" ]]; then
+        start cot-rx cot_receiver_bridge.py --connect "$COT_RX_HOST"
+    else
+        echo "  [skip] cot-rx — set COT_RX_PORT or COT_RX_HOST in .env to enable"
+    fi
 }
 
 start_giraffe_layers() {
@@ -324,6 +348,16 @@ start_giraffe_layers() {
         start cot-tcp cot_layer.py --host "${TAK_HOST:-127.0.0.1}" --port "${TAK_PORT:-8087}"
     else
         echo "  [skip] cot-tcp — TAK Server not reachable at ${TAK_HOST:-127.0.0.1}:${TAK_PORT:-8087}"
+    fi
+
+    # Track fusion — always start in giraffe mode (correlates radar + any ADS-B)
+    start track-fusion track_fusion_bridge.py
+
+    # STANAG 4586 UAS interface — only if VSM host is configured
+    if [[ "${STANAG4586_HOST:-}" ]]; then
+        start stanag4586 stanag4586_layer.py --host "$STANAG4586_HOST" --port "${STANAG4586_PORT:-4586}"
+    else
+        echo "  [skip] stanag4586 — set STANAG4586_HOST in .env to enable"
     fi
 }
 
