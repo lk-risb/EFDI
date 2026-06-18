@@ -90,7 +90,7 @@ def normalize(ac: dict, is_military: bool) -> dict | None:
     lon = ac.get("lon")
     if lat is None or lon is None:
         return None
-    return {
+    track = {
         "_ts":            time.time(),
         "_src":           "airplaneslive",
         "icao24":         ac.get("hex", "").lower(),
@@ -106,6 +106,23 @@ def normalize(ac: dict, is_military: bool) -> dict | None:
         "squawk":         (ac.get("squawk") or ""),
         "is_military":    is_military,
     }
+    # Route: departure → destination (IATA codes)
+    dep = (ac.get("dep_iata") or ac.get("origin") or "").strip().upper()
+    arr = (ac.get("arr_iata") or ac.get("destination") or "").strip().upper()
+    if dep and arr:
+        track["route"] = "{} → {}".format(dep, arr)
+    elif dep:
+        track["route"] = dep + " →"
+    elif arr:
+        track["route"] = "→ " + arr
+    # RSSI — signal strength from the best receiving station, in dBFS
+    rssi = ac.get("rssi")
+    if rssi is not None:
+        try:
+            track["rssi_db"] = round(float(rssi), 1)
+        except (TypeError, ValueError):
+            pass
+    return track
 
 
 def run(args):
