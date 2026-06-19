@@ -1599,6 +1599,23 @@ def main():
                 pub_sensor = session.declare_publisher(TOPIC_SENSOR)
                 pubs.append(pub_sensor)
                 print("Zenoh CAT-34 topic:", TOPIC_SENSOR, flush=True)
+                # Publish initial site marker so ATAK shows the radar immediately,
+                # even before the first CAT-34 north marker arrives (or when offline)
+                _sac = args.radar_sac; _sic = args.radar_sic
+                _init_status = {
+                    "_src":        "ASTERIX CAT-34",
+                    "_ts":         time.time(),
+                    "sensor_type": "radar",
+                    "sensor_id":   "CAT34-{}-{}".format(_sac, _sic),
+                    "sensor_name": radar_name or "RADAR SAC{}/SIC{}".format(_sac, _sic),
+                    "lat_deg":     radar_lat,
+                    "lon_deg":     radar_lon,
+                    "sac":         _sac,
+                    "sic":         _sic,
+                }
+                pub_sensor.put(json.dumps(_init_status).encode(),
+                               encoding=zenoh.Encoding.APPLICATION_JSON)
+                print("Published startup site marker for SAC{}/SIC{}".format(_sac, _sic), flush=True)
             else:
                 print("WARNING: --radar-lat/--radar-lon not set — "
                       "polar plots will have no WGS-84 position", flush=True)
