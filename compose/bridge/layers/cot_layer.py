@@ -171,8 +171,9 @@ _TOPIC_COT = {
     "land/**/neutral/unit/**":   ("a-n-G-U-C",   LAND_STALE_S),
     "land/**/unknown/unit/**":   ("a-u-G-U-C",   LAND_STALE_S),
     # AIR — full affiliation matrix
-    "air/**/friendly/aircraft/**": ("a-f-A-M-F", AIR_STALE_S),
-    "air/**/hostile/aircraft/**":  ("a-h-A-M-F", AIR_STALE_S),
+    "air/**/friendly/aircraft/**": ("a-f-A-M-F",   AIR_STALE_S),
+    "air/**/hostile/aircraft/**":  ("a-h-A-M-F",   AIR_STALE_S),
+    "air/**/hostile/uav/**":       ("a-h-A-M-F-Q", AIR_STALE_S),
     # SEA — full affiliation matrix
     "sea/**/civ/vessel/**":      (_sea_type,      SEA_STALE_S),
     "sea/**/mil/vessel/**":      ("a-n-S-W-C",   SEA_STALE_S),
@@ -186,6 +187,8 @@ _TOPIC_COT = {
     "env/air_quality/station/**":("a-n-G-I-R",   SENSOR_STALE_S),
     # RADAR SENSOR SITES — CAT-34 status publishes here; rendered as radar marker + stat card
     "land/**/neutral/radar/**":  ("a-f-G-E-S-R", LAND_STALE_S * 2),
+    # ACOUSTIC / RF SENSOR SITES — generic sensor box, neutral (green)
+    "land/**/neutral/sensor/**": ("a-n-G-E-S",   LAND_STALE_S * 2),
 }
 
 # ATC / ground-station callsigns that appear in ADS-B feeds.
@@ -816,6 +819,24 @@ def _build_remarks(track: dict, cot_type: str) -> str:
                 ae = rs.get("collimation_az_deg"); re = rs.get("collimation_rng_nm")
                 if ae is not None and re is not None and (abs(ae) > 0.001 or abs(re) > 0.001):
                     radar_l.append("CAL: AZ {:+.3f}°  RNG {:+.3f} nm".format(ae, re))
+
+        # ── DETECTION (dronuradaras acoustic/RF sensor network) ──
+        det_l = []
+        det_time = track.get("detected_at_utc")
+        if det_time:
+            det_l.append("TIME: {}".format(det_time.replace("T", " ").replace(".000Z", " UTC")))
+        det_sensor = track.get("detecting_sensor")
+        if det_sensor:
+            det_l.append("SENSOR: {}".format(det_sensor))
+        if track.get("audio_available"):
+            det_l.append("[AUDIO RECORDED]")
+            audio_url = track.get("audio_url")
+            if audio_url:
+                det_l.append("AUDIO: {}".format(audio_url))
+        det_ref = track.get("detection_id")
+        if det_ref:
+            det_l.append("REF: {}".format(det_ref[:13]))
+        _sec("DETECTION", det_l)
 
         # ── STATUS ──
         if track.get("spi"):
