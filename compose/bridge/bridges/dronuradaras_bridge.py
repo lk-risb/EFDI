@@ -6,8 +6,8 @@ Polls radar-api.mainline.inc (the backend for https://dronuradaras.lt) for:
   2. Drone detections             → published as air/unknown/uav tracks (30 s stale)
 
 Zenoh topics:
-  <ORG>/land/dronuradaras/neutral/radar/status/v1   — sensor nodes
-  <ORG>/air/dronuradaras/hostile/uav/tracks/v1      — drone detections
+  <ORG>/land/dronuradaras/acoustic/neutral/sensor/status/v1   — sensor nodes
+  <ORG>/air/dronuradaras/acoustic/hostile/uav/tracks/v1      — drone detections
 
 No API key required — uses the same public CORS origin as the website.
 """
@@ -30,8 +30,13 @@ _CERT_DIR = os.environ.get("GOAT_CERT_DIR", HERE)
 _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", ROUTER)
 
 API_BASE          = "https://radar-api.mainline.inc/api/v1/public"
+AUDIO_URL         = API_BASE + "/detections/{}/audio"
 ORIGIN_HEADER     = "https://dronuradaras.lt"
 REFERER_HEADER    = "https://dronuradaras.lt/"
+
+# Shared device name cache — updated by run_devices, read by run_detections
+_device_names: dict[str, str] = {}   # device_id → display_name
+_device_lock  = threading.Lock()
 
 DEVICE_POLL_S     = 60    # radar nodes move rarely
 DETECT_POLL_S     = 10    # drone detections — low latency
@@ -86,13 +91,19 @@ def _get(path: str) -> dict | None:
 # ---------------------------------------------------------------------------
 
 def run_devices(pub: "zenoh.Publisher", verbose: bool):
-    topic_suffix = "land/dronuradaras/neutral/radar/status/v1"
+    topic_suffix = "land/dronuradaras/acoustic/neutral/sensor/status/v1"
     print("Device poll topic: {}/{}".format(ORG, topic_suffix), flush=True)
 
     while True:
         data = _get("devices")
         if data:
             devices = data.get("devices") or []
+            # Update shared name cache for all devices (online or not)
+            with _device_lock:
+                for dev in devices:
+                    if dev.get("id") and dev.get("display_name"):
+                        _device_names[dev["id"]] = dev["display_name"]
+
             online = [d for d in devices if d.get("is_online")]
             for dev in online:
                 lat = dev.get("latitude")
@@ -103,9 +114,9 @@ def run_devices(pub: "zenoh.Publisher", verbose: bool):
                 payload = {
                     "_src":        "dronuradaras",
                     "_ts":         time.time(),
-                    "sensor_type": "radar",
+                    "sensor_type": "acoustic",
                     "sensor_id":   "DRONU-{}".format(dev["id"][:8]),
-                    "sensor_name": dev.get("display_name", "dronu-radar"),
+                    "sensor_name": dev.get("display_name", "dronu-sensor"),
                     "lat_deg":     round(lat, 6),
                     "lon_deg":     round(lon, 6),
                     "is_online":   dev.get("is_online", False),
@@ -129,7 +140,7 @@ def run_devices(pub: "zenoh.Publisher", verbose: bool):
 # ---------------------------------------------------------------------------
 
 def run_detections(pub: "zenoh.Publisher", verbose: bool):
-    topic_suffix = "air/dronuradaras/hostile/uav/tracks/v1"
+    topic_suffix = "air/dronuradaras/acoustic/hostile/uav/tracks/v1"
     print("Detection poll topic: {}/{}".format(ORG, topic_suffix), flush=True)
 
     seen: dict[str, float] = {}   # detection_id → published_at timestamp
@@ -162,15 +173,24 @@ def run_detections(pub: "zenoh.Publisher", verbose: bool):
                 if (now - detected_s) > DETECT_WINDOW_S:
                     continue
 
+                dev_id = det.get("device_id", "")
+                with _device_lock:
+                    dev_name = _device_names.get(dev_id, dev_id[:8] if dev_id else "unknown")
+
+                has_audio = bool(det.get("audio_available"))
                 payload = {
-                    "_src":           "dronuradaras",
-                    "_ts":            detected_s,
-                    "sensor_id":      "DRONU-DET-{}".format(det_id[:8]),
-                    "callsign":       "DRONE",
-                    "lat_deg":        round(lat, 6),
-                    "lon_deg":        round(lon, 6),
-                    "device_id":      det.get("device_id", ""),
-                    "audio_available": det.get("audio_available", False),
+                    "_src":            "dronuradaras",
+                    "_ts":             detected_s,
+                    "sensor_id":       "DRONU-DET-{}".format(det_id[:8]),
+                    "callsign":        "DRONE",
+                    "lat_deg":         round(lat, 6),
+                    "lon_deg":         round(lon, 6),
+                    "detection_id":    det_id,
+                    "device_id":       dev_id,
+                    "detecting_sensor": dev_name,
+                    "detected_at_utc": det.get("received_at", ""),
+                    "audio_available": has_audio,
+                    "audio_url":       AUDIO_URL.format(det_id) if has_audio else None,
                 }
 
                 pub.put(json.dumps(payload).encode(),
@@ -200,8 +220,8 @@ def main():
 
     session = zenoh.open(make_config())
 
-    topic_dev = "{}/land/dronuradaras/neutral/radar/status/v1".format(ORG)
-    topic_det = "{}/air/dronuradaras/hostile/uav/tracks/v1".format(ORG)
+    topic_dev = "{}/land/dronuradaras/acoustic/neutral/sensor/status/v1".format(ORG)
+    topic_det = "{}/air/dronuradaras/acoustic/hostile/uav/tracks/v1".format(ORG)
 
     pub_dev = session.declare_publisher(topic_dev)
     pub_det = session.declare_publisher(topic_det)
