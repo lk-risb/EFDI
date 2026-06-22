@@ -7,7 +7,7 @@ Polls radar-api.mainline.inc (the backend for https://dronuradaras.lt) for:
 
 Zenoh topics:
   <ORG>/land/dronuradaras/neutral/radar/status/v1   — sensor nodes
-  <ORG>/air/dronuradaras/unknown/uav/tracks/v1      — drone detections
+  <ORG>/air/dronuradaras/hostile/uav/tracks/v1      — drone detections
 
 No API key required — uses the same public CORS origin as the website.
 """
@@ -93,7 +93,8 @@ def run_devices(pub: "zenoh.Publisher", verbose: bool):
         data = _get("devices")
         if data:
             devices = data.get("devices") or []
-            for dev in devices:
+            online = [d for d in devices if d.get("is_online")]
+            for dev in online:
                 lat = dev.get("latitude")
                 lon = dev.get("longitude")
                 if lat is None or lon is None:
@@ -118,7 +119,7 @@ def run_devices(pub: "zenoh.Publisher", verbose: bool):
                           "online={}".format(payload["is_online"]),
                           "{:.4f},{:.4f}".format(lat, lon), flush=True)
 
-            print("Devices: {} published".format(len(devices)), flush=True)
+            print("Devices: {}/{} online published".format(len(online), len(devices)), flush=True)
 
         time.sleep(DEVICE_POLL_S)
 
@@ -128,7 +129,7 @@ def run_devices(pub: "zenoh.Publisher", verbose: bool):
 # ---------------------------------------------------------------------------
 
 def run_detections(pub: "zenoh.Publisher", verbose: bool):
-    topic_suffix = "air/dronuradaras/unknown/uav/tracks/v1"
+    topic_suffix = "air/dronuradaras/hostile/uav/tracks/v1"
     print("Detection poll topic: {}/{}".format(ORG, topic_suffix), flush=True)
 
     seen: dict[str, float] = {}   # detection_id → published_at timestamp
@@ -200,7 +201,7 @@ def main():
     session = zenoh.open(make_config())
 
     topic_dev = "{}/land/dronuradaras/neutral/radar/status/v1".format(ORG)
-    topic_det = "{}/air/dronuradaras/unknown/uav/tracks/v1".format(ORG)
+    topic_det = "{}/air/dronuradaras/hostile/uav/tracks/v1".format(ORG)
 
     pub_dev = session.declare_publisher(topic_dev)
     pub_det = session.declare_publisher(topic_det)
