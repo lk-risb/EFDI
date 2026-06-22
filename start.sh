@@ -48,26 +48,17 @@ fi
 # ── Service registry ───────────────────────────────────────────────────────
 SERVICES=(
     zenoh
-    asterix link16 mavlink vmf cot-rx sitaware
+    asterix link16 mavlink vmf sitaware dronuradaras
     cot-udp cot-tcp track-fusion
-    airplaneslive aisstream aprs fr24 opensky
-    openmeteo meteolt yrno osm n2yo purpleair windy here-traffic notam
 )
 
 declare -A SVC_CAT=(
     [zenoh]="Infrastructure"
-    [asterix]="Sensor bridges"    [link16]="Sensor bridges"
-    [mavlink]="Sensor bridges"    [vmf]="Sensor bridges"
-    [cot-rx]="Sensor bridges"     [sitaware]="Sensor bridges"
-    [cot-udp]="Output layers"     [cot-tcp]="Output layers"
+    [asterix]="Sensor bridges"  [link16]="Sensor bridges"
+    [mavlink]="Sensor bridges"  [vmf]="Sensor bridges"
+    [sitaware]="Sensor bridges" [dronuradaras]="Sensor bridges"
+    [cot-udp]="Output layers"   [cot-tcp]="Output layers"
     [track-fusion]="Output layers"
-    [airplaneslive]="Open-API data"  [aisstream]="Open-API data"
-    [aprs]="Open-API data"           [fr24]="Open-API data"
-    [opensky]="Open-API data"        [openmeteo]="Open-API data"
-    [meteolt]="Open-API data"        [yrno]="Open-API data"
-    [osm]="Open-API data"            [n2yo]="Open-API data"
-    [purpleair]="Open-API data"      [windy]="Open-API data"
-    [here-traffic]="Open-API data"   [notam]="Open-API data"
 )
 
 declare -A SVC_DESC=(
@@ -76,67 +67,38 @@ declare -A SVC_DESC=(
     [link16]="Link-16 JREAP-C datalink"
     [mavlink]="MAVLink UAV telemetry"
     [vmf]="VMF MIL-STD-47001C messages"
-    [cot-rx]="CoT inbound receiver"
     [sitaware]="SitaWare friendly force tracking"
+    [dronuradaras]="dronuradaras.lt drone detection network"
     [cot-udp]="CoT → ATAK UDP multicast 239.2.3.1:6969"
     [cot-tcp]="CoT → TAK Server TCP"
     [track-fusion]="Radar/ADS-B track correlation"
-    [airplaneslive]="ADS-B (Airplanes.Live)"
-    [aisstream]="AIS vessel tracking (AISStream)"
-    [aprs]="APRS amateur radio positions"
-    [fr24]="FlightRadar24 live flights"
-    [opensky]="OpenSky Network ADS-B"
-    [openmeteo]="Open-Meteo weather forecast"
-    [meteolt]="Lithuanian meteo forecast"
-    [yrno]="Yr.no weather forecast"
-    [osm]="OpenStreetMap overpass POIs"
-    [n2yo]="N2YO satellite positions"
-    [purpleair]="PurpleAir air quality"
-    [windy]="Windy weather forecast"
-    [here-traffic]="HERE Maps real-time traffic"
-    [notam]="ICAO NOTAM flight advisories"
 )
 
 # ── Ready check — 0=can start, 1=missing config ───────────────────────────
 svc_ready() {
     case "$1" in
-        zenoh|cot-udp|cot-tcp|track-fusion|airplaneslive|aprs|opensky|openmeteo|meteolt|yrno|osm)
+        zenoh|cot-udp|cot-tcp|track-fusion)
             return 0 ;;
-        asterix)      [[ "${CAT48_PORT:-}${CAT21_PORT:-}${CAT20_PORT:-}" ]] ;;
-        link16)       [[ "${LINK16_PORT:-}" ]] ;;
-        mavlink)      [[ "${MAVLINK_PORT:-}" ]] ;;
+        asterix)  [[ "${CAT48_PORT:-}${CAT21_PORT:-}${CAT20_PORT:-}" ]] ;;
+        link16)   [[ "${LINK16_PORT:-}" ]] ;;
+        mavlink)  [[ "${MAVLINK_PORT:-}" ]] ;;
         vmf)          [[ "${VMF_PORT:-}" ]] ;;
-        cot-rx)       [[ "${COT_RX_PORT:-}${COT_RX_HOST:-}" ]] ;;
         sitaware)     [[ "${SITAWARE_URL:-}" ]] ;;
-        aisstream)    [[ "${AISSTREAM_KEY:-}" ]] ;;
-        fr24)         [[ "${FR24_KEY:-}" ]] ;;
-        n2yo)         [[ "${N2YO_KEY:-}" ]] ;;
-        purpleair)    [[ "${PURPLEAIR_KEY:-}" ]] ;;
-        windy)        [[ "${WINDY_KEY:-}" ]] ;;
-        here-traffic) [[ "${HERE_KEY:-}" ]] ;;
-        notam)        [[ "${ICAO_NOTAM_KEY:-}" ]] ;;
-        *)            return 0 ;;
+        dronuradaras) return 0 ;;
+        *)        return 0 ;;
     esac
 }
 
 # Short config note shown in status column when not ready
 svc_hint() {
     case "$1" in
-        asterix)      echo "CAT48_PORT=${CAT48_PORT:-not set}" ;;
-        link16)       echo "LINK16_PORT not set" ;;
-        mavlink)      echo "MAVLINK_PORT not set" ;;
-        vmf)          echo "VMF_PORT not set" ;;
-        cot-rx)       echo "COT_RX_PORT/HOST not set" ;;
-        sitaware)     echo "SITAWARE_URL not set" ;;
-        aisstream)    echo "AISSTREAM_KEY not set" ;;
-        fr24)         echo "FR24_KEY not set" ;;
-        n2yo)         echo "N2YO_KEY not set" ;;
-        purpleair)    echo "PURPLEAIR_KEY not set" ;;
-        windy)        echo "WINDY_KEY not set" ;;
-        here-traffic) echo "HERE_KEY not set" ;;
-        notam)        echo "ICAO_NOTAM_KEY not set" ;;
-        cot-tcp)      echo "${TAK_HOST:-127.0.0.1}:${TAK_PORT:-8087}" ;;
-        *)            echo "" ;;
+        asterix)  echo "CAT48_PORT=${CAT48_PORT:-not set}" ;;
+        link16)   echo "LINK16_PORT not set" ;;
+        mavlink)  echo "MAVLINK_PORT not set" ;;
+        vmf)      echo "VMF_PORT not set" ;;
+        sitaware) echo "SITAWARE_URL not set" ;;
+        cot-tcp)  echo "${TAK_HOST:-127.0.0.1}:${TAK_PORT:-8087}" ;;
+        *)        echo "" ;;
     esac
 }
 
@@ -214,17 +176,13 @@ launch() {
             _start vmf bridges/vmf_bridge.py --port "$VMF_PORT" "${tvmf[@]}"
             ;;
 
-        cot-rx)
-            if [[ "${COT_RX_PORT:-}" ]]; then
-                _start cot-rx layers/cot_receiver_bridge.py --listen "$COT_RX_PORT"
-            else
-                _start cot-rx layers/cot_receiver_bridge.py --connect "$COT_RX_HOST"
-            fi
-            ;;
-
         sitaware)
             local sf=(); [[ "${SITAWARE_DISCOVER:-}" == "1" ]] && sf=(--discover)
             _start sitaware bridges/sitaware_bridge.py "${sf[@]}"
+            ;;
+
+        dronuradaras)
+            _start dronuradaras bridges/dronuradaras_bridge.py
             ;;
 
         cot-udp)
@@ -239,34 +197,6 @@ launch() {
             _start track-fusion layers/track_fusion_layer.py
             ;;
 
-        airplaneslive)
-            _start airplaneslive bridges/airplaneslive_adsb_bridge.py ;;
-        aisstream)
-            _start aisstream bridges/aisstream_ws_bridge.py --apikey "$AISSTREAM_KEY" ;;
-        aprs)
-            _start aprs bridges/aprsis_bridge.py ;;
-        fr24)
-            _start fr24 bridges/fr24_live_bridge.py --key "$FR24_KEY" ;;
-        opensky)
-            _start opensky bridges/opensky_states_bridge.py ;;
-        openmeteo)
-            _start openmeteo bridges/openmeteo_forecast_bridge.py ;;
-        meteolt)
-            _start meteolt bridges/meteolt_forecast_bridge.py ;;
-        yrno)
-            _start yrno bridges/yrno_forecast_bridge.py ;;
-        osm)
-            _start osm bridges/osm_overpass_bridge.py ;;
-        n2yo)
-            _start n2yo bridges/n2yo_satpos_bridge.py --key "$N2YO_KEY" ;;
-        purpleair)
-            _start purpleair bridges/purpleair_sensor_bridge.py --key "$PURPLEAIR_KEY" ;;
-        windy)
-            _start windy bridges/windy_forecast_bridge.py --key "$WINDY_KEY" ;;
-        here-traffic)
-            _start here-traffic bridges/here_traffic_bridge.py --key "$HERE_KEY" ;;
-        notam)
-            _start notam bridges/icao_notam_bridge.py --key "$ICAO_NOTAM_KEY" ;;
     esac
 }
 
@@ -275,7 +205,7 @@ declare -A sel
 
 # Default: zenoh + asterix (if ready) + cot-udp
 for svc in "${SERVICES[@]}"; do sel[$svc]=0; done
-for svc in zenoh cot-udp; do sel[$svc]=1; done
+for svc in zenoh cot-udp cot-tcp track-fusion; do sel[$svc]=1; done
 svc_ready asterix && sel[asterix]=1 || true
 
 draw_menu() {
