@@ -6,26 +6,12 @@ This guide covers deploying the sensor bridge stack on a Linux host. The stack i
 
 ---
 
-## Table of Contents
-
-1. [Prerequisites](#1-prerequisites)
-2. [Installation](#2-installation)
-3. [Configuration](#3-configuration)
-4. [Launching the Stack](#4-launching-the-stack)
-5. [ATAK Setup](#5-atak-setup)
-6. [Service Reference](#6-service-reference)
-7. [Operations](#7-operations)
-8. [Troubleshooting](#8-troubleshooting)
-9. [Adding a New Bridge](#9-adding-a-new-bridge)
-
----
-
 ## 1. Prerequisites
 
 ### Software
 
 | Dependency | Minimum | Verify |
-|---|---|---|
+| --- | --- | --- |
 | Python | 3.10 | `python3 --version` |
 | Docker Engine | 24.0 | `docker --version` |
 | Docker Compose | 2.20 | `docker compose version` |
@@ -34,7 +20,7 @@ This guide covers deploying the sensor bridge stack on a Linux host. The stack i
 ### Network
 
 | Port / address | Direction | Purpose |
-|---|---|---|
+| --- | --- | --- |
 | UDP `<CAT48_PORT>` (default 30048) | inbound | Giraffe AMB ASTERIX stream |
 | UDP multicast `239.2.3.1:6969` | outbound | CoT delivery to ATAK |
 | TCP 7448 | localhost | Local Zenoh router |
@@ -62,7 +48,7 @@ cd efdi-moon-pod
 
 Place the bundle at `$HOME/goat-bundle/` (default path; override with `BUNDLE_DIR`):
 
-```
+```text
 ~/goat-bundle/
 ├── efdi-ca-root.pem          # CA certificate (public)
 ├── <NAMESPACE>-cert.pem      # Node certificate
@@ -159,7 +145,7 @@ MAVLINK_TCP=
 
 The interactive launcher displays all services with their readiness state. Toggle by number, then press **Enter** to launch selected services.
 
-```
+```text
 ╔══════════════════════════════════════════════════════════════════╗
 ║           EFDI Bridge Launcher  —  select services to start      ║
 ╚══════════════════════════════════════════════════════════════════╝
@@ -187,7 +173,7 @@ The interactive launcher displays all services with their readiness state. Toggl
 **Launcher controls:**
 
 | Input | Action |
-|---|---|
+| --- | --- |
 | `1`–`10` | Toggle individual service (space-separated for multiple) |
 | `a` | Select all ready services |
 | `n` | Deselect all |
@@ -197,9 +183,11 @@ The interactive launcher displays all services with their readiness state. Toggl
 **Recommended deployments:**
 
 | Scenario | Selection |
-|---|---|
+| --- | --- |
 | Giraffe radar + ATAK multicast | `1 2 8` |
 | Giraffe + drone detection + ATAK | `1 2 7 8` |
+| Giraffe + SitaWare + ATAK multicast | `1 2 6 8` |
+| Giraffe + SitaWare + drone detection + ATAK | `1 2 6 7 8` |
 | All sensors + TAK Server | `a`, then deselect `8` (cot-udp) |
 | Radar only, no ATAK (debug) | `1 2 10` |
 
@@ -235,7 +223,7 @@ SITAWARE_POLL_S=10   # optional — poll interval in seconds (default 10)
 The bridge reads MIL-STD-2525B SIDC codes from SitaWare and routes each unit to the correct Zenoh topic by affiliation and battle dimension:
 
 | SIDC affiliation | SIDC dimension | Zenoh topic path | ATAK CoT type |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | Friendly / Assumed Friendly | Ground (G) | `…/land/sitaware/rest/friendly/unit/…` | `a-f-G-U-C` |
 | Hostile | Ground (G) | `…/land/sitaware/rest/hostile/unit/…` | `a-h-G-U-C` |
 | Neutral | Ground (G) | `…/land/sitaware/rest/neutral/unit/…` | `a-n-G-U-C` |
@@ -247,7 +235,7 @@ The bridge reads MIL-STD-2525B SIDC codes from SitaWare and routes each unit to 
 ### Icon reference
 
 | ATAK appearance | CoT type | Source |
-|---|---|---|
+| --- | --- | --- |
 | Blue radar dish (with motion trail if mobile) | `a-f-G-E-S-R` | Giraffe AMB site marker |
 | Blue ground unit | `a-f-G-U-C` | SitaWare friendly ground unit |
 | Red ground unit | `a-h-G-U-C` | SitaWare hostile ground unit |
@@ -267,7 +255,7 @@ The bridge reads MIL-STD-2525B SIDC codes from SitaWare and routes each unit to 
 ## 6. Service Reference
 
 | Service | Script | Zenoh topic (abbreviated) | Trigger |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `asterix` | `bridges/asterix_bridge.py` | `…/air/asterix/cat48/unknown/aircraft/tracks/v1` | Streaming UDP |
 | `dronuradaras` | `bridges/dronuradaras_bridge.py` | `…/air/dronuradaras/acoustic/hostile/uav/tracks/v1` | 10 s REST poll |
 | `sitaware` | `bridges/sitaware_bridge.py` | `…/land/sitaware/rest/friendly/unit/tracks/v1` | Configurable REST |
@@ -279,12 +267,12 @@ The bridge reads MIL-STD-2525B SIDC codes from SitaWare and routes each unit to 
 
 ### Zenoh topic schema
 
-```
+```text
 {NAMESPACE}/{DOMAIN}/{SOURCE}/{PROTOCOL}/{AFFILIATION}/{TYPE}/tracks/v1
 ```
 
 | Field | Values |
-|---|---|
+| --- | --- |
 | `DOMAIN` | `air`, `land`, `sea`, `space`, `env` |
 | `AFFILIATION` | `friendly`, `hostile`, `neutral`, `unknown`, `civ`, `mil` |
 | `TYPE` | `aircraft`, `vessel`, `vehicle`, `unit`, `sensor`, `uav`, `radar` |
@@ -375,6 +363,29 @@ now = time.time()
 fresh = [x for x in d if (now - x.get('detected_at', 0)/1000) < 300]
 print(f'{len(fresh)} fresh / {len(d)} total detections')
 "
+```
+
+### SitaWare units not appearing in ATAK
+
+**1. Verify the bridge is running and polling:**
+
+```bash
+tail -f logs/sitaware.log
+# Expected: "SitaWare poll: N units published" every SITAWARE_POLL_S seconds
+```
+
+**2. Verify credentials and endpoint:**
+
+```bash
+curl -s -u "$SITAWARE_USER:$SITAWARE_PASS" "$SITAWARE_URL/..." | python3 -m json.tool | head -20
+```
+
+**3. SIDC not mapped — unit appears with wrong icon or not at all:**
+
+SitaWare units without a valid 15-character SIDC are routed to `…/land/sitaware/rest/unknown/unit/…` and rendered as unknown ground units (`a-u-G-U-C`). Check the raw SIDC value in the log:
+
+```bash
+grep "sidc=" logs/sitaware.log | head -10
 ```
 
 ### Duplicate process instances
@@ -486,7 +497,7 @@ In `layers/cot_layer.py`, add to `_TOPIC_COT`:
 ## Changelog
 
 | Date | Change |
-|---|---|
+| --- | --- |
 | 2026-06-14 | Initial commit — forked from official `efdi-moon-pod-main` repository |
 | 2026-06-15 | Base bridge adapters wired; repository structure established; README added |
 | 2026-06-16 | `airplanes.live` bridge: regional ADS-B feed + worldwide military aircraft tracking |
