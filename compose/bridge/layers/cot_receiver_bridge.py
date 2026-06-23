@@ -8,7 +8,7 @@ so cot_layer.py and ATAK pick them up automatically.
 Two modes:
   --listen PORT   We open a TCP server. Remote side connects to us.
                   Give the Giraffe crew: <our-netbird-ip>:PORT
-                  Our NetBird IP: 100.64.59.142
+                  Our NetBird IP: <POD_NETBIRD_IP>
 
   --connect IP:PORT  We connect to the remote side. They give us their IP:PORT.
 
@@ -40,7 +40,7 @@ import xml.etree.ElementTree as ET
 import zenoh
 
 ROUTER    = "tls/zenoh.efdi.netbird.efdi-backbone.net:7447"
-ORG       = "1851281db70ccc0409dad4ecfc874cf5"
+ORG       = os.environ.get("PARTNER_NAMESPACE", "")
 HERE      = os.path.dirname(os.path.abspath(__file__))
 _CERT_DIR = os.environ.get("GOAT_CERT_DIR", HERE)
 _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", ROUTER)

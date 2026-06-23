@@ -26,7 +26,7 @@ import urllib.request
 import zenoh
 
 ROUTER = "tls/zenoh.efdi.netbird.efdi-backbone.net:7447"
-ORG    = "1851281db70ccc0409dad4ecfc874cf5"
+ORG    = os.environ.get("PARTNER_NAMESPACE", "")
 HERE   = os.path.dirname(os.path.abspath(__file__))
 # GOAT_CERT_DIR: directory containing efdi-ca-root.pem + ORG-{cert,key}.pem.
 # Defaults to HERE so the script works unchanged when run directly from the bundle.

@@ -3,7 +3,7 @@ syntax = "proto3";
 package ltu.cis.tracks.v1;
 
 // ASTERIX CAT62 System Track from radar (cat62_bridge.py)
-// Published to: 1851281db70ccc0409dad4ecfc874cf5/radar/<radar-host>/tracks/v1
+// Published to: <YOUR_NAMESPACE>/radar/<radar-host>/tracks/v1
 // JSON wire format: key _ts → timestamp; only decoded fields are present (compound
 // I062 items 10/12/15/16/17/19-25 are skipped — remaining fields abort on first compound).
 // Zero value means "not present/decoded" for numeric optional fields.

@@ -3,7 +3,7 @@ syntax = "proto3";
 package ltu.cis.tracks.v1;
 
 // APRS position record from APRS-IS (aprs_bridge.py)
-// Published to: 1851281db70ccc0409dad4ecfc874cf5/aprs/aprs-is/tracks/v1
+// Published to: <YOUR_NAMESPACE>/aprs/aprs-is/tracks/v1
 // Source: rotate.aprs2.net:14580 (filtered), filter r/55.17/23.88/500 (Baltic, 500 km)
 // JSON wire format: keys _ts → timestamp, _src → source; all other keys match field names.
 // Zero value means "not present" for numeric optional fields.

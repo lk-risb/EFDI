@@ -49,7 +49,7 @@ import time
 import zenoh
 
 ROUTER    = "tls/zenoh.efdi.netbird.efdi-backbone.net:7447"
-ORG       = "1851281db70ccc0409dad4ecfc874cf5"
+ORG       = os.environ.get("PARTNER_NAMESPACE", "")
 HERE      = os.path.dirname(os.path.abspath(__file__))
 _CERT_DIR = os.environ.get("GOAT_CERT_DIR", HERE)
 _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", ROUTER)
@@ -430,12 +430,17 @@ def decode_cat034(data: bytes) -> dict | None:
         elif frn == 9:                  # I034/110  Data Filter (1 byte)
             if pos + 1 > len(data): break
             pos += 1
-        elif frn == 10:                 # I034/120  3D-Range and Azimuth (compound, skip)
+        elif frn == 10:                 # I034/120  3D-Position of Data Source (compound)
             if pos >= len(data): break
             sf = data[pos]; pos += 1
-            if sf & 0x80 and pos + 2 <= len(data): pos += 2
-            if sf & 0x40 and pos + 2 <= len(data): pos += 2
-            while sf & 0x01:
+            if sf & 0x80:               # subfield 1: height MSL (int16, LSB = 1 m)
+                if pos + 2 > len(data): break
+                msg["site_alt_m"] = _s16(data[pos:pos+2]); pos += 2
+            if sf & 0x40:               # subfield 2: WGS-84 lat+lon (int24 each, LSB = 180/2²³°)
+                if pos + 6 > len(data): break
+                msg["site_lat"] = round(_s24(data[pos:pos+3]) * (180.0 / 2**23), 7); pos += 3
+                msg["site_lon"] = round(_s24(data[pos:pos+3]) * (180.0 / 2**23), 7); pos += 3
+            while sf & 0x01:            # FX: skip unknown extension subfields
                 if pos >= len(data): break
                 sf = data[pos]; pos += 1
                 for m in (0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02):
@@ -1296,7 +1301,8 @@ def _make_cat021_handler(pub):
     return _h
 
 
-def _make_cat034_handler(pub_sensor, radar_lat, radar_lon, radar_name):
+def _make_cat034_handler(pub_sensor, site, radar_name):
+    # site = [lat, lon] — mutable so CAT-34 I034/120 can self-configure the radar position
     _first_seen:   dict[str, float] = {}
     _sweep:        dict[str, dict]  = {}   # key → {north_ts, rotation_s, status}
     _sweep_lock    = threading.Lock()
@@ -1304,6 +1310,7 @@ def _make_cat034_handler(pub_sensor, radar_lat, radar_lon, radar_name):
     _keepalive:    dict[str, dict]  = {}   # key → last full status
     _keepalive_active: set[str]     = set()
     _ka_lock       = threading.Lock()
+    _pos_hist:     dict[str, tuple] = {}   # key → (ts, lat, lon) for speed/course
     KEEPALIVE_S    = 60   # republish site marker every 60 s so ATAK never loses it
 
     def _keepalive_thread(key: str):
@@ -1360,7 +1367,12 @@ def _make_cat034_handler(pub_sensor, radar_lat, radar_lon, radar_name):
                 msg.get("collimation_rng_nm", "-"),
             ), flush=True)
 
-        if not (pub_sensor and radar_lat and radar_lon):
+        # Self-configure: update radar site position from I034/120 when the radar transmits it
+        if msg.get("site_lat") is not None:
+            site[0] = msg["site_lat"]
+            site[1] = msg["site_lon"]
+
+        if not (pub_sensor and site[0] is not None and site[1] is not None):
             return
 
         sac = msg.get("sac", 0); sic = msg.get("sic", 0)
@@ -1369,16 +1381,35 @@ def _make_cat034_handler(pub_sensor, radar_lat, radar_lon, radar_name):
 
         if mtype == "north_marker":
             _first_seen.setdefault(key, now)
+
+            # Compute speed and course from successive position reports (mobile platform support)
+            speed_ms = heading_deg = None
+            prev = _pos_hist.get(key)
+            if prev and site[0] is not None and site[1] is not None:
+                dt = now - prev[0]
+                if 0 < dt < 3600:
+                    dlat = (site[0] - prev[1]) * 111320.0
+                    dlon = (site[1] - prev[2]) * 111320.0 * math.cos(math.radians(site[0]))
+                    dist_m = math.hypot(dlat, dlon)
+                    speed_ms = round(dist_m / dt, 2)
+                    if dist_m > 1.0:
+                        heading_deg = round((math.degrees(math.atan2(dlon, dlat)) + 360) % 360, 1)
+            _pos_hist[key] = (now, site[0], site[1])
+
             status = {
                 "_src":        "ASTERIX CAT-34",
                 "_ts":         now,
                 "sensor_type": "radar",
                 "sensor_id":   "CAT34-{}-{}".format(sac, sic),
                 "sensor_name": radar_name or "RADAR SAC{}/SIC{}".format(sac, sic),
-                "lat_deg":     radar_lat,
-                "lon_deg":     radar_lon,
+                "lat_deg":     site[0],
+                "lon_deg":     site[1],
                 "online_since": _first_seen[key],
             }
+            if speed_ms is not None:
+                status["speed_ms"]    = speed_ms
+            if heading_deg is not None:
+                status["heading_deg"] = heading_deg
             for k, v in msg.items():
                 if k == "tod_s":
                     status["radar_clock_s"] = v
@@ -1423,15 +1454,16 @@ def _make_cat034_handler(pub_sensor, radar_lat, radar_lon, radar_name):
     return _h
 
 
-def _make_cat048_handler(pub, radar_lat, radar_lon):
+def _make_cat048_handler(pub, site):
+    # site = [lat, lon] — shared mutable reference; updated live from CAT-34 I034/120
     def _h(data: bytes, verbose: bool):
         pos = 0
         while pos < len(data):
-            track, pos = decode_cat048_record(data, pos, radar_lat, radar_lon)
+            track, pos = decode_cat048_record(data, pos, site[0], site[1])
             if len(track) > 2:
                 if verbose and "lat_deg" not in track:
                     ident = track.get("icao24") or track.get("radar_id") or "PSR"
-                    print("cat48 {} no-position (set --radar-lat/--radar-lon)".format(
+                    print("cat48 {} no-position (awaiting I034/120 or set --radar-lat/--radar-lon)".format(
                         ident), flush=True)
                 _pub(pub, track, "cat48", verbose)
     return _h
@@ -1575,8 +1607,10 @@ def main():
     ap.add_argument("--verbose", "-v", action="store_true")
     args = ap.parse_args()
 
-    radar_lat  = args.radar_lat  if args.radar_lat  != 0.0 else None
-    radar_lon  = args.radar_lon  if args.radar_lon  != 0.0 else None
+    _site = [
+        args.radar_lat if args.radar_lat != 0.0 else None,   # [0] lat — updated live from I034/120
+        args.radar_lon if args.radar_lon != 0.0 else None,   # [1] lon
+    ]
     radar_name = args.radar_name or None
 
     active = any([args.cat48_port, args.cat21_port, args.cat20_port,
@@ -1594,13 +1628,11 @@ def main():
     try:
         if args.cat48_port:
             pub_048    = session.declare_publisher(TOPIC_048); pubs.append(pub_048)
-            pub_sensor = None
-            if radar_lat and radar_lon:
-                pub_sensor = session.declare_publisher(TOPIC_SENSOR)
-                pubs.append(pub_sensor)
-                print("Zenoh CAT-34 topic:", TOPIC_SENSOR, flush=True)
-                # Publish initial site marker so ATAK shows the radar immediately,
-                # even before the first CAT-34 north marker arrives (or when offline)
+            pub_sensor = session.declare_publisher(TOPIC_SENSOR); pubs.append(pub_sensor)
+            print("Zenoh CAT-34 topic:", TOPIC_SENSOR, flush=True)
+            if _site[0] and _site[1]:
+                # Publish initial site marker from env-var position so ATAK sees the radar
+                # immediately, before the first CAT-34 north marker arrives.
                 _sac = args.radar_sac; _sic = args.radar_sic
                 _init_status = {
                     "_src":        "ASTERIX CAT-34",
@@ -1608,8 +1640,8 @@ def main():
                     "sensor_type": "radar",
                     "sensor_id":   "CAT34-{}-{}".format(_sac, _sic),
                     "sensor_name": radar_name or "RADAR SAC{}/SIC{}".format(_sac, _sic),
-                    "lat_deg":     radar_lat,
-                    "lon_deg":     radar_lon,
+                    "lat_deg":     _site[0],
+                    "lon_deg":     _site[1],
                     "sac":         _sac,
                     "sic":         _sic,
                 }
@@ -1617,11 +1649,11 @@ def main():
                                encoding=zenoh.Encoding.APPLICATION_JSON)
                 print("Published startup site marker for SAC{}/SIC{}".format(_sac, _sic), flush=True)
             else:
-                print("WARNING: --radar-lat/--radar-lon not set — "
-                      "polar plots will have no WGS-84 position", flush=True)
+                print("INFO: --radar-lat/--radar-lon not set — "
+                      "radar will self-report position via CAT-34 I034/120", flush=True)
             print("Zenoh CAT-48 topic:", TOPIC_048, flush=True)
-            h034 = _make_cat034_handler(pub_sensor, radar_lat, radar_lon, radar_name)
-            h048 = _make_cat048_handler(pub_048, radar_lat, radar_lon)
+            h034 = _make_cat034_handler(pub_sensor, _site, radar_name)
+            h048 = _make_cat048_handler(pub_048, _site)
             threads.append(threading.Thread(
                 target=_run_inbound,
                 args=(args.cat48_port, args.cat48_tcp, "CAT-48/34",

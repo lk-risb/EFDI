@@ -3,7 +3,7 @@ syntax = "proto3";
 package ltu.cis.tracks.v1;
 
 // Live aircraft position from OpenSky Network (opensky_bridge.py)
-// Published to: 1851281db70ccc0409dad4ecfc874cf5/opensky/tracks/v1
+// Published to: <YOUR_NAMESPACE>/opensky/tracks/v1
 message AircraftTrack {
   double timestamp     = 1;  // Unix epoch when record was created locally
   string source        = 2;  // "opensky"
