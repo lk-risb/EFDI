@@ -69,7 +69,7 @@ Place the bundle at `$HOME/goat-bundle/` (default path; override with `BUNDLE_DI
 └── <NAMESPACE>-key.pem       # Private key — restrict permissions
 ```
 
-`<NAMESPACE>` is the hex UUID assigned to your pod (e.g. `1851281db70ccc0409dad4ecfc874cf5`).
+`<NAMESPACE>` is the hex UUID assigned to your pod (e.g. `<YOUR_NAMESPACE>`).
 
 ```bash
 # Verify
@@ -121,12 +121,12 @@ BUNDLE_DIR=/home/<user>/goat-bundle
 
 # ── Giraffe AMB radar (ASTERIX CAT-48/34) ───────────────────────────────────
 CAT48_PORT=30048               # UDP port the radar transmits on
-CAT48_RADAR_LAT=54.9639        # Antenna latitude  (WGS-84 decimal degrees)
-CAT48_RADAR_LON=24.0848        # Antenna longitude (WGS-84 decimal degrees)
-CAT48_RADAR_SAC=122            # ASTERIX Source Area Code
-CAT48_RADAR_SIC=65             # ASTERIX Source Identification Code
+CAT48_RADAR_SAC=<SAC>          # ASTERIX Source Area Code
+CAT48_RADAR_SIC=<SIC>          # ASTERIX Source Identification Code
 CAT48_RADAR_NAME=Giraffe AMB   # Callsign displayed in ATAK
 ```
+
+> **Radar position (lat/lon):** The bridge reads radar position automatically from each CAT-34 north marker via ASTERIX field I034/120. You do **not** need to configure coordinates for a static or mobile radar — position, speed, and course update live. Set `CAT48_RADAR_LAT` / `CAT48_RADAR_LON` only as a fallback for radar systems that do not transmit I034/120, or to show an immediate ATAK marker before the first CAT-34 message arrives.
 
 ### Optional fields
 
@@ -223,10 +223,12 @@ Set `TAK_HOST` and `TAK_PORT` in `.env`, then select `cot-tcp` instead of `cot-u
 
 | ATAK appearance | CoT type | Source |
 |---|---|---|
-| Blue radar dish | `a-f-G-E-S-R` | Giraffe AMB site marker |
+| Blue radar dish (with motion trail if mobile) | `a-f-G-E-S-R` | Giraffe AMB site marker |
 | Green sensor box | `a-n-G-E-S` | dronuradaras.lt acoustic sensor |
 | Red hostile UAV | `a-h-A-M-F-Q` | Drone detection event |
 | White unknown aircraft | `a-u-A-C-F` | Unclassified radar track |
+
+> Position, speed, and course on the radar marker update automatically from the live CAT-34 stream. On a mobile platform, ATAK will show a speed vector and movement trail.
 
 ---
 
@@ -321,7 +323,7 @@ sudo tcpdump -i any udp and host 239.2.3.1 and port 6969 -c 5
 
 ### Giraffe radar icon at 0°N 0°E
 
-`CAT48_RADAR_LAT` or `CAT48_RADAR_LON` is not set. Verify:
+The radar has not yet transmitted a CAT-34 message with I034/120 (3D-Position). Wait for the first rotation (~4 s), or set fallback coordinates in `.env`:
 
 ```bash
 grep CAT48_RADAR compose/.env
@@ -373,7 +375,7 @@ tail -20 logs/asterix.log | grep -E "keepalive|startup|error"
 import json, os, time
 import zenoh
 
-ORG       = "1851281db70ccc0409dad4ecfc874cf5"
+ORG       = "<YOUR_NAMESPACE>"
 _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", "tcp/127.0.0.1:7448")
 _CERT_DIR = os.environ.get("GOAT_CERT_DIR", os.path.dirname(__file__))
 
@@ -453,10 +455,10 @@ In `layers/cot_layer.py`, add to `_TOPIC_COT`:
 
 | Date | Author | Change |
 |---|---|---|
-| 2026-06-22 | G. Ndukve | Initial deployment: Giraffe ASTERIX bridge, `start.sh` launcher |
-| 2026-06-22 | G. Ndukve | dronuradaras.lt bridge — acoustic sensors + drone detections |
-| 2026-06-22 | G. Ndukve | CoT DETECTION section with audio URL in ATAK remarks |
-| 2026-06-22 | G. Ndukve | Radar keepalive + startup publish |
+| 2026-06-22 | — | Initial deployment: Giraffe ASTERIX bridge, `start.sh` launcher |
+| 2026-06-22 | — | dronuradaras.lt bridge — acoustic sensors + drone detections |
+| 2026-06-22 | — | CoT DETECTION section with audio URL in ATAK remarks |
+| 2026-06-22 | — | Radar keepalive + startup publish |
 
 ---
 

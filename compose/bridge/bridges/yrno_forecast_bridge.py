@@ -23,14 +23,14 @@ import urllib.request
 import zenoh
 
 ROUTER = "tls/zenoh.efdi.netbird.efdi-backbone.net:7447"
-ORG    = "1851281db70ccc0409dad4ecfc874cf5"
+ORG    = os.environ.get("PARTNER_NAMESPACE", "")
 HERE   = os.path.dirname(os.path.abspath(__file__))
 _CERT_DIR = os.environ.get("GOAT_CERT_DIR", HERE)
 _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", ROUTER)
 
 YR_URL       = "https://api.met.no/weatherapi/locationforecast/2.0/compact"
 # MET Norway requires a User-Agent that identifies your app and contact.
-YR_UA        = "efdi-yr-bridge/1.0 gabrielius.ndukve@gmail.com"
+YR_UA        = os.environ.get("YR_USER_AGENT", "efdi-yr-bridge/1.0 contact@example.com")  # MET Norway ToS requires app name + contact email
 POLL_INTERVAL = 1800  # 30 min — forecasts update ~1h but caching keeps load low
 
 DEFAULT_LOCATIONS = [

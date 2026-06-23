@@ -71,7 +71,7 @@ Bundle patalpinkite į `$HOME/goat-bundle/` (numatytasis kelias; keičiamas per 
 └── <NAMESPACE>-key.pem       # Privatus raktas — apribokite prieigą
 ```
 
-`<NAMESPACE>` — jūsų pod'ui priskirtas šešioliktainis UUID (pvz. `1851281db70ccc0409dad4ecfc874cf5`).
+`<NAMESPACE>` — jūsų pod'ui priskirtas šešioliktainis UUID (pvz. `<YOUR_NAMESPACE>`).
 
 ```bash
 # Patikrinimas
@@ -123,10 +123,10 @@ BUNDLE_DIR=/home/<vartotojas>/goat-bundle
 
 # ── Giraffe AMB radaras (ASTERIX CAT-48/34) ─────────────────────────────────
 CAT48_PORT=30048               # UDP prievadas, iš kurio radaras siunčia duomenis
-CAT48_RADAR_LAT=54.9639        # Antenos platuma  (WGS-84 dešimtainiai laipsniai)
-CAT48_RADAR_LON=24.0848        # Antenos ilguma   (WGS-84 dešimtainiai laipsniai)
-CAT48_RADAR_SAC=122            # ASTERIX šaltinio srities kodas (Source Area Code)
-CAT48_RADAR_SIC=65             # ASTERIX šaltinio identifikacijos kodas
+CAT48_RADAR_LAT=<RADAR_LAT>        # Antenos platuma  (WGS-84 dešimtainiai laipsniai)
+CAT48_RADAR_LON=<RADAR_LON>        # Antenos ilguma   (WGS-84 dešimtainiai laipsniai)
+CAT48_RADAR_SAC=<SAC>            # ASTERIX šaltinio srities kodas (Source Area Code)
+CAT48_RADAR_SIC=<SIC>             # ASTERIX šaltinio identifikacijos kodas
 CAT48_RADAR_NAME=Giraffe AMB   # Vardas, rodomas ATAK žemėlapyje
 ```
 
@@ -375,7 +375,7 @@ tail -20 logs/asterix.log | grep -E "keepalive|startup|error"
 import json, os, time
 import zenoh
 
-ORG       = "1851281db70ccc0409dad4ecfc874cf5"
+ORG       = "<YOUR_NAMESPACE>"
 _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", "tcp/127.0.0.1:7448")
 _CERT_DIR = os.environ.get("GOAT_CERT_DIR", os.path.dirname(__file__))
 
@@ -455,10 +455,10 @@ SERVICES=(... <pavadinimas> ...)
 
 | Data | Autorius | Pakeitimas |
 |---|---|---|
-| 2026-06-22 | G. Ndukve | Pradinis diegimas: Giraffe ASTERIX bridge, `start.sh` paleidiklis |
-| 2026-06-22 | G. Ndukve | dronuradaras.lt bridge — akustiniai jutikliai ir drono aptikimai |
-| 2026-06-22 | G. Ndukve | CoT DETECTION sekcija su garso URL ATAK pastabose |
-| 2026-06-22 | G. Ndukve | Radaro keepalive ir pradinė publikacija paleidimo metu |
+| 2026-06-22 | — | Pradinis diegimas: Giraffe ASTERIX bridge, `start.sh` paleidiklis |
+| 2026-06-22 | — | dronuradaras.lt bridge — akustiniai jutikliai ir drono aptikimai |
+| 2026-06-22 | — | CoT DETECTION sekcija su garso URL ATAK pastabose |
+| 2026-06-22 | — | Radaro keepalive ir pradinė publikacija paleidimo metu |
 
 ---
 

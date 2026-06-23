@@ -3,7 +3,7 @@ syntax = "proto3";
 package ltu.cis.tracks.v1;
 
 // Live AIS vessel position from aisstream.io (ais_bridge.py)
-// Published to: 1851281db70ccc0409dad4ecfc874cf5/ais/aisstream/tracks/v1
+// Published to: <YOUR_NAMESPACE>/ais/aisstream/tracks/v1
 // JSON wire format: keys _ts → timestamp, _src → source; all other keys match field names.
 // Zero value means "not present" for numeric optional fields.
 message AisTrack {
