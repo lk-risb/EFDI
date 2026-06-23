@@ -453,12 +453,28 @@ SERVICES=(... <pavadinimas> ...)
 
 ## Pakeitimų žurnalas
 
-| Data | Autorius | Pakeitimas |
-|---|---|---|
-| 2026-06-22 | — | Pradinis diegimas: Giraffe ASTERIX bridge, `start.sh` paleidiklis |
-| 2026-06-22 | — | dronuradaras.lt bridge — akustiniai jutikliai ir drono aptikimai |
-| 2026-06-22 | — | CoT DETECTION sekcija su garso URL ATAK pastabose |
-| 2026-06-22 | — | Radaro keepalive ir pradinė publikacija paleidimo metu |
+| Data | Pakeitimas |
+|---|---|
+| 2026-06-14 | Pradinis commit — šakota iš oficialaus `efdi-moon-pod-main` saugyklos |
+| 2026-06-15 | Baziniai bridge adapteriai sujungti; saugyklos struktūra nustatyta; pridėtas README |
+| 2026-06-16 | `airplanes.live` bridge: regioniniai ADS-B ir pasauliniai kariniai orlaiviai |
+| 2026-06-16 | ICAO NOTAM bridge: aktyvių NOTAM priėmimas per ICAO Dataservices API |
+| 2026-06-16 | FlightRadar24 bridge: FR24 komercinės transliacijos integracija |
+| 2026-06-16 | Windy bridge: taškų orų prognozių API integracija |
+| 2026-06-16 | Protocol Buffer aprašai naujiems takelio tipams (`aircraft_track`, `ais_track`, `aprs_track`, `cat62_track`) |
+| 2026-06-17/18 | Kokybės gerinimai: bridge'ų stabilumas, sluoksnių dublikatų filtravimas, takelio suliejimo derinimas |
+| 2026-06-18 | ASTERIX pilno dekodavimo projektavimo specifikacijos dokumentas |
+| 2026-06-19/22 | Papildomi bridge ir sluoksnių gerinimai; Giraffe ASTERIX bridge užbaigtas |
+| 2026-06-22 | `dronuradaras.lt` bridge: akustinių jutiklių tinklas ir drono aptikimo įvykiai |
+| 2026-06-22 | CoT DETECTION sekcija su garso įrašo URL ATAK pastabų lauke |
+| 2026-06-22 | Radaro vietos žymeklis: publikacija paleidimo metu + 60 s keepalive, kad ATAK neprarastų žymeklio |
+| 2026-06-23 | Saugumo patikrinimas: pašalintas koduotas API raktas iš `register_topics.sh`; raktas perkeltas į `$EFDI_PORTAL_KEY` aplinkos kintamąjį |
+| 2026-06-23 | Saugumas: asmeninis namespace UUID, el. paštas, IP ir pardavėjo identifikatorius pašalinti iš visų sekamų failų; bridge'ai skaito `PARTNER_NAMESPACE` iš aplinkos |
+| 2026-06-23 | Saugumas: `compose/.env` ir `register_topics.sh` pridėti į `.gitignore` — kredencialai lieka tik lokaliai |
+| 2026-06-23 | Saugumas: neriboto HTTP kūno skaitymas `rest-http/bridge.py` apribotas iki 10 MB |
+| 2026-06-23 | Dokumentacijos atnaujinimas: `INSTALL.md` (anglų), `DIEGIMAS.md` (lietuvių), `README.md` perrašytas kaip architektūros apžvalga |
+| 2026-06-23 | ASTERIX CAT-34 I034/120 dekoderis: radaras pats praneša WGS-84 poziciją iš gyvo srauto — rankinis koordinačių nustatymas nebereikalingas |
+| 2026-06-23 | Mobiliojo radaro palaikymas: pozicija, greitis ir kursas gaunami iš nuoseklių I034/120 pranešimų; ATAK rodo judėjimo taką ant transporto priemonėje montuojamų radarų |
 
 ---
 
