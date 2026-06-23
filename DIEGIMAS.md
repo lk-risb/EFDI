@@ -1,216 +1,165 @@
-# EFDI Moon-Pod — Diegimo ir Naudojimo Instrukcija
+# EFDI Moon-Pod — Diegimo instrukcija
 
-> **Dokumentas atnaujinamas nuolat** — pridėkite pastabas prie kiekvieno skyriaus jei kažkas pasikeitė.
+> **Platforma:** Linux · **Zenoh:** 1.9.0 · **Python:** 3.10+
 >
-> Kalba: lietuvių. Komandų pavadinimai, failų pavadinimai ir techniniai terminai paliekami anglų kalba.
+> Techniniai terminai, komandų ir failų pavadinimai pateikiami anglų kalba.
+
+Šis vadovas aprašo sensorių bridge'ų steko diegimą Linux serveryje. Stekas priima ASTERIX CAT-48/34 (Giraffe AMB radaras), dronuradaras.lt akustinius jutiklius, Link-16, MAVLink ir SitaWare duomenis, juos nukreipia per vietinę Zenoh magistralę ir pristatyta į ATAK kaip CoT pranešimai — UDP multicast arba TCP per TAK serverį.
 
 ---
 
 ## Turinys
 
-1. [Sistemos apžvalga](#1-sistemos-apžvalga)
-2. [Reikalavimai](#2-reikalavimai)
-3. [Pradinė sąranka](#3-pradinė-sąranka)
-4. [Sertifikatų ir bundle diegimas](#4-sertifikatų-ir-bundle-diegimas)
-5. [Konfigūracija `.env`](#5-konfigūracija-env)
-6. [Paleidimas](#6-paleidimas)
-7. [Komponentų aprašymas](#7-komponentų-aprašymas)
-8. [ATAK konfigūracija](#8-atak-konfigūracija)
-9. [Dažniausios problemos](#9-dažniausios-problemos)
-10. [Naujo bridge kūrimas](#10-naujo-bridge-kūrimas)
-11. [Atnaujinimų žurnalas](#11-atnaujinimų-žurnalas)
+1. [Reikalavimai](#1-reikalavimai)
+2. [Diegimas](#2-diegimas)
+3. [Konfigūracija](#3-konfigūracija)
+4. [Steko paleidimas](#4-steko-paleidimas)
+5. [ATAK sąranka](#5-atak-sąranka)
+6. [Paslaugų žinynas](#6-paslaugų-žinynas)
+7. [Eksploatacija](#7-eksploatacija)
+8. [Dažniausios problemos](#8-dažniausios-problemos)
+9. [Naujo bridge kūrimas](#9-naujo-bridge-kūrimas)
 
 ---
 
-## 1. Sistemos apžvalga
-
-```
-[Giraffe AMB radaras]──ASTERIX UDP──►[asterix_bridge]──►┐
-[dronuradaras.lt API]──REST poll────►[dronuradaras_bridge]►│
-[SitaWare sistema]────REST poll────►[sitaware_bridge]────►│  ZENOH
-[Link-16 šaltinis]────UDP/TCP──────►[link16_bridge]──────►│  tinklas
-[MAVLink UAV]─────────UDP/TCP──────►[mavlink_bridge]─────►│
-                                                           │
-                    ┌──────────────────────────────────────┘
-                    ▼
-             [cot_layer] ──UDP multicast 239.2.3.1:6969──► [ATAK CIV]
-             [track_fusion_layer] ──► (sulietų takelius)
-```
-
-**Kas yra Zenoh?** — greitas publish/subscribe tinklas (panašus į MQTT, bet greitesnis ir su TLS šifravimu). Visi bridge'ai publikuoja duomenis į Zenoh, o layer'iai juos gauna ir persiunčia toliau.
-
-**Kas yra CoT?** — Cursor-on-Target (CoT) — XML formato pranešimų standartas, kurį naudoja ATAK. Kiekvienas objektas (lėktuvas, radaras, drono aptikimas) siunčiamas kaip CoT XML pranešimas.
-
----
-
-## 2. Reikalavimai
+## 1. Reikalavimai
 
 ### Programinė įranga
 
-| Programa | Minimali versija | Tikrinimo komanda |
+| Priklausomybė | Minimali versija | Tikrinimas |
 |---|---|---|
-| Python | 3.10+ | `python3 --version` |
-| Docker | 24+ | `docker --version` |
-| Docker Compose | 2.20+ | `docker compose version` |
+| Python | 3.10 | `python3 --version` |
+| Docker Engine | 24.0 | `docker --version` |
+| Docker Compose | 2.20 | `docker compose version` |
 | Git | bet kuri | `git --version` |
 
 ### Tinklas
 
-- **UDP prievadas 30048** — atidarytas iš Giraffe AMB radaro pusės (ASTERIX CAT-48/34)
-- **UDP multicast 239.2.3.1:6969** — ATAK įrenginiai turi būti tame pačiame tinkle
-- **TCP 7448** — vietinis Zenoh router (localhost)
-- **TCP 7447 TLS** — nuotolinis Zenoh router (reikalingas VPN/NetBird)
-- Interneto prieiga — dronuradaras.lt API
+| Prievadas / adresas | Kryptis | Paskirtis |
+|---|---|---|
+| UDP `<CAT48_PORT>` (numatytasis 30048) | į serverį | Giraffe AMB ASTERIX srautas |
+| UDP multicast `239.2.3.1:6969` | iš serverio | CoT pristatymas į ATAK |
+| TCP 7448 | localhost | Vietinis Zenoh router |
+| TCP 7447 TLS | iš serverio | Nuotolinis Zenoh router (reikia NetBird) |
+| HTTPS | iš serverio | dronuradaras.lt REST API |
 
-### Aparatinė įranga
+ATAK įrenginiai turi būti tame pačiame L2 tinklo segmente kaip serveris (multicast neperžengia VLAN ribų be maršrutizatoriaus konfigūracijos). Tarpvietiniam diegimui naudokite TAK serverį ir `cot-tcp` paslaugą.
 
-- Linux serveris (testuota su Arch Linux / kernel 7.x)
-- ATAK CIV 5.x įdiegtas Android įrenginyje tame pačiame tinkle
+### Sertifikatai
+
+Zenoh mTLS autentifikacijai reikalingas EFDI išduotas `goat-bundle`. Gaukite jį iš EFDI administratoriaus. **Bundle niekada nesaugomas šioje repozitorijoje.**
 
 ---
 
-## 3. Pradinė sąranka
+## 2. Diegimas
 
-### 3.1 Projekto klonavimas
+### 2.1 Repozitorijos klonavimas
 
 ```bash
 git clone <repo-url> efdi-moon-pod
 cd efdi-moon-pod
 ```
 
-### 3.2 Python virtualios aplinkos sukūrimas
+### 2.2 goat-bundle įdiegimas
 
-Bridge'ai naudoja atskirą Python aplinką kad nekonfliktuotų su sistemos paketais:
+Bundle patalpinkite į `$HOME/goat-bundle/` (numatytasis kelias; keičiamas per `BUNDLE_DIR`):
+
+```
+~/goat-bundle/
+├── efdi-ca-root.pem          # CA sertifikatas (viešas)
+├── <NAMESPACE>-cert.pem      # Mazgo sertifikatas
+└── <NAMESPACE>-key.pem       # Privatus raktas — apribokite prieigą
+```
+
+`<NAMESPACE>` — jūsų pod'ui priskirtas šešioliktainis UUID (pvz. `1851281db70ccc0409dad4ecfc874cf5`).
+
+```bash
+# Patikrinimas
+ls ~/goat-bundle/*.pem
+chmod 600 ~/goat-bundle/*-key.pem
+```
+
+### 2.3 Python virtualios aplinkos kūrimas
+
+`start.sh` sukuria aplinką automatiškai per pirmą paleidimą. Rankinis kūrimas:
 
 ```bash
 python3 -m venv compose/bridge/venv
 compose/bridge/venv/bin/pip install eclipse-zenoh==1.9.0
 ```
 
-> **⚠ Svarbu:** eclipse-zenoh versija turi būti **tiksliai 1.9.0**. Kitos versijos gali turėti nesuderinamus API pakeitimus.
+> `eclipse-zenoh` versija turi būti **tiksliai 1.9.0** — net nedideli versijų skirtumai gali pakeisti API.
 
-Patikrinimas:
-
-```bash
-compose/bridge/venv/bin/python3 -c "import zenoh; print(zenoh.__version__)"
-# Turi išvesti: 1.9.0
-```
-
-### 3.3 Zenoh router paleidimas (Docker)
+### 2.4 Zenoh router paleidimas
 
 ```bash
 docker compose -f compose/docker-compose.yml up -d zenoh-router
 ```
 
-Patikrinimas:
+Prieš tęsiant patikrinkite, kad konteineris veikia:
 
 ```bash
 docker compose -f compose/docker-compose.yml ps zenoh-router
-# Turi rodyti "healthy"
+# Stulpelyje "Status" turi būti "healthy"
 ```
-
-> **Pastaba:** Zenoh router yra vienintelis Docker konteineris — visi kiti komponentai veikia tiesiogiai kaip Python procesai.
 
 ---
 
-## 4. Sertifikatų ir bundle diegimas
-
-Zenoh TLS ryšiui reikalingi sertifikatai. Jie **negali būti saugomi repozitorijoje**.
-
-### 4.1 Bundle struktūra
-
-Sertifikatai saugomi atskirame kataloge (numatytasis: `/home/<vartotojas>/goat-bundle`):
-
-```
-~/goat-bundle/
-├── efdi-ca-root.pem              # CA sertifikatas (viešas)
-├── <NAMESPACE>-cert.pem          # Jūsų pod sertifikatas
-└── <NAMESPACE>-key.pem           # Privatus raktas (SAUGOTI SLAPTAI)
-```
-
-kur `<NAMESPACE>` = jūsų organizacijos unikalus identifikatorius (pvz. `1851281db70ccc0409dad4ecfc874cf5`).
-
-### 4.2 Bundle gavimas
-
-Bundle gaunamas iš EFDI administratoriaus arba per `goat-cli`:
-
-```bash
-# Jei turite goat-cli:
-goat-cli bundle download --output ~/goat-bundle/
-```
-
-### 4.3 Aplinkos kintamieji
-
-Nustatykite prieš paleidžiant bet kurį bridge:
-
-```bash
-export BUNDLE_DIR=~/goat-bundle
-export GOAT_CERT_DIR=~/goat-bundle
-export ZENOH_LOCAL_ENDPOINT=tcp/127.0.0.1:7448
-```
-
-> **⚠ Dažna klaida:** Jei bundle katalogo kelias neteisingas arba sertifikatų failai neegzistuoja — Zenoh meta klaidą `Unable to connect` ir bridge nepasileidžia. Tikrinkite failus komanda `ls ~/goat-bundle/*.pem`.
-
----
-
-## 5. Konfigūracija `.env`
-
-Konfigūracijos failas: `compose/.env`
-
-> **⚠ Šis failas NIEKADA neturi patekti į git repozitoriją** — jame yra API raktai. Patikrinkite `.gitignore`.
-
-### 5.1 Sukūrimas
+## 3. Konfigūracija
 
 ```bash
 cp compose/.env.example compose/.env
-# Redaguokite:
-nano compose/.env
 ```
 
-### 5.2 Svarbiausi parametrai
+Redaguokite `compose/.env`. Failą `start.sh` nuskaito eilutė po eilutės saugiu būdu — be `eval`, be subapvalkalo vykdymo.
+
+> `compose/.env` įtrauktas į `.gitignore`. **Niekada jo nekomituokite.**
+
+### Privalomi laukai
 
 ```bash
-# ── Zenoh ──────────────────────────────────────────────────────
-ZENOH_LOCAL_ENDPOINT=tcp/127.0.0.1:7448
+# ── Bundle kelias ────────────────────────────────────────────────────────────
 BUNDLE_DIR=/home/<vartotojas>/goat-bundle
 
-# ── Giraffe AMB radaras (ASTERIX CAT-48/34) ────────────────────
-CAT48_PORT=30048                  # UDP prievadas iš radaro
-CAT48_RADAR_LAT=54.9639           # Radaro geografinė platuma
-CAT48_RADAR_LON=24.0848           # Radaro geografinė ilguma
-CAT48_RADAR_SAC=122               # Source Area Code (iš radaro konfig.)
-CAT48_RADAR_SIC=65                # Source Identification Code (iš radaro konfig.)
-
-# ── TAK serveris (neprivaloma) ──────────────────────────────────
-TAK_HOST=127.0.0.1                # Jei nėra TAK serverio — palikite 127.0.0.1
-TAK_PORT=8087
-
-# ── SitaWare (jei naudojate) ───────────────────────────────────
-SITAWARE_URL=https://sitaware.example.com
-SITAWARE_USER=vartotojas
-SITAWARE_PASS=slaptazodis
-
-# ── Link-16 (jei yra šaltinis) ─────────────────────────────────
-LINK16_PORT=                      # Palikite tuščią jei nenaudojate
-LINK16_TCP=                       # 1 = TCP, tuščia = UDP
+# ── Giraffe AMB radaras (ASTERIX CAT-48/34) ─────────────────────────────────
+CAT48_PORT=30048               # UDP prievadas, iš kurio radaras siunčia duomenis
+CAT48_RADAR_LAT=54.9639        # Antenos platuma  (WGS-84 dešimtainiai laipsniai)
+CAT48_RADAR_LON=24.0848        # Antenos ilguma   (WGS-84 dešimtainiai laipsniai)
+CAT48_RADAR_SAC=122            # ASTERIX šaltinio srities kodas (Source Area Code)
+CAT48_RADAR_SIC=65             # ASTERIX šaltinio identifikacijos kodas
+CAT48_RADAR_NAME=Giraffe AMB   # Vardas, rodomas ATAK žemėlapyje
 ```
 
-### 5.3 Svarbi pastaba dėl specialių simbolių
+### Pasirinktiniai laukai
 
-Kai kurios reikšmės (pvz. FR24_KEY) gali turėti `|` simbolį. `.env` faile tai **nesukelia problemų**, nes `run.sh` ir `start.sh` skaito jį saugiu būdu (be `eval` ar `source` shell komandų).
+```bash
+# ── TAK serveris (naudokite cot-tcp vietoj cot-udp) ─────────────────────────
+TAK_HOST=127.0.0.1
+TAK_PORT=8087
+
+# ── SitaWare draugiškų pajėgų sekimas ───────────────────────────────────────
+SITAWARE_URL=https://sitaware.example.com
+SITAWARE_USER=
+SITAWARE_PASS=
+
+# ── Link-16 JREAP-C ─────────────────────────────────────────────────────────
+LINK16_PORT=                   # Palikite tuščią, jei Link-16 šaltinio nėra
+LINK16_TCP=                    # 1 = TCP režimas, tuščia = UDP
+
+# ── MAVLink ─────────────────────────────────────────────────────────────────
+MAVLINK_PORT=
+MAVLINK_TCP=
+```
 
 ---
 
-## 6. Paleidimas
-
-### 6.1 Interaktyvus paleidimas (rekomenduojamas)
+## 4. Steko paleidimas
 
 ```bash
-cd efdi-moon-pod
 ./start.sh
 ```
 
-Pasirodys meniu:
+Interaktyvus paleidiklis rodo visas paslaugas su jų parengties būsena. Įjunkite/išjunkite numeriu, tada paspauskite **Enter** pasirinktoms paslaugoms paleisti.
 
 ```
 ╔══════════════════════════════════════════════════════════════════╗
@@ -218,386 +167,237 @@ Pasirodys meniu:
 ╚══════════════════════════════════════════════════════════════════╝
 
   Infrastructure
-  [ 1] [✓] zenoh         Zenoh message router (Docker)           ready
+  ──────────────────────────────────────────────────────────
+  [ 1] [✓] zenoh          Zenoh message router (Docker)          ready
 
   Sensor bridges
-  [ 2] [✓] asterix       ASTERIX CAT-48/34 radar tracks          ready
-  [ 3] [ ] link16        Link-16 JREAP-C datalink                LINK16_PORT not set
-  ...
+  ──────────────────────────────────────────────────────────
+  [ 2] [✓] asterix        ASTERIX CAT-48/34 radar tracks         ready
+  [ 3] [ ] link16         Link-16 JREAP-C datalink               LINK16_PORT not set
+  [ 4] [ ] mavlink        MAVLink UAV telemetry                   MAVLINK_PORT not set
+  [ 5] [ ] vmf            VMF MIL-STD-47001C messages            VMF_PORT not set
+  [ 6] [ ] sitaware       SitaWare friendly force tracking       SITAWARE_URL not set
+  [ 7] [ ] dronuradaras   dronuradaras.lt drone detection        ready
 
-> _
+  Output layers
+  ──────────────────────────────────────────────────────────
+  [ 8] [✓] cot-udp        CoT → ATAK UDP multicast 239.2.3.1:6969
+  [ 9] [✓] cot-tcp        CoT → TAK Server TCP
+  [10] [✓] track-fusion   Radar/ADS-B track correlation
 ```
 
-**Valdymas:**
-- Rašykite skaičių (pvz. `2`) — įjungti/išjungti paslaugą
-- Keli skaičiai iš karto (pvz. `1 2 6`) — keisti kelis
-- `a` — pasirinkti visus galimus
-- `n` — atžymėti visus
-- `Enter` — paleisti pažymėtus
-- `q` — išeiti
+**Paleidiklio valdymas:**
 
-**Tipinis paleidimo rinkinys (Giraffe radaras + ATAK):**
+| Įvestis | Veiksmas |
+|---|---|
+| `1`–`10` | Įjungti / išjungti paslaugą (keli skaičiai atskiriami tarpu) |
+| `a` | Pasirinkti visas paruoštas paslaugas |
+| `n` | Atžymėti visas |
+| Enter | Paleisti pažymėtas paslaugas |
+| `q` | Išeiti |
 
-Pažymėkite: `1` (zenoh) + `2` (asterix) + `7` (dronuradaras) + `8` (cot-udp)
+**Rekomenduojami rinkiniai:**
 
-### 6.2 Sustabdymas
+| Scenarijus | Pasirinkimas |
+|---|---|
+| Giraffe radaras + ATAK multicast | `1 2 8` |
+| Giraffe + drono aptikimai + ATAK | `1 2 7 8` |
+| Visi jutikliai + TAK serveris | `a`, tada atžymėkite `8` (cot-udp) |
+| Tik radaras be ATAK (derinimui) | `1 2 10` |
 
-```bash
-./stop.sh         # Sustabdo viską
-./stop.sh layers  # Sustabdo tik output layers
-```
-
-### 6.3 Žurnalai (logs)
-
-Visi žurnalai rašomi į `logs/` katalogą:
-
-```bash
-tail -f logs/asterix.log         # Giraffe radaro bridge
-tail -f logs/cot-udp.log         # CoT → ATAK srautas
-tail -f logs/dronuradaras.log    # dronuradaras.lt bridge
-tail -f logs/track-fusion.log    # Takelio koreliacijos sluoksnis
-```
-
-### 6.4 Procesų tikrinimas
-
-```bash
-ls .pids/          # Rodo veikiančių procesų PID failus
-cat .pids/asterix.pid
-kill -0 $(cat .pids/asterix.pid) && echo "veikia" || echo "neveikia"
-```
+Procesų PID failai saugomi `.pids/`, žurnalai rašomi į `logs/<paslauga>.log`.
 
 ---
 
-## 7. Komponentų aprašymas
+## 5. ATAK sąranka
 
-### 7.1 `asterix_bridge.py` — Giraffe AMB radaras
+### UDP multicast (tas pats tinklų segmentas)
 
-**Ką daro:** Klauso ASTERIX UDP srautą iš Giraffe AMB radaro, dekodina CAT-48 (sekamieji objektai) ir CAT-34 (radaro būsena) pranešimus, publikuoja į Zenoh.
+1. **Settings → Network → Multicast** — įjunkite multicast gaviklį
+2. Adresų sąraše patikrinkite, kad yra `239.2.3.1:6969`
+3. Objektai turi pasirodyti per vieną apklausinėjimo ciklą (≤ 10 s drono aptikimams, ≤ 60 s radaro keepalive)
 
-**Zenoh temos:**
-- `…/air/asterix/cat48/unknown/aircraft/tracks/v1` — oro objektai
-- `…/land/asterix/cat34/neutral/radar/status/v1` — radaro būsena
+### TAK serveris (skirtingi tinklai / VLAN)
 
-**Ypatingumas:** Paleidimo metu iš karto publikuoja pradinį radaro žymeklį į ATAK (net jei radaras dar nesiuntė duomenų). Kiekvieną 60 sekundžių atnaujina žymeklį kad jis neišnyktų iš ATAK žemėlapio (keepalive mechanizmas).
+Nustatykite `TAK_HOST` ir `TAK_PORT` faile `.env`, tada paleidiklyje pasirinkite `cot-tcp` vietoj `cot-udp`.
 
-**Paleidimo parametrai (automatiškai nuskaitomi iš `.env`):**
-```bash
-compose/bridge/venv/bin/python3 compose/bridge/bridges/asterix_bridge.py \
-  --cat48-port 30048 \
-  --radar-lat 54.9639 \
-  --radar-lon 24.0848 \
-  --radar-name "Giraffe AMB" \
-  --radar-sac 122 \
-  --radar-sic 65
-```
+### Piktogramų žinynas
 
----
-
-### 7.2 `dronuradaras_bridge.py` — dronuradaras.lt akustinio radaro tinklas
-
-**Ką daro:** Apklausinėja `radar-api.mainline.inc` viešąjį API (dronuradaras.lt tinklo backend'as). Publikuoja:
-1. Jutiklių mazgų pozicijas (tik **online** būsenos) — žali sensorių dėžutės ATAK žemėlapyje
-2. Aptiktus dronus — raudoni priešiški UAV žymekliai su informacine kortele
-
-**API:**
-- `GET https://radar-api.mainline.inc/api/v1/public/devices` — jutikliai (kas 60 s)
-- `GET https://radar-api.mainline.inc/api/v1/public/detections` — aptikimai (kas 10 s)
-- `GET https://radar-api.mainline.inc/api/v1/public/detections/{id}/audio` — WAV garso įrašas
-
-**API rakto nereikia** — naudojama ta pati viešoji CORS kilmė kaip dronuradaras.lt svetainė.
-
-**Zenoh temos:**
-- `…/land/dronuradaras/acoustic/neutral/sensor/status/v1` — jutikliai
-- `…/air/dronuradaras/acoustic/hostile/uav/tracks/v1` — drono aptikimai
-
-**ATAK žymekliai:**
-- Jutikliai: `a-n-G-E-S` (žalia sensorių dėžutė)
-- Drono aptikimas: `a-h-A-M-F-Q` (raudona priešiška UAV piktograma)
-
-**Informacinė kortelė drono aptikimui (ATAK):**
-```
-─── IDENTITY ───
-CS: DRONE
-
-─── KINEMATICS ───
-LAT/LON/MGRS
-
-─── DETECTION ───
-TIME: 2026-06-21 13:59:39 UTC
-SENSOR: radar-58264
-[AUDIO RECORDED]
-AUDIO: https://radar-api.mainline.inc/...audio
-REF: 7cd608d3-392e-4
-```
-
----
-
-### 7.3 `cot_layer.py` — CoT išvesties sluoksnis
-
-**Ką daro:** Prenumeruoja visas Zenoh temas, konvertuoja objektus į CoT XML ir siunčia į ATAK.
-
-**Du veikimo režimai:**
-- `--udp --host 239.2.3.1 --port 6969` — multicast visiems ATAK tinkle (nenaudojamas TAK serveris)
-- `--host <TAK_HOST> --port 8087` — TCP į FreeTAK arba TAK serverį
-
-**CoT tipų žemėlapis (pasirinkimas):**
-
-| Zenoh tema | CoT tipas | ATAK piktograma |
+| ATAK piktograma | CoT tipas | Šaltinis |
 |---|---|---|
-| `air/**/unknown/**` | `a-u-A-C-F` | Balta nežinoma piktograma |
-| `air/**/hostile/uav/**` | `a-h-A-M-F-Q` | Raudona priešiška UAV |
-| `land/**/neutral/radar/**` | `a-f-G-E-S-R` | Mėlynas radaro dubuo |
-| `land/**/neutral/sensor/**` | `a-n-G-E-S` | Žalia sensorių dėžutė |
-| `sea/**/civ/vessel/**` | (pagal tipą) | Laivas |
+| Mėlynas radaro dubuo | `a-f-G-E-S-R` | Giraffe AMB radaro vieta |
+| Žalia sensorių dėžutė | `a-n-G-E-S` | dronuradaras.lt akustinis jutiklis |
+| Raudona priešiška UAV | `a-h-A-M-F-Q` | Drono aptikimo įvykis |
+| Balta nežinoma orlaivio | `a-u-A-C-F` | Neklasifikuotas radaro takelis |
 
 ---
 
-### 7.4 `track_fusion_layer.py` — takelio koreliacijos sluoksnis
-
-**Ką daro:** Priima radaro takelius (ASTERIX CAT-48) ir ADS-B duomenis, koreliuoja juos pagal erdvę ir laiką, išveda sulietus takelius. Pašalina dublikatus (tą patį lėktuvą matantį ir radaras, ir ADS-B).
-
-**Prenumeruoja:**
-- `…/air/asterix/cat48/**` (radaras — pirminė pozicijų valdžia)
-- `…/air/asterix/cat21/**` (ADS-B — tapatybės praturtinimas)
-
-**Publikuoja:**
-- `…/air/fused/*/aircraft/tracks/v1`
-
-> **Pastaba:** Jei nenorite naudoti koreliacijos — galite paleisti tik `asterix` + `cot-udp` be `track-fusion`. Tada ATAK matys tiesioginius radaro takelius.
-
----
-
-### 7.5 `sitaware_bridge.py` — SitaWare draugiškų pajėgų stebėjimas
-
-**Ką daro:** Apklausinėja SitaWare REST API, gauna draugiškų vienetų pozicijas ir publikuoja į Zenoh kaip žemės takelius.
-
-**Reikia:** `SITAWARE_URL`, `SITAWARE_USER`, `SITAWARE_PASS` `.env` faile.
-
----
-
-## 8. ATAK konfigūracija
-
-### 8.1 UDP Multicast gavimas
-
-ATAK įrenginyje:
-
-1. **Settings → Network → Multicast**
-2. Įjungti multicast
-3. Adresų sąraše turi būti `239.2.3.1:6969`
-
-> Jei ATAK ir serveris skirtinguose tinkluose — multicast neveiks. Reikia arba TAK serverio, arba NetBird VPN.
-
-### 8.2 Tinklo tikrinimas
-
-Serverio pusėje patikrinkite ar multicast siunčiamas:
-
-```bash
-# Klausykite ar ateina CoT duomenys (reikia tcpdump):
-sudo tcpdump -i any -n udp and host 239.2.3.1 and port 6969 -A | head -50
-```
-
-### 8.3 ATAK piktogramų reikšmės
-
-| Spalva | Reikšmė | Pavyzdys |
-|---|---|---|
-| Mėlyna | Draugiškas (Friendly) | Giraffe radaras |
-| Žalia | Neutralus (Neutral) | dronuradaras.lt jutikliai |
-| Raudona | Priešiškas (Hostile) | Aptiktas dronas |
-| Geltona | Nežinomas (Unknown) | Neklasifikuotas objektas |
-
----
-
-## 9. Dažniausios problemos
-
-### 9.1 Zenoh negali prisijungti
-
-**Klaida:**
-```
-zenoh.ZError: Unable to connect to any of [tls/zenoh.efdi...]
-```
-
-**Priežastys ir sprendimai:**
-
-```bash
-# 1. Patikrinkite ar Zenoh router veikia:
-docker compose -f compose/docker-compose.yml ps zenoh-router
-
-# 2. Patikrinkite ar ZENOH_LOCAL_ENDPOINT nustatytas teisingai:
-echo $ZENOH_LOCAL_ENDPOINT
-# Turi būti: tcp/127.0.0.1:7448
-
-# 3. Eksportuokite rankiniu būdu:
-export ZENOH_LOCAL_ENDPOINT=tcp/127.0.0.1:7448
-export GOAT_CERT_DIR=/home/<vartotojas>/goat-bundle
-export BUNDLE_DIR=/home/<vartotojas>/goat-bundle
-```
-
-> **⚠ Svarbu:** `source compose/.env` be `export` neeksportuoja kintamųjų į vaikinių procesų aplinką. Naudokite `set -a && source compose/.env && set +a` arba eksportuokite rankiniu būdu.
-
----
-
-### 9.2 ATAK nieko nerodo
-
-**Tikrinkite eilės tvarka:**
-
-```bash
-# 1. Ar cot-udp procesas veikia?
-cat .pids/cot-udp.pid && kill -0 $(cat .pids/cot-udp.pid) && echo "veikia"
-
-# 2. Ar siunčia duomenis? (žurnale turi būti CoT XML eilutės)
-tail -20 logs/cot-udp.log
-
-# 3. Ar tinklas leidžia multicast?
-sudo tcpdump -i any udp and host 239.2.3.1 -c 5
-
-# 4. Ar ATAK įrenginys tame pačiame tinkle?
-# Patikrinkite IP adresus abiejų pusių
-```
-
-**Dažna klaida:** ATAK ir serveris skirtinguose VLAN — multicast nepraeina tarp VLAN be maršrutizatoriaus konfigūracijos.
-
----
-
-### 9.3 Keli to paties proceso egzemplioriai
-
-**Problema:** Paleidus `start.sh` du kartus — veikia du to paties bridge procesai.
-
-**Diagnozė:**
-```bash
-ps aux | grep "asterix_bridge\|cot_layer" | grep -v grep
-```
-
-**Sprendimas:**
-```bash
-pkill -f "asterix_bridge.py"
-pkill -f "cot_layer.py"
-rm -f .pids/*.pid
-./start.sh
-```
-
-> **Kodėl taip nutinka:** PID faile saugomas bash wrapper proceso PID, ne Python proceso. `start.sh` tikrina PID failą, bet procesas jau gali būti kitas. **Niekada nenaudokite** `kill -9` prieš tikrinant — gali palikti Zenoh jungtis neuždarytomis.
-
----
-
-### 9.4 Giraffe radaras išnyksta iš ATAK po kiek laiko
-
-**Priežastis:** CoT žymeklio galiojimo laikas (stale timer) pasibaigė — ATAK automatiškai ištrina senus žymeklius.
-
-**Sprendimas jau įdiegtas:** `asterix_bridge.py` kas 60 sekundžių iš naujo publikuoja paskutinę žinomą radaro poziciją (keepalive mechanizmas). Jei radaras visiškai atsijungė ir bridge buvo paleistas iš naujo — pradinį žymeklį bridge publikuoja iš karto paleidimo metu.
-
-**Jei vis tiek dingsta:**
-```bash
-tail -f logs/asterix.log | grep -i "keepalive\|startup\|Published"
-```
-
----
-
-### 9.5 Radaras rodo 0°/0° koordinatėse
-
-**Priežastis:** `CAT48_RADAR_LAT` / `CAT48_RADAR_LON` nenustatyti `.env` faile arba neeksportuoti.
-
-```bash
-grep "CAT48_RADAR" compose/.env
-# Turi rodyti konkretų skaičių, ne tuščią reikšmę
-```
-
----
-
-### 9.6 dronuradaras.lt bridge nepublikuoja aptikimų
-
-**Galimos priežastys:**
-
-1. **API grąžina tik senus aptikimus** — bridge filtruoja aptikimus senesnius nei 5 minutes. Jei sistemos laikrodis neteisingas arba aptikimai seni — nebus publikuojama.
-
-```bash
-# Patikrinkite paskutinį aptikimo laiką:
-curl -s -H "Origin: https://dronuradaras.lt" \
-  https://radar-api.mainline.inc/api/v1/public/detections | python3 -m json.tool
-```
-
-2. **Visi aptikimai jau matyti** — bridge deduplikuoja pagal ID. Perkraukite bridge jei norite vėl pamatyti.
-
-3. **Nėra interneto ryšio:**
-```bash
-curl -s -o /dev/null -w "%{http_code}" \
-  -H "Origin: https://dronuradaras.lt" \
-  https://radar-api.mainline.inc/api/v1/public/devices
-# Turi grąžinti 200
-```
-
----
-
-### 9.7 `.env` failo kintamieji neskaitomi
-
-**Problema:** FR24_KEY ir panašūs raktai su `|` simboliu gali sugadinti `source .env` komandą standartiniame shell.
-
-**Mūsų sprendimas:** `start.sh` ir `run.sh` skaito `.env` saugiu būdu (eilutė po eilutės, be `eval`). **Niekada nenaudokite:**
-
-```bash
-# ❌ BLOGAI — gali interpretuoti | kaip pipe:
-source compose/.env
-
-# ✓ GERAI — naudokite start.sh arba run.sh
-./start.sh
-```
-
----
-
-## 10. Naujo bridge kūrimas
-
-Sekite šį šabloną kai pridedate naują duomenų šaltinį:
-
-### 10.1 Failo struktūra
-
-```python
-# compose/bridge/bridges/<pavadinimas>_bridge.py
-
-import json, os, time, urllib.request
-import zenoh
-
-ORG       = "1851281db70ccc0409dad4ecfc874cf5"
-_ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", "tls/zenoh.efdi...")
-_CERT_DIR = os.environ.get("GOAT_CERT_DIR", os.path.dirname(__file__))
-
-def make_config():
-    # Kopijuokite iš esamo bridge (pvz. opensky_states_bridge.py)
-    ...
-
-def main():
-    session = zenoh.open(make_config())
-    # Pasirinkite temą pagal duomenų tipą (žr. žemiau)
-    topic = "{}/air/<šaltinis>/<protokolas>/unknown/aircraft/tracks/v1".format(ORG)
-    pub = session.declare_publisher(topic)
-
-    while True:
-        data = fetch_data()
-        for item in data:
-            payload = {"_src": "<šaltinis>", "_ts": time.time(), "lat_deg": ..., "lon_deg": ...}
-            pub.put(json.dumps(payload).encode(), encoding=zenoh.Encoding.APPLICATION_JSON)
-        time.sleep(POLL_INTERVAL)
-```
-
-### 10.2 Temos pavadinimo taisyklės
+## 6. Paslaugų žinynas
+
+| Paslauga | Scenarijus | Zenoh tema (sutrumpinta) | Suaktyvinimas |
+|---|---|---|---|
+| `asterix` | `bridges/asterix_bridge.py` | `…/air/asterix/cat48/unknown/aircraft/tracks/v1` | Srautinis UDP |
+| `dronuradaras` | `bridges/dronuradaras_bridge.py` | `…/air/dronuradaras/acoustic/hostile/uav/tracks/v1` | REST apklausa 10 s |
+| `sitaware` | `bridges/sitaware_bridge.py` | `…/land/sitaware/rest/friendly/unit/tracks/v1` | Konfigūruojama REST |
+| `link16` | `bridges/link16_bridge.py` | `…/air/link16/jreap/*/aircraft/tracks/v1` | Srautinis UDP/TCP |
+| `mavlink` | `bridges/mavlink_bridge.py` | `…/air/mavlink/mav2/*/uav/tracks/v1` | Srautinis UDP/TCP |
+| `cot-udp` | `layers/cot_layer.py` | Prenumeratorius — visos temos | Įvykio valdomas |
+| `cot-tcp` | `layers/cot_layer.py` | Prenumeratorius — visos temos | Įvykio valdomas |
+| `track-fusion` | `layers/track_fusion_layer.py` | CAT-48 + CAT-21 prenumeratorius | Įvykio valdomas |
+
+### Zenoh temų schema
 
 ```
-{DOMAIN}/{ŠALTINIS}/{PROTOKOLAS}/{PRIKLAUSOMYBĖ}/{TIPAS}/tracks/v1
+{VARDAS_ERDVĖ}/{DOMENAS}/{ŠALTINIS}/{PROTOKOLAS}/{PRIKLAUSOMYBĖ}/{TIPAS}/tracks/v1
 ```
 
 | Laukas | Galimos reikšmės |
 |---|---|
-| DOMAIN | `air`, `land`, `sea`, `space`, `env` |
-| PRIKLAUSOMYBĖ | `friendly`, `hostile`, `neutral`, `unknown`, `civ`, `mil` |
-| TIPAS | `aircraft`, `vessel`, `vehicle`, `unit`, `sensor`, `uav`, `radar` |
+| `DOMENAS` | `air`, `land`, `sea`, `space`, `env` |
+| `PRIKLAUSOMYBĖ` | `friendly`, `hostile`, `neutral`, `unknown`, `civ`, `mil` |
+| `TIPAS` | `aircraft`, `vessel`, `vehicle`, `unit`, `sensor`, `uav`, `radar` |
 
-**Pavyzdžiai:**
-```
-air/asterix/cat48/unknown/aircraft/tracks/v1       ← Giraffe radaras
-air/dronuradaras/acoustic/hostile/uav/tracks/v1    ← drono aptikimas
-land/dronuradaras/acoustic/neutral/sensor/status/v1 ← akustinis jutiklis
-land/asterix/cat34/neutral/radar/status/v1          ← Giraffe radaro vieta
+---
+
+## 7. Eksploatacija
+
+### Paslaugų stabdymas
+
+```bash
+./stop.sh              # Stabdo visus bridge procesus
+./stop.sh layers       # Stabdo tik išvesties sluoksnius (cot-udp, cot-tcp, track-fusion)
 ```
 
-### 10.3 Privalomi laukai JSON payload
+### Žurnalų stebėjimas
+
+```bash
+tail -f logs/asterix.log          # Giraffe radaras — ASTERIX dekodavimas ir publikavimas
+tail -f logs/cot-udp.log          # CoT išvestis — patvirtina pristatymą į ATAK
+tail -f logs/dronuradaras.log     # Drono aptikimo įvykiai
+tail -f logs/track-fusion.log     # Sulieta takelio išvestis
+```
+
+### Procesų būsenos tikrinimas
+
+```bash
+ls .pids/                                          # Veikiančių paslaugų sąrašas
+kill -0 $(cat .pids/asterix.pid) && echo ok        # Konkretaus proceso tikrinimas
+```
+
+---
+
+## 8. Dažniausios problemos
+
+### Zenoh ryšio klaida
+
+**Simptomas:** `zenoh.ZError: Unable to connect to any of [tls/zenoh.efdi...]`
+
+```bash
+# 1. Patikrinkite ar router konteineris sveikas
+docker compose -f compose/docker-compose.yml ps zenoh-router
+
+# 2. Patikrinkite ar endpoint kintamasis nustatytas
+echo $ZENOH_LOCAL_ENDPOINT   # turi būti: tcp/127.0.0.1:7448
+
+# 3. Patikrinkite ar sertifikatų failai egzistuoja
+ls $GOAT_CERT_DIR/*.pem
+```
+
+Jei `compose/.env` buvo įkeltas paprastu `source compose/.env`, kintamieji neeksportuojami į vaikininius procesus. Naudokite `./start.sh` (kuris tai tvarko automatiškai), arba:
+
+```bash
+set -a && source compose/.env && set +a
+```
+
+### ATAK nerodo jokių objektų
+
+```bash
+# 1. Patikrinkite ar cot-udp veikia
+kill -0 $(cat .pids/cot-udp.pid) && echo veikia
+
+# 2. Patikrinkite ar multicast srautas išeina iš serverio
+sudo tcpdump -i any udp and host 239.2.3.1 and port 6969 -c 5
+
+# 3. Patikrinkite ar ATAK ir serveris tame pačiame L2 segmente
+```
+
+### Giraffe radaras rodomas 0°Š 0°R koordinatėse
+
+`CAT48_RADAR_LAT` arba `CAT48_RADAR_LON` nenustatytas. Patikrinkite:
+
+```bash
+grep CAT48_RADAR compose/.env
+```
+
+### Drono aptikimai nepublikuojami
+
+Bridge'as atmeta aptikimus, senesnius nei 300 s. Patikrinkite API pasiekiamumą ir duomenų aktualumą:
+
+```bash
+curl -s -H "Origin: https://dronuradaras.lt" \
+  https://radar-api.mainline.inc/api/v1/public/detections \
+  | python3 -c "
+import sys, json, time
+d = json.load(sys.stdin).get('detections', [])
+now = time.time()
+fresh = [x for x in d if (now - x.get('detected_at', 0)/1000) < 300]
+print(f'{len(fresh)} nauji / {len(d)} iš viso aptikimų')
+"
+```
+
+### Keli to paties proceso egzemplioriai
+
+Atsiranda paleidus `start.sh` du kartus be sustabdymo:
+
+```bash
+pkill -f "_bridge\.py\|cot_layer\|track_fusion"
+rm -f .pids/*.pid
+./start.sh
+```
+
+### Giraffe radaro piktograma dingsta iš ATAK
+
+`asterix` bridge'as kas 60 s publikuoja keepalive nepriklausomai nuo takelio aktyvumo. Jei piktograma dingsta — bridge'as sustojo:
+
+```bash
+tail -20 logs/asterix.log | grep -E "keepalive|startup|error"
+```
+
+---
+
+## 9. Naujo bridge kūrimas
+
+### Failo struktūra
+
+```python
+# compose/bridge/bridges/<pavadinimas>_bridge.py
+
+import json, os, time
+import zenoh
+
+ORG       = "1851281db70ccc0409dad4ecfc874cf5"
+_ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", "tcp/127.0.0.1:7448")
+_CERT_DIR = os.environ.get("GOAT_CERT_DIR", os.path.dirname(__file__))
+
+# make_config() nukopijuokite iš bet kurio esamo bridge — visiems ji identiška.
+
+def main():
+    session = zenoh.open(make_config())
+    topic = f"{ORG}/air/<šaltinis>/<protokolas>/unknown/aircraft/tracks/v1"
+    pub = session.declare_publisher(topic)
+
+    while True:
+        for item in fetch_data():
+            payload = {
+                "_src": "<šaltinis>", "_ts": time.time(),
+                "lat_deg": item["lat"], "lon_deg": item["lon"],
+            }
+            pub.put(json.dumps(payload).encode(),
+                    encoding=zenoh.Encoding.APPLICATION_JSON)
+        time.sleep(POLL_INTERVAL)
+```
+
+### Minimalūs privalomi JSON payload laukai
 
 ```json
 {
@@ -608,62 +408,58 @@ land/asterix/cat34/neutral/radar/status/v1          ← Giraffe radaro vieta
 }
 ```
 
-Papildomi rekomenduojami laukai:
+Pasirinktiniai laukai, atpažįstami išvesties sluoksnių:
+
 ```json
 {
-  "sensor_id":  "unikalus_id",
-  "callsign":   "rodomas_pavadinimas",
-  "speed_ms":   15.2,
+  "sensor_id":   "unikalus_id",
+  "callsign":    "rodomas_vardas",
+  "speed_ms":    15.2,
   "heading_deg": 270.0,
-  "baro_alt_m": 1500.0
+  "baro_alt_m":  1500.0
 }
 ```
 
-### 10.4 Pridėjimas į `start.sh`
+### Registravimas `start.sh`
 
 ```bash
-# 1. Pridėkite į SERVICES masyvą:
+# 1. Pridėkite į SERVICES masyvą
 SERVICES=(... <pavadinimas> ...)
 
-# 2. Pridėkite į SVC_CAT:
+# 2. Pridėkite kategoriją
 [<pavadinimas>]="Sensor bridges"
 
-# 3. Pridėkite į SVC_DESC:
+# 3. Pridėkite aprašymą
 [<pavadinimas>]="Trumpas aprašymas"
 
-# 4. Pridėkite į svc_ready():
-<pavadinimas>) return 0 ;;    # arba tikrinkite env kintamąjį
+# 4. Pridėkite parengties tikrinimą (arba return 0 jei visada paruošta)
+<pavadinimas>) [[ "${MANO_KINTAMASIS:-}" ]] ;;
 
-# 5. Pridėkite į launch():
+# 5. Pridėkite launch case
 <pavadinimas>)
-    _start <pavadinimas> bridges/<pavadinimas>_bridge.py
-    ;;
+    _start <pavadinimas> bridges/<pavadinimas>_bridge.py ;;
 ```
 
-### 10.5 CoT tipo pridėjimas (jei reikia naujo)
+### CoT tipo pridėjimas (jei reikia naujo)
 
-`cot_layer.py` faile, `_TOPIC_COT` žodyne:
+`layers/cot_layer.py` faile, `_TOPIC_COT` žodyne:
 
 ```python
-"air/**/hostile/uav/**": ("a-h-A-M-F-Q", AIR_STALE_S),   # UAV aptikimas
-"land/**/neutral/sensor/**": ("a-n-G-E-S", LAND_STALE_S * 2),  # Akustinis jutiklis
+"air/**/hostile/uav/**":      ("a-h-A-M-F-Q", AIR_STALE_S),
+"land/**/neutral/sensor/**":  ("a-n-G-E-S",   LAND_STALE_S * 2),
 ```
 
 ---
 
-## 11. Atnaujinimų žurnalas
+## Pakeitimų žurnalas
 
-| Data | Kas pakeitė | Aprašymas |
+| Data | Autorius | Pakeitimas |
 |---|---|---|
-| 2026-06-22 | G. Ndukve | Pradinė sąranka, Giraffe ASTERIX bridge |
-| 2026-06-22 | G. Ndukve | `start.sh` interaktyvus paleidiklis |
-| 2026-06-22 | G. Ndukve | dronuradaras.lt bridge (akustiniai jutikliai + drono aptikimai) |
-| 2026-06-22 | G. Ndukve | Drono aptikimo informacinė kortelė su garso URL |
-| 2026-06-22 | G. Ndukve | Giraffe radaro keepalive + pradinė publikacija paleidimo metu |
-| | | |
-
-> Pridėkite naują eilutę kiekvieną kartą kai atliekate reikšmingą pakeitimą.
+| 2026-06-22 | G. Ndukve | Pradinis diegimas: Giraffe ASTERIX bridge, `start.sh` paleidiklis |
+| 2026-06-22 | G. Ndukve | dronuradaras.lt bridge — akustiniai jutikliai ir drono aptikimai |
+| 2026-06-22 | G. Ndukve | CoT DETECTION sekcija su garso URL ATAK pastabose |
+| 2026-06-22 | G. Ndukve | Radaro keepalive ir pradinė publikacija paleidimo metu |
 
 ---
 
-*Dokumentas skirtas vidiniam naudojimui. Neskleisti už projekto ribų.*
+*Skirta vidiniam naudojimui — neskleisti už projekto ribų.*
