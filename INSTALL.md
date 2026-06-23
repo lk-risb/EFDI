@@ -219,11 +219,43 @@ Processes are tracked via PID files in `.pids/` and log to `logs/<service>.log`.
 
 Set `TAK_HOST` and `TAK_PORT` in `.env`, then select `cot-tcp` instead of `cot-udp` in the launcher.
 
+### SitaWare friendly-force tracking
+
+SitaWare publishes all unit positions to ATAK automatically once the `sitaware` service is running. No ATAK-side configuration is required beyond normal CoT reception.
+
+**Required `.env` fields:**
+
+```bash
+SITAWARE_URL=https://<sitaware-host>
+SITAWARE_USER=<username>
+SITAWARE_PASS=<password>
+SITAWARE_POLL_S=10   # optional — poll interval in seconds (default 10)
+```
+
+The bridge reads MIL-STD-2525B SIDC codes from SitaWare and routes each unit to the correct Zenoh topic by affiliation and battle dimension:
+
+| SIDC affiliation | SIDC dimension | Zenoh topic path | ATAK CoT type |
+|---|---|---|---|
+| Friendly / Assumed Friendly | Ground (G) | `…/land/sitaware/rest/friendly/unit/…` | `a-f-G-U-C` |
+| Hostile | Ground (G) | `…/land/sitaware/rest/hostile/unit/…` | `a-h-G-U-C` |
+| Neutral | Ground (G) | `…/land/sitaware/rest/neutral/unit/…` | `a-n-G-U-C` |
+| Friendly | Air (A) | `…/air/sitaware/rest/friendly/aircraft/…` | `a-f-A-M-F` |
+| Hostile | Air (A) | `…/air/sitaware/rest/hostile/aircraft/…` | `a-h-A-M-F` |
+| Friendly | Sea (S) | `…/sea/sitaware/rest/friendly/vessel/…` | `a-f-S-X-L` |
+| Hostile | Sea (S) | `…/sea/sitaware/rest/hostile/vessel/…` | `a-h-S-X-L` |
+
 ### Icon reference
 
 | ATAK appearance | CoT type | Source |
 |---|---|---|
 | Blue radar dish (with motion trail if mobile) | `a-f-G-E-S-R` | Giraffe AMB site marker |
+| Blue ground unit | `a-f-G-U-C` | SitaWare friendly ground unit |
+| Red ground unit | `a-h-G-U-C` | SitaWare hostile ground unit |
+| Yellow/green ground unit | `a-n-G-U-C` | SitaWare neutral ground unit |
+| Blue aircraft | `a-f-A-M-F` | SitaWare friendly air unit |
+| Red aircraft | `a-h-A-M-F` | SitaWare hostile air unit |
+| Blue vessel | `a-f-S-X-L` | SitaWare friendly vessel |
+| Red vessel | `a-h-S-X-L` | SitaWare hostile vessel |
 | Green sensor box | `a-n-G-E-S` | dronuradaras.lt acoustic sensor |
 | Red hostile UAV | `a-h-A-M-F-Q` | Drone detection event |
 | White unknown aircraft | `a-u-A-C-F` | Unclassified radar track |
