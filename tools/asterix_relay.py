@@ -10,7 +10,7 @@ Usage:
     python3 asterix_relay.py
 
     # Or override defaults:
-    python3 asterix_relay.py --local-port 30002 --dest 100.64.59.142:30048
+    python3 asterix_relay.py --local-port 30002 --dest <MOON_POD_NETBIRD_IP>:30048
 
 Requirements:
     Python 3.6+  (no extra packages needed)
@@ -20,7 +20,7 @@ import argparse
 import socket
 
 LOCAL_PORT = 30002          # port the Giraffe sends ASTERIX to on this PC
-DEST_IP    = "100.64.59.142"  # moon-pod NetBird IP
+DEST_IP    = ""             # moon-pod NetBird IP — set via --dest IP:PORT
 DEST_PORT  = 30048          # asterix_bridge listening port on moon-pod
 
 
@@ -28,8 +28,9 @@ def main():
     ap = argparse.ArgumentParser(description="ASTERIX UDP relay → moon-pod")
     ap.add_argument("--local-port", type=int, default=LOCAL_PORT,
                     help="Local UDP port the radar sends to (default: {})".format(LOCAL_PORT))
-    ap.add_argument("--dest", default="{}:{}".format(DEST_IP, DEST_PORT),
-                    help="moon-pod address IP:PORT (default: {}:{})".format(DEST_IP, DEST_PORT))
+    ap.add_argument("--dest", required=not DEST_IP,
+                    default="{}:{}".format(DEST_IP, DEST_PORT) if DEST_IP else None,
+                    help="moon-pod address IP:PORT (NetBird mesh IP of the pod)")
     args = ap.parse_args()
 
     dest_ip, dest_port = args.dest.rsplit(":", 1)

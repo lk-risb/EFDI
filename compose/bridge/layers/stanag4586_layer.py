@@ -44,7 +44,7 @@ import time
 import zenoh
 
 ROUTER    = "tls/zenoh.efdi.netbird.efdi-backbone.net:7447"
-ORG       = "1851281db70ccc0409dad4ecfc874cf5"
+ORG       = os.environ.get("PARTNER_NAMESPACE", "")
 HERE      = os.path.dirname(os.path.abspath(__file__))
 _CERT_DIR = os.environ.get("GOAT_CERT_DIR", HERE)
 _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", ROUTER)

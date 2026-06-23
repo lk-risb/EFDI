@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""first-publisher.py — org "1851281db70ccc0409dad4ecfc874cf5" → EFDI Fabric.
+"""first-publisher.py — org "<YOUR_NAMESPACE>" → EFDI Fabric.
 
 A working starting point. Run this from the directory the tarball
 unpacked into; the cert/key/root paths assume sibling files.
@@ -31,7 +31,7 @@ import time
 import zenoh
 
 ROUTER = "tls/zenoh.efdi.netbird.efdi-backbone.net:7447"       # mesh-internal endpoint; from the OOB bundle
-ORG = "1851281db70ccc0409dad4ecfc874cf5"       # your org prefix
+ORG = os.environ.get("PARTNER_NAMESPACE", "")       # your org prefix
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 

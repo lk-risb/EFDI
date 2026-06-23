@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""first-subscriber.py — org "1851281db70ccc0409dad4ecfc874cf5" → EFDI Fabric.
+"""first-subscriber.py — org "<YOUR_NAMESPACE>" → EFDI Fabric.
 
 Self-validation companion to first-publisher.py. Run this in one shell
 and first-publisher.py in another; you'll see your own publishes echo
-back. By default subscribes to your whole org subtree ("1851281db70ccc0409dad4ecfc874cf5/**");
+back. By default subscribes to your whole org subtree ("<YOUR_NAMESPACE>/**");
 pass a key expression as the first arg to narrow.
 
 Install:
@@ -11,8 +11,8 @@ Install:
     pip install eclipse-zenoh
 Run:
     . venv/bin/activate
-    python3 first-subscriber.py                       # 1851281db70ccc0409dad4ecfc874cf5/**
-    python3 first-subscriber.py "1851281db70ccc0409dad4ecfc874cf5/hello/v1"         # one topic
+    python3 first-subscriber.py                       # <YOUR_NAMESPACE>/**
+    python3 first-subscriber.py "<YOUR_NAMESPACE>/hello/v1"         # one topic
     python3 first-subscriber.py "**"                  # everything on fabric
 
 Windows note: use "python" instead of "python3"; activate the venv
@@ -32,7 +32,7 @@ import time
 import zenoh
 
 ROUTER = "tls/zenoh.efdi.netbird.efdi-backbone.net:7447"       # mesh-internal endpoint; from the OOB bundle
-ORG = "1851281db70ccc0409dad4ecfc874cf5"       # your org prefix
+ORG = os.environ.get("PARTNER_NAMESPACE", "")       # your org prefix
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 

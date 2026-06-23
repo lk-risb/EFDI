@@ -1,2 +1,3 @@
 .compound-engineering/*.local.yaml
 register_topics.sh
+compose/.env
