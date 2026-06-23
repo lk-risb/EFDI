@@ -453,12 +453,28 @@ In `layers/cot_layer.py`, add to `_TOPIC_COT`:
 
 ## Changelog
 
-| Date | Author | Change |
-|---|---|---|
-| 2026-06-22 | — | Initial deployment: Giraffe ASTERIX bridge, `start.sh` launcher |
-| 2026-06-22 | — | dronuradaras.lt bridge — acoustic sensors + drone detections |
-| 2026-06-22 | — | CoT DETECTION section with audio URL in ATAK remarks |
-| 2026-06-22 | — | Radar keepalive + startup publish |
+| Date | Change |
+|---|---|
+| 2026-06-14 | Initial commit — forked from official `efdi-moon-pod-main` repository |
+| 2026-06-15 | Base bridge adapters wired; repository structure established; README added |
+| 2026-06-16 | `airplanes.live` bridge: regional ADS-B feed + worldwide military aircraft tracking |
+| 2026-06-16 | ICAO NOTAM bridge: live NOTAM ingestion via ICAO Dataservices API |
+| 2026-06-16 | FlightRadar24 bridge: FR24 commercial feed integration |
+| 2026-06-16 | Windy bridge: point-forecast API integration |
+| 2026-06-16 | Protocol Buffer definitions for new track types (`aircraft_track`, `ais_track`, `aprs_track`, `cat62_track`) |
+| 2026-06-17/18 | Quality-of-life improvements: bridge robustness, layer deduplication, track fusion tuning |
+| 2026-06-18 | ASTERIX full-decode design specification document added |
+| 2026-06-19/22 | Further bridge and layer improvements; Giraffe ASTERIX bridge complete |
+| 2026-06-22 | `dronuradaras.lt` bridge: acoustic sensor network + drone detection events |
+| 2026-06-22 | CoT DETECTION section with audio clip URL in ATAK remarks field |
+| 2026-06-22 | Radar site marker: startup publish + 60 s keepalive so ATAK never loses the marker |
+| 2026-06-23 | Security audit: removed hardcoded API token from `register_topics.sh`; token moved to `$EFDI_PORTAL_KEY` env var |
+| 2026-06-23 | Security: personal namespace UUID, email, IP, and vendor slug removed from all tracked files; bridges read `PARTNER_NAMESPACE` from environment |
+| 2026-06-23 | Security: `compose/.env` and `register_topics.sh` added to `.gitignore` — credentials stay local only |
+| 2026-06-23 | Security: unbounded HTTP body read in `rest-http/bridge.py` capped at 10 MB |
+| 2026-06-23 | Documentation overhaul: `INSTALL.md` (English), `DIEGIMAS.md` (Lithuanian), `README.md` rewritten as architecture overview |
+| 2026-06-23 | ASTERIX CAT-34 I034/120 decoder: radar self-reports WGS-84 position from live stream — no manual coordinate config required |
+| 2026-06-23 | Mobile radar support: position, speed, and course derived from successive I034/120 reports; ATAK shows motion trail on vehicle-mounted radars |
 
 ---
 

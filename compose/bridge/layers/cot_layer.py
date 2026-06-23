@@ -2,12 +2,17 @@
 """cot_layer.py — Zenoh EFDI track topics → TAK Server / ATAK CoT bridge.
 
 Subscribes to all EFDI track topics and forwards position updates as
-Cursor-on-Target (CoT) XML to a TAK Server (FreeTAKServer) over TCP.
+Cursor-on-Target (CoT) XML to a TAK Server over TCP.
 All connected ATAK / iTAK / TAKX / WinTAK devices see the tracks automatically
 through the server — no per-device configuration, no multicast required.
 
-Default: TCP → localhost:8087  (FreeTAKServer running in the same compose stack)
-Override: --host <ip> --port <port>
+Option A — plaintext TCP (NetBird tunnel provides encryption):
+  Default: TCP → localhost:8087
+  Override: --host <ip> --port <port>
+
+Option B — mutual TLS directly on official TAK Server port 8089:
+  --host <ip> --port 8089 --tls --cert cert.pem --key key.pem --ca ca.pem
+  Generate certs with: make add-service NAME=efdi-pod  (in the TAK repo)
 
 For direct UDP multicast (same L2 only): --udp --host 239.2.3.1 --port 6969
 
@@ -24,9 +29,11 @@ Zenoh topics consumed (5 main categories):
   SPACE: <ORG>/space/tracks/v1      → CoT a-f-P     (satellite)
 
 Run:
-    venv/bin/python3 cot_layer.py                        # TCP → FTS localhost
-    venv/bin/python3 cot_layer.py --host 100.64.59.10   # TCP → remote FTS
-    venv/bin/python3 cot_layer.py --udp --host 239.2.3.1 --port 6969  # UDP multicast
+    venv/bin/python3 cot_layer.py                                          # TCP plaintext → localhost:8087
+    venv/bin/python3 cot_layer.py --host 100.64.x.x --port 8087           # TCP plaintext → remote TAK Server
+    venv/bin/python3 cot_layer.py --host 100.64.x.x --port 8089 --tls \   # mTLS → official TAK Server
+        --cert cert.pem --key key.pem --ca ca.pem
+    venv/bin/python3 cot_layer.py --udp --host 239.2.3.1 --port 6969      # UDP multicast
 """
 
 import argparse
@@ -36,6 +43,7 @@ import math
 import os
 import re
 import socket
+import ssl
 import struct
 import threading
 import time
@@ -1275,24 +1283,39 @@ def track_to_cot(track: dict, cot_type: str, stale_s: float = COT_STALE_S) -> st
 # ---------------------------------------------------------------------------
 
 class TcpSender:
-    """Thread-safe TCP writer with reconnect. Drops messages when disconnected."""
+    """Thread-safe TCP writer with reconnect. Supports plaintext and mutual TLS."""
 
-    def __init__(self, host: str, port: int):
-        self.host  = host
-        self.port  = port
+    def __init__(self, host: str, port: int, tls: bool = False,
+                 certfile: str | None = None, keyfile: str | None = None,
+                 cafile: str | None = None):
+        self.host      = host
+        self.port      = port
+        self._tls      = tls
+        self._certfile = certfile
+        self._keyfile  = keyfile
+        self._cafile   = cafile
         self._sock: socket.socket | None = None
         self._lock = threading.Lock()
         self._connect()
 
     def _connect(self):
         try:
-            s = socket.create_connection((self.host, self.port), timeout=SEND_TIMEOUT_S)
+            raw = socket.create_connection((self.host, self.port), timeout=SEND_TIMEOUT_S)
+            if self._tls:
+                ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+                ctx.load_verify_locations(self._cafile)  # cafile required; enforced in run()
+                if self._certfile and self._keyfile:
+                    ctx.load_cert_chain(self._certfile, self._keyfile)
+                s = ctx.wrap_socket(raw, server_hostname=self.host)
+            else:
+                s = raw
             s.settimeout(SEND_TIMEOUT_S)
             with self._lock:
                 self._sock = s
-            print("TAK TCP connected → {}:{}".format(self.host, self.port), flush=True)
+            mode = "TLS" if self._tls else "TCP"
+            print("TAK {} connected → {}:{}".format(mode, self.host, self.port), flush=True)
         except OSError as exc:
-            print("TAK TCP connect failed ({}:{}) — {}, retry in {}s".format(
+            print("TAK connect failed ({}:{}) — {}, retry in {}s".format(
                 self.host, self.port, exc, RECONNECT_S), flush=True)
             self._sock = None
             threading.Timer(RECONNECT_S, self._connect).start()
@@ -1502,8 +1525,16 @@ def run(args):
         sender = UdpSender(args.host, args.port)
         print("CoT → UDP {}:{}".format(args.host, args.port), flush=True)
     else:
-        sender = TcpSender(args.host, args.port)
-        print("CoT → TCP {}:{} (TAK Server)".format(args.host, args.port), flush=True)
+        tls = getattr(args, "tls", False)
+        if tls and not getattr(args, "ca", None):
+            raise SystemExit("--ca / TAK_CA is required when --tls is specified")
+        sender = TcpSender(args.host, args.port,
+                           tls=tls,
+                           certfile=getattr(args, "cert", None),
+                           keyfile=getattr(args, "key", None),
+                           cafile=getattr(args, "ca", None))
+        mode = "TLS mTLS" if tls else "TCP plaintext"
+        print("CoT → {} {}:{} (TAK Server)".format(mode, args.host, args.port), flush=True)
 
     session = zenoh.open(make_config())
     _start_dr_thread(sender)
@@ -1546,6 +1577,15 @@ def main():
                     help="TAK Server host (default: 127.0.0.1)")
     ap.add_argument("--port", type=int, default=int(os.environ.get("TAK_PORT", "8087")),
                     help="TAK Server port (default: 8087)")
+    ap.add_argument("--tls", action="store_true",
+                    default=os.environ.get("TAK_TLS", "") == "1",
+                    help="Enable mutual TLS — Option B, port 8089 (requires --cert, --key, --ca)")
+    ap.add_argument("--cert", default=os.environ.get("TAK_CERT"),
+                    help="Client certificate PEM (mTLS Option B)")
+    ap.add_argument("--key", default=os.environ.get("TAK_KEY"),
+                    help="Client private key PEM (mTLS Option B)")
+    ap.add_argument("--ca", default=os.environ.get("TAK_CA"),
+                    help="CA certificate PEM (mTLS Option B)")
     ap.add_argument("--udp", action="store_true",
                     help="Use UDP instead of TCP (for direct multicast/unicast, no TAK Server)")
     ap.add_argument("--verbose", "-v", action="store_true",
