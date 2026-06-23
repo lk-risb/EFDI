@@ -174,10 +174,14 @@ start_layers() {
     # CoT → ATAK UDP multicast (no TAK Server needed)
     start cot-udp layers/cot_layer.py --udp --host 239.2.3.1 --port 6969
 
-    # CoT → FreeTAKServer TCP (only if TAK_HOST is set to something reachable)
+    # CoT → TAK Server TCP (Option A: plaintext :8087, Option B: mTLS :8089)
     if [[ "${TAK_HOST:-127.0.0.1}" != "127.0.0.1" ]] || \
        nc -z "${TAK_HOST:-127.0.0.1}" "${TAK_PORT:-8087}" 2>/dev/null; then
-        start cot-tcp layers/cot_layer.py --host "${TAK_HOST:-127.0.0.1}" --port "${TAK_PORT:-8087}"
+        _cot_args=(--host "${TAK_HOST:-127.0.0.1}" --port "${TAK_PORT:-8087}")
+        if [[ "${TAK_TLS:-}" == "1" ]]; then
+            _cot_args+=(--tls --cert "${TAK_CERT}" --key "${TAK_KEY}" --ca "${TAK_CA}")
+        fi
+        start cot-tcp layers/cot_layer.py "${_cot_args[@]}"
     else
         echo "  [skip] cot-tcp — TAK Server not reachable at ${TAK_HOST:-127.0.0.1}:${TAK_PORT:-8087}"
     fi
@@ -323,10 +327,14 @@ start_giraffe_layers() {
     # CoT → ATAK UDP multicast
     start cot-udp layers/cot_layer.py --udp --host 239.2.3.1 --port 6969
 
-    # CoT → FreeTAKServer TCP (only if reachable)
+    # CoT → TAK Server TCP (Option A: plaintext :8087, Option B: mTLS :8089)
     if [[ "${TAK_HOST:-127.0.0.1}" != "127.0.0.1" ]] || \
        nc -z "${TAK_HOST:-127.0.0.1}" "${TAK_PORT:-8087}" 2>/dev/null; then
-        start cot-tcp layers/cot_layer.py --host "${TAK_HOST:-127.0.0.1}" --port "${TAK_PORT:-8087}"
+        _cot_args=(--host "${TAK_HOST:-127.0.0.1}" --port "${TAK_PORT:-8087}")
+        if [[ "${TAK_TLS:-}" == "1" ]]; then
+            _cot_args+=(--tls --cert "${TAK_CERT}" --key "${TAK_KEY}" --ca "${TAK_CA}")
+        fi
+        start cot-tcp layers/cot_layer.py "${_cot_args[@]}"
     else
         echo "  [skip] cot-tcp — TAK Server not reachable at ${TAK_HOST:-127.0.0.1}:${TAK_PORT:-8087}"
     fi
