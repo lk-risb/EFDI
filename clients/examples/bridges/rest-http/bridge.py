@@ -72,6 +72,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(404, b'{"error":"POST /pub/<suffix>"}')
         suffix = path[len("/pub/"):]
         length = int(self.headers.get("Content-Length", "0"))
+        if length > 10 * 1024 * 1024:  # 10 MB cap
+            return self._send(413, b'{"error":"payload too large (max 10 MB)"}')
         payload = self.rfile.read(length) if length else b""
         key = _abs_key(suffix)
         SESSION.put(key, payload)
