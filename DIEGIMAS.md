@@ -8,26 +8,12 @@
 
 ---
 
-## Turinys
-
-1. [Reikalavimai](#1-reikalavimai)
-2. [Diegimas](#2-diegimas)
-3. [Konfigūracija](#3-konfigūracija)
-4. [Steko paleidimas](#4-steko-paleidimas)
-5. [ATAK sąranka](#5-atak-sąranka)
-6. [Paslaugų žinynas](#6-paslaugų-žinynas)
-7. [Eksploatacija](#7-eksploatacija)
-8. [Dažniausios problemos](#8-dažniausios-problemos)
-9. [Naujo bridge kūrimas](#9-naujo-bridge-kūrimas)
-
----
-
 ## 1. Reikalavimai
 
 ### Programinė įranga
 
 | Priklausomybė | Minimali versija | Tikrinimas |
-|---|---|---|
+| --- | --- | --- |
 | Python | 3.10 | `python3 --version` |
 | Docker Engine | 24.0 | `docker --version` |
 | Docker Compose | 2.20 | `docker compose version` |
@@ -36,7 +22,7 @@
 ### Tinklas
 
 | Prievadas / adresas | Kryptis | Paskirtis |
-|---|---|---|
+| --- | --- | --- |
 | UDP `<CAT48_PORT>` (numatytasis 30048) | į serverį | Giraffe AMB ASTERIX srautas |
 | UDP multicast `239.2.3.1:6969` | iš serverio | CoT pristatymas į ATAK |
 | TCP 7448 | localhost | Vietinis Zenoh router |
@@ -64,7 +50,7 @@ cd efdi-moon-pod
 
 Bundle patalpinkite į `$HOME/goat-bundle/` (numatytasis kelias; keičiamas per `BUNDLE_DIR`):
 
-```
+```text
 ~/goat-bundle/
 ├── efdi-ca-root.pem          # CA sertifikatas (viešas)
 ├── <NAMESPACE>-cert.pem      # Mazgo sertifikatas
@@ -161,7 +147,7 @@ MAVLINK_TCP=
 
 Interaktyvus paleidiklis rodo visas paslaugas su jų parengties būsena. Įjunkite/išjunkite numeriu, tada paspauskite **Enter** pasirinktoms paslaugoms paleisti.
 
-```
+```text
 ╔══════════════════════════════════════════════════════════════════╗
 ║           EFDI Bridge Launcher  —  select services to start      ║
 ╚══════════════════════════════════════════════════════════════════╝
@@ -189,7 +175,7 @@ Interaktyvus paleidiklis rodo visas paslaugas su jų parengties būsena. Įjunki
 **Paleidiklio valdymas:**
 
 | Įvestis | Veiksmas |
-|---|---|
+| --- | --- |
 | `1`–`10` | Įjungti / išjungti paslaugą (keli skaičiai atskiriami tarpu) |
 | `a` | Pasirinkti visas paruoštas paslaugas |
 | `n` | Atžymėti visas |
@@ -199,9 +185,11 @@ Interaktyvus paleidiklis rodo visas paslaugas su jų parengties būsena. Įjunki
 **Rekomenduojami rinkiniai:**
 
 | Scenarijus | Pasirinkimas |
-|---|---|
+| --- | --- |
 | Giraffe radaras + ATAK multicast | `1 2 8` |
 | Giraffe + drono aptikimai + ATAK | `1 2 7 8` |
+| Giraffe + SitaWare + ATAK multicast | `1 2 6 8` |
+| Giraffe + SitaWare + drono aptikimai + ATAK | `1 2 6 7 8` |
 | Visi jutikliai + TAK serveris | `a`, tada atžymėkite `8` (cot-udp) |
 | Tik radaras be ATAK (derinimui) | `1 2 10` |
 
@@ -221,21 +209,55 @@ Procesų PID failai saugomi `.pids/`, žurnalai rašomi į `logs/<paslauga>.log`
 
 Nustatykite `TAK_HOST` ir `TAK_PORT` faile `.env`, tada paleidiklyje pasirinkite `cot-tcp` vietoj `cot-udp`.
 
+### SitaWare draugiškų pajėgų sekimas
+
+SitaWare vieneto pozicijos automatiškai publikuojamos į ATAK kai veikia `sitaware` paslauga. Jokios papildomos ATAK konfigūracijos nereikia.
+
+**Būtini `.env` laukai:**
+
+```bash
+SITAWARE_URL=https://<sitaware-serveris>
+SITAWARE_USER=<vartotojo vardas>
+SITAWARE_PASS=<slaptažodis>
+SITAWARE_POLL_S=10   # neprivaloma — apklausos intervalas sekundėmis (numatytasis 10)
+```
+
+Bridge'as nuskaito MIL-STD-2525B SIDC kodus iš SitaWare ir nukreipia kiekvieną vienetą į teisingą Zenoh temą pagal priklausomybę ir kovos dimensiją:
+
+| SIDC priklausomybė | SIDC dimensija | Zenoh temos kelias | ATAK CoT tipas |
+| --- | --- | --- | --- |
+| Draugiškas / Laikomas draugišku | Žemė (G) | `…/land/sitaware/rest/friendly/unit/…` | `a-f-G-U-C` |
+| Priešiškas | Žemė (G) | `…/land/sitaware/rest/hostile/unit/…` | `a-h-G-U-C` |
+| Neutralus | Žemė (G) | `…/land/sitaware/rest/neutral/unit/…` | `a-n-G-U-C` |
+| Draugiškas | Oras (A) | `…/air/sitaware/rest/friendly/aircraft/…` | `a-f-A-M-F` |
+| Priešiškas | Oras (A) | `…/air/sitaware/rest/hostile/aircraft/…` | `a-h-A-M-F` |
+| Draugiškas | Jūra (S) | `…/sea/sitaware/rest/friendly/vessel/…` | `a-f-S-X-L` |
+| Priešiškas | Jūra (S) | `…/sea/sitaware/rest/hostile/vessel/…` | `a-h-S-X-L` |
+
 ### Piktogramų žinynas
 
 | ATAK piktograma | CoT tipas | Šaltinis |
-|---|---|---|
-| Mėlynas radaro dubuo | `a-f-G-E-S-R` | Giraffe AMB radaro vieta |
+| --- | --- | --- |
+| Mėlynas radaro dubuo (su judėjimo pėdsaku jei mobilus) | `a-f-G-E-S-R` | Giraffe AMB radaro vieta |
+| Mėlynas žemės vienetas | `a-f-G-U-C` | SitaWare draugiškas žemės vienetas |
+| Raudonas žemės vienetas | `a-h-G-U-C` | SitaWare priešiškas žemės vienetas |
+| Geltonas/žalias žemės vienetas | `a-n-G-U-C` | SitaWare neutralus žemės vienetas |
+| Mėlynas orlaivis | `a-f-A-M-F` | SitaWare draugiškas oro vienetas |
+| Raudonas orlaivis | `a-h-A-M-F` | SitaWare priešiškas oro vienetas |
+| Mėlynas laivas | `a-f-S-X-L` | SitaWare draugiškas laivas |
+| Raudonas laivas | `a-h-S-X-L` | SitaWare priešiškas laivas |
 | Žalia sensorių dėžutė | `a-n-G-E-S` | dronuradaras.lt akustinis jutiklis |
 | Raudona priešiška UAV | `a-h-A-M-F-Q` | Drono aptikimo įvykis |
 | Balta nežinoma orlaivio | `a-u-A-C-F` | Neklasifikuotas radaro takelis |
+
+> Radaro žymeklio pozicija, greitis ir kursas atnaujinami automatiškai iš gyvo CAT-34 srauto. Mobilioje platformoje ATAK rodys greičio vektorių ir judėjimo taką.
 
 ---
 
 ## 6. Paslaugų žinynas
 
 | Paslauga | Scenarijus | Zenoh tema (sutrumpinta) | Suaktyvinimas |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `asterix` | `bridges/asterix_bridge.py` | `…/air/asterix/cat48/unknown/aircraft/tracks/v1` | Srautinis UDP |
 | `dronuradaras` | `bridges/dronuradaras_bridge.py` | `…/air/dronuradaras/acoustic/hostile/uav/tracks/v1` | REST apklausa 10 s |
 | `sitaware` | `bridges/sitaware_bridge.py` | `…/land/sitaware/rest/friendly/unit/tracks/v1` | Konfigūruojama REST |
@@ -247,12 +269,12 @@ Nustatykite `TAK_HOST` ir `TAK_PORT` faile `.env`, tada paleidiklyje pasirinkite
 
 ### Zenoh temų schema
 
-```
+```text
 {VARDAS_ERDVĖ}/{DOMENAS}/{ŠALTINIS}/{PROTOKOLAS}/{PRIKLAUSOMYBĖ}/{TIPAS}/tracks/v1
 ```
 
 | Laukas | Galimos reikšmės |
-|---|---|
+| --- | --- |
 | `DOMENAS` | `air`, `land`, `sea`, `space`, `env` |
 | `PRIKLAUSOMYBĖ` | `friendly`, `hostile`, `neutral`, `unknown`, `civ`, `mil` |
 | `TIPAS` | `aircraft`, `vessel`, `vehicle`, `unit`, `sensor`, `uav`, `radar` |
@@ -343,6 +365,29 @@ now = time.time()
 fresh = [x for x in d if (now - x.get('detected_at', 0)/1000) < 300]
 print(f'{len(fresh)} nauji / {len(d)} iš viso aptikimų')
 "
+```
+
+### SitaWare vienetai nerodomi ATAK
+
+**1. Patikrinkite ar bridge'as veikia ir apklausinėja:**
+
+```bash
+tail -f logs/sitaware.log
+# Laukiamas: "SitaWare poll: N units published" kas SITAWARE_POLL_S sekundžių
+```
+
+**2. Patikrinkite kredencialus ir adresą:**
+
+```bash
+curl -s -u "$SITAWARE_USER:$SITAWARE_PASS" "$SITAWARE_URL/..." | python3 -m json.tool | head -20
+```
+
+**3. SIDC kodo problema — vienetas rodomas su neteisinga piktograma arba nerodomas:**
+
+SitaWare vienetai be galiojančio 15 simbolių SIDC kodo nukreipiami į `…/land/sitaware/rest/unknown/unit/…` ir rodomi kaip nežinomi žemės vienetai (`a-u-G-U-C`). Patikrinkite SIDC reikšmę žurnale:
+
+```bash
+grep "sidc=" logs/sitaware.log | head -10
 ```
 
 ### Keli to paties proceso egzemplioriai
@@ -454,7 +499,7 @@ SERVICES=(... <pavadinimas> ...)
 ## Pakeitimų žurnalas
 
 | Data | Pakeitimas |
-|---|---|
+| --- | --- |
 | 2026-06-14 | Pradinis commit — šakota iš oficialaus `efdi-moon-pod-main` saugyklos |
 | 2026-06-15 | Baziniai bridge adapteriai sujungti; saugyklos struktūra nustatyta; pridėtas README |
 | 2026-06-16 | `airplanes.live` bridge: regioniniai ADS-B ir pasauliniai kariniai orlaiviai |
