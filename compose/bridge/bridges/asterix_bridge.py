@@ -209,8 +209,8 @@ def _decode_bds50(mb: bytes) -> dict:
         w = b - a + 1; r = _uns(a, b)
         return r - (1 << w) if r >= (1 << (w - 1)) else r
     out = {}
-    if _bit(1):  out["roll_deg"]         = round(_sgn(2, 11) * 45.0 / 512.0, 1)
-    if _bit(12): out["true_track_deg"]   = round(_sgn(13, 22) * 90.0 / 512.0 % 360, 1)
+    if _bit(1):  out["roll_deg"]         = round(_sgn(2, 11) * 45.0 / 256.0, 1)
+    if _bit(12): out["true_track_deg"]   = round(_uns(13, 22) * 360.0 / 1024.0, 1)
     if _bit(23): out["bds_gs_kt"]        = round(_uns(24, 33) * 2.0, 0)
     if _bit(34): out["track_rate_degs"]  = round(_sgn(35, 44) * 8.0 / 256.0, 2)
     if _bit(45): out["tas_kt"]           = round(_uns(46, 55) * 2.0, 0)
@@ -226,7 +226,7 @@ def _decode_bds60(mb: bytes) -> dict:
         w = b - a + 1; r = _uns(a, b)
         return r - (1 << w) if r >= (1 << (w - 1)) else r
     out = {}
-    if _bit(1):  out["mag_hdg_deg"]  = round(_sgn(2, 11) * 90.0 / 512.0 % 360, 1)
+    if _bit(1):  out["mag_hdg_deg"]  = round(_uns(2, 11) * 360.0 / 1024.0, 1)
     if _bit(12): out["ias_kt"]       = _uns(13, 22)
     if _bit(23): out["mach"]         = round(_uns(24, 34) * 2.048 / 2048.0, 3)
     if _bit(35): out["baro_vr_fpm"]  = _sgn(36, 46) * 32
@@ -277,6 +277,21 @@ _EMITTER_CATEGORY = {
     10: "glider",    11: "airship",   12: "UAV",        13: "space vehicle",
     14: "emergency vehicle", 15: "service vehicle",    16: "ground obstruction",
 }
+
+
+def _decode_bds40(mb: bytes) -> dict:
+    """BDS 4,0 Selected Vertical Intention."""
+    v = int.from_bytes(mb[:7], "big")
+    def _bit(n):    return (v >> (56 - n)) & 1
+    def _uns(a, b): return (v >> (56 - b)) & ((1 << (b - a + 1)) - 1)
+    out = {}
+    if _bit(1):  out["sel_alt_mcp_ft"]  = _uns(2, 13) * 16
+    if _bit(14): out["sel_alt_fms_ft"]  = _uns(15, 26) * 16
+    if _bit(27): out["baro_setting_mb"] = round(_uns(28, 39) * 0.1 + 800.0, 1)
+    if _bit(40): out["vnav_active"]     = True
+    if _bit(41): out["alt_hold"]        = True
+    if _bit(42): out["approach_mode"]   = True
+    return out
 
 
 def _decode_bds30(mb: bytes) -> dict:
@@ -338,10 +353,11 @@ def _decode_i034_050(data: bytes, pos: int) -> tuple[dict, int]:
     if sf & 0x80:
         if pos >= len(data): return out, pos
         com = data[pos]; pos += 1
-        out["sys_nogo"]        = bool(com & 0x80)
-        out["sys_ovl_rdp"]     = bool(com & 0x10)
-        out["sys_ovl_xmt"]     = bool(com & 0x08)
-        out["sys_tsv_invalid"] = bool(com & 0x02)
+        out["sys_nogo"]        = bool(com & 0x80)   # NOGO: system not operational
+        out["sys_ovl_rdp"]     = bool(com & 0x40)   # OVL RDP: overload
+        out["sys_ovl_xmt"]     = bool(com & 0x20)   # OVL XMT: comms overload
+        if com & 0x10: out["sys_msc_connected"] = True  # MSC: monitoring connected
+        out["sys_tsv_invalid"] = bool(com & 0x08)   # TSV: time source invalid
     for key, mask in (("psr_status", 0x20), ("ssr_status", 0x10), ("mds_status", 0x08)):
         if sf & mask:
             if pos >= len(data): return out, pos
@@ -363,14 +379,27 @@ def _decode_i034_060(data: bytes, pos: int) -> tuple[dict, int]:
     if pos >= len(data):
         return out, pos
     sf = data[pos]; pos += 1
-    if sf & 0x80:
+    if sf & 0x80:               # COM sub-field
         if pos >= len(data): return out, pos
         com = data[pos]; pos += 1
         red = (com & 0xE0) >> 5
         if red: out["reduction_level"] = red
-    for mask in (0x20, 0x10, 0x08):
-        if sf & mask:
-            if pos < len(data): pos += 1
+    if sf & 0x20:               # PSR sub-field
+        if pos >= len(data): return out, pos
+        b = data[pos]; pos += 1
+        out["psr_polarization"]    = "circular" if (b & 0x80) else "linear"
+        if b & 0x40: out["psr_coverage_reduced"] = True  # REDRAD
+        if b & 0x20: out["psr_stc_active"]       = True
+    if sf & 0x10:               # SSR sub-field
+        if pos >= len(data): return out, pos
+        b = data[pos]; pos += 1
+        chab = (b >> 6) & 0x03
+        if chab: out["ssr_channel"] = ("", "A", "B", "A+B")[chab]
+        if b & 0x20: out["ssr_overload"] = True
+    if sf & 0x08:               # MDS sub-field
+        if pos >= len(data): return out, pos
+        b = data[pos]; pos += 1
+        if b & 0x80: out["mds_overload"] = True
     while sf & 0x01:
         if pos >= len(data): break
         sf = data[pos]; pos += 1
@@ -426,9 +455,16 @@ def decode_cat034(data: bytes) -> dict | None:
             if counts: msg["msg_counts"] = counts
         elif frn == 8:                  # I034/100  Generic Polar Window (8 bytes)
             if pos + 8 > len(data): break
+            msg["coverage_rho_start_nm"] = round(_u16(data[pos:pos+2]) / 128.0, 2)
+            msg["coverage_rho_end_nm"]   = round(_u16(data[pos+2:pos+4]) / 128.0, 2)
+            msg["coverage_az_start_deg"] = round(_u16(data[pos+4:pos+6]) * 360.0 / 65536.0, 2)
+            msg["coverage_az_end_deg"]   = round(_u16(data[pos+6:pos+8]) * 360.0 / 65536.0, 2)
             pos += 8
         elif frn == 9:                  # I034/110  Data Filter (1 byte)
             if pos + 1 > len(data): break
+            _FILT034 = {0: "invalid", 1: "no_filter", 2: "psr", 3: "ssr",
+                        4: "psr_ssr", 5: "all", 6: "no_det_psr", 7: "no_det_ssr"}
+            msg["data_filter"] = _FILT034.get(data[pos], "type_{}".format(data[pos]))
             pos += 1
         elif frn == 10:                 # I034/120  3D-Position of Data Source (compound)
             if pos >= len(data): break
@@ -477,13 +513,22 @@ def decode_cat048_record(data: bytes, pos: int,
         elif frn == 2:                  # I048/020  Target Report Descriptor (FX)
             if pos >= len(data): return track, len(data)
             b = data[pos]; pos += 1
-            if b & 0x10: track["simulated"] = True
+            typ = (b >> 5) & 0x07
+            _TYP048 = ("no_det","ssr_mlat","am","psr","psr_ssr","psr_ssr_am","all_no_det","all")
+            if typ: track["antenna_type"] = _TYP048[typ]
+            if b & 0x10: track["simulated"]       = True   # SIM
+            if b & 0x08: track["rdp_chain"]       = True   # RDP
+            if b & 0x04: track["spi"]             = True
+            if b & 0x02: track["surface_vehicle"] = True   # RAB
             if b & 0x01:
                 if pos >= len(data): return track, len(data)
                 b = data[pos]; pos += 1
-                if b & 0x80: track["on_ground"]     = True
-                if b & 0x40: track["mil_emergency"]  = True
-                foe = (b >> 3) & 0x03
+                if b & 0x80: track["test_target"]    = True   # TST
+                if b & 0x40: track["extended_range"] = True   # ERR
+                if b & 0x20: track["x_pulse"]        = True   # XPP
+                if b & 0x10: track["mil_emergency"]  = True   # ME
+                if b & 0x08: track["mil_ident"]      = True   # MI
+                foe = (b >> 1) & 0x03
                 if foe: track["iff"] = ("", "friendly", "unknown", "no_reply")[foe]
                 while b & 0x01:
                     if pos >= len(data): break
@@ -511,16 +556,34 @@ def decode_cat048_record(data: bytes, pos: int,
             if pos >= len(data): break
             psf = data[pos]; pos += 1
             while True:
-                if psf & 0x80: pos += 1
-                if psf & 0x40: pos += 1
-                if psf & 0x20:
+                if psf & 0x80:                          # SRL: SSR plot runlength
                     if pos < len(data):
-                        track["rcs_dbm"] = struct.unpack_from("b", data, pos)[0]
+                        track["ssr_runlength_deg"] = round(data[pos] * 360.0 / 8192.0, 3)
                     pos += 1
-                if psf & 0x10: pos += 1
-                if psf & 0x08: pos += 1
-                if psf & 0x04: pos += 2
-                if psf & 0x02: pos += 2
+                if psf & 0x40:                          # SRR: SSR replies received
+                    if pos < len(data):
+                        track["ssr_reply_count"] = data[pos]
+                    pos += 1
+                if psf & 0x20:                          # SAM: SSR amplitude (dBm)
+                    if pos < len(data):
+                        track["ssr_amplitude_dbm"] = struct.unpack_from("b", data, pos)[0]
+                    pos += 1
+                if psf & 0x10:                          # PRL: PSR plot runlength
+                    if pos < len(data):
+                        track["psr_runlength_deg"] = round(data[pos] * 360.0 / 8192.0, 3)
+                    pos += 1
+                if psf & 0x08:                          # PAM: PSR amplitude (dBm)
+                    if pos < len(data):
+                        track["psr_amplitude_dbm"] = struct.unpack_from("b", data, pos)[0]
+                    pos += 1
+                if psf & 0x04:                          # RPD: PSR-SSR range diff (s8, 1/256 NM)
+                    if pos < len(data):
+                        track["psr_ssr_range_diff_nm"] = round(struct.unpack_from("b", data, pos)[0] / 256.0, 4)
+                    pos += 1
+                if psf & 0x02:                          # APD: PSR-SSR azimuth diff (s8, 360/16384°)
+                    if pos < len(data):
+                        track["psr_ssr_az_diff_deg"] = round(struct.unpack_from("b", data, pos)[0] * 360.0 / 16384.0, 4)
+                    pos += 1
                 if not (psf & 0x01): break
                 if pos >= len(data): break
                 psf = data[pos]; pos += 1
@@ -539,7 +602,9 @@ def decode_cat048_record(data: bytes, pos: int,
                 mb   = bytes(data[pos:pos + 7])
                 bds  = data[pos + 7]; pos += 8
                 bds1 = (bds >> 4) & 0x0F; bds2 = bds & 0x0F
-                if bds1 == 5 and bds2 == 0:  track.update(_decode_bds50(mb))
+                if   bds1 == 3 and bds2 == 0: track.update(_decode_bds30(mb))
+                elif bds1 == 4 and bds2 == 0: track.update(_decode_bds40(mb))
+                elif bds1 == 5 and bds2 == 0: track.update(_decode_bds50(mb))
                 elif bds1 == 6 and bds2 == 0: track.update(_decode_bds60(mb))
         elif frn == 10:                 # I048/161  Track Number
             if pos + 2 > len(data): return track, len(data)
@@ -553,16 +618,16 @@ def decode_cat048_record(data: bytes, pos: int,
             if pos + 4 > len(data): return track, len(data)
             spd_raw = _u16(data[pos:pos+2])
             hdg_raw = _u16(data[pos+2:pos+4])
-            track["speed_ms"]    = round(spd_raw / 4.0 * 0.514444, 2)
+            track["speed_ms"]    = round(spd_raw * 1852.0 / 16384.0, 2)   # LSB = 2^-14 NM/s
             track["heading_deg"] = round(hdg_raw * 360.0 / 65536.0, 2)
             pos += 4
         elif frn == 13:                 # I048/170  Track Status (FX)
             if pos >= len(data): return track, len(data)
             b = data[pos]; pos += 1
             if b & 0x80: track["track_tentative"] = True
-            if b & 0x10: track["track_doubtful"]  = True
-            if b & 0x08: track["track_manoeuvre"] = True
-            cdm = (b & 0x06) >> 1
+            if b & 0x20: track["track_doubtful"]  = True   # DOU at B6
+            if b & 0x10: track["track_manoeuvre"] = True   # MAH at B5
+            cdm = (b & 0x0C) >> 2                           # CDM at B4-B3
             if   cdm == 1: track["vertical_trend"] = "climbing"
             elif cdm == 2: track["vertical_trend"] = "descending"
             if b & 0x01:
@@ -580,21 +645,20 @@ def decode_cat048_record(data: bytes, pos: int,
             track["track_sigma_h_ft"] = data[pos + 2] * 25
             track["track_sigma_v_kt"] = round(data[pos + 3] / 128.0 * 3600.0, 1)
             pos += 4
-        elif frn == 15:                 # I048/030  Warning/Error Conditions (FX)
-            if pos >= len(data): return track, len(data)
-            b = data[pos]; pos += 1
-            if b & 0x80: track["spi"]  = True
-            if b & 0x40: track["pai"]  = True
-            if b & 0x20: track["stc"]  = True
-            if b & 0x10: track["apw"]  = True
-            if b & 0x04: track["msaw"] = True
-            if b & 0x02: track["cst"]  = True
-            raw_hex = "{:02x}".format(b)
-            while b & 0x01:
+        elif frn == 15:                 # I048/030  Warning/Error Conditions (FX repeating type codes)
+            # Each octet: bits 7-1 = condition code (1-127), bit 0 = FX
+            _WE048 = {1:"spi",2:"pai",3:"stc",4:"apw",5:"msaw",
+                      6:"apw2",7:"cld",8:"track_doubtful"}
+            codes = []
+            while True:
                 if pos >= len(data): break
                 b = data[pos]; pos += 1
-                raw_hex += "{:02x}".format(b)
-            track["we_conditions_hex"] = raw_hex
+                code = (b >> 1) & 0x7F
+                codes.append(code)
+                _f = _WE048.get(code)
+                if _f: track[_f] = True
+                if not (b & 0x01): break
+            if codes: track["we_conditions"] = codes
         elif frn == 16:                 # I048/080  Mode-3/A Confidence (2 bytes)
             if pos + 2 > len(data): return track, len(data)
             w = _u16(data[pos:pos + 2])
@@ -630,11 +694,16 @@ def decode_cat048_record(data: bytes, pos: int,
         elif frn == 20:                 # I048/230  Communications/ACAS Capability (2 bytes)
             if pos + 2 > len(data): return track, len(data)
             b0 = data[pos]; b1 = data[pos + 1]
-            com = (b0 >> 5) & 0x07
+            com  = (b0 >> 5) & 0x07
+            stat = (b0 >> 3) & 0x03
             if com: track["com_capability"] = com
-            if b1 & 0x80: track["mssc"]        = True
-            if b1 & 0x40: track["altitude_25ft"] = True
-            if b1 & 0x20: track["aic"]          = True
+            _STAT230 = ("", "standby", "airborne", "ground")
+            if stat: track["transponder_status"] = _STAT230[stat]
+            if b0 & 0x04: track["si_code"]       = True   # SI (vs II) code capable
+            if b0 & 0x02: track["mssc"]          = True   # Mode-S specific services
+            if b0 & 0x01: track["altitude_25ft"] = True   # ARC: 25 ft reporting
+            if b1 & 0x80: track["aic"]           = True   # aircraft ID capability
+            # b1 bits 6-2: BDS 1,0 capability bits (B1A/B1B) — skip
             pos += 2
         elif frn == 21:                 # I048/260  ACAS RA (7 bytes = BDS 3,0)
             if pos + 7 > len(data): return track, len(data)
@@ -671,7 +740,18 @@ def decode_cat020_record(data: bytes, pos: int):
             if pos + 2 > len(data): return track, len(data)
             track["sac"] = data[pos]; track["sic"] = data[pos + 1]; pos += 2
         elif frn == 1:                  # I020/020  Target Report Descriptor (FX)
-            pos = _skip_fx_field(data, pos)
+            if pos >= len(data): return track, len(data)
+            b = data[pos]; pos += 1
+            if b & 0x10: track["simulated"]      = True   # SIM
+            if b & 0x08: track["test_target"]    = True   # TSIM
+            if b & 0x04: track["surface_vehicle"]= True   # RAB
+            if b & 0x01:
+                if pos >= len(data): return track, len(data)
+                b = data[pos]; pos += 1
+                if b & 0x80: track["spi"]        = True   # SPI
+                while b & 0x01:
+                    if pos >= len(data): break
+                    b = data[pos]; pos += 1
         elif frn == 2:                  # I020/140  Time of Day (1/128 s)
             if pos + 3 > len(data): return track, len(data)
             raw = (data[pos] << 16) | (data[pos + 1] << 8) | data[pos + 2]
@@ -730,12 +810,25 @@ def decode_cat020_record(data: bytes, pos: int):
             while psf & 0x01:
                 if pos >= len(data): break
                 psf = data[pos]; pos += 1
-        elif frn == 13: pos += 1        # I020/300  Vehicle Fleet ID
-        elif frn == 14: pos = _skip_fx_field(data, pos)  # I020/310
+        elif frn == 13:                 # I020/300  Vehicle Fleet ID (1 byte)
+            if pos + 1 > len(data): return track, len(data)
+            track["fleet_id"] = data[pos]; pos += 1
+        elif frn == 14:                 # I020/310  Pre-programmed Message (FX)
+            if pos >= len(data): return track, len(data)
+            b = data[pos]; pos += 1
+            if b & 0x80: track["in_trouble"] = True
+            msg_type = (b >> 4) & 0x07
+            _MSG310 = ("", "go_around", "rvsm_failed", "tcas_ra_downlink",
+                       "emergency", "maneuvering", "", "")
+            if msg_type:
+                track["preprog_msg"] = _MSG310[msg_type] or "type_{}".format(msg_type)
+            while b & 0x01:
+                if pos >= len(data): break
+                b = data[pos]; pos += 1
         elif frn == 15:                 # I020/500  Position Accuracy (compound, skip sub-fields)
             if pos >= len(data): return track, len(data)
             psf = data[pos]; pos += 1
-            if psf & 0x80: pos += 4   # DOP matrix (4 bytes)
+            if psf & 0x80: pos += 6   # DOP matrix: Dx + Dy + Dxy (3 × u16 = 6 bytes)
             if psf & 0x40:            # σ lat/lon (4 bytes each × 2 = 8 bytes, u16 units)
                 if pos + 4 <= len(data):
                     track["pos_accuracy_lat_m"] = round(_u16(data[pos:pos+2]) * 0.5, 1)
@@ -745,9 +838,14 @@ def decode_cat020_record(data: bytes, pos: int):
             while psf & 0x01:
                 if pos >= len(data): break
                 psf = data[pos]; pos += 1
-        elif frn == 16:                 # I020/400  Contributing Receivers (variable)
+        elif frn == 16:                 # I020/400  Contributing Receivers (REP × 2-byte SAC/SIC)
             if pos + 1 > len(data): return track, len(data)
-            count = data[pos]; pos += 1 + count
+            count = data[pos]; pos += 1
+            receivers = []
+            for _ in range(count):
+                if pos + 2 > len(data): break
+                receivers.append("{}/{}".format(data[pos], data[pos+1])); pos += 2
+            if receivers: track["mlat_receivers"] = receivers
         elif frn == 17:                 # I020/250  Mode-S MB Data (REP × 8 bytes)
             if pos >= len(data): return track, len(data)
             rep = data[pos]; pos += 1
@@ -756,7 +854,8 @@ def decode_cat020_record(data: bytes, pos: int):
                 mb   = bytes(data[pos:pos + 7])
                 bds  = data[pos + 7]; pos += 8
                 bds1 = (bds >> 4) & 0x0F; bds2 = bds & 0x0F
-                if bds1 == 3 and bds2 == 0: track.update(_decode_bds30(mb))
+                if   bds1 == 3 and bds2 == 0: track.update(_decode_bds30(mb))
+                elif bds1 == 4 and bds2 == 0: track.update(_decode_bds40(mb))
                 elif bds1 == 5 and bds2 == 0: track.update(_decode_bds50(mb))
                 elif bds1 == 6 and bds2 == 0: track.update(_decode_bds60(mb))
         else: break
@@ -778,7 +877,29 @@ def decode_cat021_record(data: bytes, pos: int):
         if frn == 0:                    # I021/010  SAC/SIC
             if pos + 2 > len(data): return track, len(data)
             track["sac"] = data[pos]; track["sic"] = data[pos + 1]; pos += 2
-        elif frn == 1: pos = _skip_fx_field(data, pos)   # I021/040  TRD (FX)
+        elif frn == 1:                  # I021/040  Target Report Descriptor (FX)
+            if pos >= len(data): return track, len(data)
+            b = data[pos]; pos += 1
+            atp = (b >> 5) & 0x07
+            arc = (b >> 3) & 0x03
+            track["addr_type"] = ("icao24","icao24_dup","surface","anonymous","non_icao","","","")[atp]
+            track["alt_res"]   = ("unknown","25ft","100ft","n/a")[arc]
+            if not (b & 0x04): track["range_check_fail"] = True
+            if b & 0x02:       track["surface_vehicle"]  = True   # RAB
+            if b & 0x01:
+                if pos >= len(data): return track, len(data)
+                b = data[pos]; pos += 1
+                if b & 0x80: track["diff_correction"] = True
+                if b & 0x40: track["on_ground"]       = True
+                if b & 0x20: track["simulated"]       = True
+                if b & 0x10: track["test_target"]     = True
+                if b & 0x08: track["mil_emergency"]   = True
+                if b & 0x04: track["mil_ident"]       = True
+                foe = (b >> 1) & 0x03
+                if foe: track["iff"] = ("","friendly","unknown","no_reply")[foe]
+                while b & 0x01:
+                    if pos >= len(data): break
+                    b = data[pos]; pos += 1
         elif frn == 2:                  # I021/030  Time of Day (1/128 s)
             if pos + 3 > len(data): return track, len(data)
             raw = (data[pos] << 16) | (data[pos + 1] << 8) | data[pos + 2]
@@ -829,7 +950,7 @@ def decode_cat021_record(data: bytes, pos: int):
             if im:
                 track["mach"] = round(val * 2.0 / (2 ** 14), 3)
             else:
-                track["ias_kt"] = round(val * 3600.0 / 16384.0 * 0.539957, 1)
+                track["ias_kt"] = round(val * 3600.0 / 16384.0, 1)
             pos += 2
         elif frn == 11:                 # I021/151  True Airspeed (2 bytes, u15 kt)
             if pos + 2 > len(data): return track, len(data)
@@ -877,15 +998,29 @@ def decode_cat021_record(data: bytes, pos: int):
             nac_v = (data[pos] >> 4) & 0x0F
             if nac_v and "nac_v" not in track: track["nac_v"] = nac_v
             pos += 1
-        elif frn == 19: pos += 1        # I021/032  Time Accuracy (skip)
+        elif frn == 19:                 # I021/032  Time of Day Accuracy (1 byte, 1/128 s)
+            if pos + 1 > len(data): return track, len(data)
+            track["tod_accuracy_s"] = round(data[pos] / 128.0, 4); pos += 1
         elif frn == 20:                 # I021/200  Target Status (FX)
             if pos >= len(data): return track, len(data)
             b = data[pos]; pos += 1
-            if b & 0x40: track["intent_change"]   = True
-            if b & 0x20: track["tcas_operational"] = True
+            ss = (b >> 6) & 0x03
+            if ss == 1: track["alert"] = "permanent"
+            elif ss == 2: track["alert"] = "temporary"
+            elif ss == 3: track["spi"]  = True
+            if b & 0x20: track["lnav_engaged"]     = True
+            if b & 0x10: track["mil_emergency"]    = True
+            if b & 0x08: track["tcas_operational"] = True
+            if b & 0x04: track["intent_change"]    = True
             while b & 0x01:
                 if pos >= len(data): break
                 b = data[pos]; pos += 1
+                if b & 0x80: track["autopilot"]    = True
+                if b & 0x40: track["vnav_active"]  = True
+                if b & 0x20: track["alt_hold"]     = True
+                if b & 0x10: track["approach_mode"]= True
+                if b & 0x08: track["tcas_ra"]      = True
+                if b & 0x04: track["ident_switch"]  = True
         elif frn == 21:                 # I021/020  Emitter Category (1 byte)
             if pos + 1 > len(data): return track, len(data)
             ec = data[pos]; pos += 1
@@ -942,6 +1077,28 @@ def decode_cat021_record(data: bytes, pos: int):
             track["lat_deg"] = round(_s32(data[pos:pos + 4]) * scale, 7)
             track["lon_deg"] = round(_s32(data[pos + 4:pos + 8]) * scale, 7)
             pos += 8
+        elif frn == 28:                 # I021/132  Message Amplitude (s8, 1 dBm/LSB)
+            if pos + 1 > len(data): return track, len(data)
+            track["signal_amplitude_dbm"] = struct.unpack_from("b", data, pos)[0]; pos += 1
+        elif frn == 29:                 # I021/250  Mode-S MB Data (REP × 8 bytes)
+            if pos >= len(data): return track, len(data)
+            rep = data[pos]; pos += 1
+            for _ in range(rep):
+                if pos + 8 > len(data): break
+                mb = bytes(data[pos:pos + 7]); bds = data[pos + 7]; pos += 8
+                bds1 = (bds >> 4) & 0x0F; bds2 = bds & 0x0F
+                if   bds1 == 3 and bds2 == 0: track.update(_decode_bds30(mb))
+                elif bds1 == 4 and bds2 == 0: track.update(_decode_bds40(mb))
+                elif bds1 == 5 and bds2 == 0: track.update(_decode_bds50(mb))
+                elif bds1 == 6 and bds2 == 0: track.update(_decode_bds60(mb))
+        elif frn == 30:                 # I021/260  ACAS Resolution Advisory (7 bytes, BDS 3,0)
+            if pos + 7 > len(data): return track, len(data)
+            track.update(_decode_bds30(data[pos:pos + 7])); pos += 7
+        elif frn == 31:                 # I021/400  Receiver ID (1 byte)
+            if pos + 1 > len(data): return track, len(data)
+            track["receiver_id"] = data[pos]; pos += 1
+        elif frn == 32: pos += 3        # I021/008  ACAS Capability/Operational Status (3 bytes)
+        elif frn == 33: pos += 2        # I021/271  Surface Capabilities and Status (2 bytes)
         else: break
     return track, pos
 
@@ -980,13 +1137,14 @@ def _decode_i062_380(data: bytes, pos: int) -> tuple[dict, int]:
         w = _u16(data[pos:pos+2])
         im = (w >> 15) & 1; val = w & 0x7FFF
         if im: out["mach"]   = round(val * 2.0 / (2**14), 3)
-        else:  out["ias_kt"] = round(val * 3600.0 / 16384.0 * 0.539957, 1)
+        else:  out["ias_kt"] = round(val * 3600.0 / 16384.0, 1)
         pos += 2
     # Sub 06: TAS (2 bytes, u16, 1 kt/LSB)
     if psf & 0x04:
         if pos + 2 > len(data): return out, pos
         w = _u16(data[pos:pos+2]) & 0x7FFF
-        if w: out["tas_kt"] = w; pos += 2
+        if w: out["tas_kt"] = w
+        pos += 2
     # Sub 07: SSR modes (2 bytes, skip)
     if psf & 0x02:
         pos += 2
@@ -1037,7 +1195,8 @@ def _decode_i062_380(data: bytes, pos: int) -> tuple[dict, int]:
             if pos + 8 > len(data): break
             mb = bytes(data[pos:pos+7]); bds = data[pos+7]; pos += 8
             b1 = (bds >> 4) & 0xF; b2 = bds & 0xF
-            if b1 == 3 and b2 == 0: out.update(_decode_bds30(mb))
+            if   b1 == 3 and b2 == 0: out.update(_decode_bds30(mb))
+            elif b1 == 4 and b2 == 0: out.update(_decode_bds40(mb))
             elif b1 == 5 and b2 == 0: out.update(_decode_bds50(mb))
             elif b1 == 6 and b2 == 0: out.update(_decode_bds60(mb))
     # Consume any further FX extension bytes
@@ -1063,10 +1222,19 @@ def _decode_i062_390(data: bytes, pos: int) -> tuple[dict, int]:
         out["fp_callsign"] = _decode_callsign(data[pos:pos+6]); pos += 6
     # IFI: 4 bytes
     if psf & 0x40: pos += 4
-    # FCT: 1 byte
+    # FCT: Flight Category (1 byte) — GAT/OAT, flight rules, RVSM status
     if psf & 0x20:
         if pos + 1 > len(data): return out, pos
-        pos += 1
+        fc   = data[pos]; pos += 1
+        gat  = (fc >> 6) & 0x03
+        fr   = (fc >> 4) & 0x03
+        rvsm = (fc >> 2) & 0x03
+        if gat:  out["flight_gat"]   = ("", "GAT", "OAT", "GAT+OAT")[gat]
+        if fr:   out["flight_rules"] = ("", "IFR", "VFR", "IFR+VFR")[fr]
+        if rvsm == 1: out["rvsm"] = "approved"
+        elif rvsm == 2: out["rvsm"] = "exempt"
+        elif rvsm == 3: out["rvsm"] = "not_approved"
+        if fc & 0x02: out["high_priority"] = True
     # TAC: 4 ASCII bytes (ICAO type designator)
     if psf & 0x10:
         if pos + 4 > len(data): return out, pos
@@ -1091,11 +1259,41 @@ def _decode_i062_390(data: bytes, pos: int) -> tuple[dict, int]:
     if pos >= len(data):
         return out, pos
     psf2 = data[pos]; pos += 1
-    # CFL: 2 bytes, s16, 0.25 FL
+    # CFL: Cleared Flight Level (2 bytes, s16, 0.25 FL)
     if psf2 & 0x80:
         if pos + 2 > len(data): return out, pos
         out["cleared_fl"] = round(_s16(data[pos:pos+2]) * 0.25, 0); pos += 2
-    # Consume any further PSF bytes
+    # CTL: Current Cleared Flight Level (2 bytes, u16, 0.25 FL)
+    if psf2 & 0x40:
+        if pos + 2 > len(data): return out, pos
+        out["current_fl"] = round(_u16(data[pos:pos+2]) * 0.25, 0); pos += 2
+    # TOD: Time of Departure/Arrival — REP × 4 bytes (type 1B + time 3B), skip
+    if psf2 & 0x20:
+        if pos >= len(data): return out, pos
+        rep = data[pos]; pos += 1
+        pos += rep * 4
+    # AST: Aircraft Stand (6 bytes ASCII)
+    if psf2 & 0x10:
+        if pos + 6 > len(data): return out, pos
+        out["aircraft_stand"] = data[pos:pos+6].decode("ascii", errors="replace").strip("\x00 ")
+        pos += 6
+    # STS: Stand Status flags (1 byte)
+    if psf2 & 0x08:
+        if pos + 1 > len(data): return out, pos
+        sts = data[pos]; pos += 1
+        if sts & 0x80: out["stand_occupied"] = True
+        if sts & 0x40: out["stand_docking"]  = True
+    # STD: Standard Instrument Departure (5 bytes ASCII)
+    if psf2 & 0x04:
+        if pos + 5 > len(data): return out, pos
+        out["sid"] = data[pos:pos+5].decode("ascii", errors="replace").strip("\x00 ")
+        pos += 5
+    # STA: Standard Instrument Arrival (5 bytes ASCII)
+    if psf2 & 0x02:
+        if pos + 5 > len(data): return out, pos
+        out["star"] = data[pos:pos+5].decode("ascii", errors="replace").strip("\x00 ")
+        pos += 5
+    # Consume any further FX extension bytes
     while psf2 & 0x01:
         if pos >= len(data): break
         psf2 = data[pos]; pos += 1
@@ -1155,10 +1353,29 @@ def decode_cat62_record(data: bytes, pos: int):
             if pos + 2 > len(data): return track, len(data)
             track["track_num"] = _u16(data[pos:pos + 2]) & 0x0FFF; pos += 2
         elif frn == 9:                  # I062/080  Track Status (FX)
-            start = pos
-            pos = _skip_fx_field(data, pos)
-            if start < len(data):
-                track["track_confirmed"] = not bool(data[start] & 0x80)
+            if pos >= len(data): return track, len(data)
+            b = data[pos]; pos += 1
+            if b & 0x80: track["track_monosensor"] = True   # MON: 1=monosensor track
+            if b & 0x40: track["spi"]              = True
+            src = (b >> 3) & 0x07
+            _SRC = ("", "GPS", "3D_radar", "triangulation", "pressure_alt",
+                    "velocity_integration", "INS", "3D_radar_corrected")
+            if src: track["height_src"] = _SRC[src]
+            if b & 0x04: track["track_tentative"]  = True   # CNF: 1=tentative
+            if b & 0x01:
+                if pos >= len(data): return track, len(data)
+                b = data[pos]; pos += 1
+                if b & 0x80: track["simulated"]      = True   # SIM
+                if b & 0x40: track["track_end"]      = True   # TSE: last plot of track
+                if b & 0x20: track["track_begin"]    = True   # TSB: first detection
+                if b & 0x10: track["fp_correlated"]  = True   # FRIFPSI
+                if b & 0x08: track["mil_emergency"]  = True   # ME
+                if b & 0x04: track["mil_ident"]      = True   # MI
+                if b & 0x02: track["amalgamated"]    = True   # AMA
+                while b & 0x01:
+                    if pos >= len(data): break
+                    b = data[pos]; pos += 1
+                    if b & 0x80: track["track_coasting"] = True   # STP
         elif frn == 10:                 # I062/290  System Track Update Ages (compound)
             if pos >= len(data): return track, len(data)
             psf = data[pos]; pos += 1
@@ -1168,31 +1385,48 @@ def decode_cat62_record(data: bytes, pos: int):
                 if psf & mask:
                     if pos + 1 > len(data): return track, len(data)
                     track["track_age_{}_s".format(label)] = round(data[pos] * 0.25, 2); pos += 1
-            if psf & 0x01:              # FX: LOP, MLT (1 byte each)
+            if psf & 0x01:              # FX: LOP, MLT ages (1 byte each, 0.25s/LSB)
                 if pos >= len(data): return track, len(data)
                 psf2 = data[pos]; pos += 1
-                for mask in (0x80, 0x40):
-                    if psf2 & mask:
-                        if pos + 1 > len(data): return track, len(data)
-                        pos += 1
+                if psf2 & 0x80:
+                    if pos + 1 > len(data): return track, len(data)
+                    track["track_age_lop_s"] = round(data[pos] * 0.25, 2); pos += 1
+                if psf2 & 0x40:
+                    if pos + 1 > len(data): return track, len(data)
+                    track["track_age_mlt_s"] = round(data[pos] * 0.25, 2); pos += 1
                 while psf2 & 0x01:
                     if pos >= len(data): break
                     psf2 = data[pos]; pos += 1
-        elif frn == 11: pos += 2        # I062/200  Mode of Movement
+        elif frn == 11:                 # I062/200  Mode of Movement (2 bytes)
+            if pos + 2 > len(data): return track, len(data)
+            b1 = data[pos]; b2 = data[pos + 1]; pos += 2
+            _MOV = ("constant", "right", "left", "undetermined")
+            _LON = ("constant", "increasing", "decreasing", "undetermined")
+            _VRT = ("level", "climb", "descend", "undetermined")
+            trans = (b1 >> 6) & 0x03
+            long_ = (b1 >> 4) & 0x03
+            vert  = (b1 >> 2) & 0x03
+            if trans: track["lateral_trend"]  = _MOV[trans]
+            if long_: track["speed_trend"]    = _LON[long_]
+            if vert:  track["vertical_trend"] = _VRT[vert]
+            if b1 & 0x02: track["alt_discrepancy"] = True   # ADF
         elif frn == 13:                 # I062/136  Measured Flight Level
             if pos + 2 > len(data): return track, len(data)
-            track["measured_fl"] = _s16(data[pos:pos + 2]) * 0.25; pos += 2
+            track["measured_alt_ft"] = _s16(data[pos:pos + 2]) * 25; pos += 2
         elif frn == 14:                 # I062/130  Calculated Altitude
             if pos + 2 > len(data): return track, len(data)
             track["calc_alt_ft"] = _s16(data[pos:pos + 2]) * 25; pos += 2
-        elif frn == 18: pos += 1        # I062/300  Vehicle Fleet ID
-        elif frn == 12:                 # I062/295  Track Data Ages (compound, skip sub-fields)
+        elif frn == 18:                 # I062/300  Vehicle Fleet ID
+            if pos >= len(data): return track, len(data)
+            track["fleet_id"] = data[pos]; pos += 1
+        elif frn == 12:                 # I062/295  Track Data Ages (compound, 0.25s/LSB each)
             if pos >= len(data): return track, len(data)
             psf = data[pos]; pos += 1
-            for mask in (0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02):
+            _AGE295 = ["psr", "ssr", "mds", "ads_b", "es", "vdl4", "uat"]
+            for label, mask in zip(_AGE295, (0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02)):
                 if psf & mask:
                     if pos + 1 > len(data): return track, len(data)
-                    pos += 1
+                    track["data_age_{}_s".format(label)] = round(data[pos] * 0.25, 2); pos += 1
             while psf & 0x01:
                 if pos >= len(data): break
                 psf = data[pos]; pos += 1
@@ -1240,18 +1474,84 @@ def decode_cat62_record(data: bytes, pos: int):
             if psf & 0x80:              # SID: SAC/SIC (2 bytes)
                 if pos + 2 > len(data): return track, len(data)
                 measured_by.append("{}/{}".format(data[pos], data[pos+1])); pos += 2
-            if psf & 0x40: pos += 4    # range + azimuth
-            if psf & 0x20: pos += 2    # height (mode-C)
-            if psf & 0x10: pos += 4    # mode-2 + confidence
-            if psf & 0x08: pos += 2    # mode-1
-            if psf & 0x04: pos += 4    # mode-5 + confidence (skip)
-            if psf & 0x02: pos += 2    # spare
+            if psf & 0x40:              # measured slant range (1/256 NM) + azimuth (360/65536°)
+                if pos + 4 > len(data): return track, len(data)
+                track["meas_range_nm"] = round(_u16(data[pos:pos+2]) / 256.0, 3)
+                track["meas_az_deg"]   = round(_u16(data[pos+2:pos+4]) * 360.0 / 65536.0, 3)
+                pos += 4
+            if psf & 0x20:              # measured Mode-C height (Gillham)
+                if pos + 2 > len(data): return track, len(data)
+                alt = _gillham_to_ft(_u16(data[pos:pos+2]))
+                if alt is not None: track["meas_alt_ft"] = alt
+                pos += 2
+            if psf & 0x10:              # MDC: Measured Mode C code + confidence (4 bytes)
+                if pos + 4 > len(data): return track, len(data)
+                alt = _gillham_to_ft(_u16(data[pos:pos+2]))
+                if alt is not None: track.setdefault("meas_mode_c_ft", alt)
+                pos += 4
+            if psf & 0x08:              # MDA: Measured Mode 3/A code (2 bytes)
+                if pos + 2 > len(data): return track, len(data)
+                track.setdefault("squawk", "{:04o}".format(_u16(data[pos:pos+2]) & 0x0FFF))
+                pos += 2
+            if psf & 0x04: pos += 4    # MD5: Mode 5 code + confidence (4 bytes, skip)
+            if psf & 0x02:              # MD1: Mode 1 code + quality (2 bytes)
+                if pos + 2 > len(data): return track, len(data)
+                track.setdefault("mode1", "{:02o}".format(_u16(data[pos:pos+2]) & 0x3F))
+                pos += 2
             if measured_by: track["measured_by"] = measured_by
             while psf & 0x01:
                 if pos >= len(data): break
                 psf = data[pos]; pos += 1
-        elif frn in (19, 20, 21, 24, 25):
-            break                       # Mode-5/hidden/composed track — skip unrecoverable
+        elif frn == 19:                 # I062/110  Mode 5 and Mode 1 Data (compound)
+            if pos >= len(data): return track, len(data)
+            psf = data[pos]; pos += 1
+            if psf & 0x80:              # Mode 5 Summary (3 bytes: flags + PIN hi + PIN lo)
+                if pos + 3 > len(data): return track, len(data)
+                b = data[pos]
+                if b & 0x80: track["mode5_active"] = True
+                if b & 0x40: track["mode5_iff"]    = True
+                if b & 0x20: track["mode5_data"]   = True
+                pos += 3
+            if psf & 0x40: pos += 2    # National origin (2 bytes)
+            if psf & 0x20: pos += 8    # Reported position (lat/lon s32 each)
+            if psf & 0x10:              # Mode 1 code (2 bytes)
+                if pos + 2 > len(data): return track, len(data)
+                track["mode1"] = "{:02o}".format(_u16(data[pos:pos+2]) & 0x3F); pos += 2
+            if psf & 0x08:              # Mode 2 code (2 bytes)
+                if pos + 2 > len(data): return track, len(data)
+                track["mode2"] = "{:04o}".format(_u16(data[pos:pos+2]) & 0x0FFF); pos += 2
+            if psf & 0x04:              # Mode 3/A (2 bytes)
+                if pos + 2 > len(data): return track, len(data)
+                track.setdefault("squawk", "{:04o}".format(_u16(data[pos:pos+2]) & 0x0FFF)); pos += 2
+            if psf & 0x02:              # Mode C height (2 bytes, Gillham)
+                if pos + 2 > len(data): return track, len(data)
+                alt = _gillham_to_ft(_u16(data[pos:pos+2]))
+                if alt is not None: track.setdefault("mode_c_alt_ft", alt)
+                pos += 2
+            while psf & 0x01:
+                if pos >= len(data): break
+                psf = data[pos]; pos += 1
+                for mask in (0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02):
+                    if psf & mask: pos += 2
+        elif frn == 20:                 # I062/120  Mode 5 Track Ages (compound, 1 byte each)
+            if pos >= len(data): return track, len(data)
+            psf = data[pos]; pos += 1
+            for mask in (0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02):
+                if psf & mask:
+                    if pos + 1 > len(data): return track, len(data)
+                    pos += 1
+            while psf & 0x01:
+                if pos >= len(data): break
+                psf = data[pos]; pos += 1
+                for mask in (0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02):
+                    if psf & mask:
+                        if pos + 1 > len(data): return track, len(data)
+                        pos += 1
+        elif frn == 21:                 # I062/510  Composed Track Number (REP + N×4)
+            if pos >= len(data): return track, len(data)
+            n = data[pos]; pos += 1 + n * 4
+        elif frn in (24, 25):
+            break                       # I062/SP / I062/RE — vendor-specific, unrecoverable
         else:
             break
     return track, pos
