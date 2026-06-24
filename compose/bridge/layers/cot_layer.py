@@ -636,16 +636,16 @@ def _build_remarks(track: dict, cot_type: str) -> str:
         atype   = (track.get("aircraft_type") or "").strip().upper()
         cs_disp = "{} ({})".format(cs_raw, atype) if cs_raw and atype else (cs_raw or atype or None)
         if track.get("track_num") is not None:
-            _r("TRK", track["track_num"], ident_l)
+            _r("TRK (track #)", track["track_num"], ident_l)
         if cs_disp:
-            ident_l.append("CS: {}".format(cs_disp))
-        _r("REG",   (track.get("registration") or "").strip().upper() or None, ident_l)
-        _r("ICAO",  (track.get("icao24")       or "").strip().upper() or None, ident_l)
-        _r("FLAG",  track.get("origin_country"), ident_l)
+            ident_l.append("CS (callsign): {}".format(cs_disp))
+        _r("REG (registration)",  (track.get("registration") or "").strip().upper() or None, ident_l)
+        _r("ICAO (hex address)",  (track.get("icao24")       or "").strip().upper() or None, ident_l)
+        _r("FLAG (country)",  track.get("origin_country"), ident_l)
         opr = (track.get("operating_as") or track.get("painted_as") or "").strip()
-        _r("OPR",   opr or None, ident_l)
-        _r("ROUTE", track.get("route"),    ident_l)
-        _r("UAV",   track.get("mav_type"), ident_l)
+        _r("OPR (operator)",  opr or None, ident_l)
+        _r("ROUTE",           track.get("route"),    ident_l)
+        _r("UAV Type",        track.get("mav_type"), ident_l)
 
         # ── IFF / MODES ──
         m1 = track.get("mode1")
@@ -654,8 +654,8 @@ def _build_remarks(track: dict, cot_type: str) -> str:
             label  = _MODE1_LABEL.get(m1_str.zfill(2))
             iff_l.append("MODE 1 (NATO MIL ID): {}{}".format(
                 m1_str, " ({})".format(label) if label else ""))
-        _r("MODE 2", track.get("mode2"), iff_l)
-        _r("MODE 3 (SQUAWK)", track.get("squawk"), iff_l)
+        _r("MODE 2 (military code)", track.get("mode2"), iff_l)
+        _r("MODE 3 (squawk)", track.get("squawk"), iff_l)
         iff = track.get("iff", "")
         if iff == "friendly":
             iff_l.append("MODE 4 (IFF): FRIENDLY")
@@ -663,6 +663,11 @@ def _build_remarks(track: dict, cot_type: str) -> str:
             iff_l.append("MODE 4 (IFF): UNKNOWN")
         elif iff == "no_reply":
             iff_l.append("MODE 4 (IFF): NO REPLY")
+        if track.get("mode5_active"):
+            m5 = ["MODE 5 (secure IFF): ACTIVE"]
+            if track.get("mode5_iff"):  m5.append("IFF OK")
+            if track.get("mode5_data"): m5.append("DATA VALID")
+            iff_l.append("  ".join(m5))
         sq_str = str(track.get("squawk") or "")
         if sq_str in _EMERGENCY_SQUAWK:
             iff_l.append("[!!! EMERGENCY: {} !!!]".format(_EMERGENCY_SQUAWK[sq_str]))
@@ -670,102 +675,105 @@ def _build_remarks(track: dict, cot_type: str) -> str:
             iff_l.append("[!!! MILITARY EMERGENCY !!!]")
         com = track.get("com_capability")
         if com:
-            iff_l.append("COM: capability-{}{}".format(
-                com, "  ARC:25ft" if track.get("altitude_25ft") else ""))
+            iff_l.append("COM (comms capability): level-{}{}".format(
+                com, "  25ft altitude reporting" if track.get("altitude_25ft") else ""))
         lt = track.get("link_tech")
         if lt:
-            iff_l.append("LINK: {}".format(" / ".join(lt)))
+            iff_l.append("LINK (data link): {}".format(" / ".join(lt)))
         ec_str = track.get("emitter_category_str")
         if ec_str:
-            iff_l.append("EMITTER: {}".format(ec_str))
+            iff_l.append("EMITTER (aircraft category): {}".format(ec_str))
 
         # ── KINEMATICS ──
         tod = track.get("tod_s")
         age = _track_age(track)
         if tod is not None:
             h = int(tod // 3600) % 24; m = int((tod % 3600) // 60); s = tod % 60
-            kinem_l.append("TOD: {:02d}:{:02d}:{:04.1f} UTC  {}".format(h, m, s, age).rstrip())
+            kinem_l.append("TOD (time of detection): {:02d}:{:02d}:{:04.1f} UTC  {}".format(h, m, s, age).rstrip())
         else:
             ts = track.get("_ts")
             if ts:
                 kinem_l.append("TIME: {}  {}".format(
                     datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%H:%M:%S UTC"), age).rstrip())
         lat = track.get("lat_deg"); lon = track.get("lon_deg")
-        if lat is not None: kinem_l.append("LAT: {:.5f}°".format(round(lat, 5)))
-        if lon is not None: kinem_l.append("LON: {:.5f}°".format(round(lon, 5)))
+        if lat is not None: kinem_l.append("LAT (latitude): {:.5f}°".format(round(lat, 5)))
+        if lon is not None: kinem_l.append("LON (longitude): {:.5f}°".format(round(lon, 5)))
         if lat is not None and lon is not None:
             kinem_l.extend(_mgrs_lines(lat, lon))
         hdg  = _course(track)
         roll = track.get("roll_deg")
         if roll is not None:
-            kinem_l.append("HDG: {}°   ROLL: {:+.1f}°".format(int(hdg), roll))
+            kinem_l.append("HDG (heading): {}°   ROLL (bank angle): {:+.1f}°".format(int(hdg), roll))
         else:
-            kinem_l.append("HDG: {}°".format(int(hdg)))
+            kinem_l.append("HDG (heading): {}°".format(int(hdg)))
         alt_m = _hae(track)
         if alt_m < 9_999_998:
             alt_ft = int(alt_m / 0.3048)
             alt_fl = "FL{:03d}".format(alt_ft // 100) if alt_ft > 1000 else "{} ft".format(alt_ft)
-            kinem_l.append("ALT: {}  ({} ft / {} m)".format(alt_fl, alt_ft, int(alt_m)))
+            h_src  = track.get("height_src")
+            alt_line = "ALT (Altitude): {}  ({} ft / {} m)".format(alt_fl, alt_ft, int(alt_m))
+            if h_src: alt_line += "  [{}]".format(h_src)
+            kinem_l.append(alt_line)
         baro_vr = track.get("baro_vr_fpm")
         geo_vr  = track.get("geo_vr_fpm")
         vr_ms   = track.get("vertical_rate_ms")
         vt = track.get("vertical_trend", "")
         if baro_vr is not None:
             vfpm = baro_vr; vms = baro_vr / 196.85
-            vr_label = "V/S"
+            vr_label = "V/S (vertical speed)"
         elif geo_vr is not None:
             vfpm = geo_vr; vms = geo_vr / 196.85
-            vr_label = "GEO V/S"
+            vr_label = "V/S (geometric vertical speed)"
         elif vr_ms is not None:
             vfpm = int(float(vr_ms) * 196.85); vms = float(vr_ms)
-            vr_label = "V/S"
+            vr_label = "V/S (vertical speed)"
         else:
-            vfpm = None; vr_label = "V/S"
+            vfpm = None; vr_label = "V/S (vertical speed)"
         if vfpm is not None:
             vs = "{}: {:+d} ft/min / {:+.1f} m/s".format(vr_label, vfpm, vms)
             kinem_l.append(vs + ("  ({})".format(vt.upper()) if vt else ""))
         elif vt:
-            kinem_l.append("CDM: {}".format(vt.upper()))
+            kinem_l.append("CDM (climb/descent mode): {}".format(vt.upper()))
         spd = _speed_ms(track)
         ias_mav = track.get("airspeed_ms")
         tas_kt  = track.get("tas_kt")
         ias_kt  = track.get("ias_kt")
         mach    = track.get("mach")
         if ias_mav is not None:
-            kinem_l.append("AIR SPD: {} kt / {} km/h".format(
+            kinem_l.append("AIRSPEED: {} kt / {} km/h".format(
                 round(float(ias_mav) / 0.514444), round(float(ias_mav) * 3.6)))
         if tas_kt is not None:
-            kinem_l.append("TAS: {} kt / {} km/h".format(int(tas_kt), int(tas_kt * 1.852)))
+            kinem_l.append("TAS (true airspeed): {} kt / {} km/h".format(int(tas_kt), int(tas_kt * 1.852)))
         if ias_kt is not None:
-            kinem_l.append("IAS: {} kt / {} km/h".format(int(ias_kt), int(ias_kt * 1.852)))
+            kinem_l.append("IAS (indicated airspeed): {} kt / {} km/h".format(int(ias_kt), int(ias_kt * 1.852)))
         if spd:
             gs_kt = round(spd / 0.514444); gs_kmh = round(spd * 3.6)
-            lbl = "GS" if (tas_kt or ias_kt or ias_mav) else "SPD"
+            lbl = "GS (ground speed)" if (tas_kt or ias_kt or ias_mav) else "SPD (speed)"
             kinem_l.append("{}: {} kt / {} km/h".format(lbl, gs_kt, gs_kmh))
         if mach is not None:
-            kinem_l.append("MACH: {:.3f}".format(mach))
+            kinem_l.append("MACH (Mach number): {:.3f}".format(mach))
         # Magnetic heading (if differs from track by more than 2°)
         mag_hdg = track.get("mag_hdg_deg")
         if mag_hdg is not None:
             diff = abs(mag_hdg - hdg)
             if diff > 180: diff = 360 - diff
             if diff > 2:
-                kinem_l.append("MAG HDG: {}°".format(round(mag_hdg, 1)))
+                kinem_l.append("MAG HDG (magnetic heading): {}°".format(round(mag_hdg, 1)))
         # Doppler speed
         dop = track.get("doppler_kt")
         if dop is not None:
-            kinem_l.append("DOPPLER: {:+.0f} kt".format(dop))
+            kinem_l.append("DOPPLER (radial speed): {:+.0f} kt".format(dop))
         # Selected altitude
         sel_alt = track.get("selected_alt_ft")
         if sel_alt is not None:
             src_lbl = track.get("selected_alt_source", "")
             fl_lbl  = "FL{:03d}".format(abs(sel_alt) // 100) if abs(sel_alt) > 1000 else "{} ft".format(sel_alt)
-            kinem_l.append("SEL ALT: {}{}".format(
+            kinem_l.append("SEL ALT (selected altitude): {}{}".format(
                 fl_lbl, "  ({})".format(src_lbl) if src_lbl else ""))
         fin_alt = track.get("final_alt_ft")
         if fin_alt is not None:
             fl_lbl = "FL{:03d}".format(abs(fin_alt) // 100) if abs(fin_alt) > 1000 else "{} ft".format(fin_alt)
-            kinem_l.append("FINAL ALT: {}".format(fl_lbl))
+            kinem_l.append("FINAL ALT (target altitude): {}".format(fl_lbl))
         # Wind / temperature from ADS-B met
         ws = track.get("wind_speed_kt"); wd = track.get("wind_dir_deg"); tc = track.get("temp_c")
         if ws is not None or wd is not None:
@@ -773,25 +781,31 @@ def _build_remarks(track: dict, cot_type: str) -> str:
             if wd is not None: parts.append("{}°".format(int(wd)))
             if ws is not None: parts.append("{} kt".format(round(ws, 1)))
             line = "WIND: {}".format(" / ".join(parts))
-            if tc is not None: line += "  T: {}°C".format(round(tc, 1))
+            if tc is not None: line += "  TEMP: {}°C".format(round(tc, 1))
             kinem_l.append(line)
         elif tc is not None:
-            kinem_l.append("T: {}°C".format(round(tc, 1)))
+            kinem_l.append("TEMP: {}°C".format(round(tc, 1)))
         # Track angle rate
         tar = track.get("track_angle_rate_degs")
         if tar is not None and abs(tar) >= 0.05:
-            kinem_l.append("TRACK RATE: {:+.2f} °/s".format(tar))
+            kinem_l.append("TURN RATE: {:+.2f} °/s".format(tar))
 
         # ── RADAR ──
         rng = track.get("range_nm"); azm = track.get("azimuth_deg")
         if rng is not None:
-            radar_l.append("RNG: {} nm / {} km   AZM: {}°".format(
+            radar_l.append("RNG (range): {} nm / {} km   AZM (azimuth): {}°".format(
                 round(rng, 1), round(rng * 1.852, 1), round(azm or 0, 1)))
-        rcs = track.get("rcs_dbm"); rssi = track.get("rssi_db")
-        if rcs is not None and rssi is not None:
-            radar_l.append("RCS: {} dBm   RSSI: {} dBFS".format(rcs, rssi))
-        elif rcs  is not None: radar_l.append("RCS: {} dBm".format(rcs))
-        elif rssi is not None: radar_l.append("RSSI: {} dBFS".format(rssi))
+        rssi = track.get("rssi_db")
+        if rssi is not None: radar_l.append("RSSI (signal strength): {} dBFS".format(rssi))
+        ssr_amp = track.get("ssr_amplitude_dbm"); psr_amp = track.get("psr_amplitude_dbm")
+        sig_amp = track.get("signal_amplitude_dbm")
+        if psr_amp is not None or ssr_amp is not None:
+            amp_parts = []
+            if psr_amp is not None: amp_parts.append("PSR (primary radar): {} dBm".format(psr_amp))
+            if ssr_amp is not None: amp_parts.append("SSR (secondary radar): {} dBm".format(ssr_amp))
+            radar_l.append("AMPLITUDE — {}".format("  ".join(amp_parts)))
+        elif sig_amp is not None:
+            radar_l.append("AMPLITUDE (signal): {} dBm".format(sig_amp))
         # Track quality / accuracy
         sx = track.get("track_sigma_x_nm"); sh = track.get("track_sigma_h_ft")
         if sx is not None or sh is not None:
@@ -800,18 +814,44 @@ def _build_remarks(track: dict, cot_type: str) -> str:
                 sy = track.get("track_sigma_y_nm")
                 acc_parts.append("±{:.3f} nm".format(max(sx, sy) if sy is not None else sx))
             if sh is not None: acc_parts.append("±{} ft".format(sh))
-            radar_l.append("ACC: {}".format("  ".join(acc_parts)))
+            radar_l.append("ACC (position accuracy): {}".format("  ".join(acc_parts)))
+        nac_p = track.get("nac_p"); nic = track.get("nic"); nac_v = track.get("nac_v")
+        if nac_p is not None or nic is not None or nac_v is not None:
+            ads_acc = []
+            if nac_p is not None: ads_acc.append("NACp={}".format(nac_p))
+            if nic   is not None: ads_acc.append("NIC={}".format(nic))
+            if nac_v is not None: ads_acc.append("NACv={}".format(nac_v))
+            radar_l.append("ADS-B ACC (ADS-B accuracy): {}".format("  ".join(ads_acc)))
         # Track update ages (CAT-062 I062/290)
         ages = []
-        for sensor_key, label in (("psr","PSR"),("ssr","SSR"),("ads","ADS"),("mds","MDS")):
+        for sensor_key, label in (("psr","PSR"),("ssr","SSR"),("ads","ADS"),("mds","MDS"),
+                                   ("es","ES"),("vdl","VDL"),("uat","UAT"),
+                                   ("lop","LOP"),("mlt","MLT")):
             v = track.get("track_age_{}_s".format(sensor_key))
             if v is not None: ages.append("{}: {}s".format(label, round(v, 1)))
         if ages: radar_l.append("AGE — {}".format("  ".join(ages)))
+        data_ages = []
+        for _dk, _dl in (("psr","PSR"),("ssr","SSR"),("mds","MDS"),("ads_b","ADS-B"),("es","ES"),("vdl4","VDL4"),("uat","UAT")):
+            v = track.get("data_age_{}_s".format(_dk))
+            if v is not None: data_ages.append("{}: {}s".format(_dl, round(v, 1)))
+        if data_ages: radar_l.append("DATA AGE — {}".format("  ".join(data_ages)))
         sac_t = track.get("sac"); sic_t = track.get("sic")
         if rng is not None and sac_t is not None:
-            radar_l.append("SAC/SIC: {}/{}".format(sac_t, sic_t))
+            radar_l.append("SITE (SAC/SIC): {}/{}".format(sac_t, sic_t))
         if track.get("radar_id"):
-            radar_l.append("RDR: {}".format(track["radar_id"]))
+            radar_l.append("RDR (radar ID): {}".format(track["radar_id"]))
+        pol = track.get("psr_polarization"); chan = track.get("ssr_channel")
+        if pol or chan:
+            pol_parts = []
+            if pol:  pol_parts.append("PSR POL (polarisation): {}".format(pol.upper()))
+            if chan: pol_parts.append("SSR CH (channel): {}".format(chan))
+            radar_l.append("  ".join(pol_parts))
+        tod_acc = track.get("tod_accuracy_s")
+        if tod_acc is not None:
+            radar_l.append("TOD ACC (time accuracy): ±{:.4f}s".format(tod_acc))
+        mlat_rx = track.get("mlat_receivers")
+        if mlat_rx:
+            radar_l.append("MLAT (receivers): {}".format(", ".join(str(r) for r in mlat_rx)))
         # Enrich with live CAT-34 sensor status if available
         if sac_t is not None:
             with _radar_status_lock:
@@ -826,7 +866,7 @@ def _build_remarks(track: dict, cot_type: str) -> str:
                 if rs.get("sys_nogo"): radar_l.append("[SENSOR DEGRADED]")
                 ae = rs.get("collimation_az_deg"); re = rs.get("collimation_rng_nm")
                 if ae is not None and re is not None and (abs(ae) > 0.001 or abs(re) > 0.001):
-                    radar_l.append("CAL: AZ {:+.3f}°  RNG {:+.3f} nm".format(ae, re))
+                    radar_l.append("CAL (calibration error): AZ {:+.3f}°  RNG {:+.3f} nm".format(ae, re))
 
         # ── DETECTION (dronuradaras acoustic/RF sensor network) ──
         det_l = []
@@ -848,25 +888,40 @@ def _build_remarks(track: dict, cot_type: str) -> str:
 
         # ── STATUS ──
         if track.get("spi"):
-            status_l.append("[⚠ SPI IDENT]")
+            status_l.append("[⚠ SPI (special position ident)]")
         sense = track.get("acas_ra_sense")
         if sense:
-            status_l.append("[⚠ ACAS RA: {}]".format(sense))
+            status_l.append("[⚠ TCAS/ACAS RA (collision avoidance): {}]".format(sense))
         elif track.get("acas_ra_active"):
-            status_l.append("[⚠ ACAS RA ACTIVE]")
+            status_l.append("[⚠ TCAS/ACAS (collision avoidance) ACTIVE]")
         em_str = track.get("emergency_str")
         if em_str:
             status_l.append("[⚠ EMERGENCY: {}]".format(em_str))
-        if track.get("msaw"):         status_l.append("[MSAW]")
+        if track.get("msaw"):         status_l.append("[MSAW (minimum safe altitude warning)]")
         if track.get("squawk_garbled"): status_l.append("[SQUAWK GARBLED]")
         if track.get("on_ground"):    status_l.append("[ON GROUND]")
         if track.get("is_military"):  status_l.append("[MILITARY]")
-        if track.get("track_ghost"):  status_l.append("[GHOST TARGET]")
+        if track.get("track_ghost"):     status_l.append("[GHOST TARGET]")
         if track.get("track_tentative"): status_l.append("[TENTATIVE]")
-        if track.get("track_end"):    status_l.append("[COASTING]")
+        if track.get("track_end"):       status_l.append("[TRACK END]")
+        if track.get("track_coasting"):  status_l.append("[COASTING]")
+        if track.get("track_begin"):     status_l.append("[TRACK START]")
+        if track.get("amalgamated"):     status_l.append("[AMALGAMATED]")
         if track.get("track_manoeuvre"): status_l.append("[MANOEUVRE]")
-        if track.get("_extrap"):      status_l.append("[DEAD RECKONED]")
-        status_l.append("SRC: {}".format(src))
+        if track.get("_extrap"):         status_l.append("[DEAD RECKONED]")
+        xp_stat = track.get("transponder_status")
+        if xp_stat:                    status_l.append("XPDR (transponder): {}".format(xp_stat.upper()))
+        ant = track.get("antenna_type")
+        if ant:                        status_l.append("ANT (sensor type): {}".format(ant.upper()))
+        if track.get("simulated"):     status_l.append("[SIMULATED TARGET]")
+        if track.get("test_target"):   status_l.append("[TEST TARGET]")
+        if track.get("extended_range"):status_l.append("[EXTENDED RANGE]")
+        if track.get("mil_ident"):     status_l.append("[MIL IDENT]")
+        if track.get("in_trouble"):    status_l.append("[IN TROUBLE]")
+        pmsg = track.get("preprog_msg")
+        if pmsg:
+            status_l.append("[MSG: {}]".format(pmsg.upper().replace("_", " ")))
+        status_l.append("SRC (data source): {}".format(src))
 
         # ── FLIGHT PLAN ──
         fp_l = []
@@ -876,16 +931,32 @@ def _build_remarks(track: dict, cot_type: str) -> str:
         dep      = (track.get("departure_icao") or "").strip() or None
         dst      = (track.get("destination_icao") or "").strip() or None
         cfl      = track.get("cleared_fl")
+        ctl      = track.get("current_fl")
+        sid      = (track.get("sid")  or "").strip() or None
+        star     = (track.get("star") or "").strip() or None
+        stand    = (track.get("aircraft_stand") or "").strip() or None
         if fp_cs or ac_type:
             line = []
-            if fp_cs:  line.append("FLT: {}".format(fp_cs))
-            if ac_type: line.append("TYPE: {}".format(ac_type))
-            if wtc:    line.append("WTC: {}".format(wtc))
+            if fp_cs:   line.append("FLT (flight id): {}".format(fp_cs))
+            if ac_type: line.append("TYPE (aircraft): {}".format(ac_type))
+            if wtc:     line.append("WTC (wake turbulence): {}".format(wtc))
             fp_l.append("  ".join(line))
         if dep or dst:
-            fp_l.append("DEP: {} → DST: {}".format(dep or "----", dst or "----"))
+            fp_l.append("DEP (departure): {} → DST (destination): {}".format(dep or "----", dst or "----"))
+        if sid or star:
+            fp_l.append("SID (departure proc): {}  STAR (arrival proc): {}".format(sid or "--", star or "--"))
         if cfl is not None:
-            fp_l.append("CFL: FL{:03d}".format(int(cfl)))
+            fp_l.append("CFL (cleared level): FL{:03d}".format(int(cfl)))
+        if ctl is not None:
+            fp_l.append("CTL (current level): FL{:03d}".format(int(ctl)))
+        if stand:
+            fp_l.append("STAND (aircraft stand): {}".format(stand))
+        fr_str = track.get("flight_rules"); gat_str = track.get("flight_gat")
+        rvsm_s = track.get("rvsm")
+        fp_cat = "  ".join(filter(None, [fr_str, gat_str,
+                                          ("RVSM: " + rvsm_s) if rvsm_s else None,
+                                          "[HIGH PRIORITY]" if track.get("high_priority") else None]))
+        if fp_cat: fp_l.append(fp_cat)
 
         _sec("IDENTITY",   ident_l)
         _sec("IFF / MODES", iff_l)
