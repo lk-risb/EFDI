@@ -239,7 +239,8 @@ class MultiWordReader:
         """Map logical bit offset (across 75-bit words) to storage bit offset."""
         word_idx  = bit // 75
         bit_in_w  = bit % 75
-        return word_idx * 80 + bit_in_w   # 80 stored bits per word (5 padding at end)
+        # After >>5 each block has 5 leading zeros then 75 data bits — skip them
+        return word_idx * 80 + bit_in_w + 5
 
     def u(self, bit: int, width: int) -> int:
         """Unsigned field at logical bit offset across concatenated 75-bit words."""
@@ -302,7 +303,7 @@ def decode_j32(words: list[bytes]) -> dict | None:
     lon_lsb      = r.u(75, 11)
     lon_raw_u    = (lon_msb << 11) | lon_lsb           # 26-bit unsigned
     lon_raw_s    = lon_raw_u - (1 << 26) if lon_raw_u >= (1 << 25) else lon_raw_u
-    lon_deg      = lon_raw_s * (360.0 / (1 << 25))
+    lon_deg      = lon_raw_s * (360.0 / (1 << 26))
 
     alt_raw      = r.u(86, 11)
     alt_ft       = alt_raw * 100 - 100_000             # offset encoding
@@ -366,7 +367,7 @@ def decode_j22(words: list[bytes]) -> dict | None:
     lon_lsb      = r.u(75, 11) if len(words) > 1 else 0
     lon_raw_u    = (lon_msb << 0)                      # MSBs already 26-bit
     lon_raw_s    = lon_raw_u - (1 << 25) if lon_raw_u >= (1 << 25) else lon_raw_u
-    lon_deg      = lon_raw_s * (360.0 / (1 << 25))
+    lon_deg      = lon_raw_s * (360.0 / (1 << 26))
 
     alt_raw      = r.u(86, 10)
     alt_ft       = alt_raw * 100 - 100_000

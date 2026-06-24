@@ -162,7 +162,7 @@ def _bam25_lat(raw: int) -> float:
 
 
 def _bam26_lon(raw: int) -> float:
-    return raw * (360.0 / (1 << 25))
+    return raw * (360.0 / (1 << 26))
 
 
 def _decode_k05_2(br: _BitReader, hdr: dict) -> dict | None:
