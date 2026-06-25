@@ -1,0 +1,465 @@
+#!/usr/bin/env bash
+# install.sh — EFDI Moon-Pod bridge stack installer
+# Configures compose/.env, Python venv, and starts the Zenoh router.
+# Run as the deployment user (not root) on a host that already has Docker.
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || echo "$PWD")"
+ENV_FILE="$SCRIPT_DIR/compose/.env"
+VENV="$SCRIPT_DIR/compose/bridge/venv"
+
+[ -t 0 ] || exec < /dev/tty 2>/dev/null || true
+
+# ── Colours ───────────────────────────────────────────────────────────────────
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
+CYAN='\033[0;36m'; BOLD='\033[1m'; NC='\033[0m'
+ok()      { echo -e "${GREEN}[✓]${NC} $*"; }
+info()    { echo -e "${CYAN}[*]${NC} $*"; }
+warn()    { echo -e "${YELLOW}[!]${NC} $*"; }
+err()     { echo -e "${RED}[✗]${NC} $*"; exit 1; }
+section() { echo -e "\n${CYAN}── $* ──────────────────────────────────────────────────────${NC}"; }
+
+ask() {
+    local _var="$1" _q="$2" _default="${3:-}" _ans
+    if [ -n "$_default" ]; then
+        read -rp "$(echo -e "  ${BOLD}${_q}${NC} [${_default}]: ")" _ans
+        printf -v "$_var" '%s' "${_ans:-$_default}"
+    else
+        while true; do
+            read -rp "$(echo -e "  ${BOLD}${_q}${NC}: ")" _ans
+            [ -n "$_ans" ] && break
+            echo "    (required)"
+        done
+        printf -v "$_var" '%s' "$_ans"
+    fi
+}
+
+ask_opt() {  # ask_opt <var> <question> [default]  — empty answer allowed
+    local _var="$1" _q="$2" _default="${3:-}" _ans
+    if [ -n "$_default" ]; then
+        read -rp "$(echo -e "  ${BOLD}${_q}${NC} [${_default}]: ")" _ans
+        printf -v "$_var" '%s' "${_ans:-$_default}"
+    else
+        read -rp "$(echo -e "  ${BOLD}${_q}${NC} (leave blank to skip): ")" _ans
+        printf -v "$_var" '%s' "${_ans:-}"
+    fi
+}
+
+gen_uuid() { python3 -c 'import uuid; print(uuid.uuid4().hex)'; }
+
+# ── Banner ────────────────────────────────────────────────────────────────────
+echo ""
+echo -e "${BOLD}  EFDI Moon-Pod — Bridge Stack Installer${NC}"
+echo "  Sensor bridges: ASTERIX · Link-16 · MAVLink · VMF · SitaWare · dronuradaras"
+echo ""
+
+# ── Install mode ──────────────────────────────────────────────────────────────
+section "Install mode"
+echo "  Production  — requires a real EFDI goat-bundle (mTLS, fabric connectivity)"
+echo "  Testing     — generates self-signed certs, local Zenoh only (no fabric)"
+echo ""
+while true; do
+    read -rp "$(echo -e "  ${BOLD}Mode${NC} [P]roduction / [T]esting: ")" _MODE
+    case "${_MODE:-}" in
+        [Pp]*) INSTALL_MODE="production"; break ;;
+        [Tt]*) INSTALL_MODE="testing";    break ;;
+        *)     echo "    Enter P or T" ;;
+    esac
+done
+echo ""
+if [ "$INSTALL_MODE" = "testing" ]; then
+    echo -e "  ${YELLOW}Testing mode${NC}: self-signed certs will be generated, Zenoh runs over plain TCP."
+    echo "  Bridges connect locally — no EFDI fabric, no goat-bundle required."
+else
+    echo -e "  ${GREEN}Production mode${NC}: real goat-bundle required, mTLS enforced."
+fi
+
+# ── Prerequisites ─────────────────────────────────────────────────────────────
+section "Prerequisites"
+
+PY_OK=0
+for py in python3.12 python3.11 python3.10 python3; do
+    if command -v "$py" &>/dev/null; then
+        PY_VER=$("$py" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+        PY_MAJ=${PY_VER%%.*}; PY_MIN=${PY_VER#*.}
+        if (( PY_MAJ > 3 || (PY_MAJ == 3 && PY_MIN >= 10) )); then
+            PYTHON="$py"
+            ok "Python ${PY_VER} ($py)"
+            PY_OK=1; break
+        fi
+    fi
+done
+(( PY_OK )) || err "Python 3.10+ required. Install it and re-run."
+
+command -v docker &>/dev/null || err "Docker not found. Install Docker Engine 24.0+ and re-run."
+ok "Docker $(docker --version | awk '{print $3}' | tr -d ,)"
+
+COMPOSE_VER=$(docker compose version --short 2>/dev/null || echo "")
+[ -n "$COMPOSE_VER" ] || err "Docker Compose v2 not found. Install plugin and re-run."
+ok "Docker Compose $COMPOSE_VER"
+
+if [ "$INSTALL_MODE" = "production" ]; then
+    command -v envsubst &>/dev/null || warn "envsubst not found — Zenoh config rendering requires it (install gettext)"
+fi
+
+if [ "$INSTALL_MODE" = "testing" ]; then
+    command -v openssl &>/dev/null || err "openssl not found — required to generate test certificates."
+    ok "openssl $(openssl version | awk '{print $2}')"
+fi
+
+# ── goat-bundle / test-certs ──────────────────────────────────────────────────
+if [ "$INSTALL_MODE" = "production" ]; then
+    section "goat-bundle (TLS certificates)"
+    echo "  The bundle is a directory containing:"
+    echo "    efdi-ca-root.pem   <NAMESPACE>-cert.pem   <NAMESPACE>-key.pem"
+    echo ""
+    ask BUNDLE_DIR "goat-bundle path" "$HOME/goat-bundle"
+
+    if [ -d "$BUNDLE_DIR" ]; then
+        PEM_COUNT=$(ls "$BUNDLE_DIR"/*.pem 2>/dev/null | wc -l)
+        if (( PEM_COUNT >= 3 )); then
+            ok "Bundle found ($PEM_COUNT .pem files)"
+        else
+            warn "Directory exists but has fewer than 3 .pem files — verify bundle contents"
+        fi
+    else
+        warn "Path does not exist yet — create it and place your .pem files before starting bridges"
+    fi
+
+    section "EFDI Namespace"
+    echo "  Your PARTNER_NAMESPACE is the hex UUID from your goat-bundle."
+    echo "  Example: 1851281db70ccc0409dad4ecfc874cf5"
+    echo ""
+    EXISTING_NS=""
+    if [ -f "$ENV_FILE" ]; then
+        EXISTING_NS=$(grep '^PARTNER_NAMESPACE=' "$ENV_FILE" | head -1 | cut -d= -f2- | tr -d '[:space:]')
+    fi
+    ask PARTNER_NAMESPACE "PARTNER_NAMESPACE" "${EXISTING_NS:-}"
+
+    section "Pod state directory"
+    echo "  Zenoh router config and TLS material live here (created by first-boot.sh)."
+    echo "  Must be on the LUKS-encrypted volume in production."
+    echo ""
+    EXISTING_POD_STATE=""
+    if [ -f "$ENV_FILE" ]; then
+        EXISTING_POD_STATE=$(grep '^POD_STATE_DIR=' "$ENV_FILE" | head -1 | cut -d= -f2- | tr -d '[:space:]')
+    fi
+    ask POD_STATE_DIR "POD_STATE_DIR" "${EXISTING_POD_STATE:-$HOME/goat-moon}"
+
+    EXISTING_ZENOH_ENDPOINT=""
+    if [ -f "$ENV_FILE" ]; then
+        EXISTING_ZENOH_ENDPOINT=$(grep '^ZENOH_LOCAL_ENDPOINT=' "$ENV_FILE" | head -1 | cut -d= -f2- | tr -d '[:space:]')
+    fi
+    ZENOH_LOCAL_ENDPOINT="${EXISTING_ZENOH_ENDPOINT:-tcp/127.0.0.1:7448}"
+
+else
+    # Testing mode — generate everything automatically
+    section "Test namespace and directories"
+    PARTNER_NAMESPACE=$(gen_uuid)
+    BUNDLE_DIR="$SCRIPT_DIR/compose/bridge/test-certs"
+    POD_STATE_DIR="$SCRIPT_DIR/.test-pod-state"
+    ZENOH_LOCAL_ENDPOINT="tcp/127.0.0.1:7448"
+    info "Generated PARTNER_NAMESPACE: $PARTNER_NAMESPACE"
+    info "Test certs directory       : $BUNDLE_DIR"
+    info "Pod state directory        : $POD_STATE_DIR"
+fi
+
+# ── Sensor bridges ─────────────────────────────────────────────────────────────
+section "ASTERIX radar (CAT-48/34 — Giraffe AMB)"
+echo "  Leave blank if no radar is connected."
+echo ""
+ask_opt CAT48_PORT      "Radar UDP port (CAT48_PORT)"     "30048"
+if [ -n "${CAT48_PORT:-}" ]; then
+    ask_opt CAT48_RADAR_SAC  "Radar SAC (Source Area Code)"    ""
+    ask_opt CAT48_RADAR_SIC  "Radar SIC (Source Identification Code)" ""
+    ask_opt CAT48_RADAR_NAME "Radar display name in ATAK"      "Giraffe AMB"
+    ask_opt CAT48_RADAR_LAT  "Radar fallback latitude  (or blank for auto from CAT-34)" ""
+    ask_opt CAT48_RADAR_LON  "Radar fallback longitude (or blank for auto from CAT-34)" ""
+    ask_opt CAT21_PORT       "ADS-B CAT-21 UDP port (optional)" ""
+    ask_opt CAT20_PORT       "MLAT  CAT-20 UDP port (optional)" ""
+fi
+
+section "Link-16 / JREAP-C"
+ask_opt LINK16_PORT "Link-16 UDP/TCP port (leave blank to skip)" ""
+if [ -n "${LINK16_PORT:-}" ]; then
+    ask_opt LINK16_TCP "TCP mode? (1=TCP, leave blank=UDP)" ""
+fi
+
+section "MAVLink"
+ask_opt MAVLINK_PORT "MAVLink UDP/TCP port (leave blank to skip)" ""
+if [ -n "${MAVLINK_PORT:-}" ]; then
+    ask_opt MAVLINK_TCP "TCP mode? (1=TCP, leave blank=UDP)" ""
+fi
+
+section "VMF (MIL-STD-47001C)"
+ask_opt VMF_PORT "VMF UDP/TCP port (leave blank to skip)" ""
+if [ -n "${VMF_PORT:-}" ]; then
+    ask_opt VMF_TCP "TCP mode? (1=TCP, leave blank=UDP)" ""
+fi
+
+section "SitaWare friendly-force tracking"
+ask_opt SITAWARE_URL  "SitaWare URL (e.g. https://sitaware.example.com)" ""
+if [ -n "${SITAWARE_URL:-}" ]; then
+    ask_opt SITAWARE_USER "SitaWare username" ""
+    ask_opt SITAWARE_PASS "SitaWare password" ""
+    ask_opt SITAWARE_POLL_S "Poll interval in seconds" "10"
+fi
+
+section "TAK Server (optional — for cross-subnet CoT)"
+ask_opt TAK_HOST "TAK Server hostname/IP" ""
+ask_opt TAK_PORT "TAK Server port"        "8087"
+
+section "API keys (optional)"
+ask_opt WINDY_KEY       "Windy Point Forecast API key"    ""
+ask_opt ICAO_NOTAM_KEY  "ICAO Dataservices NOTAM API key" ""
+ask_opt FR24_KEY        "FlightRadar24 API key"           ""
+ask_opt N2YO_KEY        "N2YO satellite tracker API key"  ""
+ask_opt AISSTREAM_KEY   "AISStream.io WebSocket key"      ""
+ask_opt HERE_KEY        "HERE Traffic Flow API key"       ""
+ask_opt PURPLEAIR_KEY   "PurpleAir sensor API key"        ""
+ask_opt CMEMS_USER      "Copernicus Marine username"      ""
+ask_opt CMEMS_PASS      "Copernicus Marine password"      ""
+
+# ── Summary ────────────────────────────────────────────────────────────────────
+echo ""
+echo -e "${BOLD}── Summary ──────────────────────────────────────────────────────────${NC}"
+echo "  Mode              : $INSTALL_MODE"
+echo "  PARTNER_NAMESPACE : $PARTNER_NAMESPACE"
+echo "  BUNDLE_DIR        : $BUNDLE_DIR"
+echo "  POD_STATE_DIR     : $POD_STATE_DIR"
+echo "  ZENOH_ENDPOINT    : $ZENOH_LOCAL_ENDPOINT"
+[ -n "${CAT48_PORT:-}"    ] && echo "  CAT48_PORT        : $CAT48_PORT"
+[ -n "${LINK16_PORT:-}"   ] && echo "  LINK16_PORT       : $LINK16_PORT"
+[ -n "${MAVLINK_PORT:-}"  ] && echo "  MAVLINK_PORT      : $MAVLINK_PORT"
+[ -n "${VMF_PORT:-}"      ] && echo "  VMF_PORT          : $VMF_PORT"
+[ -n "${SITAWARE_URL:-}"  ] && echo "  SITAWARE_URL      : $SITAWARE_URL"
+[ -n "${TAK_HOST:-}"      ] && echo "  TAK_HOST:PORT     : $TAK_HOST:$TAK_PORT"
+echo ""
+read -rp "$(echo -e "  ${BOLD}Proceed?${NC} [Y/n]: ")" _CONFIRM
+[[ "${_CONFIRM:-Y}" =~ ^[Yy] ]] || { echo "Aborted."; exit 0; }
+
+# ── Generate test certificates (testing mode only) ────────────────────────────
+if [ "$INSTALL_MODE" = "testing" ]; then
+    section "Generating self-signed test certificates"
+    mkdir -p "$BUNDLE_DIR"
+
+    CA_KEY="$BUNDLE_DIR/efdi-ca-root-key.pem"
+    CA_CERT="$BUNDLE_DIR/efdi-ca-root.pem"
+    NODE_KEY="$BUNDLE_DIR/${PARTNER_NAMESPACE}-key.pem"
+    NODE_CSR="$BUNDLE_DIR/.node.csr"
+    NODE_CERT="$BUNDLE_DIR/${PARTNER_NAMESPACE}-cert.pem"
+
+    info "Generating CA key and self-signed certificate…"
+    openssl genrsa -out "$CA_KEY" 2048 2>/dev/null
+    openssl req -new -x509 -key "$CA_KEY" -out "$CA_CERT" -days 3650 -nodes \
+        -subj "/CN=efdi-test-ca/O=EFDI-Test/C=LT" 2>/dev/null
+    chmod 600 "$CA_KEY"
+    ok "CA certificate: $CA_CERT"
+
+    info "Generating node key and certificate…"
+    openssl genrsa -out "$NODE_KEY" 2048 2>/dev/null
+    openssl req -new -key "$NODE_KEY" -out "$NODE_CSR" -nodes \
+        -subj "/CN=${PARTNER_NAMESPACE}/O=EFDI-Test/C=LT" 2>/dev/null
+    openssl x509 -req -in "$NODE_CSR" -CA "$CA_CERT" -CAkey "$CA_KEY" \
+        -CAcreateserial -out "$NODE_CERT" -days 3650 2>/dev/null
+    rm -f "$NODE_CSR" "$BUNDLE_DIR/efdi-ca-root.srl"
+    chmod 600 "$NODE_KEY"
+    ok "Node certificate: $NODE_CERT"
+
+    warn "Test certificates are NOT suitable for production — valid 10 years, self-signed."
+fi
+
+# ── Pod state dirs + Zenoh config (testing mode) ──────────────────────────────
+if [ "$INSTALL_MODE" = "testing" ]; then
+    section "Zenoh router config (test — TCP, no mTLS)"
+    mkdir -p "${POD_STATE_DIR}/zenoh/tls" "${POD_STATE_DIR}/zenoh/rocksdb"
+
+    cat > "${POD_STATE_DIR}/zenoh/config.json5" << ZCFG
+{
+  mode: "router",
+  listen: {
+    endpoints: ["tcp/0.0.0.0:7448"],
+  },
+  plugins_loading: {
+    enabled: true,
+    search_dirs: ["/", "/opt/zenoh/plugins"],
+  },
+  plugins: {
+    storage_manager: {
+      storages: {
+        efdi_live: {
+          key_expr: "${PARTNER_NAMESPACE}/**",
+          volume: { id: "memory" },
+        },
+      },
+    },
+  },
+}
+ZCFG
+    ok "Zenoh config written: ${POD_STATE_DIR}/zenoh/config.json5"
+fi
+
+# ── Write compose/.env ─────────────────────────────────────────────────────────
+section "Writing compose/.env"
+
+# Preserve any keys from an existing .env that we don't manage here (e.g. INBOUND_NAMESPACE).
+EXTRA_LINES=""
+if [ -f "$ENV_FILE" ]; then
+    MANAGED_KEYS="POD_STATE_DIR|PARTNER_NAMESPACE|POD_ID|ZENOH_LOCAL_ENDPOINT|ZENOH_LOG|INSTALL_MODE"
+    MANAGED_KEYS+="|BUNDLE_DIR|GOAT_CERT_DIR"
+    MANAGED_KEYS+="|CAT48_PORT|CAT48_TCP|CAT48_RADAR_SAC|CAT48_RADAR_SIC|CAT48_RADAR_NAME|CAT48_RADAR_LAT|CAT48_RADAR_LON"
+    MANAGED_KEYS+="|CAT21_PORT|CAT21_TCP|CAT20_PORT|CAT20_TCP"
+    MANAGED_KEYS+="|LINK16_PORT|LINK16_TCP|MAVLINK_PORT|MAVLINK_TCP|VMF_PORT|VMF_TCP"
+    MANAGED_KEYS+="|SITAWARE_URL|SITAWARE_USER|SITAWARE_PASS|SITAWARE_POLL_S|SITAWARE_DISCOVER"
+    MANAGED_KEYS+="|TAK_HOST|TAK_PORT"
+    MANAGED_KEYS+="|WINDY_KEY|ICAO_NOTAM_KEY|FR24_KEY|N2YO_KEY|AISSTREAM_KEY"
+    MANAGED_KEYS+="|HERE_KEY|PURPLEAIR_KEY|CMEMS_USER|CMEMS_PASS"
+    MANAGED_KEYS+="|COPERNICUSMARINE_SERVICE_USERNAME|COPERNICUSMARINE_SERVICE_PASSWORD"
+    EXTRA_LINES=$(grep -Ev "^(#|[[:space:]]*$)" "$ENV_FILE" 2>/dev/null \
+                  | grep -Ev "^(${MANAGED_KEYS})=" || true)
+fi
+
+{
+    echo "# EFDI Moon-Pod compose/.env — written by install.sh on $(date -u '+%Y-%m-%d %H:%M UTC')"
+    echo "# Mode: ${INSTALL_MODE}  — DO NOT commit to version control."
+    echo ""
+    echo "# ── Pod identity ──────────────────────────────────────────────────────"
+    echo "INSTALL_MODE=${INSTALL_MODE}"
+    echo "POD_STATE_DIR=${POD_STATE_DIR}"
+    echo "PARTNER_NAMESPACE=${PARTNER_NAMESPACE}"
+    echo "POD_ID=moon-pod"
+    echo ""
+    echo "# ── Zenoh ─────────────────────────────────────────────────────────────"
+    echo "ZENOH_LOCAL_ENDPOINT=${ZENOH_LOCAL_ENDPOINT}"
+    echo "ZENOH_LOG=info"
+    echo ""
+    echo "# ── Certificates ──────────────────────────────────────────────────────"
+    echo "BUNDLE_DIR=${BUNDLE_DIR}"
+    echo "GOAT_CERT_DIR=${BUNDLE_DIR}"
+    echo ""
+    echo "# ── ASTERIX radar ─────────────────────────────────────────────────────"
+    [ -n "${CAT48_PORT:-}"       ] && echo "CAT48_PORT=${CAT48_PORT}"
+    [ -n "${CAT48_RADAR_SAC:-}"  ] && echo "CAT48_RADAR_SAC=${CAT48_RADAR_SAC}"
+    [ -n "${CAT48_RADAR_SIC:-}"  ] && echo "CAT48_RADAR_SIC=${CAT48_RADAR_SIC}"
+    [ -n "${CAT48_RADAR_NAME:-}" ] && echo "CAT48_RADAR_NAME=${CAT48_RADAR_NAME}"
+    [ -n "${CAT48_RADAR_LAT:-}"  ] && echo "CAT48_RADAR_LAT=${CAT48_RADAR_LAT}"
+    [ -n "${CAT48_RADAR_LON:-}"  ] && echo "CAT48_RADAR_LON=${CAT48_RADAR_LON}"
+    [ -n "${CAT21_PORT:-}"       ] && echo "CAT21_PORT=${CAT21_PORT}"
+    [ -n "${CAT20_PORT:-}"       ] && echo "CAT20_PORT=${CAT20_PORT}"
+    echo ""
+    echo "# ── Sensor ports ──────────────────────────────────────────────────────"
+    [ -n "${LINK16_PORT:-}"  ] && echo "LINK16_PORT=${LINK16_PORT}"
+    [ -n "${LINK16_TCP:-}"   ] && echo "LINK16_TCP=${LINK16_TCP}"
+    [ -n "${MAVLINK_PORT:-}" ] && echo "MAVLINK_PORT=${MAVLINK_PORT}"
+    [ -n "${MAVLINK_TCP:-}"  ] && echo "MAVLINK_TCP=${MAVLINK_TCP}"
+    [ -n "${VMF_PORT:-}"     ] && echo "VMF_PORT=${VMF_PORT}"
+    [ -n "${VMF_TCP:-}"      ] && echo "VMF_TCP=${VMF_TCP}"
+    echo ""
+    echo "# ── Integrations ──────────────────────────────────────────────────────"
+    [ -n "${SITAWARE_URL:-}"    ] && echo "SITAWARE_URL=${SITAWARE_URL}"
+    [ -n "${SITAWARE_USER:-}"   ] && echo "SITAWARE_USER=${SITAWARE_USER}"
+    [ -n "${SITAWARE_PASS:-}"   ] && echo "SITAWARE_PASS=${SITAWARE_PASS}"
+    [ -n "${SITAWARE_POLL_S:-}" ] && echo "SITAWARE_POLL_S=${SITAWARE_POLL_S}"
+    [ -n "${TAK_HOST:-}"        ] && echo "TAK_HOST=${TAK_HOST}"
+    [ -n "${TAK_PORT:-}"        ] && echo "TAK_PORT=${TAK_PORT}"
+    echo ""
+    echo "# ── API keys ──────────────────────────────────────────────────────────"
+    [ -n "${WINDY_KEY:-}"      ] && echo "WINDY_KEY=${WINDY_KEY}"
+    [ -n "${ICAO_NOTAM_KEY:-}" ] && echo "ICAO_NOTAM_KEY=${ICAO_NOTAM_KEY}"
+    [ -n "${FR24_KEY:-}"       ] && echo "FR24_KEY=${FR24_KEY}"
+    [ -n "${N2YO_KEY:-}"       ] && echo "N2YO_KEY=${N2YO_KEY}"
+    [ -n "${AISSTREAM_KEY:-}"  ] && echo "AISSTREAM_KEY=${AISSTREAM_KEY}"
+    [ -n "${HERE_KEY:-}"       ] && echo "HERE_KEY=${HERE_KEY}"
+    [ -n "${PURPLEAIR_KEY:-}"  ] && echo "PURPLEAIR_KEY=${PURPLEAIR_KEY}"
+    [ -n "${CMEMS_USER:-}"     ] && echo "COPERNICUSMARINE_SERVICE_USERNAME=${CMEMS_USER}"
+    [ -n "${CMEMS_PASS:-}"     ] && echo "COPERNICUSMARINE_SERVICE_PASSWORD=${CMEMS_PASS}"
+    if [ -n "$EXTRA_LINES" ]; then
+        echo ""
+        echo "# ── Preserved from prior .env ────────────────────────────────────────"
+        echo "$EXTRA_LINES"
+    fi
+} > "$ENV_FILE"
+chmod 600 "$ENV_FILE"
+ok "compose/.env written (mode 600)"
+
+# ── Python venv ────────────────────────────────────────────────────────────────
+section "Python virtual environment"
+if [ -x "$VENV/bin/python3" ]; then
+    INSTALLED_ZEN=$("$VENV/bin/pip" show eclipse-zenoh 2>/dev/null | grep '^Version:' | awk '{print $2}' || echo "")
+    if [ "$INSTALLED_ZEN" = "1.9.0" ]; then
+        ok "Venv exists with eclipse-zenoh 1.9.0"
+    else
+        info "Reinstalling eclipse-zenoh==1.9.0 (found: ${INSTALLED_ZEN:-none})"
+        "$VENV/bin/pip" install --quiet eclipse-zenoh==1.9.0
+        ok "eclipse-zenoh 1.9.0 installed"
+    fi
+else
+    info "Creating venv at $VENV…"
+    "$PYTHON" -m venv "$VENV"
+    info "Installing eclipse-zenoh==1.9.0…"
+    "$VENV/bin/pip" install --quiet eclipse-zenoh==1.9.0
+    ok "Venv ready"
+fi
+
+# ── Zenoh router ──────────────────────────────────────────────────────────────
+section "Zenoh router"
+ZENOH_CONFIG="${POD_STATE_DIR}/zenoh/config.json5"
+if [ ! -f "$ZENOH_CONFIG" ]; then
+    warn "Zenoh config not found at $ZENOH_CONFIG"
+    warn "Run host/first-boot.sh with your goat-bundle to generate it, then:"
+    warn "  docker compose -f compose/docker-compose.yml up -d zenoh-router"
+else
+    info "Starting zenoh-router…"
+    docker compose -f "$SCRIPT_DIR/compose/docker-compose.yml" up -d zenoh-router
+    printf "  Waiting for zenoh-router to be healthy"
+    for _ in $(seq 1 20); do
+        sleep 1
+        if docker compose -f "$SCRIPT_DIR/compose/docker-compose.yml" ps zenoh-router \
+                --format "{{.Status}}" 2>/dev/null | grep -q "healthy"; then
+            printf " OK\n"; break
+        fi
+        printf "."
+    done
+    if docker compose -f "$SCRIPT_DIR/compose/docker-compose.yml" ps zenoh-router \
+            --format "{{.Status}}" 2>/dev/null | grep -q "healthy"; then
+        ok "zenoh-router healthy"
+    else
+        warn "zenoh-router not healthy — check: docker compose -f compose/docker-compose.yml logs zenoh-router"
+    fi
+fi
+
+# ── Done ──────────────────────────────────────────────────────────────────────
+echo ""
+echo -e "${BOLD}╔══════════════════════════════════════════════════════════════╗${NC}"
+if [ "$INSTALL_MODE" = "testing" ]; then
+echo -e "${YELLOW}${BOLD}║         Moon-Pod bridge stack ready  [TESTING MODE]          ║${NC}"
+else
+echo -e "${GREEN}${BOLD}║              Moon-Pod bridge stack ready                     ║${NC}"
+fi
+echo -e "${BOLD}╚══════════════════════════════════════════════════════════════╝${NC}"
+echo ""
+echo "  Start bridges  : ./start.sh"
+echo "  Stop bridges   : ./stop.sh"
+echo "  Logs           : tail -f logs/<service>.log"
+echo "  Config         : $ENV_FILE"
+if [ "$INSTALL_MODE" = "testing" ]; then
+    echo ""
+    echo -e "  ${YELLOW}Test certs${NC} : $BUNDLE_DIR"
+    echo -e "  ${YELLOW}Namespace${NC}  : $PARTNER_NAMESPACE"
+    echo ""
+    echo "  Full data flow is active in testing mode:"
+    echo "    Sensor bridges → Zenoh (tcp/127.0.0.1:7448) → CoT layer → ATAK/WinTAK/iTAK"
+    echo ""
+    echo "  To deliver tracks to ATAK devices on your network, start.sh will:"
+    echo "    • cot-udp  → UDP multicast 239.2.3.1:6969  (same-subnet ATAK)"
+    echo "    • cot-tcp  → TAK Server at TAK_HOST:TAK_PORT (if configured)"
+    echo ""
+    echo -e "  ${YELLOW}[!]${NC} No EFDI fabric connectivity — local pub/sub only."
+    echo "      All bridges, Zenoh, and CoT delivery are fully functional."
+fi
+echo ""
+if [ "$INSTALL_MODE" = "production" ] && [ ! -f "$ZENOH_CONFIG" ]; then
+    echo -e "  ${YELLOW}[!]${NC} Run host/first-boot.sh with your goat-bundle before starting bridges."
+    echo ""
+fi
