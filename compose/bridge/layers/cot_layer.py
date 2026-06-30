@@ -197,6 +197,8 @@ _TOPIC_COT = {
     "land/**/neutral/radar/**":  ("a-f-G-E-S-R", LAND_STALE_S * 2),
     # ACOUSTIC / RF SENSOR SITES — generic sensor box, neutral (green)
     "land/**/neutral/sensor/**": ("a-n-G-E-S",   LAND_STALE_S * 2),
+    # GPS JAMMING / SPOOFING THREATS — hostile ground EW equipment
+    "env/gps/ew/hostile/threat/**": ("a-h-G-E-X", ENV_STALE_S * 2),
 }
 
 # ATC / ground-station callsigns that appear in ADS-B feeds.
@@ -1139,6 +1141,33 @@ def _build_remarks(track: dict, cot_type: str) -> str:
             _sec("CALIBRATION", calib_l)
             _sec("STATISTICS",  stats_l)
 
+        elif src in ("gpsjam", "eurocontrol", "custom") and track.get("event_type") in ("jamming", "spoofing", "unknown"):  # GPS EW
+            threat_l = []; pos_l = []
+            if time_str: threat_l.append("TIME: {}".format(time_str))
+            etype  = track.get("event_type", "unknown").upper()
+            sev    = track.get("severity",   "unknown").upper()
+            prob   = track.get("jam_prob", -1.0)
+            radius = track.get("radius_km", 0.0)
+            detail = track.get("detail", "")
+            threat_l.append("TYPE: GPS {}".format(etype))
+            threat_l.append("SEVERITY: {}".format(sev))
+            if prob >= 0:
+                threat_l.append("PROBABILITY: {:.0%}".format(prob))
+            if radius:
+                threat_l.append("RADIUS: {} km".format(round(radius)))
+            threat_l.append("SRC: {}".format(src.upper()))
+            rep = track.get("report_utc", "")
+            if rep:
+                threat_l.append("REPORTED: {}".format(rep))
+            if detail:
+                threat_l.append("NOTE: {}".format(detail))
+            if lat is not None: pos_l.append("LAT: {:.5f}°".format(round(lat, 5)))
+            if lon is not None: pos_l.append("LON: {:.5f}°".format(round(lon, 5)))
+            if lat is not None and lon is not None:
+                pos_l.extend(_mgrs_lines(lat, lon))
+            _sec("GPS EW THREAT", threat_l)
+            _sec("POSITION",      pos_l)
+
         elif src in ("openmeteo", "meteolt", "yrno", "windy"):   # WEATHER
             place = (track.get("place_name") or track.get("place_code") or src).upper()
             ident_l = []; env_l = []
@@ -1329,6 +1358,18 @@ def track_to_cot(track: dict, cot_type: str, stale_s: float = COT_STALE_S) -> st
         ET.SubElement(detail, "sensor", {
             "vfov": "90", "hfov": "360",
             "range": str(rng),
+            "azimuth": "0",
+            "model": "Generic", "ranges": "0",
+            "type": "radar",
+            "displayMagneticReference": "0",
+            "stockTool": "false",
+        })
+    elif track.get("radius_km", 0) > 0:
+        # GPS jamming / EW threat area — render as a threat circle
+        threat_range_m = int(float(track["radius_km"]) * 1000)
+        ET.SubElement(detail, "sensor", {
+            "vfov": "90", "hfov": "360",
+            "range": str(threat_range_m),
             "azimuth": "0",
             "model": "Generic", "ranges": "0",
             "type": "radar",
