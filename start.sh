@@ -48,7 +48,7 @@ fi
 # ── Service registry ───────────────────────────────────────────────────────
 SERVICES=(
     zenoh
-    asterix link16 mavlink vmf sitaware dronuradaras
+    asterix link16 mavlink vmf sitaware dronuradaras gps-ew
     cot-udp cot-tcp track-fusion
 )
 
@@ -57,6 +57,7 @@ declare -A SVC_CAT=(
     [asterix]="Sensor bridges"  [link16]="Sensor bridges"
     [mavlink]="Sensor bridges"  [vmf]="Sensor bridges"
     [sitaware]="Sensor bridges" [dronuradaras]="Sensor bridges"
+    [gps-ew]="Sensor bridges"
     [cot-udp]="Output layers"   [cot-tcp]="Output layers"
     [track-fusion]="Output layers"
 )
@@ -69,6 +70,7 @@ declare -A SVC_DESC=(
     [vmf]="VMF MIL-STD-47001C messages"
     [sitaware]="SitaWare friendly force tracking"
     [dronuradaras]="dronuradaras.lt drone detection network"
+    [gps-ew]="GPS jamming/spoofing threat feed (GPSJam + custom)"
     [cot-udp]="CoT → ATAK UDP multicast 239.2.3.1:6969"
     [cot-tcp]="CoT → TAK Server TCP"
     [track-fusion]="Radar/ADS-B track correlation"
@@ -85,6 +87,7 @@ svc_ready() {
         vmf)          [[ "${VMF_PORT:-}" ]] ;;
         sitaware)     [[ "${SITAWARE_URL:-}" ]] ;;
         dronuradaras) return 0 ;;
+        gps-ew)       return 0 ;;  # always ready; sources enabled via env vars
         *)        return 0 ;;
     esac
 }
@@ -183,6 +186,10 @@ launch() {
 
         dronuradaras)
             _start dronuradaras bridges/dronuradaras_bridge.py
+            ;;
+
+        gps-ew)
+            _start gps-ew bridges/gps_ew_bridge.py
             ;;
 
         cot-udp)
