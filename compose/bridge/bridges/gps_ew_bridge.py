@@ -505,12 +505,24 @@ class _KmlHandler(http.server.BaseHTTPRequestHandler):
 
 
 def _start_kml_server(port: int) -> None:
+    import socket
     srv = http.server.HTTPServer(("0.0.0.0", port), _KmlHandler)
-    t = threading.Thread(target=srv.serve_forever, daemon=True)
-    t.start()
-    print("GPS-EW KML layer: http://<host>:{}/gps-ew.kml".format(port), flush=True)
-    print("  → ATAK: Overlay Manager → Add Layer → Remote KML → paste URL", flush=True)
-    print("  → WinTAK/iTAK: same path in Overlay Manager", flush=True)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    # Print every non-loopback address so any reachable interface works
+    addrs = []
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            ip = info[4][0]
+            if not ip.startswith("127."):
+                addrs.append(ip)
+    except OSError:
+        pass
+    if not addrs:
+        addrs = ["<this-host>"]
+    print("GPS-EW KML layer serving on port {} — reachable via any of:".format(port), flush=True)
+    for ip in addrs:
+        print("  http://{}:{}/gps-ew.kml".format(ip, port), flush=True)
+    print("  → ATAK/WinTAK/iTAK: Overlay Manager → Add Layer → Remote KML", flush=True)
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
