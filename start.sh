@@ -49,7 +49,7 @@ fi
 SERVICES=(
     zenoh
     asterix link16 mavlink vmf sitaware dronuradaras gps-ew
-    cot-udp cot-tcp track-fusion
+    cot-udp cot-udp-tak cot-tcp track-fusion
 )
 
 declare -A SVC_CAT=(
@@ -58,8 +58,8 @@ declare -A SVC_CAT=(
     [mavlink]="Sensor bridges"  [vmf]="Sensor bridges"
     [sitaware]="Sensor bridges" [dronuradaras]="Sensor bridges"
     [gps-ew]="Sensor bridges"
-    [cot-udp]="Output layers"   [cot-tcp]="Output layers"
-    [track-fusion]="Output layers"
+    [cot-udp]="Output layers"   [cot-udp-tak]="Output layers"
+    [cot-tcp]="Output layers"   [track-fusion]="Output layers"
 )
 
 declare -A SVC_DESC=(
@@ -71,7 +71,8 @@ declare -A SVC_DESC=(
     [sitaware]="SitaWare friendly force tracking"
     [dronuradaras]="dronuradaras.lt drone detection network"
     [gps-ew]="GPS jamming/spoofing threat feed (GPSJam + custom)"
-    [cot-udp]="CoT → ATAK UDP multicast 239.2.3.1:6969"
+    [cot-udp]="CoT → ATAK UDP multicast 239.2.3.1:6969 (same LAN only)"
+    [cot-udp-tak]="CoT → UDP unicast direct to TAK Server (crosses NetBird/VPN)"
     [cot-tcp]="CoT → TAK Server TCP"
     [track-fusion]="Radar/ADS-B track correlation"
 )
@@ -79,7 +80,7 @@ declare -A SVC_DESC=(
 # ── Ready check — 0=can start, 1=missing config ───────────────────────────
 svc_ready() {
     case "$1" in
-        zenoh|cot-udp|cot-tcp|track-fusion)
+        zenoh|cot-udp|cot-udp-tak|cot-tcp|track-fusion)
             return 0 ;;
         asterix)  [[ "${CAT48_PORT:-}${CAT21_PORT:-}${CAT20_PORT:-}" ]] ;;
         link16)   [[ "${LINK16_PORT:-}" ]] ;;
@@ -100,7 +101,8 @@ svc_hint() {
         mavlink)  echo "MAVLINK_PORT not set" ;;
         vmf)      echo "VMF_PORT not set" ;;
         sitaware) echo "SITAWARE_URL not set" ;;
-        cot-tcp)  echo "${TAK_HOST:-127.0.0.1}:${TAK_PORT:-8087}" ;;
+        cot-tcp)     echo "${TAK_HOST:-127.0.0.1}:${TAK_PORT:-8087}" ;;
+        cot-udp-tak) [[ "${TAK_UDP_HOST:-}" ]] && echo "${TAK_UDP_HOST}:${TAK_UDP_PORT:-8087}" || echo "will prompt for address" ;;
         *)        echo "" ;;
     esac
 }
@@ -194,6 +196,19 @@ launch() {
 
         cot-udp)
             _start cot-udp layers/cot_layer.py --udp --host 239.2.3.1 --port 6969
+            ;;
+
+        cot-udp-tak)
+            local tak_udp_host="${TAK_UDP_HOST:-}"
+            local tak_udp_port="${TAK_UDP_PORT:-8087}"
+            if [[ -z "$tak_udp_host" ]]; then
+                read -rp "$(printf "  ${BOLD}TAK Server address${R} (IP, e.g. NetBird IP): ")" tak_udp_host
+                if [[ -z "$tak_udp_host" ]]; then
+                    printf "  ${YELLOW}[skip]${R}  cot-udp-tak     no address entered\n"
+                    return
+                fi
+            fi
+            _start cot-udp-tak layers/cot_layer.py --udp --host "$tak_udp_host" --port "$tak_udp_port"
             ;;
 
         cot-tcp)
