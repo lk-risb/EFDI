@@ -100,9 +100,24 @@ svc_hint() {
         link16)   echo "LINK16_PORT not set" ;;
         mavlink)  echo "MAVLINK_PORT not set" ;;
         vmf)      echo "VMF_PORT not set" ;;
-        sitaware)    [[ "${SITAWARE_URL:-}" ]] && echo "${SITAWARE_URL}" || echo "will prompt for address" ;;
-        cot-tcp)     echo "${TAK_HOST:-127.0.0.1}:${TAK_PORT:-8087}" ;;
-        cot-udp-tak) [[ "${TAK_UDP_HOST:-}" ]] && echo "${TAK_UDP_HOST}:${TAK_UDP_PORT:-8087}" || echo "will prompt for address" ;;
+        sitaware)
+            if [[ "${SITAWARE_URL:-}" ]]; then
+                [[ "${SITAWARE_URL_FALLBACK:-}" ]] && echo "${SITAWARE_URL} (+fallback)" || echo "${SITAWARE_URL}"
+            else
+                echo "will prompt for address"
+            fi ;;
+        cot-tcp)
+            if [[ "${TAK_HOST:-}" ]]; then
+                [[ "${TAK_HOST_FALLBACK:-}" ]] && echo "${TAK_HOST}:${TAK_PORT:-8087} (+fallback)" || echo "${TAK_HOST}:${TAK_PORT:-8087}"
+            else
+                echo "will prompt for address"
+            fi ;;
+        cot-udp-tak)
+            if [[ "${TAK_UDP_HOST:-}" ]]; then
+                [[ "${TAK_UDP_HOST_FALLBACK:-}" ]] && echo "${TAK_UDP_HOST}:${TAK_UDP_PORT:-8087} (+fallback)" || echo "${TAK_UDP_HOST}:${TAK_UDP_PORT:-8087}"
+            else
+                echo "will prompt for address"
+            fi ;;
         *)        echo "" ;;
     esac
 }
@@ -110,6 +125,20 @@ svc_hint() {
 is_running() {
     local f="$PID_DIR/$1.pid"
     [[ -f "$f" ]] && kill -0 "$(cat "$f")" 2>/dev/null
+}
+
+# Prompt for BOTH a LAN address and a NetBird mesh address for the same server.
+# Either may be left blank. Sets two caller-provided variable names (nameref-style
+# via printf -v) so both candidates can be kept as fallbacks — whichever network
+# path is actually up gets used.
+#   _prompt_dual_address <label> <lan_var> <netbird_var>
+_prompt_dual_address() {
+    local label="$1" lan_var="$2" nb_var="$3"
+    local lan_in nb_in
+    read -rp "$(printf "  ${BOLD}${label} LAN IP/URL${R} (same network, blank to skip): ")" lan_in
+    read -rp "$(printf "  ${BOLD}${label} NetBird IP/URL${R} (mesh VPN, blank to skip): ")" nb_in
+    printf -v "$lan_var" '%s' "$lan_in"
+    printf -v "$nb_var" '%s' "$nb_in"
 }
 
 # ── Launch helpers ─────────────────────────────────────────────────────────
@@ -182,13 +211,17 @@ launch() {
             ;;
 
         sitaware)
-            if [[ -z "${SITAWARE_URL:-}" ]]; then
-                read -rp "$(printf "  ${BOLD}SitaWare server IP/URL${R} (e.g. https://10.0.0.1): ")" _sw_url
-                if [[ -z "$_sw_url" ]]; then
+            if [[ -z "${SITAWARE_URL:-}" && -z "${SITAWARE_URL_FALLBACK:-}" ]]; then
+                local sw_lan sw_nb
+                _prompt_dual_address "SitaWare Server" sw_lan sw_nb
+                if [[ -z "$sw_lan" && -z "$sw_nb" ]]; then
                     printf "  ${YELLOW}[skip]${R}  sitaware        no address entered\n"
                     return
                 fi
-                export SITAWARE_URL="$_sw_url"
+                [[ -n "$sw_lan" ]] && export SITAWARE_URL="$sw_lan"
+                [[ -n "$sw_nb"  ]] && export SITAWARE_URL_FALLBACK="$sw_nb"
+                # Only a NetBird address was given — it becomes primary.
+                [[ -z "${SITAWARE_URL:-}" ]] && export SITAWARE_URL="$sw_nb" && unset SITAWARE_URL_FALLBACK
             fi
             local sf=(); [[ "${SITAWARE_DISCOVER:-}" == "1" ]] && sf=(--discover)
             _start sitaware bridges/sitaware_bridge.py "${sf[@]}"
@@ -208,19 +241,33 @@ launch() {
 
         cot-udp-tak)
             local tak_udp_host="${TAK_UDP_HOST:-}"
+            local tak_udp_host2="${TAK_UDP_HOST_FALLBACK:-}"
             local tak_udp_port="${TAK_UDP_PORT:-8087}"
-            if [[ -z "$tak_udp_host" ]]; then
-                read -rp "$(printf "  ${BOLD}TAK Server address${R} (IP, e.g. NetBird IP): ")" tak_udp_host
-                if [[ -z "$tak_udp_host" ]]; then
+            if [[ -z "$tak_udp_host" && -z "$tak_udp_host2" ]]; then
+                _prompt_dual_address "TAK Server" tak_udp_host tak_udp_host2
+                if [[ -z "$tak_udp_host" && -z "$tak_udp_host2" ]]; then
                     printf "  ${YELLOW}[skip]${R}  cot-udp-tak     no address entered\n"
                     return
                 fi
             fi
-            _start cot-udp-tak layers/cot_layer.py --udp --host "$tak_udp_host" --port "$tak_udp_port"
+            local udp_hosts=(); [[ -n "$tak_udp_host"  ]] && udp_hosts+=(--host "$tak_udp_host")
+            [[ -n "$tak_udp_host2" ]] && udp_hosts+=(--host "$tak_udp_host2")
+            _start cot-udp-tak layers/cot_layer.py --udp "${udp_hosts[@]}" --port "$tak_udp_port"
             ;;
 
         cot-tcp)
-            _start cot-tcp layers/cot_layer.py --host "${TAK_HOST:-127.0.0.1}" --port "${TAK_PORT:-8087}"
+            local tak_host="${TAK_HOST:-}"
+            local tak_host2="${TAK_HOST_FALLBACK:-}"
+            if [[ -z "$tak_host" && -z "$tak_host2" ]]; then
+                _prompt_dual_address "TAK Server" tak_host tak_host2
+                if [[ -z "$tak_host" && -z "$tak_host2" ]]; then
+                    printf "  ${YELLOW}[skip]${R}  cot-tcp         no address entered\n"
+                    return
+                fi
+            fi
+            local tcp_hosts=(); [[ -n "$tak_host"  ]] && tcp_hosts+=(--host "$tak_host")
+            [[ -n "$tak_host2" ]] && tcp_hosts+=(--host "$tak_host2")
+            _start cot-tcp layers/cot_layer.py "${tcp_hosts[@]}" --port "${TAK_PORT:-8087}"
             ;;
 
         track-fusion)

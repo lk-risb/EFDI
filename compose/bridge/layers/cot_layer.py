@@ -1396,13 +1396,18 @@ def track_to_cot(track: dict, cot_type: str, stale_s: float = COT_STALE_S) -> st
 # ---------------------------------------------------------------------------
 
 class TcpSender:
-    """Thread-safe TCP writer with reconnect. Supports plaintext and mutual TLS."""
+    """Thread-safe TCP writer with reconnect. Supports plaintext and mutual TLS.
 
-    def __init__(self, host: str, port: int, tls: bool = False,
+    Accepts multiple (host, port) candidates — e.g. a LAN IP and a NetBird mesh
+    IP for the same TAK Server. Tries them in round-robin order on each connect
+    attempt, so it converges on whichever network path is actually reachable.
+    """
+
+    def __init__(self, hosts: list[tuple[str, int]], tls: bool = False,
                  certfile: str | None = None, keyfile: str | None = None,
                  cafile: str | None = None):
-        self.host      = host
-        self.port      = port
+        self.hosts     = hosts
+        self._idx      = 0
         self._tls      = tls
         self._certfile = certfile
         self._keyfile  = keyfile
@@ -1412,25 +1417,27 @@ class TcpSender:
         self._connect()
 
     def _connect(self):
+        host, port = self.hosts[self._idx % len(self.hosts)]
         try:
-            raw = socket.create_connection((self.host, self.port), timeout=SEND_TIMEOUT_S)
+            raw = socket.create_connection((host, port), timeout=SEND_TIMEOUT_S)
             if self._tls:
                 ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
                 ctx.load_verify_locations(self._cafile)  # cafile required; enforced in run()
                 if self._certfile and self._keyfile:
                     ctx.load_cert_chain(self._certfile, self._keyfile)
-                s = ctx.wrap_socket(raw, server_hostname=self.host)
+                s = ctx.wrap_socket(raw, server_hostname=host)
             else:
                 s = raw
             s.settimeout(SEND_TIMEOUT_S)
             with self._lock:
                 self._sock = s
             mode = "TLS" if self._tls else "TCP"
-            print("TAK {} connected → {}:{}".format(mode, self.host, self.port), flush=True)
+            print("TAK {} connected → {}:{}".format(mode, host, port), flush=True)
         except OSError as exc:
-            print("TAK connect failed ({}:{}) — {}, retry in {}s".format(
-                self.host, self.port, exc, RECONNECT_S), flush=True)
+            print("TAK connect failed ({}:{}) — {}, trying next candidate in {}s".format(
+                host, port, exc, RECONNECT_S), flush=True)
             self._sock = None
+            self._idx += 1
             threading.Timer(RECONNECT_S, self._connect).start()
 
     def send(self, xml: str):
@@ -1444,6 +1451,7 @@ class TcpSender:
         except OSError:
             with self._lock:
                 self._sock = None
+            self._idx += 1
             threading.Timer(RECONNECT_S, self._connect).start()
 
     def close(self):
@@ -1458,20 +1466,29 @@ class TcpSender:
 # ---------------------------------------------------------------------------
 
 class UdpSender:
-    def __init__(self, addr: str, port: int):
-        self.dest = (addr, port)
+    """Sends each CoT event to every configured destination (dual-homed fallback).
+
+    UDP has no connection state, so there's nothing to "detect" and fail over —
+    instead, every destination gets every packet. Whichever network path (LAN,
+    NetBird mesh, multicast) is actually up delivers it; unreachable paths just
+    drop silently (or log once) without blocking the others.
+    """
+
+    def __init__(self, dests: list[tuple[str, int]]):
+        self.dests = dests
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
         self._sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        is_mcast = addr.startswith("224.") or addr.startswith("239.")
-        if is_mcast:
+        if any(addr.startswith("224.") or addr.startswith("239.") for addr, _ in dests):
             self._sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, struct.pack("b", 32))
             self._sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_LOOP, 1)
 
     def send(self, xml: str):
-        try:
-            self._sock.sendto(xml.encode("utf-8"), self.dest)
-        except OSError as exc:
-            print("CoT UDP send error:", exc, flush=True)
+        data = xml.encode("utf-8")
+        for dest in self.dests:
+            try:
+                self._sock.sendto(data, dest)
+            except OSError as exc:
+                print("CoT UDP send error ({}:{}): {}".format(dest[0], dest[1], exc), flush=True)
 
     def close(self):
         self._sock.close()
@@ -1634,20 +1651,22 @@ def make_geo_handler(sender, verbose: bool):
 # ---------------------------------------------------------------------------
 
 def run(args):
+    hosts = [(h, args.port) for h in args.host]
     if args.udp:
-        sender = UdpSender(args.host, args.port)
-        print("CoT → UDP {}:{}".format(args.host, args.port), flush=True)
+        sender = UdpSender(hosts)
+        print("CoT → UDP {}".format(", ".join("{}:{}".format(h, p) for h, p in hosts)), flush=True)
     else:
         tls = getattr(args, "tls", False)
         if tls and not getattr(args, "ca", None):
             raise SystemExit("--ca / TAK_CA is required when --tls is specified")
-        sender = TcpSender(args.host, args.port,
+        sender = TcpSender(hosts,
                            tls=tls,
                            certfile=getattr(args, "cert", None),
                            keyfile=getattr(args, "key", None),
                            cafile=getattr(args, "ca", None))
         mode = "TLS mTLS" if tls else "TCP plaintext"
-        print("CoT → {} {}:{} (TAK Server)".format(mode, args.host, args.port), flush=True)
+        print("CoT → {} candidates: {} (TAK Server, first reachable wins)".format(
+            mode, ", ".join("{}:{}".format(h, p) for h, p in hosts)), flush=True)
 
     session = zenoh.open(make_config())
     _start_dr_thread(sender)
@@ -1686,8 +1705,9 @@ def run(args):
 
 def main():
     ap = argparse.ArgumentParser(description="Zenoh tracks → TAK Server / ATAK CoT bridge")
-    ap.add_argument("--host", default=os.environ.get("TAK_HOST", "127.0.0.1"),
-                    help="TAK Server host (default: 127.0.0.1)")
+    ap.add_argument("--host", action="append", default=None,
+                    help="TAK Server host — repeatable (e.g. --host <lan-ip> --host <netbird-ip>) "
+                         "to try multiple network paths; falls back to TAK_HOST env or 127.0.0.1")
     ap.add_argument("--port", type=int, default=int(os.environ.get("TAK_PORT", "8087")),
                     help="TAK Server port (default: 8087)")
     ap.add_argument("--tls", action="store_true",
@@ -1704,6 +1724,8 @@ def main():
     ap.add_argument("--verbose", "-v", action="store_true",
                     help="Print each CoT message sent")
     args = ap.parse_args()
+    if not args.host:
+        args.host = [os.environ.get("TAK_HOST", "127.0.0.1")]
     run(args)
 
 
