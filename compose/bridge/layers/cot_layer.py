@@ -1422,6 +1422,11 @@ class TcpSender:
             raw = socket.create_connection((host, port), timeout=SEND_TIMEOUT_S)
             if self._tls:
                 ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+                # Server identity is anchored by mutual TLS (client cert + shared CA),
+                # not hostname — we deliberately dial multiple candidate addresses
+                # (LAN IP, NetBird IP) for the same server, so no single hostname/IP
+                # could ever match the server cert's SAN. Chain verification stays on.
+                ctx.check_hostname = False
                 ctx.load_verify_locations(self._cafile)  # cafile required; enforced in run()
                 if self._certfile and self._keyfile:
                     ctx.load_cert_chain(self._certfile, self._keyfile)
