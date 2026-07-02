@@ -113,7 +113,7 @@ def run_devices(pub: "zenoh.Publisher", verbose: bool):
                     continue
 
                 payload = {
-                    "_src":        "dronuradaras",
+                    "_src":        "dronuradaras.lt",
                     "_ts":         time.time(),
                     "sensor_type": "acoustic",
                     "sensor_id":   "DRONU-{}".format(dev["id"][:8]),
@@ -180,7 +180,7 @@ def run_detections(pub: "zenoh.Publisher", verbose: bool):
 
                 has_audio = bool(det.get("audio_available"))
                 payload = {
-                    "_src":            "dronuradaras",
+                    "_src":            "dronuradaras.lt",
                     "_ts":             detected_s,
                     "sensor_id":       "DRONU-DET-{}".format(det_id[:8]),
                     "callsign":        "DRONE",
