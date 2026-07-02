@@ -22,13 +22,18 @@ SIDC battle dimension (char 3):
     F → space  → space/**/civ/satellite/tracks/v1
 
 Configuration (compose/.env):
-    SITAWARE_URL=https://10.0.0.1          # base URL of SitaWare server
+    SITAWARE_URL=https://10.0.0.1          # base URL of SitaWare server (LAN, primary)
+    SITAWARE_URL_FALLBACK=https://100.x.x.x  # optional second base URL (e.g. NetBird mesh IP)
     SITAWARE_USER=admin                    # basic-auth username
     SITAWARE_PASS=secret                   # basic-auth password
     SITAWARE_SOURCE=efdi-live              # source tag written into _src field
     SITAWARE_API_PATH=/rest/v2/units       # endpoint path (default shown)
     SITAWARE_POLL_S=10                     # poll interval in seconds (default 10)
     SITAWARE_TLS_VERIFY=1                  # set 0 to skip certificate check (self-signed)
+
+Both base URLs are tried every poll, preferring whichever one last succeeded —
+so it survives losing either the LAN path or the NetBird mesh path without
+manual intervention.
 
 Run:
     venv/bin/python3 sitaware_bridge.py
@@ -62,7 +67,11 @@ HERE      = os.path.dirname(os.path.abspath(__file__))
 _CERT_DIR = os.environ.get("GOAT_CERT_DIR", HERE)
 _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", ROUTER)
 
-_BASE_URL    = os.environ.get("SITAWARE_URL",      "").rstrip("/")
+_BASE_URL_PRIMARY  = os.environ.get("SITAWARE_URL",          "").rstrip("/")
+_BASE_URL_FALLBACK = os.environ.get("SITAWARE_URL_FALLBACK", "").rstrip("/")
+_BASE_URLS   = [u for u in (_BASE_URL_PRIMARY, _BASE_URL_FALLBACK) if u]
+_BASE_URL    = _BASE_URL_PRIMARY   # kept for --discover, which only needs one host
+_active_url_idx = 0                # index into _BASE_URLS of the last-known-good base
 _USER        = os.environ.get("SITAWARE_USER",     "")
 _PASS        = os.environ.get("SITAWARE_PASS",     "")
 _SOURCE      = os.environ.get("SITAWARE_SOURCE",   "sitaware")
@@ -172,6 +181,27 @@ def _http_get(url: str) -> dict | list | None:
         raise
     except Exception as exc:
         raise RuntimeError("HTTP GET {} failed: {}".format(url, exc)) from exc
+
+
+def _http_get_any(path: str) -> tuple:
+    """GET path against each configured base URL, preferring the last-known-good
+    one first. Returns (result, base_url_used). A 404 from the preferred base is
+    authoritative (path problem, not a connectivity problem) and is returned
+    as-is rather than trying the fallback base. Only connection-level failures
+    (timeout, refused, DNS) advance to the next base URL."""
+    global _active_url_idx
+    order = [_active_url_idx] + [i for i in range(len(_BASE_URLS)) if i != _active_url_idx]
+    last_exc = None
+    for i in order:
+        base = _BASE_URLS[i]
+        try:
+            result = _http_get(base + path)
+            _active_url_idx = i
+            return result, base
+        except Exception as exc:
+            last_exc = exc
+            continue
+    raise last_exc
 
 
 def _discover_api_path() -> str:
@@ -297,7 +327,7 @@ def publish_unit(session: "zenoh.Session", track: dict, verbose: bool):
 # ---------------------------------------------------------------------------
 
 def run(args):
-    if not _BASE_URL:
+    if not _BASE_URLS:
         print("ERROR: SITAWARE_URL is not set in .env — exiting.", flush=True)
         return
 
@@ -307,14 +337,21 @@ def run(args):
 
     session = zenoh.open(make_config())
     print("SitaWare bridge started", flush=True)
-    print("  Server : {}{}".format(_BASE_URL, api_path), flush=True)
+    if len(_BASE_URLS) > 1:
+        print("  Servers: {} (+{} fallback)".format(_BASE_URLS[0], len(_BASE_URLS) - 1), flush=True)
+    else:
+        print("  Server : {}{}".format(_BASE_URLS[0], api_path), flush=True)
     print("  Poll   : {}s".format(_POLL_S), flush=True)
     print("  TLS    : {}".format("verify" if _TLS_VERIFY else "skip-verify"), flush=True)
 
     consecutive_errors = 0
+    last_used_base = None
     while True:
         try:
-            raw = _http_get(_BASE_URL + api_path)
+            raw, used_base = _http_get_any(api_path)
+            if used_base != last_used_base:
+                print("SitaWare active base: {}".format(used_base), flush=True)
+                last_used_base = used_base
             if raw is None:
                 print("WARN: 404 from SitaWare — check SITAWARE_API_PATH", flush=True)
                 time.sleep(_POLL_S)
