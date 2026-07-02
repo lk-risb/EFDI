@@ -86,7 +86,7 @@ svc_ready() {
         link16)   [[ "${LINK16_PORT:-}" ]] ;;
         mavlink)  [[ "${MAVLINK_PORT:-}" ]] ;;
         vmf)          [[ "${VMF_PORT:-}" ]] ;;
-        sitaware)     [[ "${SITAWARE_URL:-}" ]] ;;
+        sitaware)     return 0 ;;  # always ready; prompts for server IP at launch if unset
         dronuradaras) return 0 ;;
         gps-ew)       return 0 ;;  # always ready; sources enabled via env vars
         *)        return 0 ;;
@@ -100,7 +100,7 @@ svc_hint() {
         link16)   echo "LINK16_PORT not set" ;;
         mavlink)  echo "MAVLINK_PORT not set" ;;
         vmf)      echo "VMF_PORT not set" ;;
-        sitaware) echo "SITAWARE_URL not set" ;;
+        sitaware)    [[ "${SITAWARE_URL:-}" ]] && echo "${SITAWARE_URL}" || echo "will prompt for address" ;;
         cot-tcp)     echo "${TAK_HOST:-127.0.0.1}:${TAK_PORT:-8087}" ;;
         cot-udp-tak) [[ "${TAK_UDP_HOST:-}" ]] && echo "${TAK_UDP_HOST}:${TAK_UDP_PORT:-8087}" || echo "will prompt for address" ;;
         *)        echo "" ;;
@@ -182,6 +182,14 @@ launch() {
             ;;
 
         sitaware)
+            if [[ -z "${SITAWARE_URL:-}" ]]; then
+                read -rp "$(printf "  ${BOLD}SitaWare server IP/URL${R} (e.g. https://10.0.0.1): ")" _sw_url
+                if [[ -z "$_sw_url" ]]; then
+                    printf "  ${YELLOW}[skip]${R}  sitaware        no address entered\n"
+                    return
+                fi
+                export SITAWARE_URL="$_sw_url"
+            fi
             local sf=(); [[ "${SITAWARE_DISCOVER:-}" == "1" ]] && sf=(--discover)
             _start sitaware bridges/sitaware_bridge.py "${sf[@]}"
             ;;
