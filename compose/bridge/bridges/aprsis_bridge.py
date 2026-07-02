@@ -28,6 +28,7 @@ import zenoh
 
 ROUTER = "tls/zenoh.efdi.netbird.efdi-backbone.net:7447"
 ORG = os.environ.get("PARTNER_NAMESPACE", "")
+TOPIC_ROOT = "LTU/CISB/" + ORG   # organization prefix precedes the pod namespace
 HERE = os.path.dirname(os.path.abspath(__file__))
 _CERT_DIR = os.environ.get("GOAT_CERT_DIR", HERE)
 _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", ROUTER)
@@ -217,12 +218,12 @@ _LAND_CODES = set("><jkuvURfa=")  # car, motorcycle, jeep, trucks, van, bus, RV,
 def _route_topic(symbol: str) -> str:
     code = symbol[1] if len(symbol) >= 2 else ""
     if code in _AIR_CODES:
-        return "{}/air/aprs-is/aprs/civ/aircraft/tracks/v1".format(ORG)
+        return "{}/air/aprs-is/aprs/civ/aircraft/tracks/v1".format(TOPIC_ROOT)
     if code in _SEA_CODES:
-        return "{}/sea/aprs-is/aprs/civ/vessel/tracks/v1".format(ORG)
+        return "{}/sea/aprs-is/aprs/civ/vessel/tracks/v1".format(TOPIC_ROOT)
     if code in _LAND_CODES:
-        return "{}/land/aprs-is/aprs/civ/vehicle/tracks/v1".format(ORG)
-    return "{}/land/aprs-is/aprs/neutral/station/tracks/v1".format(ORG)   # digipeaters / wx / home
+        return "{}/land/aprs-is/aprs/civ/vehicle/tracks/v1".format(TOPIC_ROOT)
+    return "{}/land/aprs-is/aprs/neutral/station/tracks/v1".format(TOPIC_ROOT)   # digipeaters / wx / home
 
 
 # ---------------------------------------------------------------------------
@@ -234,15 +235,15 @@ def run(args):
     print("APRS-IS server: {}:{} | filter: {}".format(APRSIS_HOST, APRSIS_PORT, filt_desc), flush=True)
 
     session = zenoh.open(make_config())
-    pub_air   = session.declare_publisher("{}/air/aprs-is/aprs/civ/aircraft/tracks/v1".format(ORG))
-    pub_sea   = session.declare_publisher("{}/sea/aprs-is/aprs/civ/vessel/tracks/v1".format(ORG))
-    pub_land  = session.declare_publisher("{}/land/aprs-is/aprs/civ/vehicle/tracks/v1".format(ORG))
-    pub_misc  = session.declare_publisher("{}/land/aprs-is/aprs/neutral/station/tracks/v1".format(ORG))
+    pub_air   = session.declare_publisher("{}/air/aprs-is/aprs/civ/aircraft/tracks/v1".format(TOPIC_ROOT))
+    pub_sea   = session.declare_publisher("{}/sea/aprs-is/aprs/civ/vessel/tracks/v1".format(TOPIC_ROOT))
+    pub_land  = session.declare_publisher("{}/land/aprs-is/aprs/civ/vehicle/tracks/v1".format(TOPIC_ROOT))
+    pub_misc  = session.declare_publisher("{}/land/aprs-is/aprs/neutral/station/tracks/v1".format(TOPIC_ROOT))
     _pubs = {
-        "{}/air/aprs-is/aprs/civ/aircraft/tracks/v1".format(ORG):     pub_air,
-        "{}/sea/aprs-is/aprs/civ/vessel/tracks/v1".format(ORG):       pub_sea,
-        "{}/land/aprs-is/aprs/civ/vehicle/tracks/v1".format(ORG):     pub_land,
-        "{}/land/aprs-is/aprs/neutral/station/tracks/v1".format(ORG): pub_misc,
+        "{}/air/aprs-is/aprs/civ/aircraft/tracks/v1".format(TOPIC_ROOT):     pub_air,
+        "{}/sea/aprs-is/aprs/civ/vessel/tracks/v1".format(TOPIC_ROOT):       pub_sea,
+        "{}/land/aprs-is/aprs/civ/vehicle/tracks/v1".format(TOPIC_ROOT):     pub_land,
+        "{}/land/aprs-is/aprs/neutral/station/tracks/v1".format(TOPIC_ROOT): pub_misc,
     }
 
     try:

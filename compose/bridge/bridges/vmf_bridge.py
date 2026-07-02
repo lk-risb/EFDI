@@ -39,6 +39,7 @@ import zenoh
 
 ROUTER    = "tls/zenoh.efdi.netbird.efdi-backbone.net:7447"
 ORG       = os.environ.get("PARTNER_NAMESPACE", "")
+TOPIC_ROOT = "LTU/CISB/" + ORG   # organization prefix precedes the pod namespace
 HERE      = os.path.dirname(os.path.abspath(__file__))
 _CERT_DIR = os.environ.get("GOAT_CERT_DIR", HERE)
 _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", ROUTER)
@@ -255,7 +256,7 @@ def _topic(track: dict) -> str:
     domain = track.pop("_domain", "land")
     entity = track.pop("_entity", "unit")
     aff    = track.pop("_aff",    "unknown")
-    return "{}/{}/vmf/{}/{}/tracks/v1".format(ORG, domain, aff, entity)
+    return "{}/{}/vmf/{}/{}/tracks/v1".format(TOPIC_ROOT, domain, aff, entity)
 
 
 # ---------------------------------------------------------------------------

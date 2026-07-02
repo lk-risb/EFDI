@@ -57,6 +57,7 @@ import zenoh
 
 ROUTER    = "tls/zenoh.efdi.netbird.efdi-backbone.net:7447"
 ORG       = os.environ.get("PARTNER_NAMESPACE", "")
+TOPIC_ROOT = "LTU/CISB/" + ORG   # organization prefix precedes the pod namespace
 HERE      = os.path.dirname(os.path.abspath(__file__))
 _CERT_DIR = os.environ.get("GOAT_CERT_DIR", HERE)
 _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", ROUTER)
@@ -125,7 +126,7 @@ def sidc_to_topic(sidc: str) -> str:
     """Map a 15-char SIDC to the appropriate Zenoh topic."""
     sidc = (sidc or "").upper().replace("*", "-").replace("-", "")
     if len(sidc) < 3:
-        return "{}/land/sitaware/rest/unknown/unit/tracks/v1".format(ORG)
+        return "{}/land/sitaware/rest/unknown/unit/tracks/v1".format(TOPIC_ROOT)
 
     aff_char = sidc[1] if len(sidc) > 1 else "U"
     dim_char = sidc[2] if len(sidc) > 2 else "G"
@@ -138,9 +139,9 @@ def sidc_to_topic(sidc: str) -> str:
     # so cot_layer picks up a-f-A-M-F / a-h-A-M-F (swept-wing icons).
     if domain == "air":
         slot = "mil" if aff in ("friendly", "hostile") else "civ"
-        return "{}/air/sitaware/rest/{}/aircraft/tracks/v1".format(ORG, slot)
+        return "{}/air/sitaware/rest/{}/aircraft/tracks/v1".format(TOPIC_ROOT, slot)
 
-    return "{}/{}/sitaware/rest/{}/{}/tracks/v1".format(ORG, domain, aff, entity)
+    return "{}/{}/sitaware/rest/{}/{}/tracks/v1".format(TOPIC_ROOT, domain, aff, entity)
 
 
 # ---------------------------------------------------------------------------

@@ -33,6 +33,7 @@ import zenoh
 
 ROUTER = "tls/zenoh.efdi.netbird.efdi-backbone.net:7447"
 ORG    = os.environ.get("PARTNER_NAMESPACE", "")
+TOPIC_ROOT = "LTU/CISB/" + ORG   # organization prefix precedes the pod namespace
 HERE   = os.path.dirname(os.path.abspath(__file__))
 _CERT_DIR = os.environ.get("GOAT_CERT_DIR", HERE)
 _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", ROUTER)
@@ -266,7 +267,7 @@ def normalize(msg: dict) -> dict | None:
 # ---------------------------------------------------------------------------
 
 def run(args):
-    topic = "{}/sea/aisstream/ais/civ/vessel/tracks/v1".format(ORG)
+    topic = "{}/sea/aisstream/ais/civ/vessel/tracks/v1".format(TOPIC_ROOT)
     print("Zenoh topic:", topic, flush=True)
     print("AIS bounding box:", args.bbox, flush=True)
 

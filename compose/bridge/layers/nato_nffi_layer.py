@@ -31,6 +31,7 @@ import zenoh
 
 ROUTER    = "tls/zenoh.efdi.netbird.efdi-backbone.net:7447"
 ORG       = os.environ.get("PARTNER_NAMESPACE", "")
+TOPIC_ROOT = "LTU/CISB/" + ORG   # organization prefix precedes the pod namespace
 HERE      = os.path.dirname(os.path.abspath(__file__))
 _CERT_DIR = os.environ.get("GOAT_CERT_DIR", HERE)
 _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", ROUTER)
@@ -214,7 +215,7 @@ def iter_frames_newline(sock: socket.socket):
 # ---------------------------------------------------------------------------
 
 def run(args):
-    topic = "{}/land/nato/nffi/friendly/unit/tracks/v1".format(ORG)
+    topic = "{}/land/nato/nffi/friendly/unit/tracks/v1".format(TOPIC_ROOT)
     print("NFFI → Zenoh topic:", topic, flush=True)
 
     session = zenoh.open(make_config())

@@ -289,7 +289,7 @@ if [ "$INSTALL_MODE" = "testing" ]; then
     storage_manager: {
       storages: {
         efdi_live: {
-          key_expr: "${PARTNER_NAMESPACE}/**",
+          key_expr: "LTU/CISB/${PARTNER_NAMESPACE}/**",
           volume: { id: "memory" },
         },
       },
