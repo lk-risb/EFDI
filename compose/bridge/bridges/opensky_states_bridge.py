@@ -27,6 +27,7 @@ import zenoh
 
 ROUTER = "tls/zenoh.efdi.netbird.efdi-backbone.net:7447"
 ORG    = os.environ.get("PARTNER_NAMESPACE", "")
+TOPIC_ROOT = "LTU/CISB/" + ORG   # organization prefix precedes the pod namespace
 HERE   = os.path.dirname(os.path.abspath(__file__))
 # GOAT_CERT_DIR: directory containing efdi-ca-root.pem + ORG-{cert,key}.pem.
 # Defaults to HERE so the script works unchanged when run directly from the bundle.
@@ -163,7 +164,7 @@ def normalize(state: list) -> dict | None:
 # ---------------------------------------------------------------------------
 
 def run(args):
-    topic = "{}/air/opensky/adsb/civ/aircraft/tracks/v1".format(ORG)
+    topic = "{}/air/opensky/adsb/civ/aircraft/tracks/v1".format(TOPIC_ROOT)
     print("Zenoh topic:", topic, flush=True)
     print("Bounding box: lat [{}, {}]  lon [{}, {}]".format(
         args.lamin, args.lamax, args.lomin, args.lomax), flush=True)

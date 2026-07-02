@@ -39,6 +39,7 @@ import zenoh
 
 ROUTER = "tls/zenoh.efdi.netbird.efdi-backbone.net:7447"
 ORG    = os.environ.get("PARTNER_NAMESPACE", "")
+TOPIC_ROOT = "LTU/CISB/" + ORG   # organization prefix precedes the pod namespace
 HERE   = os.path.dirname(os.path.abspath(__file__))
 _CERT_DIR = os.environ.get("GOAT_CERT_DIR", HERE)
 _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", ROUTER)
@@ -310,7 +311,7 @@ def run(args):
     session = zenoh.open(make_config())
     subs = []
     for suffix, sidc in _TOPIC_SIDC.items():
-        key = "{}/{}".format(ORG, suffix)
+        key = "{}/{}".format(TOPIC_ROOT, suffix)
         subs.append(session.declare_subscriber(key, make_handler(sidc, cache)))
         print("SUB {} → SIDC {}".format(key, sidc), flush=True)
 

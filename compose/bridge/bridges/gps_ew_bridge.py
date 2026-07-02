@@ -44,6 +44,7 @@ import zenoh
 
 ROUTER    = "tls/zenoh.efdi.netbird.efdi-backbone.net:7447"
 ORG       = os.environ.get("PARTNER_NAMESPACE", "")
+TOPIC_ROOT = "LTU/CISB/" + ORG   # organization prefix precedes the pod namespace
 HERE      = os.path.dirname(os.path.abspath(__file__))
 _CERT_DIR = os.environ.get("GOAT_CERT_DIR", HERE)
 _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", ROUTER)
@@ -529,7 +530,7 @@ def _start_kml_server(port: int) -> None:
 
 def run(args):
     session = zenoh.open(make_config())
-    topic   = "{}/env/gps/ew/hostile/threat/v1".format(ORG)
+    topic   = "{}/env/gps/ew/hostile/threat/v1".format(TOPIC_ROOT)
     pub     = session.declare_publisher(topic)
 
     active = [n for n, f, _ in _SOURCES

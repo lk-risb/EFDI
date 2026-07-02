@@ -45,13 +45,14 @@ import zenoh
 
 ROUTER    = "tls/zenoh.efdi.netbird.efdi-backbone.net:7447"
 ORG       = os.environ.get("PARTNER_NAMESPACE", "")
+TOPIC_ROOT = "LTU/CISB/" + ORG   # organization prefix precedes the pod namespace
 HERE      = os.path.dirname(os.path.abspath(__file__))
 _CERT_DIR = os.environ.get("GOAT_CERT_DIR", HERE)
 _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", ROUTER)
 
 RECONNECT_S     = 10
 HEARTBEAT_S     = 5
-TOPIC_UAV_OUT   = "{}/air/stanag4586/uav/civ/aircraft/tracks/v1".format(ORG)
+TOPIC_UAV_OUT   = "{}/air/stanag4586/uav/civ/aircraft/tracks/v1".format(TOPIC_ROOT)
 
 # Message type constants (STANAG 4586 Ed.3 — confirm against VSM docs)
 MSG_VSM_HEARTBEAT  = 0x4001

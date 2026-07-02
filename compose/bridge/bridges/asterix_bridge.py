@@ -50,15 +50,16 @@ import zenoh
 
 ROUTER    = "tls/zenoh.efdi.netbird.efdi-backbone.net:7447"
 ORG       = os.environ.get("PARTNER_NAMESPACE", "")
+TOPIC_ROOT = "LTU/CISB/" + ORG   # organization prefix precedes the pod namespace
 HERE      = os.path.dirname(os.path.abspath(__file__))
 _CERT_DIR = os.environ.get("GOAT_CERT_DIR", HERE)
 _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", ROUTER)
 
-TOPIC_020    = "{}/air/asterix/cat20/civ/aircraft/tracks/v1".format(ORG)
-TOPIC_021    = "{}/air/asterix/cat21/civ/aircraft/tracks/v1".format(ORG)
-TOPIC_048    = "{}/air/asterix/cat48/unknown/aircraft/tracks/v1".format(ORG)
-TOPIC_SENSOR = "{}/land/asterix/cat34/neutral/radar/status/v1".format(ORG)
-TOPIC_062    = "{}/air/asterix/cat62/unknown/aircraft/tracks/v1".format(ORG)
+TOPIC_020    = "{}/air/asterix/cat20/civ/aircraft/tracks/v1".format(TOPIC_ROOT)
+TOPIC_021    = "{}/air/asterix/cat21/civ/aircraft/tracks/v1".format(TOPIC_ROOT)
+TOPIC_048    = "{}/air/asterix/cat48/unknown/aircraft/tracks/v1".format(TOPIC_ROOT)
+TOPIC_SENSOR = "{}/land/asterix/cat34/neutral/radar/status/v1".format(TOPIC_ROOT)
+TOPIC_062    = "{}/air/asterix/cat62/unknown/aircraft/tracks/v1".format(TOPIC_ROOT)
 
 CAT_020 = 0x14
 CAT_021 = 0x15

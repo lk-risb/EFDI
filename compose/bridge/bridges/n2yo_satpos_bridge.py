@@ -26,6 +26,7 @@ import zenoh
 
 ROUTER = "tls/zenoh.efdi.netbird.efdi-backbone.net:7447"
 ORG    = os.environ.get("PARTNER_NAMESPACE", "")
+TOPIC_ROOT = "LTU/CISB/" + ORG   # organization prefix precedes the pod namespace
 HERE   = os.path.dirname(os.path.abspath(__file__))
 _CERT_DIR = os.environ.get("GOAT_CERT_DIR", HERE)
 _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", ROUTER)
@@ -110,7 +111,7 @@ def run(args):
         raise SystemExit("N2YO_KEY not set — get a free key at https://www.n2yo.com/api/")
 
     session = zenoh.open(make_config())
-    pub = session.declare_publisher("{}/space/n2yo/satpos/civ/satellite/tracks/v1".format(ORG))
+    pub = session.declare_publisher("{}/space/n2yo/satpos/civ/satellite/tracks/v1".format(TOPIC_ROOT))
     print("Satellites:", args.sats, flush=True)
     print("Observer: lat={} lon={} alt={}km".format(args.lat, args.lon, args.alt), flush=True)
 

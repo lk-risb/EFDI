@@ -30,6 +30,7 @@ import zenoh
 
 ROUTER    = "tls/zenoh.efdi.netbird.efdi-backbone.net:7447"
 ORG       = os.environ.get("PARTNER_NAMESPACE", "")
+TOPIC_ROOT = "LTU/CISB/" + ORG   # organization prefix precedes the pod namespace
 HERE      = os.path.dirname(os.path.abspath(__file__))
 _CERT_DIR = os.environ.get("GOAT_CERT_DIR", HERE)
 _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", ROUTER)
@@ -127,8 +128,8 @@ def normalize(ac: dict, is_military: bool) -> dict | None:
 
 def run(args):
     session = zenoh.open(make_config())
-    pub_tracks = session.declare_publisher("{}/air/airplaneslive/adsb/civ/aircraft/tracks/v1".format(ORG))
-    pub_mil    = session.declare_publisher("{}/air/airplaneslive/adsb/mil/aircraft/tracks/v1".format(ORG))
+    pub_tracks = session.declare_publisher("{}/air/airplaneslive/adsb/civ/aircraft/tracks/v1".format(TOPIC_ROOT))
+    pub_mil    = session.declare_publisher("{}/air/airplaneslive/adsb/mil/aircraft/tracks/v1".format(TOPIC_ROOT))
 
     url_mil = "{}/mil".format(BASE_URL)
     print("airplanes.live: {} centers radius={}nm  poll={}s".format(

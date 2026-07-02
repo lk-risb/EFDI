@@ -58,6 +58,7 @@ import zenoh
 
 ROUTER    = "tls/zenoh.efdi.netbird.efdi-backbone.net:7447"
 ORG       = os.environ.get("PARTNER_NAMESPACE", "")
+TOPIC_ROOT = "LTU/CISB/" + ORG   # organization prefix precedes the pod namespace
 HERE      = os.path.dirname(os.path.abspath(__file__))
 _CERT_DIR = os.environ.get("GOAT_CERT_DIR", HERE)
 _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", ROUTER)
@@ -88,18 +89,18 @@ _ID_AFF = {
 
 # Topic templates per (domain, affiliation)
 _TOPIC_MAP = {
-    ("air",  "friendly"): "{}/air/link16/jreap/friendly/aircraft/tracks/v1".format(ORG),
-    ("air",  "hostile"):  "{}/air/link16/jreap/hostile/aircraft/tracks/v1".format(ORG),
-    ("air",  "neutral"):  "{}/air/link16/jreap/neutral/aircraft/tracks/v1".format(ORG),
-    ("air",  "unknown"):  "{}/air/link16/jreap/unknown/tracks/v1".format(ORG),
-    ("sea",  "friendly"): "{}/sea/link16/jreap/friendly/vessel/tracks/v1".format(ORG),
-    ("sea",  "hostile"):  "{}/sea/link16/jreap/hostile/vessel/tracks/v1".format(ORG),
-    ("sea",  "neutral"):  "{}/sea/link16/jreap/neutral/vessel/tracks/v1".format(ORG),
-    ("sea",  "unknown"):  "{}/sea/link16/jreap/unknown/vessel/tracks/v1".format(ORG),
-    ("land", "friendly"): "{}/land/link16/jreap/friendly/unit/tracks/v1".format(ORG),
-    ("land", "hostile"):  "{}/land/link16/jreap/hostile/unit/tracks/v1".format(ORG),
-    ("land", "neutral"):  "{}/land/link16/jreap/neutral/unit/tracks/v1".format(ORG),
-    ("land", "unknown"):  "{}/land/link16/jreap/unknown/unit/tracks/v1".format(ORG),
+    ("air",  "friendly"): "{}/air/link16/jreap/friendly/aircraft/tracks/v1".format(TOPIC_ROOT),
+    ("air",  "hostile"):  "{}/air/link16/jreap/hostile/aircraft/tracks/v1".format(TOPIC_ROOT),
+    ("air",  "neutral"):  "{}/air/link16/jreap/neutral/aircraft/tracks/v1".format(TOPIC_ROOT),
+    ("air",  "unknown"):  "{}/air/link16/jreap/unknown/tracks/v1".format(TOPIC_ROOT),
+    ("sea",  "friendly"): "{}/sea/link16/jreap/friendly/vessel/tracks/v1".format(TOPIC_ROOT),
+    ("sea",  "hostile"):  "{}/sea/link16/jreap/hostile/vessel/tracks/v1".format(TOPIC_ROOT),
+    ("sea",  "neutral"):  "{}/sea/link16/jreap/neutral/vessel/tracks/v1".format(TOPIC_ROOT),
+    ("sea",  "unknown"):  "{}/sea/link16/jreap/unknown/vessel/tracks/v1".format(TOPIC_ROOT),
+    ("land", "friendly"): "{}/land/link16/jreap/friendly/unit/tracks/v1".format(TOPIC_ROOT),
+    ("land", "hostile"):  "{}/land/link16/jreap/hostile/unit/tracks/v1".format(TOPIC_ROOT),
+    ("land", "neutral"):  "{}/land/link16/jreap/neutral/unit/tracks/v1".format(TOPIC_ROOT),
+    ("land", "unknown"):  "{}/land/link16/jreap/unknown/unit/tracks/v1".format(TOPIC_ROOT),
 }
 
 
@@ -461,7 +462,7 @@ def _topic_for(track: dict, msg_type: str) -> str:
     domain = track.get("domain") or _MSG_DOMAIN.get(msg_type, "land")
     aff    = track.get("affiliation", "unknown")
     return _TOPIC_MAP.get((domain, aff),
-                           "{}/land/link16/jreap/unknown/unit/tracks/v1".format(ORG))
+                           "{}/land/link16/jreap/unknown/unit/tracks/v1".format(TOPIC_ROOT))
 
 
 def process_packet(data: bytes, pub: "zenoh.Session", verbose: bool):

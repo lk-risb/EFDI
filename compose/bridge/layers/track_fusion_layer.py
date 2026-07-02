@@ -73,6 +73,7 @@ import zenoh
 
 ROUTER    = "tls/zenoh.efdi.netbird.efdi-backbone.net:7447"
 ORG       = os.environ.get("PARTNER_NAMESPACE", "")
+TOPIC_ROOT = "LTU/CISB/" + ORG   # organization prefix precedes the pod namespace
 HERE      = os.path.dirname(os.path.abspath(__file__))
 _CERT_DIR = os.environ.get("GOAT_CERT_DIR", HERE)
 _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", ROUTER)
@@ -89,20 +90,20 @@ TOPIC_FUSED  = "{}/air/fused/{}/aircraft/tracks/v1"
 
 # Topics we subscribe to as radar sources (primary: positional authority)
 _RADAR_TOPICS = [
-    "{}/air/asterix/cat48/**".format(ORG),
-    "{}/air/asterix/cat20/**".format(ORG),
-    "{}/air/link16/**".format(ORG),
-    "{}/air/stanag4586/**".format(ORG),
-    "{}/air/mavlink/**".format(ORG),
+    "{}/air/asterix/cat48/**".format(TOPIC_ROOT),
+    "{}/air/asterix/cat20/**".format(TOPIC_ROOT),
+    "{}/air/link16/**".format(TOPIC_ROOT),
+    "{}/air/stanag4586/**".format(TOPIC_ROOT),
+    "{}/air/mavlink/**".format(TOPIC_ROOT),
 ]
 
 # Topics we subscribe to as identity enrichment sources
 _ADSB_TOPICS = [
-    "{}/air/asterix/cat21/**".format(ORG),
-    "{}/air/airplaneslive/**".format(ORG),
-    "{}/air/opensky/**".format(ORG),
-    "{}/air/fr24/**".format(ORG),
-    "{}/air/cot-rx/**".format(ORG),
+    "{}/air/asterix/cat21/**".format(TOPIC_ROOT),
+    "{}/air/airplaneslive/**".format(TOPIC_ROOT),
+    "{}/air/opensky/**".format(TOPIC_ROOT),
+    "{}/air/fr24/**".format(TOPIC_ROOT),
+    "{}/air/cot-rx/**".format(TOPIC_ROOT),
 ]
 
 # Fields that carry identity (we prefer ADS-B values for these)
@@ -339,7 +340,7 @@ class TrackFuser:
             # No radar covering this aircraft — publish ADS-B track as fallback so
             # it appears in ATAK. When radar picks it up, the fused track takes over
             # seamlessly (same ICAO-based UID, same marker in ATAK).
-            pub_topic = TOPIC_FUSED.format(ORG, "civ")
+            pub_topic = TOPIC_FUSED.format(TOPIC_ROOT, "civ")
             self._session.put(pub_topic, json.dumps(track).encode(),
                               encoding=zenoh.Encoding.APPLICATION_JSON)
             if self._verbose:
@@ -361,7 +362,7 @@ class TrackFuser:
         # so cot_layer.py's _civ_air_type() can check ICAO hostile ranges.
         # Unmatched radar-only contacts stay unknown.
         aff_slot = "civ" if adsb is not None else "unknown"
-        topic = TOPIC_FUSED.format(ORG, aff_slot)
+        topic = TOPIC_FUSED.format(TOPIC_ROOT, aff_slot)
         self._session.put(topic, json.dumps(fused).encode(),
                           encoding=zenoh.Encoding.APPLICATION_JSON)
         if self._verbose:

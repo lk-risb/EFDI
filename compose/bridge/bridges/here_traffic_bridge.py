@@ -25,6 +25,7 @@ import zenoh
 
 ROUTER = "tls/zenoh.efdi.netbird.efdi-backbone.net:7447"
 ORG    = os.environ.get("PARTNER_NAMESPACE", "")
+TOPIC_ROOT = "LTU/CISB/" + ORG   # organization prefix precedes the pod namespace
 HERE   = os.path.dirname(os.path.abspath(__file__))
 _CERT_DIR = os.environ.get("GOAT_CERT_DIR", HERE)
 _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", ROUTER)
@@ -105,7 +106,7 @@ def run(args):
         raise SystemExit("HERE_KEY not set — get a free key at https://developer.here.com/")
 
     session = zenoh.open(make_config())
-    pub = session.declare_publisher("{}/land/here/rest/civ/vehicle/tracks/v1".format(ORG))
+    pub = session.declare_publisher("{}/land/here/rest/civ/vehicle/tracks/v1".format(TOPIC_ROOT))
     print("HERE Traffic bbox:", args.bbox, "  interval:", args.interval, "s", flush=True)
 
     try:
