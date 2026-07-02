@@ -28,6 +28,7 @@ import zenoh
 
 ROUTER = "tls/zenoh.efdi.netbird.efdi-backbone.net:7447"
 ORG    = os.environ.get("PARTNER_NAMESPACE", "")
+TOPIC_ROOT = "LTU/CISB/" + ORG   # organization prefix precedes the pod namespace
 HERE   = os.path.dirname(os.path.abspath(__file__))
 _CERT_DIR = os.environ.get("GOAT_CERT_DIR", HERE)
 _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", ROUTER)
@@ -156,7 +157,7 @@ def normalize(elem: dict, feature_type: str) -> dict | None:
 
 def run(args):
     session = zenoh.open(make_config())
-    pub = session.declare_publisher("{}/land/osm/overpass/neutral/geo/features/v1".format(ORG))
+    pub = session.declare_publisher("{}/land/osm/overpass/neutral/geo/features/v1".format(TOPIC_ROOT))
 
     try:
         while True:

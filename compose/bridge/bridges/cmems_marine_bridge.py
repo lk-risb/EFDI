@@ -28,6 +28,7 @@ import zenoh
 
 ROUTER = "tls/zenoh.efdi.netbird.efdi-backbone.net:7447"
 ORG    = os.environ.get("PARTNER_NAMESPACE", "")
+TOPIC_ROOT = "LTU/CISB/" + ORG   # organization prefix precedes the pod namespace
 HERE   = os.path.dirname(os.path.abspath(__file__))
 _CERT_DIR = os.environ.get("GOAT_CERT_DIR", HERE)
 _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", ROUTER)
@@ -124,7 +125,7 @@ def fetch_and_publish(pub_cache: dict, session, dataset_id: str, points: list):
             # Remove None values
             point = {k: v for k, v in point.items() if v is not None}
 
-            key = "{}/sea/surface/{}/v1".format(ORG, dataset_id)
+            key = "{}/sea/surface/{}/v1".format(TOPIC_ROOT, dataset_id)
             if key not in pub_cache:
                 pub_cache[key] = session.declare_publisher(key)
             pub_cache[key].put(json.dumps(point).encode(), encoding=zenoh.Encoding.APPLICATION_JSON)

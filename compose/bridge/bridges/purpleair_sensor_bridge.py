@@ -27,6 +27,7 @@ import zenoh
 
 ROUTER = "tls/zenoh.efdi.netbird.efdi-backbone.net:7447"
 ORG    = os.environ.get("PARTNER_NAMESPACE", "")
+TOPIC_ROOT = "LTU/CISB/" + ORG   # organization prefix precedes the pod namespace
 HERE   = os.path.dirname(os.path.abspath(__file__))
 _CERT_DIR = os.environ.get("GOAT_CERT_DIR", HERE)
 _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", ROUTER)
@@ -130,7 +131,7 @@ def run(args):
         raise SystemExit("PURPLEAIR_KEY not set — get a free key at https://develop.purpleair.com/")
 
     session = zenoh.open(make_config())
-    pub = session.declare_publisher("{}/env/air_quality/station/purpleair/sensors".format(ORG))
+    pub = session.declare_publisher("{}/env/air_quality/station/purpleair/sensors".format(TOPIC_ROOT))
 
     print("Bounding box:", args.bbox, flush=True)
 

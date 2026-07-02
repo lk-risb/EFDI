@@ -24,6 +24,7 @@ import zenoh
 
 ROUTER = "tls/zenoh.efdi.netbird.efdi-backbone.net:7447"
 ORG    = os.environ.get("PARTNER_NAMESPACE", "")
+TOPIC_ROOT = "LTU/CISB/" + ORG   # organization prefix precedes the pod namespace
 HERE   = os.path.dirname(os.path.abspath(__file__))
 
 _CERT_DIR = os.environ.get("GOAT_CERT_DIR", HERE)
@@ -92,7 +93,7 @@ def _get(path: str) -> dict | None:
 
 def run_devices(pub: "zenoh.Publisher", verbose: bool):
     topic_suffix = "land/dronuradaras/acoustic/neutral/sensor/status/v1"
-    print("Device poll topic: {}/{}".format(ORG, topic_suffix), flush=True)
+    print("Device poll topic: {}/{}".format(TOPIC_ROOT, topic_suffix), flush=True)
 
     while True:
         data = _get("devices")
@@ -141,7 +142,7 @@ def run_devices(pub: "zenoh.Publisher", verbose: bool):
 
 def run_detections(pub: "zenoh.Publisher", verbose: bool):
     topic_suffix = "air/dronuradaras/acoustic/hostile/uav/tracks/v1"
-    print("Detection poll topic: {}/{}".format(ORG, topic_suffix), flush=True)
+    print("Detection poll topic: {}/{}".format(TOPIC_ROOT, topic_suffix), flush=True)
 
     seen: dict[str, float] = {}   # detection_id → published_at timestamp
 
@@ -220,8 +221,8 @@ def main():
 
     session = zenoh.open(make_config())
 
-    topic_dev = "{}/land/dronuradaras/acoustic/neutral/sensor/status/v1".format(ORG)
-    topic_det = "{}/air/dronuradaras/acoustic/hostile/uav/tracks/v1".format(ORG)
+    topic_dev = "{}/land/dronuradaras/acoustic/neutral/sensor/status/v1".format(TOPIC_ROOT)
+    topic_det = "{}/air/dronuradaras/acoustic/hostile/uav/tracks/v1".format(TOPIC_ROOT)
 
     pub_dev = session.declare_publisher(topic_dev)
     pub_det = session.declare_publisher(topic_det)

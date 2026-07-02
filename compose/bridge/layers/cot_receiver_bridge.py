@@ -41,6 +41,7 @@ import zenoh
 
 ROUTER    = "tls/zenoh.efdi.netbird.efdi-backbone.net:7447"
 ORG       = os.environ.get("PARTNER_NAMESPACE", "")
+TOPIC_ROOT = "LTU/CISB/" + ORG   # organization prefix precedes the pod namespace
 HERE      = os.path.dirname(os.path.abspath(__file__))
 _CERT_DIR = os.environ.get("GOAT_CERT_DIR", HERE)
 _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", ROUTER)
@@ -142,7 +143,7 @@ def _parse_cot(xml_str: str) -> dict | None:
 
 def _topic(track: dict) -> str:
     aff = _affiliation(track.get("cot_type", "a-u-A"))
-    return "{}/air/radar/cot/{}/aircraft/tracks/v1".format(ORG, aff)
+    return "{}/air/radar/cot/{}/aircraft/tracks/v1".format(TOPIC_ROOT, aff)
 
 
 def _split_messages(buf: str) -> tuple[list[str], str]:

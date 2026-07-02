@@ -59,7 +59,8 @@
     storage_manager: {
       storages: {
         efdi_live: {
-          key_expr: "${PARTNER_NAMESPACE}/**",
+          // LTU/CISB/ org prefix precedes the pod namespace — see bridge TOPIC_ROOT.
+          key_expr: "LTU/CISB/${PARTNER_NAMESPACE}/**",
           volume: { id: "memory" },
         },
       },
@@ -79,7 +80,8 @@
         messages: ["put", "delete", "declare_subscriber", "query", "declare_queryable", "reply"],
         flows: ["egress", "ingress"],
         permission: "allow",
-        key_exprs: ["${PARTNER_NAMESPACE}/**"],
+        // LTU/CISB/ org prefix precedes the pod namespace — see bridge TOPIC_ROOT.
+        key_exprs: ["LTU/CISB/${PARTNER_NAMESPACE}/**"],
       },
       {
         // Inbound bilateral data from goat: subscribe/deliver only (no pod writes here).

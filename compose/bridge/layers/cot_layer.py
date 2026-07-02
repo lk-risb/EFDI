@@ -63,6 +63,7 @@ except Exception:
 
 ROUTER    = "tls/zenoh.efdi.netbird.efdi-backbone.net:7447"
 ORG       = os.environ.get("PARTNER_NAMESPACE", "")
+TOPIC_ROOT = "LTU/CISB/" + ORG   # organization prefix precedes the pod namespace
 HERE      = os.path.dirname(os.path.abspath(__file__))
 _CERT_DIR = os.environ.get("GOAT_CERT_DIR", HERE)
 # Prefer the local router (plaintext, no TLS handshake over relay) when running
@@ -1652,7 +1653,7 @@ def run(args):
     _start_dr_thread(sender)
     subs = []
     for suffix, (cot_type, stale_s) in _TOPIC_COT.items():
-        key = "{}/{}".format(ORG, suffix)
+        key = "{}/{}".format(TOPIC_ROOT, suffix)
         fn = cot_type.__name__ if callable(cot_type) else str(cot_type)
         subs.append(session.declare_subscriber(
             key, make_handler(cot_type, sender, args.verbose, stale_s=stale_s)))
@@ -1660,12 +1661,12 @@ def run(args):
 
     # Geo features (aerodromes, ports, military bases) — 24h stale
     # Matches: land/{vendor}/{protocol}/neutral/geo/features/v1
-    geo_key = "{}/land/**/neutral/geo/**".format(ORG)
+    geo_key = "{}/land/**/neutral/geo/**".format(TOPIC_ROOT)
     subs.append(session.declare_subscriber(geo_key, make_geo_handler(sender, args.verbose)))
     print("SUB {} → [geo features, 24h stale]".format(geo_key), flush=True)
 
     # Radar sensor site status (CAT-34) — updates _radar_status dict + renders CoT marker
-    radar_key = "{}/land/asterix/cat34/neutral/radar/**".format(ORG)
+    radar_key = "{}/land/asterix/cat34/neutral/radar/**".format(TOPIC_ROOT)
     subs.append(session.declare_subscriber(radar_key,
                 make_radar_status_handler(sender, args.verbose)))
     print("SUB {} → [radar sensor sites]".format(radar_key), flush=True)
