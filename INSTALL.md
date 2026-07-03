@@ -33,6 +33,8 @@ ATAK devices must be on the same L2 segment as the server for multicast delivery
 
 An EFDI-issued `goat-bundle` is required for Zenoh mTLS. Obtain from your EFDI administrator. The bundle is **never stored in this repository**.
 
+The raw signed join bundle (`<handle>.cbor`, consumed once by `host/first-boot.sh`) should live outside the repo too — e.g. `~/Documents/<pod-name>/` — and be passed by path each time it's needed rather than copied into the working tree.
+
 ---
 
 ## 2. Installation
@@ -191,7 +193,7 @@ The interactive launcher displays all services with their readiness state. Toggl
 | All sensors + TAK Server | `a`, then deselect `8` (cot-udp) |
 | Radar only, no ATAK (debug) | `1 2 10` |
 
-Processes are tracked via PID files in `.pids/` and log to `logs/<service>.log`.
+Processes are tracked via PID files in `$POD_STATE_DIR/.pids/` and log to `$POD_STATE_DIR/logs/<service>.log`.
 
 ---
 
@@ -291,17 +293,17 @@ The bridge reads MIL-STD-2525B SIDC codes from SitaWare and routes each unit to 
 ### Log monitoring
 
 ```bash
-tail -f logs/asterix.log          # Giraffe radar — ASTERIX decode + publish
-tail -f logs/cot-udp.log          # CoT output — confirms ATAK delivery
-tail -f logs/dronuradaras.log     # Drone detection events
-tail -f logs/track-fusion.log     # Fused track output
+tail -f $POD_STATE_DIR/logs/asterix.log          # Giraffe radar — ASTERIX decode + publish
+tail -f $POD_STATE_DIR/logs/cot-udp.log          # CoT output — confirms ATAK delivery
+tail -f $POD_STATE_DIR/logs/dronuradaras.log     # Drone detection events
+tail -f $POD_STATE_DIR/logs/track-fusion.log     # Fused track output
 ```
 
 ### Process health check
 
 ```bash
-ls .pids/                                          # List running services
-kill -0 $(cat .pids/asterix.pid) && echo ok        # Check specific service
+ls $POD_STATE_DIR/.pids/                                          # List running services
+kill -0 $(cat $POD_STATE_DIR/.pids/asterix.pid) && echo ok        # Check specific service
 ```
 
 ---
@@ -333,7 +335,7 @@ set -a && source compose/.env && set +a
 
 ```bash
 # 1. Confirm cot-udp is running
-kill -0 $(cat .pids/cot-udp.pid) && echo running
+kill -0 $(cat $POD_STATE_DIR/.pids/cot-udp.pid) && echo running
 
 # 2. Confirm multicast traffic is leaving the host
 sudo tcpdump -i any udp and host 239.2.3.1 and port 6969 -c 5
@@ -370,7 +372,7 @@ print(f'{len(fresh)} fresh / {len(d)} total detections')
 **1. Verify the bridge is running and polling:**
 
 ```bash
-tail -f logs/sitaware.log
+tail -f $POD_STATE_DIR/logs/sitaware.log
 # Expected: "SitaWare poll: N units published" every SITAWARE_POLL_S seconds
 ```
 
@@ -385,7 +387,7 @@ curl -s -u "$SITAWARE_USER:$SITAWARE_PASS" "$SITAWARE_URL/..." | python3 -m json
 SitaWare units without a valid 15-character SIDC are routed to `…/land/sitaware/rest/unknown/unit/…` and rendered as unknown ground units (`a-u-G-U-C`). Check the raw SIDC value in the log:
 
 ```bash
-grep "sidc=" logs/sitaware.log | head -10
+grep "sidc=" $POD_STATE_DIR/logs/sitaware.log | head -10
 ```
 
 ### Duplicate process instances
@@ -394,7 +396,7 @@ Caused by running `start.sh` twice without stopping:
 
 ```bash
 pkill -f "_bridge\.py\|cot_layer\|track_fusion"
-rm -f .pids/*.pid
+rm -f $POD_STATE_DIR/.pids/*.pid
 ./start.sh
 ```
 
@@ -403,7 +405,7 @@ rm -f .pids/*.pid
 The `asterix` bridge publishes a keepalive every 60 s regardless of track activity. If the icon disappears, the bridge has stopped:
 
 ```bash
-tail -20 logs/asterix.log | grep -E "keepalive|startup|error"
+tail -20 $POD_STATE_DIR/logs/asterix.log | grep -E "keepalive|startup|error"
 ```
 
 ---
