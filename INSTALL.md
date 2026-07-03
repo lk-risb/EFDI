@@ -164,13 +164,12 @@ The interactive launcher displays all services with their readiness state. Toggl
   [ 5] [ ] vmf            VMF MIL-STD-47001C messages            VMF_PORT not set
   [ 6] [ ] sitaware       SitaWare friendly force tracking       SITAWARE_URL not set
   [ 7] [ ] dronuradaras   dronuradaras.lt drone detection        ready
-  [ 8] [✓] lt-surveillance  Lithuania surveillance cameras (OSM)  ready
 
   Output layers
   ──────────────────────────────────────────────────────────
-  [ 9] [✓] cot-udp        CoT → ATAK UDP multicast 239.2.3.1:6969
-  [10] [✓] cot-tcp        CoT → TAK Server TCP
-  [11] [✓] track-fusion   Radar/ADS-B track correlation
+  [ 8] [✓] cot-udp        CoT → ATAK UDP multicast 239.2.3.1:6969
+  [ 9] [✓] cot-tcp        CoT → TAK Server TCP
+  [10] [✓] track-fusion   Radar/ADS-B track correlation
 ```
 
 **Launcher controls:**
@@ -248,7 +247,6 @@ The bridge reads MIL-STD-2525B SIDC codes from SitaWare and routes each unit to 
 | Blue vessel | `a-f-S-X-L` | SitaWare friendly vessel |
 | Red vessel | `a-h-S-X-L` | SitaWare hostile vessel |
 | Green/yellow/red sensor box (same icon, recolors) | `a-n-G-E-S` / `a-u-G-E-S` / `a-h-G-E-S` | dronuradaras.lt acoustic sensor — green=idle, yellow=cooling down, red=active detection (last 60s) |
-| Green sensor box | `a-n-G-E-S` | Lithuania surveillance camera (CCTV/ALPR, OSM) |
 | White unknown aircraft | `a-u-A-C-F` | Unclassified radar track |
 
 > Position, speed, and course on the radar marker update automatically from the live CAT-34 stream. On a mobile platform, ATAK will show a speed vector and movement trail.
@@ -261,9 +259,6 @@ The bridge reads MIL-STD-2525B SIDC codes from SitaWare and routes each unit to 
 | --- | --- | --- | --- |
 | `asterix` | `bridges/asterix_bridge.py` | `…/air/asterix/cat48/unknown/aircraft/tracks/v1` | Streaming UDP |
 | `dronuradaras` | `bridges/dronuradaras_bridge.py` | `…/land/dronuradaras/acoustic/neutral/sensor/status/v1` | 60 s device poll / 10 s detection poll |
-| `lt-surveillance` | `bridges/lt_surveillance_bridge.py` | `…/land/lt-surveillance/overpass/neutral/geo/features/v1` | 12 h REST poll |
-
-> `lt-surveillance` defaults to `--mode area` (precise ISO3166-1 polygon query — no border bleed, ~90s per query). Pass `--mode bbox` for the faster (~5s) rectangular query, which also picks up some neighboring-country cameras near the border.
 | `sitaware` | `bridges/sitaware_bridge.py` | `…/land/sitaware/rest/friendly/unit/tracks/v1` | Configurable REST |
 | `link16` | `bridges/link16_bridge.py` | `…/air/link16/jreap/*/aircraft/tracks/v1` | Streaming UDP/TCP |
 | `mavlink` | `bridges/mavlink_bridge.py` | `…/air/mavlink/mav2/*/uav/tracks/v1` | Streaming UDP/TCP |
