@@ -441,7 +441,7 @@ echo -e "${BOLD}╚════════════════════�
 echo ""
 echo "  Start bridges  : ./start.sh"
 echo "  Stop bridges   : ./stop.sh"
-echo "  Logs           : tail -f logs/<service>.log"
+echo "  Logs           : tail -f ${POD_STATE_DIR}/logs/<service>.log"
 echo "  Config         : $ENV_FILE"
 if [ "$INSTALL_MODE" = "testing" ]; then
     echo ""

@@ -6,10 +6,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BRIDGE_DIR="$SCRIPT_DIR/compose/bridge"
 ENV_FILE="$SCRIPT_DIR/compose/.env"
 VENV="$BRIDGE_DIR/venv"
-LOG_DIR="$SCRIPT_DIR/logs"
-PID_DIR="$SCRIPT_DIR/.pids"
-
-mkdir -p "$LOG_DIR" "$PID_DIR"
 
 # ── Load .env (safe — no shell re-parsing of values) ──────────────────────
 if [[ -f "$ENV_FILE" ]]; then
@@ -27,6 +23,13 @@ fi
 
 export ZENOH_LOCAL_ENDPOINT="${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}"
 export GOAT_CERT_DIR="${BUNDLE_DIR:-$HOME/goat-bundle}"
+
+# Runtime state (logs, PID files) lives outside the repo — same convention as
+# Zenoh's own config/certs (${POD_STATE_DIR}/zenoh/...). Keeps the working
+# tree free of unversioned junk.
+LOG_DIR="${POD_STATE_DIR:-$HOME/goat-moon}/logs"
+PID_DIR="${POD_STATE_DIR:-$HOME/goat-moon}/.pids"
+mkdir -p "$LOG_DIR" "$PID_DIR"
 
 # ── Ensure venv ────────────────────────────────────────────────────────────
 if [[ ! -x "$VENV/bin/python3" ]]; then
