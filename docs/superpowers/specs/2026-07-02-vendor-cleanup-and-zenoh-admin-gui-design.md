@@ -8,6 +8,15 @@ Two related changes to move this pod toward a minimal, self-owned base ("simple 
 1. **Vendor cleanup** — remove EFDI/goat vendor tooling that isn't load-bearing for pod operation (portal registration, proprietary audit sink, health-probe timer, partnership/contract docs, a stray tracked bundle artifact).
 2. **Zenoh admin GUI** — a new web-based admin panel for the pod's Zenoh router, replacing manual `config.json5` editing with a browser UI. Mirrors the design of the sibling TAK Server admin panel (`/home/ndukve/IdeaProjects/TAK/docs/specs/2026-06-25-admin-panel-design.md`) for stack and pattern consistency across the two admin tools.
 
+### Hard requirement: no regression to live data delivery
+
+Both parts of this change must not break the pod's existing job — sensor data reaching C2 (TAK Server / WinTAK / other connected clients) must keep working throughout and after implementation. Concretely:
+
+- **Part 1 (vendor cleanup)** touches nothing in the data path. Every item on the delete list is observability, registration, or documentation — `audit-sink` only *subscribes* for metrics (removing it doesn't affect delivery to anyone else), `register_topics.sh` registers topic schemas with EFDI's portal but nothing in any bridge checks or depends on that registration to publish. The bridges, `cot_layer.py`, `zenoh-router`, and the mesh/cert bootstrap are all untouched.
+- **Part 2 (Zenoh admin GUI)** is purely additive — a new service alongside the existing stack, not a replacement of any existing one. The one point of live impact: applying a config change via `/config` triggers a `zenoh-router` restart, which causes a brief reconnect blip for every currently-connected session (bridges, `cot-tcp`/`cot-udp-tak` senders, other pods/users on the fabric) — existing reconnect logic in each bridge and in `cot_layer.py`'s `TcpSender`/`UdpSender` already handles this automatically. This only happens when an admin explicitly clicks apply — never from merely running the GUI, viewing the dashboard, or leaving it open.
+
+Acceptance test for this requirement is in the Testing section below.
+
 ### Explicitly out of scope for this pass
 
 - **NetBird / mesh bootstrap redesign** — the existing `host/first-boot.sh` + `goat-clientd` bootstrap is the pod's only working path to mesh membership and mTLS certs. It stays as-is; nothing replaces it yet. A future pass may redesign this (dropping the `goat-cli`/bundle-based enrollment for a standalone CA), but that is not part of this spec.
@@ -184,3 +193,10 @@ On first start, if the `admin` database has no users, the container:
 - Dashboard (`/`) shows live connected sessions matching what's actually attached to `zenoh-router` (verify against a running bridge)
 - Editing a config field via `/config`, applying it, and confirming `zenoh-router` restarts and the new config takes effect (check `zenoh/config.json5` on disk matches, check bridges reconnect)
 - Malformed config write is rejected by schema validation before touching the file on disk
+
+**Non-regression (hard requirement, must pass before this is considered done):**
+- Before touching anything: confirm CoT is currently flowing end to end (bridge → `cot-tcp`/`cot-udp` → TAK Server → WinTAK/other connected clients showing live tracks) — baseline.
+- After Part 1 deletions: same end-to-end check, zero change expected.
+- After Part 2 deployment (GUI running, untouched): same end-to-end check, zero change expected — the GUI must not interfere with delivery just by existing.
+- After an actual config apply via the GUI: brief reconnect blip is expected and acceptable, but delivery must resume automatically within the existing reconnect windows (bridges: `RECONNECT_S` in `cot_layer.py`, ~5s; Zenoh client reconnect in each bridge) — no manual restart of any bridge should be required to recover.
+- Other users/pods on the fabric (anything subscribing to `LTU/CISB/<namespace>/**` besides this pod's own `cot_layer.py`) must keep receiving data across all of the above, since the topic prefix and ACL are unchanged by this work.
