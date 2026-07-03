@@ -4,7 +4,7 @@
 Polls a SitaWare Headquarters server for unit positions and publishes each unit
 as a JSON track to the EFDI Zenoh fabric so cot_layer.py can forward it to ATAK.
 
-SitaWare uses MIL-STD-2525B / NATO APP-6 SIDC codes (15-char symbol ID) to
+SitaWare uses MIL-STD-2525C / NATO APP-6 SIDC codes (15-char symbol ID) to
 describe each unit's affiliation, battle dimension, and type.  This bridge maps
 SIDCs to the correct Zenoh topic path so cot_layer.py assigns the right CoT type.
 

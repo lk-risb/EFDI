@@ -1,4 +1,4 @@
-    #!/usr/bin/env python3
+#!/usr/bin/env python3
 """cot_layer.py — Zenoh EFDI track topics → TAK Server / ATAK CoT bridge.
 
 Subscribes to all EFDI track topics and forwards position updates as
@@ -196,8 +196,9 @@ _TOPIC_COT = {
     "env/air_quality/station/**":("a-n-G-I-R",   SENSOR_STALE_S),
     # RADAR SENSOR SITES — CAT-34 status publishes here; rendered as radar marker + stat card
     "land/**/neutral/radar/**":  ("a-f-G-E-S-R", LAND_STALE_S * 2),
-    # ACOUSTIC / RF SENSOR SITES — generic sensor box, neutral (green)
-    "land/**/neutral/sensor/**": ("a-n-G-E-S",   LAND_STALE_S * 2),
+    # ACOUSTIC / RF SENSOR SITES — sensor box; recolors green/yellow/red by
+    # last_detection_ts (see _sensor_alert_cot_type), same icon throughout
+    "land/**/neutral/sensor/**": (_sensor_alert_cot_type, LAND_STALE_S * 2),
     # GPS JAMMING / SPOOFING THREATS — hostile ground EW equipment
     "env/gps/ew/hostile/threat/**": ("a-h-G-E-X", ENV_STALE_S * 2),
 }
@@ -237,10 +238,12 @@ def _aprs_cot_type(track: dict) -> str:
 # Civilian features are neutral (a-n-) so they never get flipped to hostile.
 # Military is friendly (a-f-) so _geo_cot_type() can flip RU/BY bases to hostile.
 _OSM_COT = {
-    "aerodrome": "a-n-G-I-B-A",  # neutral aerodrome (civilian shared infrastructure)
-    "port":      "a-n-G-I-B-O",  # neutral port
-    "military":  "a-f-G-I-B-M",  # friendly military base → flipped to hostile for RU/BY
-    "station":   "a-n-G-I",      # neutral ground installation (railway)
+    "aerodrome":   "a-n-G-I-B-A",  # neutral aerodrome (civilian shared infrastructure)
+    "port":        "a-n-G-I-B-O",  # neutral port
+    "military":    "a-f-G-I-B-M",  # friendly military base → flipped to hostile for RU/BY
+    "station":     "a-n-G-I",      # neutral ground installation (railway)
+    "alpr_camera": "a-n-G-E-S",    # neutral ground sensor (same icon as acoustic sensors)
+    "cctv_camera": "a-n-G-E-S",    # neutral ground sensor — general CCTV/surveillance camera
 }
 
 # ISO 3166-1 alpha-2 country codes of hostile states in this scenario
@@ -256,6 +259,25 @@ def _geo_cot_type(track: dict, base_type: str) -> str:
     if cc in _HOSTILE_CC:
         return base_type.replace("a-f-", "a-h-", 1)
     return base_type
+
+# Ground sensor site alert coloring — same icon (G-E-S) throughout, only the
+# MIL-STD-2525C affiliation letter changes based on how recently a detection
+# was reported at that sensor. Used by dronuradaras.lt: no separate drone
+# marker exists, the sensor's own marker recolors instead (there's no reliable
+# drone position, only "sensor X heard something just now").
+_SENSOR_ALERT_HOT_S  = 60    # red  — detection within the last minute
+_SENSOR_ALERT_WARM_S = 300   # yellow — cooling down, matches the bridge's DETECT_WINDOW_S
+
+def _sensor_alert_cot_type(track: dict) -> str:
+    ts = track.get("last_detection_ts")
+    if not ts:
+        return "a-n-G-E-S"   # green — no alert on record
+    age = time.time() - float(ts)
+    if age <= _SENSOR_ALERT_HOT_S:
+        return "a-h-G-E-S"   # red — active
+    if age <= _SENSOR_ALERT_WARM_S:
+        return "a-u-G-E-S"   # yellow — cooling down
+    return "a-n-G-E-S"       # green — reverted
 
 # ---------------------------------------------------------------------------
 # Embedded icon generator — stdlib only, no Pillow needed.
@@ -336,13 +358,13 @@ def _icon_png_b64(shape: str, rgb: tuple, size: int = 32) -> str:
     return base64.b64encode(png).decode()
 
 
-_BLUE   = (0, 116, 217)   # 2525B friendly blue
-_GREEN  = (0, 164, 0)     # 2525B neutral green
-_YELLOW = (255, 215, 0)   # 2525B unknown yellow
-_RED    = (220, 20,  20)  # 2525B hostile red
+_BLUE   = (0, 116, 217)   # 2525C friendly blue
+_GREEN  = (0, 164, 0)     # 2525C neutral green
+_YELLOW = (255, 215, 0)   # 2525C unknown yellow
+_RED    = (220, 20,  20)  # 2525C hostile red
 
 # b64image fallback — used when ATAK doesn't have the iconset installed.
-# ATAK CIV 5.x ignores b64image for recognised 2525B types, so we also set
+# ATAK CIV 5.x ignores b64image for recognised 2525C types, so we also set
 # iconsetpath (below) which is honoured regardless of the CoT type.
 _COT_ICON_B64 = {
     # Civil aircraft — T-shaped commercial silhouette, neutral green
@@ -377,10 +399,10 @@ _COT_ICON_B64 = {
     "a-h-G-I-B-M": _icon_png_b64("circle",   _RED),
 }
 
-# Primary icon path — references the MIL-STD-2525B iconset pre-installed in
-# ATAK CIV 5.x.  ATAK renders iconsetpath even when CoT type is standard 2525B,
+# Primary icon path — references the MIL-STD-2525C iconset pre-installed in
+# ATAK CIV 5.x.  ATAK renders iconsetpath even when CoT type is standard 2525C,
 # giving the correct inner function symbol (plane, ship silhouette) inside the
-# 2525B affiliation frame (arc=air, U=sea, box=ground).
+# 2525C affiliation frame (arc=air, U=sea, box=ground).
 _ISET = "34ae1613-9645-4222-a9d2-e5f243dea2865"
 _COT_ICONSET = {
     "a-n-A-C-F":   "{}/Neutral/Air/Fixed Wing.png".format(_ISET),
@@ -871,24 +893,6 @@ def _build_remarks(track: dict, cot_type: str) -> str:
                 if ae is not None and re is not None and (abs(ae) > 0.001 or abs(re) > 0.001):
                     radar_l.append("CAL (calibration error): AZ {:+.3f}°  RNG {:+.3f} nm".format(ae, re))
 
-        # ── DETECTION (dronuradaras acoustic/RF sensor network) ──
-        det_l = []
-        det_time = track.get("detected_at_utc")
-        if det_time:
-            det_l.append("TIME: {}".format(det_time.replace("T", " ").replace(".000Z", " UTC")))
-        det_sensor = track.get("detecting_sensor")
-        if det_sensor:
-            det_l.append("SENSOR: {}".format(det_sensor))
-        if track.get("audio_available"):
-            det_l.append("[AUDIO RECORDED]")
-            audio_url = track.get("audio_url")
-            if audio_url:
-                det_l.append("AUDIO: {}".format(audio_url))
-        det_ref = track.get("detection_id")
-        if det_ref:
-            det_l.append("REF: {}".format(det_ref[:13]))
-        _sec("DETECTION", det_l)
-
         # ── STATUS ──
         if track.get("spi"):
             status_l.append("[⚠ SPI (special position ident)]")
@@ -1142,6 +1146,29 @@ def _build_remarks(track: dict, cot_type: str) -> str:
             _sec("CALIBRATION", calib_l)
             _sec("STATISTICS",  stats_l)
 
+        elif track.get("sensor_type") == "acoustic":   # ---- ACOUSTIC SENSOR SITE (dronuradaras) ----
+            sensor_l = []; alert_l = []
+            if time_str: sensor_l.append("TIME: {}".format(time_str))
+            nm = track.get("sensor_name")
+            if nm: sensor_l.append("NAME: {}".format(nm))
+            if lat is not None: sensor_l.append("LAT: {:.5f}°".format(round(lat, 5)))
+            if lon is not None: sensor_l.append("LON: {:.5f}°".format(round(lon, 5)))
+            if lat is not None and lon is not None:
+                sensor_l.extend(_mgrs_lines(lat, lon))
+            sensor_l.append("SRC: {}".format(src))
+            last_det = track.get("last_detection_ts")
+            if last_det:
+                age = time.time() - float(last_det)
+                if age <= _SENSOR_ALERT_HOT_S:
+                    alert_l.append("[⚠ ACTIVE DETECTION — {:.0f}s ago]".format(age))
+                elif age <= _SENSOR_ALERT_WARM_S:
+                    alert_l.append("[COOLING DOWN — last detection {:.0f}s ago]".format(age))
+                audio_url = track.get("last_detection_audio_url")
+                if audio_url:
+                    alert_l.append("AUDIO: {}".format(audio_url))
+            _sec("SENSOR", sensor_l)
+            _sec("ALERT",  alert_l)
+
         elif src in ("gpsjam", "eurocontrol", "custom") and track.get("event_type") in ("jamming", "spoofing", "unknown"):  # GPS EW
             threat_l = []; pos_l = []
             if time_str: threat_l.append("TIME: {}".format(time_str))
@@ -1228,7 +1255,28 @@ def _build_remarks(track: dict, cot_type: str) -> str:
 
         else:                      # APRS / OSM / vehicles
             feat = track.get("feature_type")
-            if feat:               # OSM geo feature
+            if feat in ("alpr_camera", "cctv_camera"):   # OSM surveillance camera (ALPR or general CCTV)
+                ident_l = []
+                if time_str: ident_l.append("TIME: {}".format(time_str))
+                ident_l.append("TYPE: {}".format("ALPR CAMERA" if feat == "alpr_camera" else "CCTV CAMERA"))
+                _r("SUBTYPE",  track.get("surveillance_type"), ident_l)
+                _r("BRAND",    track.get("brand"),    ident_l)
+                _r("OPERATOR", track.get("operator"), ident_l)
+                _r("ZONE",     track.get("zone"),     ident_l)
+                _r("MOUNT",    track.get("mount"),    ident_l)
+                heading = track.get("heading_deg")
+                if heading is not None:
+                    ident_l.append("HEADING: {}°".format(int(heading)))
+                elif track.get("heading_raw"):
+                    ident_l.append("HEADING: {}".format(track["heading_raw"]))
+                _r("COUNTRY",  (track.get("country_code") or "").upper() or None, ident_l)
+                if lat is not None: ident_l.append("LAT: {:.5f}°".format(round(lat, 5)))
+                if lon is not None: ident_l.append("LON: {:.5f}°".format(round(lon, 5)))
+                if lat is not None and lon is not None:
+                    ident_l.extend(_mgrs_lines(lat, lon))
+                ident_l.append("SRC: {}".format(src))
+                _sec("SURVEILLANCE CAMERA", ident_l)
+            elif feat:               # OSM geo feature
                 ident_l = []
                 if time_str: ident_l.append("TIME: {}".format(time_str))
                 feat_label = {"aerodrome": "AERODROME", "port": "PORT",
