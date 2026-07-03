@@ -51,7 +51,7 @@ fi
 # ── Service registry ───────────────────────────────────────────────────────
 SERVICES=(
     zenoh
-    asterix link16 mavlink vmf sitaware dronuradaras gps-ew lt-surveillance
+    asterix link16 mavlink vmf sitaware dronuradaras gps-ew
     cot-udp cot-udp-tak cot-tcp track-fusion
 )
 
@@ -60,7 +60,7 @@ declare -A SVC_CAT=(
     [asterix]="Sensor bridges"  [link16]="Sensor bridges"
     [mavlink]="Sensor bridges"  [vmf]="Sensor bridges"
     [sitaware]="Sensor bridges" [dronuradaras]="Sensor bridges"
-    [gps-ew]="Sensor bridges"   [lt-surveillance]="Sensor bridges"
+    [gps-ew]="Sensor bridges"
     [cot-udp]="Output layers"   [cot-udp-tak]="Output layers"
     [cot-tcp]="Output layers"   [track-fusion]="Output layers"
 )
@@ -74,7 +74,6 @@ declare -A SVC_DESC=(
     [sitaware]="SitaWare friendly force tracking"
     [dronuradaras]="dronuradaras.lt drone detection network"
     [gps-ew]="GPS jamming/spoofing threat feed (GPSJam + custom)"
-    [lt-surveillance]="Lithuania surveillance cameras (OSM Overpass, CCTV+ALPR)"
     [cot-udp]="CoT → ATAK UDP multicast 239.2.3.1:6969 (same LAN only)"
     [cot-udp-tak]="CoT → UDP unicast direct to TAK Server (crosses NetBird/VPN)"
     [cot-tcp]="CoT → TAK Server TCP"
@@ -93,7 +92,6 @@ svc_ready() {
         sitaware)     return 0 ;;  # always ready; prompts for server IP at launch if unset
         dronuradaras) return 0 ;;
         gps-ew)       return 0 ;;  # always ready; sources enabled via env vars
-        lt-surveillance) return 0 ;;  # always ready; no API key required
         *)        return 0 ;;
     esac
 }
@@ -238,10 +236,6 @@ launch() {
 
         gps-ew)
             _start gps-ew bridges/gps_ew_bridge.py
-            ;;
-
-        lt-surveillance)
-            _start lt-surveillance bridges/lt_surveillance_bridge.py
             ;;
 
         cot-udp)

@@ -261,8 +261,6 @@ _OSM_COT = {
     "port":        "a-n-G-I-B-O",  # neutral port
     "military":    "a-f-G-I-B-M",  # friendly military base → flipped to hostile for RU/BY
     "station":     "a-n-G-I",      # neutral ground installation (railway)
-    "alpr_camera": "a-n-G-E-S",    # neutral ground sensor (same icon as acoustic sensors)
-    "cctv_camera": "a-n-G-E-S",    # neutral ground sensor — general CCTV/surveillance camera
 }
 
 # ISO 3166-1 alpha-2 country codes of hostile states in this scenario
@@ -1255,28 +1253,7 @@ def _build_remarks(track: dict, cot_type: str) -> str:
 
         else:                      # APRS / OSM / vehicles
             feat = track.get("feature_type")
-            if feat in ("alpr_camera", "cctv_camera"):   # OSM surveillance camera (ALPR or general CCTV)
-                ident_l = []
-                if time_str: ident_l.append("TIME: {}".format(time_str))
-                ident_l.append("TYPE: {}".format("ALPR CAMERA" if feat == "alpr_camera" else "CCTV CAMERA"))
-                _r("SUBTYPE",  track.get("surveillance_type"), ident_l)
-                _r("BRAND",    track.get("brand"),    ident_l)
-                _r("OPERATOR", track.get("operator"), ident_l)
-                _r("ZONE",     track.get("zone"),     ident_l)
-                _r("MOUNT",    track.get("mount"),    ident_l)
-                heading = track.get("heading_deg")
-                if heading is not None:
-                    ident_l.append("HEADING: {}°".format(int(heading)))
-                elif track.get("heading_raw"):
-                    ident_l.append("HEADING: {}".format(track["heading_raw"]))
-                _r("COUNTRY",  (track.get("country_code") or "").upper() or None, ident_l)
-                if lat is not None: ident_l.append("LAT: {:.5f}°".format(round(lat, 5)))
-                if lon is not None: ident_l.append("LON: {:.5f}°".format(round(lon, 5)))
-                if lat is not None and lon is not None:
-                    ident_l.extend(_mgrs_lines(lat, lon))
-                ident_l.append("SRC: {}".format(src))
-                _sec("SURVEILLANCE CAMERA", ident_l)
-            elif feat:               # OSM geo feature
+            if feat:               # OSM geo feature
                 ident_l = []
                 if time_str: ident_l.append("TIME: {}".format(time_str))
                 feat_label = {"aerodrome": "AERODROME", "port": "PORT",
