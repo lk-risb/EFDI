@@ -2,12 +2,20 @@
 """dronuradaras_bridge.py — dronuradaras.lt drone radar network → Zenoh bridge.
 
 Polls radar-api.mainline.inc (the backend for https://dronuradaras.lt) for:
-  1. Radar sensor node positions  → published as land/neutral/radar site markers
-  2. Drone detections             → published as air/unknown/uav tracks (30 s stale)
+  1. Radar sensor node positions  → published as land/neutral/sensor site markers
+  2. Drone detections             → recolor the reporting sensor's OWN marker
 
-Zenoh topics:
+There is no separate "drone" marker/icon. A detection doesn't carry a reliable
+drone position (the API only reports which acoustic sensor heard it), so
+instead of placing a second icon near the sensor, the sensor's own marker
+changes color while an alert is active — same icon (a-?-G-E-S), only the
+MIL-STD-2525C affiliation letter changes: neutral (green, no alert) → unknown
+(yellow, cooling down) → hostile (red, active detection in the last 60 s).
+See cot_layer.py's _sensor_alert_cot_type().
+
+Zenoh topic:
   <ORG>/land/dronuradaras/acoustic/neutral/sensor/status/v1   — sensor nodes
-  <ORG>/air/dronuradaras/acoustic/hostile/uav/tracks/v1      — drone detections
+  (carries last_detection_ts when a detection has occurred recently)
 
 No API key required — uses the same public CORS origin as the website.
 """
@@ -35,13 +43,17 @@ AUDIO_URL         = API_BASE + "/detections/{}/audio"
 ORIGIN_HEADER     = "https://dronuradaras.lt"
 REFERER_HEADER    = "https://dronuradaras.lt/"
 
-# Shared device name cache — updated by run_devices, read by run_detections
-_device_names: dict[str, str] = {}   # device_id → display_name
+# Shared device state — written by run_devices, read/written by run_detections.
+_device_names:     dict[str, str]   = {}   # device_id → display_name
+_device_positions: dict[str, tuple] = {}   # device_id → (lat, lon)
+_last_detection:   dict[str, float] = {}   # device_id → epoch of most recent detection
 _device_lock  = threading.Lock()
 
 DEVICE_POLL_S     = 60    # radar nodes move rarely
-DETECT_POLL_S     = 10    # drone detections — low latency
+DETECT_POLL_S     = 10    # drone detections — low latency; also the recolor-decay tick
 DETECT_WINDOW_S   = 300   # ignore detections older than 5 minutes
+ALERT_HOT_S       = 60    # marker shows hostile (red) while a detection is this fresh
+ALERT_WARM_S      = DETECT_WINDOW_S  # marker shows unknown (yellow) until this old, then reverts to neutral
 
 
 # ---------------------------------------------------------------------------
@@ -112,17 +124,24 @@ def run_devices(pub: "zenoh.Publisher", verbose: bool):
                 if lat is None or lon is None:
                     continue
 
+                dev_id = dev["id"]
+                with _device_lock:
+                    _device_positions[dev_id] = (lat, lon)
+                    last_det = _last_detection.get(dev_id)
+
                 payload = {
                     "_src":        "dronuradaras.lt",
                     "_ts":         time.time(),
                     "sensor_type": "acoustic",
-                    "sensor_id":   "DRONU-{}".format(dev["id"][:8]),
+                    "sensor_id":   "DRONU-{}".format(dev_id[:8]),
                     "sensor_name": dev.get("display_name", "dronu-sensor"),
                     "lat_deg":     round(lat, 6),
                     "lon_deg":     round(lon, 6),
                     "is_online":   dev.get("is_online", False),
                     "last_seen":   dev.get("last_seen_at", ""),
                 }
+                if last_det is not None:
+                    payload["last_detection_ts"] = last_det
 
                 pub.put(json.dumps(payload).encode(),
                         encoding=zenoh.Encoding.APPLICATION_JSON)
@@ -140,14 +159,42 @@ def run_devices(pub: "zenoh.Publisher", verbose: bool):
 # Detection publisher
 # ---------------------------------------------------------------------------
 
-def run_detections(pub: "zenoh.Publisher", verbose: bool):
-    topic_suffix = "air/dronuradaras/acoustic/hostile/uav/tracks/v1"
-    print("Detection poll topic: {}/{}".format(TOPIC_ROOT, topic_suffix), flush=True)
+def _publish_sensor_alert(pub_dev: "zenoh.Publisher", dev_id: str, last_detection_ts: float,
+                           audio_url: str | None = None):
+    """Republish the reporting sensor's OWN status marker with a fresh
+    last_detection_ts — this is what recolors it in cot_layer.py, instead of
+    spawning a separate nearby drone icon."""
+    with _device_lock:
+        pos  = _device_positions.get(dev_id)
+        name = _device_names.get(dev_id, dev_id[:8] if dev_id else "unknown")
+    if pos is None:
+        return  # haven't seen this device's position yet — next device poll will catch up
+    lat, lon = pos
+    payload = {
+        "_src":              "dronuradaras.lt",
+        "_ts":                time.time(),
+        "sensor_type":        "acoustic",
+        "sensor_id":          "DRONU-{}".format(dev_id[:8]),
+        "sensor_name":        name,
+        "lat_deg":            round(lat, 6),
+        "lon_deg":            round(lon, 6),
+        "is_online":          True,
+        "last_detection_ts":  last_detection_ts,
+    }
+    if audio_url:
+        payload["last_detection_audio_url"] = audio_url
+    pub_dev.put(json.dumps(payload).encode(), encoding=zenoh.Encoding.APPLICATION_JSON)
+
+
+def run_detections(pub_dev: "zenoh.Publisher", verbose: bool):
+    print("Detection poll — recolors sensor markers on {}/land/dronuradaras/acoustic/neutral/sensor/status/v1"
+          .format(TOPIC_ROOT), flush=True)
 
     seen: dict[str, float] = {}   # detection_id → published_at timestamp
 
     while True:
         now = time.time()
+        touched_devices: set[str] = set()
 
         # Evict stale entries from seen cache
         cutoff = now - DETECT_WINDOW_S
@@ -163,11 +210,6 @@ def run_detections(pub: "zenoh.Publisher", verbose: bool):
                 if not det_id or det_id in seen:
                     continue
 
-                lat = det.get("latitude")
-                lon = det.get("longitude")
-                if lat is None or lon is None:
-                    continue
-
                 # Filter by age — ignore detections older than DETECT_WINDOW_S
                 detected_ms = det.get("detected_at", 0)
                 detected_s  = detected_ms / 1000.0
@@ -175,37 +217,41 @@ def run_detections(pub: "zenoh.Publisher", verbose: bool):
                     continue
 
                 dev_id = det.get("device_id", "")
-                with _device_lock:
-                    dev_name = _device_names.get(dev_id, dev_id[:8] if dev_id else "unknown")
+                if not dev_id:
+                    continue
 
                 has_audio = bool(det.get("audio_available"))
-                payload = {
-                    "_src":            "dronuradaras.lt",
-                    "_ts":             detected_s,
-                    "sensor_id":       "DRONU-DET-{}".format(det_id[:8]),
-                    "callsign":        "DRONE",
-                    "lat_deg":         round(lat, 6),
-                    "lon_deg":         round(lon, 6),
-                    "detection_id":    det_id,
-                    "device_id":       dev_id,
-                    "detecting_sensor": dev_name,
-                    "detected_at_utc": det.get("received_at", ""),
-                    "audio_available": has_audio,
-                    "audio_url":       AUDIO_URL.format(det_id) if has_audio else None,
-                }
+                audio_url = AUDIO_URL.format(det_id) if has_audio else None
 
-                pub.put(json.dumps(payload).encode(),
-                        encoding=zenoh.Encoding.APPLICATION_JSON)
+                with _device_lock:
+                    _last_detection[dev_id] = now
+                _publish_sensor_alert(pub_dev, dev_id, now, audio_url)
+                touched_devices.add(dev_id)
+
                 seen[det_id] = now
                 new_count += 1
 
                 if verbose:
-                    print("DET", det_id[:8],
-                          "{:.4f},{:.4f}".format(lat, lon),
-                          "audio={}".format(payload["audio_available"]), flush=True)
+                    with _device_lock:
+                        dev_name = _device_names.get(dev_id, dev_id[:8])
+                    print("DET", det_id[:8], "sensor={}".format(dev_name),
+                          "audio={}".format(has_audio), flush=True)
 
             if new_count:
                 print("Detections: {} new".format(new_count), flush=True)
+
+        # Decay tick — keep recoloring (red → yellow → green) any sensor with a
+        # still-recent detection, even if no new detection arrived this cycle,
+        # so the marker visibly cools down instead of jumping straight back to
+        # green at the next 60s device-status poll.
+        with _device_lock:
+            still_warm = [d for d, ts in _last_detection.items()
+                          if now - ts <= ALERT_WARM_S and d not in touched_devices]
+        for dev_id in still_warm:
+            with _device_lock:
+                last_ts = _last_detection.get(dev_id)
+            if last_ts is not None:
+                _publish_sensor_alert(pub_dev, dev_id, last_ts)
 
         time.sleep(DETECT_POLL_S)
 
@@ -222,17 +268,13 @@ def main():
     session = zenoh.open(make_config())
 
     topic_dev = "{}/land/dronuradaras/acoustic/neutral/sensor/status/v1".format(TOPIC_ROOT)
-    topic_det = "{}/air/dronuradaras/acoustic/hostile/uav/tracks/v1".format(TOPIC_ROOT)
-
     pub_dev = session.declare_publisher(topic_dev)
-    pub_det = session.declare_publisher(topic_det)
 
     print("dronuradaras bridge starting", flush=True)
-    print("  Radar nodes  →", topic_dev, flush=True)
-    print("  Detections   →", topic_det, flush=True)
+    print("  Sensor markers (recolor on detection) →", topic_dev, flush=True)
 
     t_dev = threading.Thread(target=run_devices,    args=(pub_dev, args.verbose), daemon=True)
-    t_det = threading.Thread(target=run_detections, args=(pub_det, args.verbose), daemon=True)
+    t_det = threading.Thread(target=run_detections, args=(pub_dev, args.verbose), daemon=True)
 
     t_dev.start()
     t_det.start()
@@ -243,7 +285,6 @@ def main():
         pass
     finally:
         pub_dev.undeclare()
-        pub_det.undeclare()
         session.close()
 
 
