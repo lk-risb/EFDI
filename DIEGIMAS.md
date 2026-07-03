@@ -35,6 +35,8 @@ ATAK įrenginiai turi būti tame pačiame L2 tinklo segmente kaip serveris (mult
 
 Zenoh mTLS autentifikacijai reikalingas EFDI išduotas `goat-bundle`. Gaukite jį iš EFDI administratoriaus. **Bundle niekada nesaugomas šioje repozitorijoje.**
 
+Neapdorotas pasirašytas prisijungimo paketas (`<handle>.cbor`, vienkartiškai naudojamas `host/first-boot.sh`) taip pat turėtų būti laikomas už repozitorijos ribų — pvz. `~/Documents/<pod-pavadinimas>/` — ir nurodomas keliu kaskart, kai reikia, o ne kopijuojamas į darbinį katalogą.
+
 ---
 
 ## 2. Diegimas
@@ -193,7 +195,7 @@ Interaktyvus paleidiklis rodo visas paslaugas su jų parengties būsena. Įjunki
 | Visi jutikliai + TAK serveris | `a`, tada atžymėkite `8` (cot-udp) |
 | Tik radaras be ATAK (derinimui) | `1 2 10` |
 
-Procesų PID failai saugomi `.pids/`, žurnalai rašomi į `logs/<paslauga>.log`.
+Procesų PID failai saugomi `$POD_STATE_DIR/.pids/`, žurnalai rašomi į `$POD_STATE_DIR/logs/<paslauga>.log`.
 
 ---
 
@@ -293,17 +295,17 @@ Bridge'as nuskaito MIL-STD-2525B SIDC kodus iš SitaWare ir nukreipia kiekvieną
 ### Žurnalų stebėjimas
 
 ```bash
-tail -f logs/asterix.log          # Giraffe radaras — ASTERIX dekodavimas ir publikavimas
-tail -f logs/cot-udp.log          # CoT išvestis — patvirtina pristatymą į ATAK
-tail -f logs/dronuradaras.log     # Drono aptikimo įvykiai
-tail -f logs/track-fusion.log     # Sulieta takelio išvestis
+tail -f $POD_STATE_DIR/logs/asterix.log          # Giraffe radaras — ASTERIX dekodavimas ir publikavimas
+tail -f $POD_STATE_DIR/logs/cot-udp.log          # CoT išvestis — patvirtina pristatymą į ATAK
+tail -f $POD_STATE_DIR/logs/dronuradaras.log     # Drono aptikimo įvykiai
+tail -f $POD_STATE_DIR/logs/track-fusion.log     # Sulieta takelio išvestis
 ```
 
 ### Procesų būsenos tikrinimas
 
 ```bash
-ls .pids/                                          # Veikiančių paslaugų sąrašas
-kill -0 $(cat .pids/asterix.pid) && echo ok        # Konkretaus proceso tikrinimas
+ls $POD_STATE_DIR/.pids/                                          # Veikiančių paslaugų sąrašas
+kill -0 $(cat $POD_STATE_DIR/.pids/asterix.pid) && echo ok        # Konkretaus proceso tikrinimas
 ```
 
 ---
@@ -335,7 +337,7 @@ set -a && source compose/.env && set +a
 
 ```bash
 # 1. Patikrinkite ar cot-udp veikia
-kill -0 $(cat .pids/cot-udp.pid) && echo veikia
+kill -0 $(cat $POD_STATE_DIR/.pids/cot-udp.pid) && echo veikia
 
 # 2. Patikrinkite ar multicast srautas išeina iš serverio
 sudo tcpdump -i any udp and host 239.2.3.1 and port 6969 -c 5
@@ -372,7 +374,7 @@ print(f'{len(fresh)} nauji / {len(d)} iš viso aptikimų')
 **1. Patikrinkite ar bridge'as veikia ir apklausinėja:**
 
 ```bash
-tail -f logs/sitaware.log
+tail -f $POD_STATE_DIR/logs/sitaware.log
 # Laukiamas: "SitaWare poll: N units published" kas SITAWARE_POLL_S sekundžių
 ```
 
@@ -387,7 +389,7 @@ curl -s -u "$SITAWARE_USER:$SITAWARE_PASS" "$SITAWARE_URL/..." | python3 -m json
 SitaWare vienetai be galiojančio 15 simbolių SIDC kodo nukreipiami į `…/land/sitaware/rest/unknown/unit/…` ir rodomi kaip nežinomi žemės vienetai (`a-u-G-U-C`). Patikrinkite SIDC reikšmę žurnale:
 
 ```bash
-grep "sidc=" logs/sitaware.log | head -10
+grep "sidc=" $POD_STATE_DIR/logs/sitaware.log | head -10
 ```
 
 ### Keli to paties proceso egzemplioriai
@@ -396,7 +398,7 @@ Atsiranda paleidus `start.sh` du kartus be sustabdymo:
 
 ```bash
 pkill -f "_bridge\.py\|cot_layer\|track_fusion"
-rm -f .pids/*.pid
+rm -f $POD_STATE_DIR/.pids/*.pid
 ./start.sh
 ```
 
@@ -405,7 +407,7 @@ rm -f .pids/*.pid
 `asterix` bridge'as kas 60 s publikuoja keepalive nepriklausomai nuo takelio aktyvumo. Jei piktograma dingsta — bridge'as sustojo:
 
 ```bash
-tail -20 logs/asterix.log | grep -E "keepalive|startup|error"
+tail -20 $POD_STATE_DIR/logs/asterix.log | grep -E "keepalive|startup|error"
 ```
 
 ---

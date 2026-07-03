@@ -2,3 +2,6 @@
 register_topics.sh
 compose/.env
 compose/certs/
+logs/
+.pids/
+*.cbor

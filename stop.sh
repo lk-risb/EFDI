@@ -9,8 +9,25 @@
 #   ./stop.sh zenoh     # stop zenoh router only
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PID_DIR="$SCRIPT_DIR/.pids"
+ENV_FILE="$SCRIPT_DIR/compose/.env"
 MODE="${1:-all}"
+
+# ── Load .env (safe — no shell re-parsing of values, same as start.sh) ────
+if [[ -f "$ENV_FILE" ]]; then
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        line="${line%%$'\r'}"
+        [[ -z "$line" || "$line" == \#* ]] && continue
+        [[ "$line" != *=* ]] && continue
+        key="${line%%=*}"
+        val="${line#*=}"
+        [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
+        printf -v "$key" '%s' "$val"
+        export "$key"
+    done < "$ENV_FILE"
+fi
+
+# Must match start.sh's PID_DIR.
+PID_DIR="${POD_STATE_DIR:-$HOME/goat-moon}/.pids"
 
 stop_scripts() {
     local pattern="${1:-*}"
