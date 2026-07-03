@@ -166,13 +166,12 @@ Interaktyvus paleidiklis rodo visas paslaugas su jų parengties būsena. Įjunki
   [ 5] [ ] vmf            VMF MIL-STD-47001C messages            VMF_PORT not set
   [ 6] [ ] sitaware       SitaWare friendly force tracking       SITAWARE_URL not set
   [ 7] [ ] dronuradaras   dronuradaras.lt drone detection        ready
-  [ 8] [✓] lt-surveillance  Lietuvos vaizdo stebėjimo kameros (OSM)  ready
 
   Output layers
   ──────────────────────────────────────────────────────────
-  [ 9] [✓] cot-udp        CoT → ATAK UDP multicast 239.2.3.1:6969
-  [10] [✓] cot-tcp        CoT → TAK Server TCP
-  [11] [✓] track-fusion   Radar/ADS-B track correlation
+  [ 8] [✓] cot-udp        CoT → ATAK UDP multicast 239.2.3.1:6969
+  [ 9] [✓] cot-tcp        CoT → TAK Server TCP
+  [10] [✓] track-fusion   Radar/ADS-B track correlation
 ```
 
 **Paleidiklio valdymas:**
@@ -250,7 +249,6 @@ Bridge'as nuskaito MIL-STD-2525B SIDC kodus iš SitaWare ir nukreipia kiekvieną
 | Mėlynas laivas | `a-f-S-X-L` | SitaWare draugiškas laivas |
 | Raudonas laivas | `a-h-S-X-L` | SitaWare priešiškas laivas |
 | Žalia/geltona/raudona sensorių dėžutė (ta pati ikona, keičiasi spalva) | `a-n-G-E-S` / `a-u-G-E-S` / `a-h-G-E-S` | dronuradaras.lt akustinis jutiklis — žalia=neaktyvus, geltona=atvėsta, raudona=aptikimas aktyvus (paskutinės 60s) |
-| Žalia sensorių dėžutė | `a-n-G-E-S` | Lietuvos vaizdo stebėjimo kamera (CCTV/ALPR, OSM) |
 | Balta nežinoma orlaivio | `a-u-A-C-F` | Neklasifikuotas radaro takelis |
 
 > Radaro žymeklio pozicija, greitis ir kursas atnaujinami automatiškai iš gyvo CAT-34 srauto. Mobilioje platformoje ATAK rodys greičio vektorių ir judėjimo taką.
@@ -263,9 +261,6 @@ Bridge'as nuskaito MIL-STD-2525B SIDC kodus iš SitaWare ir nukreipia kiekvieną
 | --- | --- | --- | --- |
 | `asterix` | `bridges/asterix_bridge.py` | `…/air/asterix/cat48/unknown/aircraft/tracks/v1` | Srautinis UDP |
 | `dronuradaras` | `bridges/dronuradaras_bridge.py` | `…/land/dronuradaras/acoustic/neutral/sensor/status/v1` | Įrenginių apklausa 60 s / aptikimų apklausa 10 s |
-| `lt-surveillance` | `bridges/lt_surveillance_bridge.py` | `…/land/lt-surveillance/overpass/neutral/geo/features/v1` | REST apklausa 12 val. |
-
-> `lt-surveillance` numatytai naudoja `--mode area` (tiksli ISO3166-1 poligono užklausa — be sienos "nutekėjimo", ~90s per užklausą). Naudokite `--mode bbox` greitesnei (~5s) stačiakampio užklausai, kuri taip pat pagauna kai kurias kaimyninių šalių kameras prie sienos.
 | `sitaware` | `bridges/sitaware_bridge.py` | `…/land/sitaware/rest/friendly/unit/tracks/v1` | Konfigūruojama REST |
 | `link16` | `bridges/link16_bridge.py` | `…/air/link16/jreap/*/aircraft/tracks/v1` | Srautinis UDP/TCP |
 | `mavlink` | `bridges/mavlink_bridge.py` | `…/air/mavlink/mav2/*/uav/tracks/v1` | Srautinis UDP/TCP |
