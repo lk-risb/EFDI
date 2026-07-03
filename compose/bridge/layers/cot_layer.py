@@ -148,6 +148,25 @@ def _mil_air_type(track: dict) -> str:
 def _sea_type(track: dict) -> str:
     return "a-h-S-X-L" if _is_hostile_mmsi(track.get("mmsi", "")) else "a-n-S-X-L"
 
+# Ground sensor site alert coloring — same icon (G-E-S) throughout, only the
+# MIL-STD-2525C affiliation letter changes based on how recently a detection
+# was reported at that sensor. Used by dronuradaras.lt: no separate drone
+# marker exists, the sensor's own marker recolors instead (there's no reliable
+# drone position, only "sensor X heard something just now").
+_SENSOR_ALERT_HOT_S  = 60    # red  — detection within the last minute
+_SENSOR_ALERT_WARM_S = 300   # yellow — cooling down, matches the bridge's DETECT_WINDOW_S
+
+def _sensor_alert_cot_type(track: dict) -> str:
+    ts = track.get("last_detection_ts")
+    if not ts:
+        return "a-n-G-E-S"   # green — no alert on record
+    age = time.time() - float(ts)
+    if age <= _SENSOR_ALERT_HOT_S:
+        return "a-h-G-E-S"   # red — active
+    if age <= _SENSOR_ALERT_WARM_S:
+        return "a-u-G-E-S"   # yellow — cooling down
+    return "a-n-G-E-S"       # green — reverted
+
 
 # Sources that must NOT reach ATAK directly — they must pass through
 # track_fusion_bridge first so the marker contains merged data.
@@ -259,25 +278,6 @@ def _geo_cot_type(track: dict, base_type: str) -> str:
     if cc in _HOSTILE_CC:
         return base_type.replace("a-f-", "a-h-", 1)
     return base_type
-
-# Ground sensor site alert coloring — same icon (G-E-S) throughout, only the
-# MIL-STD-2525C affiliation letter changes based on how recently a detection
-# was reported at that sensor. Used by dronuradaras.lt: no separate drone
-# marker exists, the sensor's own marker recolors instead (there's no reliable
-# drone position, only "sensor X heard something just now").
-_SENSOR_ALERT_HOT_S  = 60    # red  — detection within the last minute
-_SENSOR_ALERT_WARM_S = 300   # yellow — cooling down, matches the bridge's DETECT_WINDOW_S
-
-def _sensor_alert_cot_type(track: dict) -> str:
-    ts = track.get("last_detection_ts")
-    if not ts:
-        return "a-n-G-E-S"   # green — no alert on record
-    age = time.time() - float(ts)
-    if age <= _SENSOR_ALERT_HOT_S:
-        return "a-h-G-E-S"   # red — active
-    if age <= _SENSOR_ALERT_WARM_S:
-        return "a-u-G-E-S"   # yellow — cooling down
-    return "a-n-G-E-S"       # green — reverted
 
 # ---------------------------------------------------------------------------
 # Embedded icon generator — stdlib only, no Pillow needed.

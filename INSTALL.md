@@ -262,6 +262,8 @@ The bridge reads MIL-STD-2525B SIDC codes from SitaWare and routes each unit to 
 | `asterix` | `bridges/asterix_bridge.py` | `…/air/asterix/cat48/unknown/aircraft/tracks/v1` | Streaming UDP |
 | `dronuradaras` | `bridges/dronuradaras_bridge.py` | `…/land/dronuradaras/acoustic/neutral/sensor/status/v1` | 60 s device poll / 10 s detection poll |
 | `lt-surveillance` | `bridges/lt_surveillance_bridge.py` | `…/land/lt-surveillance/overpass/neutral/geo/features/v1` | 12 h REST poll |
+
+> `lt-surveillance` defaults to `--mode area` (precise ISO3166-1 polygon query — no border bleed, ~90s per query). Pass `--mode bbox` for the faster (~5s) rectangular query, which also picks up some neighboring-country cameras near the border.
 | `sitaware` | `bridges/sitaware_bridge.py` | `…/land/sitaware/rest/friendly/unit/tracks/v1` | Configurable REST |
 | `link16` | `bridges/link16_bridge.py` | `…/air/link16/jreap/*/aircraft/tracks/v1` | Streaming UDP/TCP |
 | `mavlink` | `bridges/mavlink_bridge.py` | `…/air/mavlink/mav2/*/uav/tracks/v1` | Streaming UDP/TCP |

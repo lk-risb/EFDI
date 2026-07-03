@@ -2,16 +2,13 @@
 """lt_surveillance_bridge.py — Lithuania surveillance camera locations → Zenoh bridge.
 
 Queries the Overpass API for OpenStreetMap-tagged surveillance cameras
-(`man_made=surveillance`) within a bounding box (default: Lithuania) and
-publishes each as a GeoFeature JSON. Same live-query approach as
-osm_overpass_bridge.py — no manual export needed.
+(`man_made=surveillance`) and publishes each as a GeoFeature JSON. Same
+live-query approach as osm_overpass_bridge.py — no manual export needed.
 
 Originally scoped to DeFlock's ALPR-specific tag (`surveillance:type=ALPR`),
-but that subtype is heavily US-centric — a Lithuania-sized bbox returns only
-a handful of hits, mostly Belarus-adjacent, not real coverage. Dropped that
-filter down to the general `man_made=surveillance` tag, which OSM contributors
-use for CCTV, traffic, and ALPR cameras alike — confirmed 1,629 hits in
-Lithuania's bbox on a live Overpass query (vs. 6 for ALPR-only).
+but that subtype is heavily US-centric. Dropped that filter down to the
+general `man_made=surveillance` tag, which OSM contributors use for CCTV,
+traffic, and ALPR cameras alike.
 
 OSM tagging convention (confirmed via a live Overpass lookup against a known
 DeFlock-cataloged camera, OSM node 31431226 — still useful as a schema
@@ -24,11 +21,21 @@ reference even though the ALPR-only filter itself is dropped):
   surveillance:zone=<zone>       e.g. "traffic", "parking"
   camera:mount=<mount>           e.g. "pole", "wall"
 
-A rectangular bbox around a country inevitably catches some border-area hits
-just across the line (Belarus/Latvia/Poland near Lithuania's borders) — same
-limitation osm_overpass_bridge.py already accepts with its much larger Baltic
-region bbox. Not filtered further; not worth an area/polygon Overpass query
-for this.
+Two query modes, measured live against Lithuania:
+
+  --mode bbox   Rectangular bounding box. Fast (~5s) but a rectangle around an
+                irregular country border always catches neighboring territory —
+                confirmed 1,629 hits, most of them actually in Belarus/Latvia/
+                Poland/Kaliningrad, not Lithuania.
+  --mode area   Overpass area query against the real ISO3166-1=LT admin
+                boundary polygon. Precise — confirmed 606 real Lithuania hits,
+                zero border bleed — but ~90s per query since polygon
+                containment is expensive server-side. Fine here: POLL_INTERVAL
+                is 12h, so a 90s query is a trivial duty cycle.
+
+Default: area (precision matters more than the one-time 90s cost at a 12h
+poll interval). Use --mode bbox to fall back to the fast, bleed-prone query
+for comparison/testing.
 
 Re-queries every POLL_INTERVAL seconds — OSM data is stable, so 12 h is fine.
 
@@ -36,8 +43,9 @@ Zenoh topic:  <ORG>/land/lt-surveillance/overpass/neutral/geo/features/v1
 CoT type:     a-n-G-E-S  (neutral ground sensor — same icon as acoustic sensors)
 
 Run:
-    venv/bin/python3 lt_surveillance_bridge.py
-    venv/bin/python3 lt_surveillance_bridge.py --bbox 53.85 20.9 56.45 26.85
+    venv/bin/python3 lt_surveillance_bridge.py                # area mode (default)
+    venv/bin/python3 lt_surveillance_bridge.py --mode bbox
+    venv/bin/python3 lt_surveillance_bridge.py --mode bbox --bbox 53.85 20.9 56.45 26.85
 """
 
 import argparse
@@ -67,6 +75,9 @@ POLL_INTERVAL = 43200  # 12 h — OSM features don't change often
 # Operational bbox S, W, N, E — Lithuania (rectangular, slight border bleed expected)
 BBOX = (53.85, 20.9, 56.45, 26.85)
 
+# ISO3166-1 country code for the area-query mode (precise, no border bleed)
+COUNTRY_ISO = "LT"
+
 SURVEILLANCE_TAG = ("man_made", "surveillance")
 
 
@@ -85,13 +96,26 @@ def make_config() -> "zenoh.Config":
     return conf
 
 
-def overpass_query(tag_key: str, tag_value: str, bbox: tuple) -> list:
-    """Return OSM nodes matching tag within bbox; retries on 429/504/timeout,
-    falling back to a mirror instance since the main overpass-api.de server
-    rate-limits aggressively on repeated queries."""
+def _build_query(mode: str, tag_key: str, tag_value: str, bbox: tuple, country_iso: str) -> tuple:
+    """Returns (query_string, request_timeout_s) for the given mode."""
+    if mode == "area":
+        # admin_level=2 = country-level boundary — excludes sub-regions that
+        # might also carry an ISO3166-1 tag (rare, but possible for enclaves).
+        q = ('[out:json][timeout:120];'
+             'area["ISO3166-1"="{}"][admin_level=2]->.searchArea;'
+             'node["{}"="{}"](area.searchArea);out;').format(country_iso, tag_key, tag_value)
+        return q, 150  # measured ~90s live; leave headroom
     s, w, n, e = bbox
     q = '[out:json][timeout:60];node["{}"="{}"]({},{},{},{});out;'.format(
         tag_key, tag_value, s, w, n, e)
+    return q, 65
+
+
+def overpass_query(mode: str, tag_key: str, tag_value: str, bbox: tuple, country_iso: str) -> list:
+    """Return OSM nodes matching tag within bbox or country area (per mode);
+    retries on 429/504/timeout, falling back to a mirror instance since the
+    main overpass-api.de server rate-limits aggressively on repeated queries."""
+    q, req_timeout = _build_query(mode, tag_key, tag_value, bbox, country_iso)
     data = q.encode()
     headers = {"User-Agent": "efdi-lt-surveillance-bridge/1.0", "Content-Type": "text/plain"}
 
@@ -99,7 +123,7 @@ def overpass_query(tag_key: str, tag_value: str, bbox: tuple) -> list:
         url = OVERPASS_URLS[(attempt - 1) % len(OVERPASS_URLS)]
         req = urllib.request.Request(url, data=data, headers=headers)
         try:
-            with urllib.request.urlopen(req, timeout=65) as resp:
+            with urllib.request.urlopen(req, timeout=req_timeout) as resp:
                 return json.loads(resp.read().decode()).get("elements", [])
         except urllib.error.HTTPError as exc:
             if exc.code in (429, 504) and delay is not None:
@@ -162,8 +186,8 @@ def run(args):
 
     try:
         while True:
-            print("Querying Lithuania surveillance cameras…", flush=True)
-            elements = overpass_query(*SURVEILLANCE_TAG, args.bbox)
+            print("Querying Lithuania surveillance cameras (mode={})…".format(args.mode), flush=True)
+            elements = overpass_query(args.mode, *SURVEILLANCE_TAG, args.bbox, args.country)
             count = 0
             for elem in elements:
                 point = normalize(elem)
@@ -184,9 +208,14 @@ def main():
     ap = argparse.ArgumentParser(description="Lithuania surveillance camera → Zenoh bridge")
     ap.add_argument("--interval", type=int, default=POLL_INTERVAL,
                     help="Re-query interval in seconds (default: 43200 = 12 h)")
+    ap.add_argument("--mode", choices=("area", "bbox"), default="area",
+                    help="area = precise ISO3166-1 polygon query, ~90s, no border bleed (default). "
+                         "bbox = fast rectangular query, ~5s, catches neighboring-country hits.")
     ap.add_argument("--bbox", type=float, nargs=4, default=list(BBOX),
                     metavar=("S", "W", "N", "E"),
-                    help="Bounding box south west north east (default: Lithuania)")
+                    help="Bounding box south west north east, used only with --mode bbox (default: Lithuania)")
+    ap.add_argument("--country", default=COUNTRY_ISO,
+                    help="ISO3166-1 country code, used only with --mode area (default: LT)")
     args = ap.parse_args()
     run(args)
 

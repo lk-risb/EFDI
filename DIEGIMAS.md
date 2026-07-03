@@ -264,6 +264,8 @@ Bridge'as nuskaito MIL-STD-2525B SIDC kodus iš SitaWare ir nukreipia kiekvieną
 | `asterix` | `bridges/asterix_bridge.py` | `…/air/asterix/cat48/unknown/aircraft/tracks/v1` | Srautinis UDP |
 | `dronuradaras` | `bridges/dronuradaras_bridge.py` | `…/land/dronuradaras/acoustic/neutral/sensor/status/v1` | Įrenginių apklausa 60 s / aptikimų apklausa 10 s |
 | `lt-surveillance` | `bridges/lt_surveillance_bridge.py` | `…/land/lt-surveillance/overpass/neutral/geo/features/v1` | REST apklausa 12 val. |
+
+> `lt-surveillance` numatytai naudoja `--mode area` (tiksli ISO3166-1 poligono užklausa — be sienos "nutekėjimo", ~90s per užklausą). Naudokite `--mode bbox` greitesnei (~5s) stačiakampio užklausai, kuri taip pat pagauna kai kurias kaimyninių šalių kameras prie sienos.
 | `sitaware` | `bridges/sitaware_bridge.py` | `…/land/sitaware/rest/friendly/unit/tracks/v1` | Konfigūruojama REST |
 | `link16` | `bridges/link16_bridge.py` | `…/air/link16/jreap/*/aircraft/tracks/v1` | Srautinis UDP/TCP |
 | `mavlink` | `bridges/mavlink_bridge.py` | `…/air/mavlink/mav2/*/uav/tracks/v1` | Srautinis UDP/TCP |
