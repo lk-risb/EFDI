@@ -1,0 +1,24 @@
+name: zenoh-admin-frontend
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  zenoh-admin-frontend:
+    name: zenoh-admin UI type-check + build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: compose/zenoh-admin/ui
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm install -g pnpm
+      - run: pnpm install
+      - run: pnpm type-check
+      - run: pnpm build

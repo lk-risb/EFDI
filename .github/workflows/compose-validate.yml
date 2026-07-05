@@ -1,0 +1,15 @@
+name: compose-validate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  compose-validate:
+    name: Validate docker-compose.yml parses
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 -c "import yaml; yaml.safe_load(open('compose/docker-compose.yml'))"
