@@ -24,7 +24,7 @@ Each bridge publishes tracks to a Zenoh router under a structured topic hierarch
 
 ### Data plane
 
-All bridges are lightweight Python processes with no shared state beyond the Zenoh session. They publish self-describing JSON payloads. The CoT layer translates any incoming Zenoh topic to the appropriate MIL-STD-2525B CoT type using a topic-pattern → CoT-type map — adding a new sensor requires no changes to the output layer.
+All bridges are lightweight Python processes with no shared state beyond the Zenoh session. They publish self-describing JSON payloads. The CoT layer translates any incoming Zenoh topic to the appropriate MIL-STD-2525C CoT type using a topic-pattern → CoT-type map — adding a new sensor requires no changes to the output layer.
 
 ### Transport security
 

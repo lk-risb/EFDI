@@ -562,6 +562,22 @@ Config lives at `${POD_STATE_DIR}/zenoh-test/config.json5` — same certs/namesp
 
 ---
 
+## 11. Continuous Integration
+
+`.github/workflows/ci.yml` runs on every push/PR to `main`:
+
+| Job | Checks |
+| --- | --- |
+| `shellcheck` | Lints every `.sh` script in the repo (`-S warning`) |
+| `compose-validate` | Confirms `compose/docker-compose.yml` parses as valid YAML |
+| `bridge-syntax` | `py_compile` on every file in `compose/bridge/bridges/` and `compose/bridge/layers/` |
+| `zenoh-admin-frontend` | `pnpm type-check` + `pnpm build` for `compose/zenoh-admin/ui` |
+| `docker-build` | Builds both `compose/bridge` and `compose/zenoh-admin` Docker images (no push) |
+
+This catches syntax errors, TypeScript errors, and Dockerfile breakage before merge — it does **not** run the bridges themselves (most need real API keys/network access CI doesn't have).
+
+---
+
 ## Changelog
 
 | Date | Change |
@@ -592,6 +608,11 @@ Config lives at `${POD_STATE_DIR}/zenoh-test/config.json5` — same certs/namesp
 | 2026-07-05 | Zenoh admin GUI: added `/api/health` (CPU/RAM/disk/uptime/load/network/cert-expiry, TAK-admin-panel style) to the dashboard |
 | 2026-07-05 | Fixed SPA routing bug: direct navigation/refresh/back-button to any GUI sub-route (`/config`, `/admin-users`) 404'd as raw JSON instead of loading the app — the fallback code caught `fastapi.HTTPException`, but `StaticFiles.get_response` raises `starlette.exceptions.HTTPException` (a different, parent class), so the catch never matched |
 | 2026-07-05 | Added isolated `zenoh-router-test` service (`test` compose profile) for local pub/sub testing without touching the real pod or its fabric connection |
+| 2026-07-05 | Removed the `gps-ew` bridge (GPSJam-based) — gpsjam.org has no public API for its own processed data, so this bridge never actually worked; removed from `start.sh` and `cot_layer.py` rather than left silently broken |
+| 2026-07-05 | Fixed cross-source/cross-pod duplicate tracks in SitaWare: `nato_nvg_layer.py`'s `_uid()` baked the source name into the track ID (unlike `cot_layer.py`'s already-correct version), so the same aircraft from two sources got two different SitaWare tracks |
+| 2026-07-05 | Fixed `dronuradaras_bridge.py` publishing only `is_online` sensors (22 of 199 registered) — now publishes all sensors with a known position, matching what the public dronuradaras.lt site shows |
+| 2026-07-05 | Added `.github/workflows/ci.yml`: compile-checks bridges/layers, type-checks + builds the zenoh-admin frontend, builds both Docker images on every push/PR |
+| 2026-07-05 | Added `shellcheck` and `compose-validate` CI jobs; fixed the one real finding (`compose/rebuild.sh` missing `cd ... \|\| exit`) and silenced a false-positive (`SC2163` on the intentional "export by dynamic name" idiom in `start.sh`/`stop.sh`/`run.sh`) |
 
 ---
 

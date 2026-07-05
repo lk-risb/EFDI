@@ -1,5 +1,5 @@
 #!/bin/bash
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit
 docker compose up -d --build \
   opensky-bridge aisstream-bridge openmeteo-bridge meteo-lt-bridge \
   yr-no-bridge n2yo-bridge osm-bridge purpleair-bridge \
