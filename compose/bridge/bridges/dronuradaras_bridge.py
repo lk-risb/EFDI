@@ -117,12 +117,15 @@ def run_devices(pub: "zenoh.Publisher", verbose: bool):
                     if dev.get("id") and dev.get("display_name"):
                         _device_names[dev["id"]] = dev["display_name"]
 
-            online = [d for d in devices if d.get("is_online")]
-            for dev in online:
-                lat = dev.get("latitude")
-                lon = dev.get("longitude")
-                if lat is None or lon is None:
-                    continue
+            # Publish every device with a known position, not just currently-online
+            # ones — "is_online" is a narrow live flag (most registered sensors read
+            # false at any given moment even when recently active), so gating on it
+            # dropped the vast majority of real sensors the public site still shows.
+            # is_online stays in the payload for status display.
+            with_position = [d for d in devices if d.get("latitude") is not None and d.get("longitude") is not None]
+            for dev in with_position:
+                lat = dev["latitude"]
+                lon = dev["longitude"]
 
                 dev_id = dev["id"]
                 with _device_lock:
@@ -150,7 +153,9 @@ def run_devices(pub: "zenoh.Publisher", verbose: bool):
                           "online={}".format(payload["is_online"]),
                           "{:.4f},{:.4f}".format(lat, lon), flush=True)
 
-            print("Devices: {}/{} online published".format(len(online), len(devices)), flush=True)
+            online_count = sum(1 for d in with_position if d.get("is_online"))
+            print("Devices: {} published ({} online, {} total registered)".format(
+                len(with_position), online_count, len(devices)), flush=True)
 
         time.sleep(DEVICE_POLL_S)
 
