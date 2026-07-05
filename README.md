@@ -1,8 +1,38 @@
+<div align="center">
+
 # efdi-moon-pod
 
-The **EFDI moon-pod** is a minimal, partner-custodial sensor bridge stack. It ingests data from tactical sensors (radars, drone detection networks, datalinks, UAV telemetry), routes everything through a local Zenoh publish/subscribe fabric, and delivers it to ATAK as Cursor-on-Target (CoT) over UDP multicast or TAK Server TCP — all running on your own hardware, under your own custody.
+**Partner-custodial sensor bridge stack — tactical sensors → Zenoh pub/sub → ATAK CoT, on your own hardware, under your own custody.**
+
+![Zenoh](https://img.shields.io/badge/Zenoh-1.9.0-blue)
+![Python](https://img.shields.io/badge/Python-3.12-blue?logo=python&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker%20Compose-2496ED?logo=docker&logoColor=white)
+![ATAK](https://img.shields.io/badge/ATAK-CoT-4c9a4c)
+![License](https://img.shields.io/badge/License-Apache--2.0-blue)
+
+[![shellcheck](https://github.com/risblicencijos/efdi-moon-pod/actions/workflows/shellcheck.yml/badge.svg)](https://github.com/risblicencijos/efdi-moon-pod/actions/workflows/shellcheck.yml)
+[![compose-validate](https://github.com/risblicencijos/efdi-moon-pod/actions/workflows/compose-validate.yml/badge.svg)](https://github.com/risblicencijos/efdi-moon-pod/actions/workflows/compose-validate.yml)
+[![bridge-syntax](https://github.com/risblicencijos/efdi-moon-pod/actions/workflows/bridge-syntax.yml/badge.svg)](https://github.com/risblicencijos/efdi-moon-pod/actions/workflows/bridge-syntax.yml)
+[![zenoh-admin-frontend](https://github.com/risblicencijos/efdi-moon-pod/actions/workflows/zenoh-admin-frontend.yml/badge.svg)](https://github.com/risblicencijos/efdi-moon-pod/actions/workflows/zenoh-admin-frontend.yml)
+[![docker-build](https://github.com/risblicencijos/efdi-moon-pod/actions/workflows/docker-build.yml/badge.svg)](https://github.com/risblicencijos/efdi-moon-pod/actions/workflows/docker-build.yml)
+
+</div>
+
+The **EFDI moon-pod** ingests data from tactical sensors (radars, drone detection networks, datalinks, UAV telemetry), routes everything through a local Zenoh publish/subscribe fabric, and delivers it to ATAK as Cursor-on-Target (CoT) over UDP multicast or TAK Server TCP.
 
 This repository is the EFDI-partner collaboration surface. It carries **no goat-internal infrastructure, credentials, or private links** — everything here is safe to develop against openly.
+
+---
+
+## Table of contents
+
+- [What it does](#what-it-does)
+- [Architecture](#architecture)
+- [Bundle contents](#bundle-contents)
+- [Repository layout](#repository-layout)
+- [Deployment](#deployment)
+- [EFDI sandbox notes](#efdi-sandbox-notes)
+- [License](#license)
 
 ---
 

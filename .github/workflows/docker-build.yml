@@ -1,0 +1,26 @@
+name: docker-build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  docker-build:
+    name: Docker image builds
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - name: bridge
+            context: compose/bridge
+          - name: zenoh-admin
+            context: compose/zenoh-admin
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build ${{ matrix.name }} image
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          push: false
