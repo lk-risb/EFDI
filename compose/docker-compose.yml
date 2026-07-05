@@ -34,6 +34,29 @@ services:
       timeout: 5s
       retries: 5
 
+  zenoh-router-test:
+    # Isolated test router for local pub/sub testing — same image, same certs/ACL/namespace
+    # as zenoh-router, but different ports and NO connect.endpoints (never dials the fabric).
+    # Config: ${POD_STATE_DIR}/zenoh-test/config.json5. Not started by default — `docker compose
+    # --profile test up -d zenoh-router-test`.
+    image: eclipse/zenoh:1.9.0@sha256:157965d71e0bfd0a044d76a985ff0e5c306ad3968929168fb9678cd2a7fec23f
+    container_name: goat-moon-zenoh-router-test
+    network_mode: host
+    restart: "no"
+    profiles:
+      - test
+    environment:
+      - RUST_LOG=${ZENOH_LOG:-info}
+    volumes:
+      - ${POD_STATE_DIR:?set in .env}/zenoh-test/config.json5:/etc/zenoh/config.json5:ro
+      - ${POD_STATE_DIR}/zenoh/tls:/etc/zenoh/tls:ro
+    command: ["-c", "/etc/zenoh/config.json5"]
+    healthcheck:
+      test: ["CMD-SHELL", "true"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
   opensky-bridge:
     build:
       context: ./bridge
