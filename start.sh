@@ -17,6 +17,8 @@ if [[ -f "$ENV_FILE" ]]; then
         val="${line#*=}"
         [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
         printf -v "$key" '%s' "$val"
+        # shellcheck disable=SC2163  # $key holds a variable NAME (set above via printf -v),
+        # not the value to export — exporting by that name is the intended idiom here.
         export "$key"
     done < "$ENV_FILE"
 fi
