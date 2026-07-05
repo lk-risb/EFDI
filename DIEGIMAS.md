@@ -564,6 +564,22 @@ Konfigūracija yra `${POD_STATE_DIR}/zenoh-test/config.json5` — tie patys sert
 
 ---
 
+## 11. Tęstinė integracija (CI)
+
+`.github/workflows/ci.yml` paleidžiamas kas kartą pushinant/darant PR į `main`:
+
+| Job | Tikrina |
+| --- | --- |
+| `shellcheck` | Tikrina kiekvieną `.sh` skriptą repo'je (`-S warning`) |
+| `compose-validate` | Patvirtina, kad `compose/docker-compose.yml` yra validus YAML |
+| `bridge-syntax` | `py_compile` kiekvienam failui `compose/bridge/bridges/` ir `compose/bridge/layers/` |
+| `zenoh-admin-frontend` | `pnpm type-check` + `pnpm build` `compose/zenoh-admin/ui` |
+| `docker-build` | Sukuria abu Docker image'us (`compose/bridge` ir `compose/zenoh-admin`), be push |
+
+Tai pagauna sintaksės klaidas, TypeScript klaidas ir Dockerfile lūžimus prieš merge — **nepaleidžia** pačių bridge'ų (dauguma reikalauja tikrų API raktų/tinklo prieigos, kurios CI neturi).
+
+---
+
 ## Pakeitimų žurnalas
 
 | Data | Pakeitimas |
@@ -594,6 +610,11 @@ Konfigūracija yra `${POD_STATE_DIR}/zenoh-test/config.json5` — tie patys sert
 | 2026-07-05 | Zenoh admin GUI: pridėtas `/api/health` (CPU/RAM/diskas/uptime/apkrova/tinklas/sertifikatų galiojimas, TAK admin panelės stiliaus) skydelyje |
 | 2026-07-05 | Ištaisyta SPA routing klaida: tiesioginis navigavimas/refresh/back mygtukas į bet kurį GUI sub-route (`/config`, `/admin-users`) grąžindavo žalią JSON 404 vietoj programos užkrovimo — fallback kodas gaudė `fastapi.HTTPException`, bet `StaticFiles.get_response` meta `starlette.exceptions.HTTPException` (kitą, tėvinę klasę), todėl gaudymas niekada nesutapo |
 | 2026-07-05 | Pridėtas izoliuotas `zenoh-router-test` servisas (`test` compose profilis) lokaliam pub/sub testavimui, neliečiant tikro pod'o ar jo fabric ryšio |
+| 2026-07-05 | Pašalintas `gps-ew` bridge (GPSJam pagrindu) — gpsjam.org neturi viešo API savo apdorotiems duomenims, todėl šis bridge niekada realiai neveikė; pašalintas iš `start.sh` ir `cot_layer.py`, o ne paliktas tyliai sulūžęs |
+| 2026-07-05 | Ištaisyti dubliuoti takeliai SitaWare tarp šaltinių/pod'ų: `nato_nvg_layer.py` `_uid()` funkcijoje šaltinio pavadinimas buvo įtraukiamas į takelio ID (skirtingai nuo jau teisingos `cot_layer.py` versijos), todėl tas pats orlaivis iš dviejų šaltinių gaudavo du skirtingus SitaWare takelius |
+| 2026-07-05 | Ištaisyta `dronuradaras_bridge.py` — publikavo tik `is_online` jutiklius (22 iš 199 registruotų) — dabar publikuoja visus jutiklius su žinoma pozicija, atitinka tai, ką rodo viešas dronuradaras.lt puslapis |
+| 2026-07-05 | Pridėtas `.github/workflows/ci.yml`: tikrina bridge'ų/sluoksnių sintaksę, type-check + build zenoh-admin frontend'ui, sukuria abu Docker image'us kas kartą pushinant/darant PR |
+| 2026-07-05 | Pridėti `shellcheck` ir `compose-validate` CI job'ai; ištaisytas vienintelis realus radinys (`compose/rebuild.sh` trūko `cd ... \|\| exit`) ir nutildytas klaidingas teigiamas (`SC2163` dėl sąmoningo "export pagal dinaminį vardą" idiomo `start.sh`/`stop.sh`/`run.sh`) |
 
 ---
 
