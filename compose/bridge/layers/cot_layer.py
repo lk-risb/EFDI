@@ -219,8 +219,6 @@ _TOPIC_COT = {
     # ACOUSTIC / RF SENSOR SITES — sensor box; recolors green/yellow/red by
     # last_detection_ts (see _sensor_alert_cot_type), same icon throughout
     "land/**/neutral/sensor/**": (_sensor_alert_cot_type, LAND_STALE_S * 2),
-    # GPS JAMMING / SPOOFING THREATS — hostile ground EW equipment
-    "env/gps/ew/hostile/threat/**": ("a-h-G-E-X", ENV_STALE_S * 2),
 }
 
 # ATC / ground-station callsigns that appear in ADS-B feeds.
@@ -1191,33 +1189,6 @@ def _build_remarks(track: dict, cot_type: str) -> str:
                     alert_l.append("AUDIO: {}".format(audio_url))
             _sec("SENSOR", sensor_l)
             _sec("ALERT",  alert_l)
-
-        elif src in ("gpsjam", "eurocontrol", "custom") and track.get("event_type") in ("jamming", "spoofing", "unknown"):  # GPS EW
-            threat_l = []; pos_l = []
-            if time_str: threat_l.append("TIME: {}".format(time_str))
-            etype  = track.get("event_type", "unknown").upper()
-            sev    = track.get("severity",   "unknown").upper()
-            prob   = track.get("jam_prob", -1.0)
-            radius = track.get("radius_km", 0.0)
-            detail = track.get("detail", "")
-            threat_l.append("TYPE: GPS {}".format(etype))
-            threat_l.append("SEVERITY: {}".format(sev))
-            if prob >= 0:
-                threat_l.append("PROBABILITY: {:.0%}".format(prob))
-            if radius:
-                threat_l.append("RADIUS: {} km".format(round(radius)))
-            threat_l.append("SRC: {}".format(src.upper()))
-            rep = track.get("report_utc", "")
-            if rep:
-                threat_l.append("REPORTED: {}".format(rep))
-            if detail:
-                threat_l.append("NOTE: {}".format(detail))
-            if lat is not None: pos_l.append("LAT: {:.5f}°".format(round(lat, 5)))
-            if lon is not None: pos_l.append("LON: {:.5f}°".format(round(lon, 5)))
-            if lat is not None and lon is not None:
-                pos_l.extend(_mgrs_lines(lat, lon))
-            _sec("GPS EW THREAT", threat_l)
-            _sec("POSITION",      pos_l)
 
         elif src in ("openmeteo", "meteolt", "yrno", "windy"):   # WEATHER
             place = (track.get("place_name") or track.get("place_code") or src).upper()

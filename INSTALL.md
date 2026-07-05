@@ -549,6 +549,17 @@ The Config tab exposes structured fields, not raw JSON5 — each save re-renders
 
 Three deliberately **not** exposed in the GUI (too easy to lock out every client, including the GUI itself, if misconfigured): `access_control.enabled`, `default_permission`, `enable_mtls`. Edit those directly in `zenoh/config.json5` if ever needed.
 
+### Isolated test router
+
+For local pub/sub testing without touching the real pod or its fabric connection: `zenoh-router-test`, behind the `test` compose profile (never starts with the rest of the stack).
+
+```bash
+cd compose
+docker compose --profile test up -d zenoh-router-test
+```
+
+Config lives at `${POD_STATE_DIR}/zenoh-test/config.json5` — same certs/namespace/ACL as the real router, but different ports (`7457` mTLS / `7458` TCP, vs. `7447`/`7448`) and **no `connect.endpoints`** (never dials the fabric). Safe to leave running alongside the real router; nothing conflicts.
+
 ---
 
 ## Changelog
@@ -578,6 +589,9 @@ Three deliberately **not** exposed in the GUI (too easy to lock out every client
 | 2026-07-05 | Zenoh admin GUI: FastAPI + React panel for router status and `config.json5` editing, styled after the TAK admin panel |
 | 2026-07-05 | Fixed `zenoh-router.json5.tmpl` drift: template was missing the plaintext `tcp/0.0.0.0:7448` local listen endpoint that the live config already had |
 | 2026-07-05 | Zenoh admin GUI config tab: added `verify_name_on_connect` and storage-plugin-loading toggles; fabric endpoint now entered as separate Host/Port fields with one-click presets instead of a raw `tls/host:port` string |
+| 2026-07-05 | Zenoh admin GUI: added `/api/health` (CPU/RAM/disk/uptime/load/network/cert-expiry, TAK-admin-panel style) to the dashboard |
+| 2026-07-05 | Fixed SPA routing bug: direct navigation/refresh/back-button to any GUI sub-route (`/config`, `/admin-users`) 404'd as raw JSON instead of loading the app — the fallback code caught `fastapi.HTTPException`, but `StaticFiles.get_response` raises `starlette.exceptions.HTTPException` (a different, parent class), so the catch never matched |
+| 2026-07-05 | Added isolated `zenoh-router-test` service (`test` compose profile) for local pub/sub testing without touching the real pod or its fabric connection |
 
 ---
 
