@@ -114,9 +114,8 @@ Never run `git commit` in this repo. Stage changes and describe them — the use
 ### Security constraints (never violate)
 - Certs never in repo
 - `compose/.env` is gitignored — stays local only
-- `BUNDLE_DIR`, `register_topics.sh` — gitignored, never commit
+- `BUNDLE_DIR` — gitignored, never commit
 - Personal namespace UUID removed from all tracked files; bridges read from `PARTNER_NAMESPACE` env var
-- `EFDI_PORTAL_KEY`, `EFDI_VENDOR_SLUG` — from environment only, never hardcoded
 - Real API keys in local `compose/.env` only
 
 ### Known recurring bug patterns (found across multiple audit passes)

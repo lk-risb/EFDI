@@ -6,7 +6,8 @@
 // from the signed bundle (the source of truth) or the active profile.
 //
 // Placeholders (all supplied by first-boot.sh from the profile + the goat-cli-extracted certs):
-//   ${ZENOH_LISTEN_PORT}      local listen port for pod-side clients (goat-cli, audit-sink)
+//   ${ZENOH_LISTEN_PORT}      mTLS listen port for mesh-facing pod-side clients (goat-cli, audit-sink)
+//   ${ZENOH_LOCAL_TCP_PORT}   plaintext TCP listen port for local-only clients (bridges, zenoh-admin GUI)
 //   ${ZENOH_FABRIC_ENDPOINT}  the goat-side endpoint the pod dials OUT to (ingress gateway / router).
 //                             SOURCE OF TRUTH = the bundle's goat_cli_extras.router_endpoint
 //                             (first-boot reads it from the bundle-derived profile.toml); the
@@ -17,12 +18,17 @@
 //   ${POD_CERT_PEM}           pod leaf cert  (from goat profile init: mtls.cert.pem)
 //   ${POD_KEY_PEM}            pod leaf key   (from goat profile init: mtls.key.pem)
 //   ${CA_ROOTS_PEM}           CA roots       (from goat profile init: ca-roots.pem) — from the BUNDLE
+//   ${ZENOH_VERIFY_NAME_ON_CONNECT}    true/false — verify the fabric endpoint's cert SAN against
+//                                       the DNS name dialed (default false: gateway cert SAN binds
+//                                       the mesh IP, not the DNS name)
+//   ${ZENOH_PLUGINS_LOADING_ENABLED}   true/false — whether the storage_manager plugin loads at all
 {
   mode: "router",
 
-  // Local listen for pod-side clients (goat-cli pub/sub, audit-sink subscribe) over mTLS.
+  // Local listen: mTLS for mesh-facing pod-side clients (goat-cli, audit-sink), plaintext TCP
+  // for local-only clients (bridges, zenoh-admin GUI) — matches the "local-tcp" ACL subject below.
   listen: {
-    endpoints: ["tls/0.0.0.0:${ZENOH_LISTEN_PORT}"],
+    endpoints: ["tls/0.0.0.0:${ZENOH_LISTEN_PORT}", "tcp/0.0.0.0:${ZENOH_LOCAL_TCP_PORT}"],
   },
 
   // Dial OUT to the goat-side receiver (ingress gateway per ADR 1020, or a router endpoint for
@@ -44,13 +50,13 @@
         enable_mtls: true,
         // Router/gateway cert SAN binds the mesh IP, not the DNS name we dial — match the
         // audit-subscriber + the sandbox router posture.
-        verify_name_on_connect: false,
+        verify_name_on_connect: ${ZENOH_VERIFY_NAME_ON_CONNECT},
       },
     },
   },
 
   plugins_loading: {
-    enabled: true,
+    enabled: ${ZENOH_PLUGINS_LOADING_ENABLED},
     search_dirs: ["/", "/opt/zenoh/plugins"],
   },
 
@@ -92,6 +98,16 @@
         permission: "allow",
         key_exprs: ["${INBOUND_NAMESPACE}/**"],
       },
+      {
+        // Admin-space introspection: read-only (query/reply), no put/delete/subscribe —
+        // lets a local mTLS client (e.g. the Zenoh admin GUI) read the router's own
+        // session/transport info via `get("@/**")`. Never grants write access to @/**.
+        id: "pod-admin-introspect",
+        messages: ["query", "reply"],
+        flows: ["egress", "ingress"],
+        permission: "allow",
+        key_exprs: ["@/**"],
+      },
     ],
     subjects: [
       {
@@ -99,9 +115,15 @@
         id: "mtls-peer",
         link_protocols: ["tls"],
       },
+      {
+        // Local plaintext TCP clients (bridges + local tooling on the pod's own host).
+        id: "local-tcp",
+        link_protocols: ["tcp"],
+      },
     ],
     policies: [
-      { rules: ["pod-firstparty", "pod-inbound"], subjects: ["mtls-peer"] },
+      { rules: ["pod-firstparty", "pod-inbound", "pod-admin-introspect"], subjects: ["mtls-peer"] },
+      { rules: ["pod-firstparty", "pod-inbound", "pod-admin-introspect"], subjects: ["local-tcp"] },
     ],
   },
 }

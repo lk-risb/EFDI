@@ -495,6 +495,62 @@ In `layers/cot_layer.py`, add to `_TOPIC_COT`:
 
 ---
 
+## 10. Zenoh Admin GUI
+
+A web GUI for viewing router status and editing `zenoh/config.json5` without SSH access, styled after the TAK admin panel.
+
+### Setup
+
+Add to `compose/.env` (see `compose/.env.example` for the full block):
+
+```bash
+ZENOH_ADMIN_DB_USER=zenoh_admin
+ZENOH_ADMIN_DB_PASSWORD=<random>
+ZENOH_ADMIN_DB_PORT=5433                # non-default: avoids clashing with any other Postgres on the host
+ZENOH_ADMIN_SECRET_KEY=<openssl rand -hex 32>
+ZENOH_ADMIN_FIRST_USER=admin
+ZENOH_ADMIN_FIRST_PASS=<set once, then blank it out after first login>
+```
+
+`ZENOH_ADMIN_FIRST_PASS` only creates the first `superadmin` account if it doesn't already exist — it is safe to blank it out again after the first login (the account persists in Postgres).
+
+### Launching
+
+```bash
+cd compose
+docker compose up -d zenoh-admin-db zenoh-admin
+```
+
+Then open `http://<pod-host>:8890`.
+
+### Roles
+
+| Role | Dashboard | Config (view) | Config (edit + restart router) | Admin Users |
+| --- | --- | --- | --- | --- |
+| `readonly` | ✓ | | | |
+| `admin` | ✓ | ✓ | | |
+| `superadmin` | ✓ | ✓ | ✓ | ✓ |
+
+Saving a config edit validates it as JSON5 first, writes it to the mounted `${POD_STATE_DIR}/zenoh/config.json5`, then restarts the `zenoh-router` container — a syntax error is rejected before anything touches disk.
+
+### Config tab fields
+
+The Config tab exposes structured fields, not raw JSON5 — each save re-renders `host/zenoh-router.json5.tmpl` (the same template `first-boot.sh` uses) with the values below, so a saved config can never drift from the template's structure.
+
+| Field | Effect |
+| --- | --- |
+| Local mTLS port | Mesh-facing listen port for goat-cli, audit-sink (default 7447) |
+| Local TCP port | Plaintext local-only listen port for bridges + this GUI (default 7448) |
+| Fabric endpoint | The goat-side/peer endpoint this pod dials out to — entered as separate Host + Port fields (scheme is always `tls`, never exposed); one-click presets are available for previously-used endpoints |
+| Partner namespace | This pod's first-party publish/subscribe prefix (its slot) — **changing this requires the other side of the fabric to also allow the new value in its ACL, or publishes silently stop reaching it** |
+| Inbound namespace | Bilateral prefix the fabric publishes TO this pod |
+| Verify name on connect | Off by default — the gateway cert SAN binds the mesh IP, not the DNS name dialed; turning this on can break the fabric connection |
+| Storage plugin loading | Off means new subscribers no longer get a last-known value via `get()` — publish/subscribe still works |
+
+Three deliberately **not** exposed in the GUI (too easy to lock out every client, including the GUI itself, if misconfigured): `access_control.enabled`, `default_permission`, `enable_mtls`. Edit those directly in `zenoh/config.json5` if ever needed.
+
+---
+
 ## Changelog
 
 | Date | Change |
@@ -519,6 +575,9 @@ In `layers/cot_layer.py`, add to `_TOPIC_COT`:
 | 2026-06-23 | Documentation overhaul: `INSTALL.md` (English), `DIEGIMAS.md` (Lithuanian), `README.md` rewritten as architecture overview |
 | 2026-06-23 | ASTERIX CAT-34 I034/120 decoder: radar self-reports WGS-84 position from live stream — no manual coordinate config required |
 | 2026-06-23 | Mobile radar support: position, speed, and course derived from successive I034/120 reports; ATAK shows motion trail on vehicle-mounted radars |
+| 2026-07-05 | Zenoh admin GUI: FastAPI + React panel for router status and `config.json5` editing, styled after the TAK admin panel |
+| 2026-07-05 | Fixed `zenoh-router.json5.tmpl` drift: template was missing the plaintext `tcp/0.0.0.0:7448` local listen endpoint that the live config already had |
+| 2026-07-05 | Zenoh admin GUI config tab: added `verify_name_on_connect` and storage-plugin-loading toggles; fabric endpoint now entered as separate Host/Port fields with one-click presets instead of a raw `tls/host:port` string |
 
 ---
 
