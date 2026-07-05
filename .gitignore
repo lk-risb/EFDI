@@ -5,3 +5,6 @@ compose/certs/
 logs/
 .pids/
 *.cbor
+node_modules/
+compose/zenoh-admin/ui/dist/
+compose/zenoh-admin/ui/src/routeTree.gen.ts

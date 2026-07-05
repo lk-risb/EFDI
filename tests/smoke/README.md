@@ -21,8 +21,7 @@ This is the gate that runs in CI. TODO: implement `loopback.sh` + a stub-remote 
 ### 2. Live EFDI-sandbox validation (slow step, on the validation host)
 
 Run the real `first-boot.sh efdi <bundle.cbor>` against the **live EFDI sandbox fabric**
-(sandbox router directly; no partner-net, no release-bridge — see
-`../../docs/efdi-vs-production.md`), then:
+(sandbox router directly; no partner-net, no release-bridge), then:
 
 - `goat doctor` → mesh up, router handshake, fabric reachable.
 - `goat-cli pub release/<partner>/test/...` → observed on the fabric.

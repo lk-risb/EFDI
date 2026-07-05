@@ -497,6 +497,62 @@ SERVICES=(... <pavadinimas> ...)
 
 ---
 
+## 10. Zenoh administravimo GUI
+
+Web GUI stebėti routerio būseną ir redaguoti `zenoh/config.json5` be SSH prieigos, stiliaus pavyzdys — TAK admin panelė.
+
+### Nustatymas
+
+Pridėkite į `compose/.env` (pilną bloką žr. `compose/.env.example`):
+
+```bash
+ZENOH_ADMIN_DB_USER=zenoh_admin
+ZENOH_ADMIN_DB_PASSWORD=<atsitiktinis>
+ZENOH_ADMIN_DB_PORT=5433                # ne numatytasis: nesikerta su kitu Postgres serveriu hoste
+ZENOH_ADMIN_SECRET_KEY=<openssl rand -hex 32>
+ZENOH_ADMIN_FIRST_USER=admin
+ZENOH_ADMIN_FIRST_PASS=<nustatykite vieną kartą, po pirmo prisijungimo galite ištrinti>
+```
+
+`ZENOH_ADMIN_FIRST_PASS` sukuria pirmą `superadmin` paskyrą tik jei ji dar neegzistuoja — po pirmo prisijungimo šį kintamąjį saugu vėl palikti tuščią (paskyra išlieka Postgres duomenų bazėje).
+
+### Paleidimas
+
+```bash
+cd compose
+docker compose up -d zenoh-admin-db zenoh-admin
+```
+
+Tada atidarykite `http://<pod-host>:8890`.
+
+### Rolės
+
+| Rolė | Skydelis | Konfigūracija (peržiūra) | Konfigūracija (redagavimas + routerio perkrovimas) | Admin vartotojai |
+| --- | --- | --- | --- | --- |
+| `readonly` | ✓ | | | |
+| `admin` | ✓ | ✓ | | |
+| `superadmin` | ✓ | ✓ | ✓ | ✓ |
+
+Išsaugant konfigūracijos pakeitimą, jis pirma patikrinamas kaip galiojantis JSON5, tada įrašomas į primontuotą `${POD_STATE_DIR}/zenoh/config.json5`, ir tik tada perkraunamas `zenoh-router` konteineris — sintaksės klaida atmetama dar prieš paliečiant diską.
+
+### Konfigūracijos skirtuko laukai
+
+Konfigūracijos skirtukas rodo struktūrizuotus laukus, ne žalią JSON5 — kiekvienas išsaugojimas iš naujo atvaizduoja `host/zenoh-router.json5.tmpl` (tą patį šabloną, kurį naudoja `first-boot.sh`) su žemiau esančiomis reikšmėmis, todėl išsaugota konfigūracija niekada negali nukrypti nuo šablono struktūros.
+
+| Laukas | Poveikis |
+| --- | --- |
+| Vietinis mTLS portas | Tinklui skirtas listen portas goat-cli, audit-sink (numatytasis 7447) |
+| Vietinis TCP portas | Plaintext, tik vietinis listen portas bridge'ams + šiam GUI (numatytasis 7448) |
+| Fabric endpoint | Goat pusės / kolegos endpoint, į kurį šis pod'as skambina — įvedamas kaip atskiri Host + Port laukai (schema visada `tls`, niekada nerodoma); yra vieno paspaudimo šablonai anksčiau naudotiems endpoint'ams |
+| Partner namespace | Šio pod'o first-party publish/subscribe prefiksas (jo slotas) — **keičiant šią reikšmę, kita fabric pusė taip pat turi leisti naują reikšmę savo ACL, kitaip publikacijos tyliai nustoja pasiekti** |
+| Inbound namespace | Bilateral prefiksas, kurį fabric publikuoja Į šį pod'ą |
+| Verify name on connect | Pagal nutylėjimą išjungta — gateway sertifikato SAN susietas su tinklo IP, ne su skambinamu DNS vardu; įjungus gali sulūžti fabric ryšys |
+| Storage plugin loading | Išjungus, nauji subscriberiai per `get()` nebegauna paskutinės žinomos reikšmės — publish/subscribe vis tiek veikia |
+
+Trys sąmoningai **nerodomi** GUI (per lengva užrakinti visus klientus, įskaitant patį GUI, jei sukonfigūruota blogai): `access_control.enabled`, `default_permission`, `enable_mtls`. Jei reikia, redaguokite juos tiesiogiai `zenoh/config.json5` faile.
+
+---
+
 ## Pakeitimų žurnalas
 
 | Data | Pakeitimas |
@@ -521,6 +577,9 @@ SERVICES=(... <pavadinimas> ...)
 | 2026-06-23 | Dokumentacijos atnaujinimas: `INSTALL.md` (anglų), `DIEGIMAS.md` (lietuvių), `README.md` perrašytas kaip architektūros apžvalga |
 | 2026-06-23 | ASTERIX CAT-34 I034/120 dekoderis: radaras pats praneša WGS-84 poziciją iš gyvo srauto — rankinis koordinačių nustatymas nebereikalingas |
 | 2026-06-23 | Mobiliojo radaro palaikymas: pozicija, greitis ir kursas gaunami iš nuoseklių I034/120 pranešimų; ATAK rodo judėjimo taką ant transporto priemonėje montuojamų radarų |
+| 2026-07-05 | Zenoh administravimo GUI: FastAPI + React panelė routerio būsenai ir `config.json5` redagavimui, stiliaus pavyzdys — TAK admin panelė |
+| 2026-07-05 | Ištaisytas `zenoh-router.json5.tmpl` neatitikimas: šablone trūko plaintext `tcp/0.0.0.0:7448` vietinio listen endpoint, kurį gyva konfigūracija jau turėjo |
+| 2026-07-05 | Zenoh admin GUI konfigūracijos skirtukas: pridėti `verify_name_on_connect` ir storage plugin loading perjungikliai; fabric endpoint dabar įvedamas kaip atskiri Host/Port laukai su vieno paspaudimo šablonais, vietoj žalio `tls/host:port` teksto |
 
 ---
 

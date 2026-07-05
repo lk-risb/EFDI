@@ -19,7 +19,7 @@ internal substrate. Concretely, a change must not introduce:
 - Stack-specific values hardcoded into the pod scaffold (see "No over-specification" below).
 
 If you need to reference an internal decision, describe it in plain prose or summarize it into a
-self-contained doc under `docs/` (as `docs/partner-contract.md` does for the boundary contract).
+self-contained doc under `docs/`.
 
 ## No over-specification against any stack
 
@@ -30,9 +30,8 @@ arrives at runtime from the **signed join bundle** (the source of truth) or, for
 values the bundle does not carry, the active **profile** under `profiles/<env>/`.
 
 When you add a feature, ask: *does this bake an EFDI / jailbreak / production assumption into the
-pod?* If so, lift it into the bundle contract or a profile var. The deltas table in
-[`docs/efdi-vs-production.md`](docs/efdi-vs-production.md) is the reference for what varies per
-stack and where it legitimately lives.
+pod?* If so, lift it into the bundle contract or a profile var — see `profiles/<env>/` for what
+varies per stack and where it legitimately lives.
 
 ## How we work
 
@@ -45,10 +44,7 @@ stack and where it legitimately lives.
 
 ## Where things live
 
-- `docs/partner-contract.md` — the boundary contract a pod meets (self-contained).
 - `docs/architecture.md` — the bundle shape + data flow.
-- `docs/partner-run-guide.md` — how a partner runs a pod.
-- `docs/efdi-vs-production.md` — what varies per stack and how the pod stays agnostic.
 - `clients/` — the connect SDKs + worked examples partners build against.
 - `profiles/` — per-environment config (the only place stack-specific values belong).
 - `host/`, `compose/` — the stack-agnostic pod scaffold.
