@@ -15,8 +15,7 @@ these are the "show me working code" companions.
 The last four are the "resilient / advanced" patterns — reach for them on the
 streams that actually need catch-up, must-deliver, or presence. For loss-tolerant
 telemetry, plain `put` + Tier-0 reconciliation is the right default; don't pay for
-guarantees a stream doesn't need. For *which* reliability each stream needs and how
-the fabric protects mission traffic, read [`../docs/quality-of-service.md`](../docs/quality-of-service.md).
+guarantees a stream doesn't need.
 
 Connection config comes from the goat profile the pod gives you (router endpoint
 + mTLS cert/key/CA-roots). See each script's header for the env vars.

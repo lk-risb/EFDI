@@ -2,16 +2,13 @@
 #
 # Runs the containerizable data-plane services. The WireGuard mesh client (goat-clientd)
 # runs on the HOST as a systemd service (see ../host/), NOT here — see ../docs/architecture.md.
-# The goat-doctor health probe also runs as a HOST systemd timer (goat-cli is no-daemon by
-# design, ADR 1019, and has no published container image) — see ../host/goat-doctor.* .
 #
 # network_mode: host so each service binds the pod's mesh IP directly (the mesh is maintained
 # by the host's goat-clientd). No netns sidecar, no NAT gymnastics.
 #
 # Values come from .env (copied from .env.example, populated by first-boot.sh from the active
-# profile + the minted artifacts). Images are pinned by digest (ADR 0859). Both services here
-# use ALREADY-PUBLISHED images — no local build context (the earlier ../audit + ../doctor
-# build-context stubs were an oversight; corrected to reuse published artifacts).
+# profile + the minted artifacts). Images are pinned by digest (ADR 0859). zenoh-router uses an
+# ALREADY-PUBLISHED image — no local build context.
 
 services:
   zenoh-router:
@@ -36,33 +33,6 @@ services:
       interval: 15s
       timeout: 5s
       retries: 5
-
-  audit-sink:
-    # Reuse the PUBLISHED goat-audit-subscriber image (a standalone Rust Zenoh client). No build.
-    # v0 runs it in OBSERVE-ONLY mode: it subscribes over mTLS and emits Prometheus metrics, but
-    # without AUDIT_SUBSCRIBER_S3_ENDPOINT it does NOT durably persist. Durable local audit
-    # (NDJSON on the LUKS volume, or a co-located MinIO) is a documented v0.x follow-up — see
-    # ../docs/architecture.md "Audit". For the EC2 functionality test, observe-only proves the
-    # audit data path (subscribe + count) without standing up object storage.
-    image: ghcr.io/desertgoat/goat-audit-subscriber:sha-51d9a8b@sha256:03cd651e180863d2ef4d32a881515c3e8f70b60b21f0484a46fd501b3903951d
-    container_name: goat-moon-audit-sink
-    network_mode: host
-    restart: unless-stopped
-    depends_on:
-      zenoh-router:
-        condition: service_healthy
-    environment:
-      # Real audit-subscriber contract (AUDIT_SUBSCRIBER_*). Subscribe to the pod's namespace +
-      # inbound goat on the LOCAL router over mTLS. No S3 endpoint => observe-only.
-      - AUDIT_SUBSCRIBER_ENDPOINT=${ZENOH_LOCAL_ENDPOINT:?set in .env}
-      - AUDIT_SUBSCRIBER_KEY=${PARTNER_NAMESPACE:?set in .env}/**
-      - AUDIT_SUBSCRIBER_ID=${POD_ID:-moon-pod}
-      - AUDIT_SUBSCRIBER_CERT=/etc/zenoh/tls/pod-cert.pem
-      - AUDIT_SUBSCRIBER_KEY_FILE=/etc/zenoh/tls/pod-key.pem
-      - AUDIT_SUBSCRIBER_ROOT_CA=/etc/zenoh/tls/ca-roots.pem
-      - AUDIT_SUBSCRIBER_METRICS_BIND=0.0.0.0:9303
-    volumes:
-      - ${POD_STATE_DIR}/zenoh/tls:/etc/zenoh/tls:ro   # mTLS leaf to subscribe (pod's own cert)
 
   opensky-bridge:
     build:
@@ -441,3 +411,52 @@ services:
       disable: true
     profiles:
       - sitaware
+
+  zenoh-admin-db:
+    image: postgres:16-alpine
+    container_name: goat-moon-zenoh-admin-db
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=${ZENOH_ADMIN_DB_USER:?set ZENOH_ADMIN_DB_USER in .env}
+      - POSTGRES_PASSWORD=${ZENOH_ADMIN_DB_PASSWORD:?set ZENOH_ADMIN_DB_PASSWORD in .env}
+      - POSTGRES_DB=admin
+      - PGPORT=${ZENOH_ADMIN_DB_PORT:-5433}
+    volumes:
+      - ${POD_STATE_DIR}/zenoh-admin/pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${ZENOH_ADMIN_DB_USER:-zenoh_admin} -p ${ZENOH_ADMIN_DB_PORT:-5433}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  zenoh-admin:
+    build:
+      context: ./zenoh-admin
+    container_name: goat-moon-zenoh-admin
+    network_mode: host
+    restart: unless-stopped
+    depends_on:
+      zenoh-router:
+        condition: service_healthy
+      zenoh-admin-db:
+        condition: service_healthy
+    environment:
+      - GOAT_CERT_DIR=/certs
+      - PARTNER_NAMESPACE=${PARTNER_NAMESPACE}
+      - ZENOH_LOCAL_ENDPOINT=${ZENOH_ADMIN_ZENOH_ENDPOINT:-tcp/127.0.0.1:7448}
+      - ZENOH_CONFIG_PATH=/zenoh-config/config.json5
+      - ZENOH_TEMPLATE_PATH=/zenoh-config-template/zenoh-router.json5.tmpl
+      - ZENOH_ADMIN_DB_USER=${ZENOH_ADMIN_DB_USER:?set ZENOH_ADMIN_DB_USER in .env}
+      - ZENOH_ADMIN_DB_PASSWORD=${ZENOH_ADMIN_DB_PASSWORD:?set ZENOH_ADMIN_DB_PASSWORD in .env}
+      - ZENOH_ADMIN_DB_ADDRESS=127.0.0.1:${ZENOH_ADMIN_DB_PORT:-5433}
+      - ZENOH_ADMIN_SECRET_KEY=${ZENOH_ADMIN_SECRET_KEY:?set ZENOH_ADMIN_SECRET_KEY in .env}
+      - ZENOH_ADMIN_FIRST_USER=${ZENOH_ADMIN_FIRST_USER:-admin}
+      - ZENOH_ADMIN_FIRST_PASS=${ZENOH_ADMIN_FIRST_PASS:-}
+    volumes:
+      - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
+      - ${POD_STATE_DIR}/zenoh:/zenoh-config
+      - ../host/zenoh-router.json5.tmpl:/zenoh-config-template/zenoh-router.json5.tmpl:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      disable: true

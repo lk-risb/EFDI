@@ -1,0 +1,8 @@
+@import "tailwindcss";
+
+@theme {
+  --color-accent-fill: var(--brand-accent-fill, #d4d4d8);
+  --color-accent-fill-hover: var(--brand-accent-fill-hover, #e4e4e7);
+  --color-accent-text: var(--brand-accent-text, #18181b);
+  --color-accent-ring: var(--brand-accent-ring, #a1a1aa);
+}

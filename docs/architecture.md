@@ -1,8 +1,7 @@
 # moon-pod — v0 architecture
 
 The v0 "secure-pipe core": the smallest bundle that moves data **both directions** securely
-and stays **partner-custodial**. See [`../README.md`](../README.md) for scope and [`partner-contract.md`](partner-contract.md) for the
-boundary contract.
+and stays **partner-custodial**. See [`../README.md`](../README.md) for scope.
 
 ## Component placement: host vs compose
 
@@ -18,16 +17,14 @@ the data-plane services run in a small **docker-compose** bundle on host network
 │                                                                                      │
 │  on PATH:                                                                            │
 │    goat-cli            ← operator surface: doctor, topic ls, pub, sub (transparency) │
-│    goat-doctor.timer   ← host systemd timer: goat doctor --json → status blob        │
-│                          (goat-cli is no-daemon, ADR 1019; no container image)       │
 │                                                                                      │
 │  docker compose (network_mode: host — binds the pod's mesh IP directly):             │
-│    ┌─────────────┐   ┌────────────┐                                                  │
-│    │ zenoh-router│──▶│ audit-sink │   (published images, no local build)            │
-│    └─────┬───────┘   └─────┬──────┘                                                  │
-│          │ mTLS, ACL       │ subscribe <ns>/** over mTLS (observe-only in v0;        │
-│          │ <ns>/**         │ durable NDJSON/MinIO is a v0.x follow-up)               │
-│          ▼                 ▼                                                          │
+│    ┌─────────────┐                                                                   │
+│    │ zenoh-router│   (published image, no local build)                              │
+│    └─────┬───────┘                                                                   │
+│          │ mTLS, ACL                                                                 │
+│          │ <ns>/**                                                                   │
+│          ▼                                                                           │
 │   (over the mesh maintained by goat-clientd)                                          │
 └──────────────────────────────────────────────────────────────────────────────────────┘
             │ WireGuard mesh
@@ -53,18 +50,12 @@ same clean routing a netns sidecar would give, but coupled to the stable host.
 1. Host: LUKS unlock → Docker up → `goat-clientd` (systemd) brings the mesh up.
 2. `first-boot.sh` (once): verify bundle → lay down WG + Zenoh mTLS certs → render `.env` →
    `goat-clientd --import-bundle` → `docker compose up -d`.
-3. compose: `zenoh-router` (dials the fabric over the mesh) → `audit-sink` (subscribes once the
-   router is local). `goat-doctor` runs as a HOST systemd timer (not compose) since goat-cli is
-   no-daemon and has no container image.
+3. compose: `zenoh-router` dials the fabric over the mesh.
 
 ### Service images (corrected from the v0 scaffold)
 
-Both compose services use **already-published images** — no local Dockerfile/build context:
+The compose service uses an **already-published image** — no local Dockerfile/build context:
 - `zenoh-router`: upstream `eclipse/zenoh:1.9.0` (digest-pinned, ADR 0858).
-- `audit-sink`: the published `ghcr.io/desertgoat/goat-audit-subscriber` image (the standalone Rust
-  Zenoh client), run in **observe-only** mode in v0 (subscribe + Prometheus metrics, no S3
-  endpoint → no durable write). Durable local audit (NDJSON on the LUKS volume, or a co-located
-  MinIO) is a documented v0.x follow-up.
 
 The earlier `../audit` and `../doctor` build-context stubs were an oversight (no Dockerfiles →
 `docker compose up` would fail); removed in favor of the published image + the host doctor timer.
@@ -73,7 +64,7 @@ The earlier `../audit` and `../doctor` build-context stubs were an oversight (no
 
 - **Outbound** (partner → fabric): partner publishes under `release/<partner>/**`; the pod's
   Zenoh router carries it over the mesh **to the goat-side ingress gateway** (see "Receiver
-  side" below), not directly into a core router. Audited locally by `audit-sink`.
+  side" below), not directly into a core router.
 - **Inbound** (fabric → partner): the partner subscribes to `release/goat/**` (when
   bilateral); v0 consumption is **raw Zenoh via `goat-cli sub`** (translator is post-v0).
 
@@ -93,8 +84,7 @@ goat↔goat (Tier-1) federation. That has a concrete consequence for the data pa
   fabric. The required ACL change (ingress/egress `put` split, default-deny on un-scoped
   ingress) is in ADR 1020.
 - Every admitted sample carries provenance (verified peering identity, original key,
-  timestamps) into the goat audit trail — independent of, and complementary to, the pod's own
-  local audit-sink.
+  timestamps) into the goat audit trail.
 
 **Open reconciliation (a decision for the receiver build, not invented here):** an onboarded
 moon-pod publishing *its own first-party* data under `release/<partner>/**` is authorized and
@@ -116,15 +106,14 @@ admitted shape is the receiver's concern.
 
 ### Workload identity (optional overlay, Phase 3+)
 
-The pod's containers can additionally carry **attested workload identity** via a SPIRE/SPIFFE overlay — a **first-class optional overlay**, layered like the local-IdP choice. It is **not** required: the base pod meets the partner-receiver contract without it, and the easy deploy path stays an honest default. A partner who wants (or is required to have) cryptographically-attested workload identity reaches for the overlay; offering the simple default does not withhold the capability. SPIRE runs inside the pod (sovereignty-clean — goat hosts no partner SVIDs); federation exchanges only public trust bundles so the goat-side ingress gateway can verify the pod router's identity. Design + rationale: [`workload-identity-spire-overlay.md`](workload-identity-spire-overlay.md).
+The pod's containers can additionally carry **attested workload identity** via a SPIRE/SPIFFE overlay — a **first-class optional overlay**, layered like the local-IdP choice. It is **not** required: the base pod meets the partner-receiver contract without it, and the easy deploy path stays an honest default. A partner who wants (or is required to have) cryptographically-attested workload identity reaches for the overlay; offering the simple default does not withhold the capability. SPIRE runs inside the pod (sovereignty-clean — goat hosts no partner SVIDs); federation exchanges only public trust bundles so the goat-side ingress gateway can verify the pod router's identity.
 
 ## Profiles (environment shape)
 
 `profiles/<env>/` carries everything that differs between deployments (endpoints, ACL subject
 axis, namespace, retention, goat-client mode). `efdi/` is concrete; `production/` is a
 documented TODO seam (ADR 0844 unsettled). The compose stack + scripts are identical across
-environments; only the profile + the signed bundle change. See
-[`efdi-vs-production.md`](efdi-vs-production.md).
+environments; only the profile + the signed bundle change.
 
 ## Provenance + self-containment
 
@@ -141,5 +130,3 @@ principles that keep it cleanly standalone:
   arrives at first-boot from the **signed join bundle** plus the active **profile**
   (`profiles/<env>/`). Switching stacks is a different bundle + profile, never a code change.
 
-The boundary contract (the seven requirements + Tier-2 ingress) is documented self-contained in
-[`partner-contract.md`](partner-contract.md).

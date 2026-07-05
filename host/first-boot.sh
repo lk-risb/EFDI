@@ -41,13 +41,16 @@ source "$PROFILE_ENV"
 : "${POD_STATE_DIR:=/var/lib/goat-moon}"
 : "${GOAT_CLIENT_MODE:=combined}"
 : "${ZENOH_LISTEN_PORT:=7447}"
+: "${ZENOH_LOCAL_TCP_PORT:=7448}"
+: "${ZENOH_VERIFY_NAME_ON_CONNECT:=false}"
+: "${ZENOH_PLUGINS_LOADING_ENABLED:=true}"
 : "${PARTNER_NAMESPACE:?PARTNER_NAMESPACE must be set in the profile}"
 # INBOUND_NAMESPACE: bilateral prefix the fabric publishes TO the pod (profile-driven, not
 # hardcoded to any stack). Default to the pod's own namespace so the rendered ACL is always valid
 # even when no bilateral inbound is granted yet.
 : "${INBOUND_NAMESPACE:=${PARTNER_NAMESPACE}}"
 # ZENOH_FABRIC_ENDPOINT: profile fallback ONLY; the bundle's router_endpoint takes precedence
-# (resolved from the bundle-derived profile.toml in step [3/6]).
+# (resolved from the bundle-derived profile.toml in step [3/5]).
 : "${ZENOH_FABRIC_ENDPOINT:=}"
 
 echo "==> goat-moon-pod first-boot (profile=${PROFILE}, state=${POD_STATE_DIR})"
@@ -55,15 +58,15 @@ echo "    WARNING: ${POD_STATE_DIR} MUST be on the partner's LUKS-encrypted volu
 
 GOAT_PROFILE_DIR="${POD_STATE_DIR}/goat-cli"
 ZENOH_TLS_DIR="${POD_STATE_DIR}/zenoh/tls"
-mkdir -p "${POD_STATE_DIR}"/{zenoh/rocksdb,audit,doctor} "${GOAT_PROFILE_DIR}" "${ZENOH_TLS_DIR}"
+mkdir -p "${POD_STATE_DIR}/zenoh/rocksdb" "${GOAT_PROFILE_DIR}" "${ZENOH_TLS_DIR}"
 chmod 700 "${POD_STATE_DIR}" "${GOAT_PROFILE_DIR}"
 
-# --- [1/6] Verify bundle + extract certs + init operator profile (one goat-cli command) ----------
+# --- [1/5] Verify bundle + extract certs + init operator profile (one goat-cli command) ----------
 # `goat profile init` verifies the signature against the bundle's OWN CA roots (no compiled-in
 # pin), checks expiry/activation-deadline, and writes mtls.cert.pem / mtls.key.pem / ca-roots.pem
 # + portal token into the profile context dir. This is steps "verify", "extract certs", and
 # "init goat-cli" folded into one.
-echo "==> [1/6] goat profile init (verify bundle + extract mTLS material)"
+echo "==> [1/5] goat profile init (verify bundle + extract mTLS material)"
 # Idempotent: `goat profile init` refuses if a profile already exists (E_BUNDLE_INVALID with a
 # "use rotate" hint). On re-run, rotate instead (preserves the prior context at .bak/).
 if find "${GOAT_PROFILE_DIR}" -name mtls.cert.pem -print -quit 2>/dev/null | grep -q .; then
@@ -82,18 +85,18 @@ CERT_PATH="$(find "${GOAT_PROFILE_DIR}" -name mtls.cert.pem -print -quit 2>/dev/
   || { echo "goat profile init did not produce mtls.cert.pem under ${GOAT_PROFILE_DIR}"; exit 1; }
 CTX_DIR="$(dirname "${CERT_PATH}")"
 
-# --- [2/6] Lay the pod's Zenoh mTLS material from the goat-cli-extracted certs -------------------
-echo "==> [2/6] laying Zenoh mTLS certs from the goat-cli profile"
+# --- [2/5] Lay the pod's Zenoh mTLS material from the goat-cli-extracted certs -------------------
+echo "==> [2/5] laying Zenoh mTLS certs from the goat-cli profile"
 install -m 600 "${CTX_DIR}/mtls.cert.pem" "${ZENOH_TLS_DIR}/pod-cert.pem"
 install -m 600 "${CTX_DIR}/mtls.key.pem"  "${ZENOH_TLS_DIR}/pod-key.pem"
 install -m 600 "${CTX_DIR}/ca-roots.pem"  "${ZENOH_TLS_DIR}/ca-roots.pem"
 
-# --- [3/6] Render the pod Zenoh router config ---------------------------------------------------
+# --- [3/5] Render the pod Zenoh router config ---------------------------------------------------
 # The SIGNED BUNDLE is the single source of truth for the fabric router endpoint: `goat profile
 # init` wrote the bundle's goat_cli_extras.router_endpoint into profile.toml. We read it from
 # there so the pod follows the bundle, never a stale profile constant. The ZENOH_FABRIC_ENDPOINT
 # profile var is a fallback only (hand-driven validation, or a bundle that omitted the field).
-echo "==> [3/6] rendering Zenoh router config"
+echo "==> [3/5] rendering Zenoh router config"
 PROFILE_TOML="$(find "${GOAT_PROFILE_DIR}" -name profile.toml -print -quit 2>/dev/null || true)"
 BUNDLE_ROUTER=""
 if [ -n "${PROFILE_TOML}" ] && [ -f "${PROFILE_TOML}" ]; then
@@ -107,18 +110,19 @@ elif [ -n "${ZENOH_FABRIC_ENDPOINT}" ]; then
 else
   echo "ZENOH_FABRIC_ENDPOINT unset and the bundle carried no router_endpoint — cannot render"; exit 1
 fi
-export ZENOH_LISTEN_PORT ZENOH_FABRIC_ENDPOINT PARTNER_NAMESPACE INBOUND_NAMESPACE
+export ZENOH_LISTEN_PORT ZENOH_LOCAL_TCP_PORT ZENOH_FABRIC_ENDPOINT PARTNER_NAMESPACE INBOUND_NAMESPACE
+export ZENOH_VERIFY_NAME_ON_CONNECT ZENOH_PLUGINS_LOADING_ENABLED
 export POD_CERT_PEM="/etc/zenoh/tls/pod-cert.pem"   # in-container paths (compose mounts ZENOH_TLS_DIR ro)
 export POD_KEY_PEM="/etc/zenoh/tls/pod-key.pem"
 export CA_ROOTS_PEM="/etc/zenoh/tls/ca-roots.pem"
 envsubst \
-  '${ZENOH_LISTEN_PORT} ${ZENOH_FABRIC_ENDPOINT} ${PARTNER_NAMESPACE} ${INBOUND_NAMESPACE} ${POD_CERT_PEM} ${POD_KEY_PEM} ${CA_ROOTS_PEM}' \
+  '${ZENOH_LISTEN_PORT} ${ZENOH_LOCAL_TCP_PORT} ${ZENOH_FABRIC_ENDPOINT} ${PARTNER_NAMESPACE} ${INBOUND_NAMESPACE} ${ZENOH_VERIFY_NAME_ON_CONNECT} ${ZENOH_PLUGINS_LOADING_ENABLED} ${POD_CERT_PEM} ${POD_KEY_PEM} ${CA_ROOTS_PEM}' \
   < "${POD_DIR}/host/zenoh-router.json5.tmpl" \
   > "${POD_STATE_DIR}/zenoh/config.json5"
 echo "    wrote ${POD_STATE_DIR}/zenoh/config.json5"
 
-# --- [4/6] Bring up the host mesh daemon (goat-clientd) -----------------------------------------
-echo "==> [4/6] importing bundle into goat-clientd (mode=${GOAT_CLIENT_MODE})"
+# --- [4/5] Bring up the host mesh daemon (goat-clientd) -----------------------------------------
+echo "==> [4/5] importing bundle into goat-clientd (mode=${GOAT_CLIENT_MODE})"
 if command -v goat-clientd >/dev/null 2>&1; then
   # goat-client v0.2.0: --import-bundle + --headless + explicit --bundle/--socket/--config
   # confirmed against the release tag (docs/goat-client-v02-contract.md). Keep goat-clientd
@@ -138,8 +142,8 @@ else
   echo "    netbird, or install goat-clientd then re-run for the production mesh path."
 fi
 
-# --- [5/6] Render compose .env and start the data plane -----------------------------------------
-echo "==> [5/6] writing compose/.env and starting the data plane"
+# --- [5/5] Render compose .env and start the data plane -----------------------------------------
+echo "==> [5/5] writing compose/.env and starting the data plane"
 # F-174: the audit-sink (a mode:client Zenoh peer with multicast scouting) cannot open a session
 # against tls/127.0.0.1 — on network_mode:host it attempts a conflicting TLS listener on :7447
 # which zenohd already owns ("Permission denied"). Point it at the router's MESH IP instead. The
@@ -166,23 +170,6 @@ chmod 600 "${ENV_OUT}"
 echo "    wrote ${ENV_OUT}"
 
 ( cd "${POD_DIR}/compose" && docker compose up -d )
-
-# --- [6/6] Install the host goat-doctor probe timer (goat-cli, no container) ---------------------
-echo "==> [6/6] installing goat-doctor host timer"
-if command -v goat >/dev/null 2>&1; then
-  DOCTOR_SH="${POD_DIR}/host/goat-doctor.sh"
-  # Render the unit with the real script path + profile dir + pod state dir (honors a custom
-  # POD_STATE_DIR; no hardcoded paths).
-  GOAT_PROFILE_DIR="${GOAT_PROFILE_DIR}" POD_STATE_DIR="${POD_STATE_DIR}" DOCTOR_SH="${DOCTOR_SH}" \
-    envsubst '${GOAT_PROFILE_DIR} ${POD_STATE_DIR} ${DOCTOR_SH}' \
-    < "${POD_DIR}/host/goat-doctor.service.example" > /etc/systemd/system/goat-doctor.service
-  cp "${POD_DIR}/host/goat-doctor.timer.example" /etc/systemd/system/goat-doctor.timer
-  systemctl daemon-reload
-  systemctl enable --now goat-doctor.timer
-  echo "    goat-doctor.timer enabled (status blob at ${POD_STATE_DIR}/doctor/status.json)"
-else
-  echo "    skipped (goat not on PATH); install goat-cli then re-run step 6"
-fi
 
 echo "==> first-boot complete."
 echo "    health:  GOAT_PROFILE_DIR=${GOAT_PROFILE_DIR} goat doctor"

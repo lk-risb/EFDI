@@ -50,6 +50,7 @@ import time
 import xml.etree.ElementTree as ET
 import zlib
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 import zenoh
 
@@ -489,6 +490,26 @@ def _track_age(track: dict) -> str:
         return "({}h {}m ago)".format(int(age_s // 3600), int((age_s % 3600) // 60))
 
 
+# ponytail: bounding-box check instead of a real geo→timezone lookup (e.g. timezonefinder) —
+# every sensor this pod currently carries is in Lithuania. Swap for timezonefinder (per-track
+# IANA name from lat/lon) if a non-Lithuania sensor is ever added.
+_LT_BBOX = (53.9, 56.5, 20.9, 26.9)  # lat_min, lat_max, lon_min, lon_max
+
+
+def _local_clock_suffix(ts, lat, lon) -> str:
+    """Local wall-clock next to UTC for stat cards, e.g. '  (17:32:07 EEST)'."""
+    if ts is None or lat is None or lon is None:
+        return ""
+    lat_min, lat_max, lon_min, lon_max = _LT_BBOX
+    if not (lat_min <= lat <= lat_max and lon_min <= lon <= lon_max):
+        return ""
+    try:
+        local = datetime.fromtimestamp(float(ts), tz=ZoneInfo("Europe/Vilnius"))
+        return "  ({} {})".format(local.strftime("%H:%M:%S"), local.strftime("%Z"))
+    except Exception:
+        return ""
+
+
 def _start_dr_thread(sender):
     """Background thread: dead-reckon contacts that haven't sent a real update."""
     def _loop():
@@ -710,15 +731,16 @@ def _build_remarks(track: dict, cot_type: str) -> str:
         # ── KINEMATICS ──
         tod = track.get("tod_s")
         age = _track_age(track)
+        lat = track.get("lat_deg"); lon = track.get("lon_deg")
         if tod is not None:
             h = int(tod // 3600) % 24; m = int((tod % 3600) // 60); s = tod % 60
             kinem_l.append("TOD (time of detection): {:02d}:{:02d}:{:04.1f} UTC  {}".format(h, m, s, age).rstrip())
         else:
             ts = track.get("_ts")
             if ts:
-                kinem_l.append("TIME: {}  {}".format(
-                    datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%H:%M:%S UTC"), age).rstrip())
-        lat = track.get("lat_deg"); lon = track.get("lon_deg")
+                kinem_l.append("TIME: {}{}  {}".format(
+                    datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%H:%M:%S UTC"),
+                    _local_clock_suffix(ts, lat, lon), age).rstrip())
         if lat is not None: kinem_l.append("LAT (latitude): {:.5f}°".format(round(lat, 5)))
         if lon is not None: kinem_l.append("LON (longitude): {:.5f}°".format(round(lon, 5)))
         if lat is not None and lon is not None:
@@ -978,11 +1000,13 @@ def _build_remarks(track: dict, cot_type: str) -> str:
         ident_l = []; kinem_l = []; status_l = []
 
         # IDENTITY
+        lat = track.get("lat_deg"); lon = track.get("lon_deg")
         ts = track.get("_ts")
         if ts:
             age = _track_age(track)
-            ident_l.append("TIME: {}  {}".format(
-                datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%H:%M:%S UTC"), age).rstrip())
+            ident_l.append("TIME: {}{}  {}".format(
+                datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%H:%M:%S UTC"),
+                _local_clock_suffix(ts, lat, lon), age).rstrip())
         _r = lambda lbl, v, b: b.append("{}: {}".format(lbl, v)) if v not in (None, "", 0.0) else None
         _r("NAME", (track.get("ship_name") or "").strip() or None, ident_l)
         _r("MMSI", track.get("mmsi"), ident_l)
@@ -999,7 +1023,6 @@ def _build_remarks(track: dict, cot_type: str) -> str:
             ident_l.append("DRAFT: {} m".format(round(float(track["draft_m"]), 1)))
 
         # KINEMATICS
-        lat = track.get("lat_deg"); lon = track.get("lon_deg")
         if lat is not None: kinem_l.append("LAT: {:.5f}°".format(round(lat, 5)))
         if lon is not None: kinem_l.append("LON: {:.5f}°".format(round(lon, 5)))
         if lat is not None and lon is not None:
@@ -1031,16 +1054,17 @@ def _build_remarks(track: dict, cot_type: str) -> str:
                 lines.extend(buf)
         ident_l = []; kinem_l = []
 
+        lat = track.get("lat_deg"); lon = track.get("lon_deg")
         ts = track.get("_ts")
         if ts:
             age = _track_age(track)
-            ident_l.append("TIME: {}  {}".format(
-                datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%H:%M:%S UTC"), age).rstrip())
+            ident_l.append("TIME: {}{}  {}".format(
+                datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%H:%M:%S UTC"),
+                _local_clock_suffix(ts, lat, lon), age).rstrip())
         _r = lambda lbl, v, b: b.append("{}: {}".format(lbl, v)) if v not in (None, "", 0.0) else None
         _r("NORAD", track.get("sat_id") or track.get("sensor_id") or track.get("norad_id"), ident_l)
         _r("NAME",  track.get("sat_name") or track.get("name"), ident_l)
 
-        lat = track.get("lat_deg"); lon = track.get("lon_deg")
         if lat is not None: kinem_l.append("LAT: {:.5f}°".format(round(lat, 5)))
         if lon is not None: kinem_l.append("LON: {:.5f}°".format(round(lon, 5)))
         if lat is not None and lon is not None:
@@ -1072,14 +1096,15 @@ def _build_remarks(track: dict, cot_type: str) -> str:
                 lines.extend(buf)
         _r = lambda lbl, v, b: b.append("{}: {}".format(lbl, v)) if v not in (None, "", 0.0) else None
 
+        lat = track.get("lat_deg"); lon = track.get("lon_deg")
         ts = track.get("_ts")
         if ts:
             age      = _track_age(track)
-            time_str = ("{}  {}".format(
-                datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%H:%M:%S UTC"), age)).rstrip()
+            time_str = ("{}{}  {}".format(
+                datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%H:%M:%S UTC"),
+                _local_clock_suffix(ts, lat, lon), age)).rstrip()
         else:
             time_str = None
-        lat = track.get("lat_deg"); lon = track.get("lon_deg")
 
         if track.get("sensor_type") == "radar":   # ---- RADAR SENSOR SITE ----
             sensor_l = []; status_l = []; calib_l = []; stats_l = []
@@ -1091,9 +1116,9 @@ def _build_remarks(track: dict, cot_type: str) -> str:
                     age_str = "({:.0f}s ago)".format(age_r)
                 else:
                     age_str = "({}m {}s ago)".format(int(age_r // 60), int(age_r % 60))
-                sensor_l.append("TIME: {}  {}".format(
+                sensor_l.append("TIME: {}{}  {}".format(
                     datetime.fromtimestamp(float(ts_r), tz=timezone.utc).strftime("%H:%M:%S UTC"),
-                    age_str))
+                    _local_clock_suffix(ts_r, lat, lon), age_str))
             # Show radar's own clock (may differ from UTC due to local timezone)
             radar_clk = track.get("radar_clock_s")
             if radar_clk is not None:

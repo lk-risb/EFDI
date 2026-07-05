@@ -65,12 +65,9 @@ efdi-moon-pod/
 │       ├── bridges/              sensor bridge scripts
 │       └── layers/               output layer scripts
 ├── docs/
-│   ├── partner-contract.md       boundary requirements + Tier-2 ingress
-│   ├── architecture.md           bundle shape + data flow
-│   └── efdi-vs-production.md     sandbox vs production delta table
+│   └── architecture.md           bundle shape + data flow
 ├── start.sh                      interactive service launcher
-├── stop.sh                       service teardown
-└── logs/                         per-service log files (runtime)
+└── stop.sh                       service teardown
 ```
 
 ---
@@ -86,8 +83,6 @@ See **[INSTALL.md](INSTALL.md)** for the full English deployment guide, or **[DI
 - **Enrollment** — a NetBird setup-key issued at onboarding. No silent control plane on the sandbox.
 - **Zenoh identity** — a per-UUID slot assigned by the portal. Your cert CN, topic prefix, and write namespace all anchor to that slot.
 - **Write namespace** — `<slot_id>/**`. Publishes outside this prefix are silently denied by the router ACL.
-
-Sandbox shape differs from production. See [`docs/efdi-vs-production.md`](docs/efdi-vs-production.md) for the delta table.
 
 ---
 
