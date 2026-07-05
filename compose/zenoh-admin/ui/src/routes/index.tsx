@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { Layout } from '@/components/Layout'
 import { apiJson } from '@/lib/api'
 import { useAuth } from '@/store/auth'
-import { CheckCircle, XCircle } from 'lucide-react'
+import { CheckCircle, XCircle, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export const Route = createFileRoute('/')({
@@ -76,16 +76,79 @@ function StatCard({ label, value }: { label: string; value: string }) {
   )
 }
 
-function KeyExprList({ label, items }: { label: string; items: string[] }) {
-  if (items.length === 0) return null
+// Groups a raw key_expr like "LTU/CISB/<namespace>/air/**/civ/aircraft/**" into
+// a domain bucket ("AIR") + the remainder path, so the long, repetitive
+// namespace prefix doesn't have to be read over and over to see what's what.
+function groupTopic(keyExpr: string): { group: string; rest: string } {
+  if (keyExpr.startsWith('@/')) return { group: 'ADMIN', rest: keyExpr }
+  const parts = keyExpr.split('/')
+  if (parts[0] === 'LTU' && parts[1] === 'CISB' && parts.length > 3) {
+    return { group: (parts[3] || 'other').toUpperCase(), rest: parts.slice(3).join('/') }
+  }
+  return { group: 'OTHER', rest: keyExpr }
+}
+
+const GROUP_COLORS: Record<string, string> = {
+  AIR: 'text-sky-400 bg-sky-400/10 border-sky-800',
+  LAND: 'text-green-400 bg-green-400/10 border-green-800',
+  SEA: 'text-cyan-400 bg-cyan-400/10 border-cyan-800',
+  SPACE: 'text-purple-400 bg-purple-400/10 border-purple-800',
+  ENV: 'text-amber-400 bg-amber-400/10 border-amber-800',
+}
+
+function groupTopics(items: string[]): { group: string; items: string[] }[] {
+  const map = new Map<string, string[]>()
+  for (const item of items) {
+    const { group, rest } = groupTopic(item)
+    if (!map.has(group)) map.set(group, [])
+    map.get(group)!.push(rest)
+  }
+  return Array.from(map.entries())
+    .map(([group, items]) => ({ group, items: items.sort() }))
+    .sort((a, b) => b.items.length - a.items.length)
+}
+
+function TopicTree({ label, items }: { label: string; items: string[] }) {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+
+  function toggle(group: string) {
+    setExpanded(s => {
+      const next = new Set(s)
+      if (next.has(group)) next.delete(group); else next.add(group)
+      return next
+    })
+  }
+
   return (
     <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-4">
       <span className="text-[10px] font-semibold tracking-wider text-zinc-500 uppercase">{label}</span>
-      <div className="mt-3 space-y-1 max-h-64 overflow-auto">
-        {items.map(k => (
-          <p key={k} className="text-xs font-mono text-zinc-400 truncate">{k}</p>
-        ))}
-      </div>
+      {items.length === 0 ? (
+        <p className="text-xs text-zinc-600 mt-3">none</p>
+      ) : (
+        <div className="mt-3 space-y-1 max-h-80 overflow-auto">
+          {groupTopics(items).map(({ group, items: groupItems }) => {
+            const isOpen = expanded.has(group)
+            const colorClass = GROUP_COLORS[group] ?? 'text-zinc-400 bg-zinc-400/10 border-zinc-700'
+            return (
+              <div key={group}>
+                <button onClick={() => toggle(group)}
+                  className="flex items-center gap-2 w-full text-left px-2 py-1.5 rounded-md hover:bg-zinc-800/50 transition-colors">
+                  <ChevronRight size={12} className={cn('text-zinc-500 transition-transform shrink-0', isOpen && 'rotate-90')} />
+                  <span className={cn('text-xs font-semibold px-1.5 py-0.5 rounded border shrink-0', colorClass)}>{group}</span>
+                  <span className="text-xs text-zinc-500">{groupItems.length}</span>
+                </button>
+                {isOpen && (
+                  <div className="ml-6 space-y-0.5 mt-1 mb-1">
+                    {groupItems.map(item => (
+                      <p key={item} className="text-xs font-mono text-zinc-500 truncate">{item || '**'}</p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
@@ -238,8 +301,8 @@ function DashboardPage() {
               <StatCard label="Storages" value={String(status.storages.length)} />
             </div>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <KeyExprList label="Subscribers" items={status.subscribers} />
-              <KeyExprList label="Queryables" items={status.queryables} />
+              <TopicTree label="Subscribing to" items={status.subscribers} />
+              <TopicTree label="Answering queries for" items={status.queryables} />
             </div>
           </>
         )}
