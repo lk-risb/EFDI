@@ -95,11 +95,14 @@ def _ts_str(ts: float) -> str:
 
 
 def _uid(track: dict) -> str:
-    src = track.get("_src", "efdi")
-    for key in ("icao24", "mmsi", "sensor_id"):
+    # Stable, source-agnostic identifier — same as cot_layer.py's _uid(): the same
+    # aircraft/vessel reported by multiple bridges (or multiple pods exchanging
+    # data) must merge to one SitaWare track, not one per source.
+    for key, prefix in (("icao24", "ICAO"), ("mmsi", "MMSI"), ("sensor_id", "SENS")):
         v = track.get(key)
         if v:
-            return "EFDI-{}-{}".format(src, str(v).upper())
+            return "EFDI-{}-{}".format(prefix, str(v).upper())
+    src = track.get("_src", "efdi")
     cs = (track.get("callsign") or "").strip()
     if cs:
         return "EFDI-{}-{}".format(src, cs)
