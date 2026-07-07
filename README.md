@@ -1,6 +1,6 @@
 <div align="center">
 
-# efdi-moon-pod
+# EFDI
 
 **Partner-custodial sensor bridge stack — tactical sensors → Zenoh pub/sub → ATAK CoT, on your own hardware, under your own custody.**
 
