@@ -18,7 +18,7 @@
 
 </div>
 
-The **EFDI moon-pod** ingests data from tactical sensors (radars, drone detection networks, datalinks, UAV telemetry), routes everything through a local Zenoh publish/subscribe fabric, and delivers it to ATAK as Cursor-on-Target (CoT) over UDP multicast or TAK Server TCP.
+The **EFDI-goat-pod** ingests data from tactical sensors (radars, drone detection networks, datalinks, UAV telemetry), routes everything through a local Zenoh publish/subscribe fabric, and delivers it to ATAK as Cursor-on-Target (CoT) over UDP multicast or TAK Server TCP.
 
 This repository is the EFDI-partner collaboration surface. It carries **no goat-internal infrastructure, credentials, or private links** — everything here is safe to develop against openly.
 
