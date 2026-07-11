@@ -14,7 +14,7 @@
 #include <string>
 #include <thread>
 
-#include "goat_connect.hpp"  // from clients/connect/cpp (added to the include path by CMake)
+#include "efdi_connect.hpp"  // from clients/connect/cpp (added to the include path by CMake)
 #include "zenoh.hxx"
 
 using namespace zenoh;
@@ -22,11 +22,11 @@ using namespace zenoh;
 int main(int argc, char** argv) {
     try {
         const std::string keyexpr =
-            argc > 1 ? std::string(argv[1]) : (goat::namespace_prefix() + "/**");
+            argc > 1 ? std::string(argv[1]) : (efdi::namespace_prefix() + "/**");
         const std::size_t limit =
             argc > 2 ? static_cast<std::size_t>(std::strtoul(argv[2], nullptr, 10)) : 0;  // 0 = forever
 
-        auto session = goat::session();
+        auto session = efdi::session();
 
         std::atomic<std::size_t> seen{0};
         std::atomic<bool> done{false};

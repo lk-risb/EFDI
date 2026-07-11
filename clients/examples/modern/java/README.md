@@ -2,7 +2,7 @@
 
 Idiomatic Java against the pod. Uses the **official** Eclipse Zenoh Java binding
 [`io.zenoh` / `zenoh-java`](https://github.com/eclipse-zenoh/zenoh-java) plus the
-[`connect/java/GoatConnect.java`](../../../connect/java/GoatConnect.java) helper.
+[`connect/java/EfdiConnect.java`](../../../connect/java/EfdiConnect.java) helper.
 
 ## Read this first: the binding is a JNI wrapper, but native libs are bundled
 
@@ -20,12 +20,12 @@ all you need. No separate `zenoh-c` install, no `LD_LIBRARY_PATH`.
 
 ```sh
 # export GOAT_* per clients/README.md
-export GOAT_ROUTER="tls/127.0.0.1:7447"
-export GOAT_CERT="$HOME/.goat/contexts/default/mtls.cert.pem"
-export GOAT_KEY="$HOME/.goat/contexts/default/mtls.key.pem"
-export GOAT_CA="$HOME/.goat/contexts/default/ca-roots.pem"
-export GOAT_NAMESPACE="release/acme"
-# GOAT_VERIFY_NAME defaults to false (local pod at 127.0.0.1); set true for a DNS-named router.
+export EFDI_ROUTER="tls/127.0.0.1:7447"
+export EFDI_CERT="$HOME/.goat/contexts/default/mtls.cert.pem"
+export EFDI_KEY="$HOME/.goat/contexts/default/mtls.key.pem"
+export EFDI_CA="$HOME/.goat/contexts/default/ca-roots.pem"
+export PARTNER_NAMESPACE="release/acme"
+# EFDI_VERIFY_NAME defaults to false (local pod at 127.0.0.1); set true for a DNS-named router.
 ```
 
 You need a Gradle wrapper (`./gradlew`) or a system Gradle 8+. To generate the wrapper once:
@@ -50,9 +50,9 @@ gradle wrapper        # writes gradlew + gradle/wrapper/ (one-time, needs Gradle
 `./gradlew run -Pmain=Publish --args="10 0.5"` in another. The JSON samples should arrive in the
 subscriber.
 
-> The Gradle build adds `../../../connect/java` to the source set so `GoatConnect.java` compiles
+> The Gradle build adds `../../../connect/java` to the source set so `EfdiConnect.java` compiles
 > alongside the examples (the same "examples reach back into `connect/<lang>/`" pattern the other
-> languages use). If you vendor these into your own project, just drop `GoatConnect.java` next to
+> languages use). If you vendor these into your own project, just drop `EfdiConnect.java` next to
 > your sources.
 
 ## The one connection gotcha (read this — it bites everyone)
@@ -60,11 +60,11 @@ subscriber.
 Zenoh's TLS config must be loaded as **one whole json5 block** at `transport/link/tls`, with
 **`enable_mtls: true`**. Setting the sub-keys one at a time silently does **not** turn on the
 client-cert send path on Zenoh 1.x — your session opens but the router rejects you, or you connect
-read-only. `GoatConnect.config()` does it the working way: it renders the entire config (including
+read-only. `EfdiConnect.config()` does it the working way: it renders the entire config (including
 the whole TLS object) and loads it with a single `Config.fromJson5(json)` call.
 
 When the router cert's SAN binds an **IP/mesh address** rather than the DNS name you dial, set
-`GOAT_VERIFY_NAME=false` (the default). A DNS-named remote router can use `true`.
+`EFDI_VERIFY_NAME=false` (the default). A DNS-named remote router can use `true`.
 
 ## Notes
 

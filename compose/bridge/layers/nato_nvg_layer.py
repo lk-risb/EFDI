@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""zenoh_nvg_bridge.py — Zenoh EFDI track topics → SitaWare Edge NVG 2.0 bridge.
+"""nato_nvg_layer.py — Zenoh EFDI track topics → SitaWare Edge NVG 2.0 bridge.
 
 Subscribes to all EFDI track topics and forwards live positions to SitaWare Edge
 via its NVG REST API.  SitaWare Frontline clients connected to the same Edge server
@@ -13,15 +13,17 @@ SitaWare Edge REST base: http(s)://<host>:<port>/SWEdge/nvg/v2
   PUT  /sources/{source}/items/{item-id}   — create / update one item
   DELETE /sources/{source}/items/{item-id} — remove one item
 
-Required env vars (or --args):
-  SITAWARE_URL    http://192.168.x.x:8080   (no trailing slash)
-  SITAWARE_USER   your Edge username
-  SITAWARE_PASS   your Edge password
-  SITAWARE_SOURCE efdi-live                 (source name, created automatically)
+Required env vars (or --args). Named SITAWARE_NVG_* (not SITAWARE_*) because this
+is the outbound Edge push — a separate SitaWare product/host from the inbound
+SitaWare HQ pull in sitaware_bridge.py, usually with different credentials:
+  SITAWARE_NVG_URL    http://192.168.x.x:8080   (no trailing slash)
+  SITAWARE_NVG_USER    your Edge username
+  SITAWARE_NVG_PASS    your Edge password
+  SITAWARE_NVG_SOURCE  efdi-live                 (source name, created automatically)
 
 Run:
-  SITAWARE_URL=http://192.168.1.10:8080 SITAWARE_USER=admin SITAWARE_PASS=secret \\
-    venv/bin/python3 zenoh_nvg_bridge.py
+  SITAWARE_NVG_URL=http://192.168.1.10:8080 SITAWARE_NVG_USER=admin SITAWARE_NVG_PASS=secret \\
+    venv/bin/python3 nato_nvg_layer.py
 """
 
 import argparse
@@ -41,7 +43,7 @@ ROUTER = "tls/zenoh.efdi.netbird.efdi-backbone.net:7447"
 ORG    = os.environ.get("PARTNER_NAMESPACE", "")
 TOPIC_ROOT = "LTU/CISB/" + ORG   # organization prefix precedes the pod namespace
 HERE   = os.path.dirname(os.path.abspath(__file__))
-_CERT_DIR = os.environ.get("GOAT_CERT_DIR", HERE)
+_CERT_DIR = os.environ.get("EFDI_CERT_DIR", HERE)
 _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", ROUTER)
 
 NVG_NS      = "http://tide.act.nato.int/schemas/2012/10/nvg"
@@ -302,9 +304,9 @@ def make_handler(sidc: str, cache: TrackCache):
 
 def run(args):
     if not args.url:
-        raise SystemExit("SITAWARE_URL not set — pass --url http://host:port or set env var")
+        raise SystemExit("SITAWARE_NVG_URL not set — pass --url http://host:port or set env var")
     if not args.user or not args.password:
-        raise SystemExit("SITAWARE_USER / SITAWARE_PASS not set")
+        raise SystemExit("SITAWARE_NVG_USER / SITAWARE_NVG_PASS not set")
 
     client = EdgeClient(args.url, args.source, args.user, args.password)
     cache  = TrackCache(client, stale_s=STALE_S, refresh_s=REFRESH_S, verbose=args.verbose)
@@ -332,13 +334,13 @@ def run(args):
 
 def main():
     ap = argparse.ArgumentParser(description="Zenoh tracks → SitaWare Edge NVG bridge")
-    ap.add_argument("--url",      default=os.environ.get("SITAWARE_URL", ""),
+    ap.add_argument("--url",      default=os.environ.get("SITAWARE_NVG_URL", ""),
                     help="SitaWare Edge base URL, e.g. http://192.168.1.10:8080")
-    ap.add_argument("--user",     default=os.environ.get("SITAWARE_USER", ""),
+    ap.add_argument("--user",     default=os.environ.get("SITAWARE_NVG_USER", ""),
                     help="Edge username")
-    ap.add_argument("--password", default=os.environ.get("SITAWARE_PASS", ""),
+    ap.add_argument("--password", default=os.environ.get("SITAWARE_NVG_PASS", ""),
                     help="Edge password")
-    ap.add_argument("--source",   default=os.environ.get("SITAWARE_SOURCE", "efdi-live"),
+    ap.add_argument("--source",   default=os.environ.get("SITAWARE_NVG_SOURCE", "efdi-live"),
                     help="NVG source name (default: efdi-live)")
     ap.add_argument("--verbose", "-v", action="store_true",
                     help="Print each NVG PUT/DELETE")

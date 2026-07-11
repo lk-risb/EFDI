@@ -1,23 +1,23 @@
-//! goat_connect — open an mTLS Zenoh session to a goat-moon-pod from env vars.
+//! efdi_connect — open an mTLS Zenoh session to a goat-moon-pod from env vars.
 //!
 //! The ONLY goat-specific code you need. Everything else is plain Zenoh (the official
 //! `zenoh` crate, 1.x).
 //!
 //! ```no_run
 //! # async fn demo() -> zenoh::Result<()> {
-//! let session = goat_connect::session().await?;
-//! session.put(goat_connect::key("sensors/temp")?, "21.5").await?;
+//! let session = efdi_connect::session().await?;
+//! session.put(efdi_connect::key("sensors/temp")?, "21.5").await?;
 //! # Ok(()) }
 //! ```
 //!
 //! Env vars (see ../../README.md):
 //!
-//! - `GOAT_ROUTER`      `tls/127.0.0.1:7447`   pod Zenoh endpoint
-//! - `GOAT_CERT`        path to your mTLS client cert (PEM)
-//! - `GOAT_KEY`         path to your mTLS private key (PEM)
-//! - `GOAT_CA`          path to the CA root that signs the router (PEM)
-//! - `GOAT_NAMESPACE`   `release/<you>`        your owned prefix (publish under this)
-//! - `GOAT_VERIFY_NAME` `"true"`/`"false"`     TLS hostname verification (default false for a
+//! - `EFDI_ROUTER`      `tls/127.0.0.1:7447`   pod Zenoh endpoint
+//! - `EFDI_CERT`        path to your mTLS client cert (PEM)
+//! - `EFDI_KEY`         path to your mTLS private key (PEM)
+//! - `EFDI_CA`          path to the CA root that signs the router (PEM)
+//! - `PARTNER_NAMESPACE`   `release/<you>`        your owned prefix (publish under this)
+//! - `EFDI_VERIFY_NAME` `"true"`/`"false"`     TLS hostname verification (default false for a
 //!   local pod reached at 127.0.0.1; "true" for a DNS-named remote router)
 
 use std::env;
@@ -49,11 +49,11 @@ fn env_var(name: &str) -> Result<String> {
 /// send path on Zenoh 1.x — the session opens but the router rejects you or you connect
 /// read-only. So we serialize the whole block and `insert_json5` it in a single call.
 pub fn config() -> Result<Config> {
-    let router = env_var("GOAT_ROUTER")?;
-    let ca = env_var("GOAT_CA")?;
-    let cert = env_var("GOAT_CERT")?;
-    let key = env_var("GOAT_KEY")?;
-    let verify_name = env::var("GOAT_VERIFY_NAME")
+    let router = env_var("EFDI_ROUTER")?;
+    let ca = env_var("EFDI_CA")?;
+    let cert = env_var("EFDI_CERT")?;
+    let key = env_var("EFDI_KEY")?;
+    let verify_name = env::var("EFDI_VERIFY_NAME")
         .map(|v| v.eq_ignore_ascii_case("true"))
         .unwrap_or(false);
 
@@ -87,7 +87,7 @@ pub fn session_blocking() -> Result<Session> {
 
 /// Your owned prefix, e.g. "release/acme" (trailing slash stripped).
 pub fn namespace() -> Result<String> {
-    Ok(env_var("GOAT_NAMESPACE")?.trim_end_matches('/').to_string())
+    Ok(env_var("PARTNER_NAMESPACE")?.trim_end_matches('/').to_string())
 }
 
 /// Build a fully-qualified key under your namespace: `key("sensors/temp")` ->

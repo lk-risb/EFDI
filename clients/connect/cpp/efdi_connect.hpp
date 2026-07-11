@@ -1,30 +1,30 @@
-// goat_connect.hpp — open an mTLS Zenoh session to a goat-moon-pod from env vars.
+// efdi_connect.hpp — open an mTLS Zenoh session to a goat-moon-pod from env vars.
 //
 // Header-only. The ONLY goat-specific code you need; everything else is plain Zenoh
 // (the official zenoh-cpp 1.x binding over zenoh-c).
 //
-//     #include "goat_connect.hpp"
-//     auto session = goat::session();                    // opens an mTLS client session
-//     auto ke = zenoh::KeyExpr(goat::key("sensors/temp"));
+//     #include "efdi_connect.hpp"
+//     auto session = efdi::session();                    // opens an mTLS client session
+//     auto ke = zenoh::KeyExpr(efdi::key("sensors/temp"));
 //     auto pub = session.declare_publisher(ke);
 //     pub.put("21.5");
 //
 // Env vars (see ../../README.md):
 //
-//     GOAT_ROUTER       tls/127.0.0.1:7447     pod Zenoh endpoint
-//     GOAT_CERT         path to your mTLS client cert (PEM)
-//     GOAT_KEY          path to your mTLS private key (PEM)
-//     GOAT_CA           path to the CA root that signs the router (PEM)
-//     GOAT_NAMESPACE    release/<you>          your owned prefix (publish under this)
-//     GOAT_VERIFY_NAME  "true"/"false"         TLS hostname verification (default false for a
+//     EFDI_ROUTER       tls/127.0.0.1:7447     pod Zenoh endpoint
+//     EFDI_CERT         path to your mTLS client cert (PEM)
+//     EFDI_KEY          path to your mTLS private key (PEM)
+//     EFDI_CA           path to the CA root that signs the router (PEM)
+//     PARTNER_NAMESPACE    release/<you>          your owned prefix (publish under this)
+//     EFDI_VERIFY_NAME  "true"/"false"         TLS hostname verification (default false for a
 //                                              local pod reached at 127.0.0.1; "true" for a
 //                                              DNS-named remote router)
 //
 // Requires zenoh-cpp 1.9.0 built over zenoh-c (the ZENOHCXX_ZENOHC backend — the default for
 // the C++ binding) with the unstable API enabled. See ../../examples/modern/cpp/README.md.
 
-#ifndef GOAT_CONNECT_HPP
-#define GOAT_CONNECT_HPP
+#ifndef EFDI_CONNECT_HPP
+#define EFDI_CONNECT_HPP
 
 #include <cstdlib>
 #include <stdexcept>
@@ -32,7 +32,7 @@
 
 #include "zenoh.hxx"
 
-namespace goat {
+namespace efdi {
 
 // env() returns the value of `name` or throws with an actionable message if unset/empty.
 inline std::string env(const char* name) {
@@ -74,12 +74,12 @@ inline std::string json_escape(const std::string& s) {
 // build the whole config (mode + connect endpoint + the complete TLS block) as a single json5
 // document and parse it in one Config::from_str call.
 inline zenoh::Config config() {
-    const std::string router = env("GOAT_ROUTER");
-    const std::string ca     = env("GOAT_CA");
-    const std::string cert   = env("GOAT_CERT");
-    const std::string key    = env("GOAT_KEY");
+    const std::string router = env("EFDI_ROUTER");
+    const std::string ca     = env("EFDI_CA");
+    const std::string cert   = env("EFDI_CERT");
+    const std::string key    = env("EFDI_KEY");
 
-    const char* vn = std::getenv("GOAT_VERIFY_NAME");
+    const char* vn = std::getenv("EFDI_VERIFY_NAME");
     std::string verify_name = "false";
     if (vn != nullptr) {
         std::string lower(vn);
@@ -112,7 +112,7 @@ inline zenoh::Session session() {
 // namespace_prefix() returns your owned prefix, e.g. "release/acme" (trailing slash stripped).
 // (Named with a trailing underscore-style suffix because `namespace` is a C++ keyword.)
 inline std::string namespace_prefix() {
-    std::string ns = env("GOAT_NAMESPACE");
+    std::string ns = env("PARTNER_NAMESPACE");
     while (!ns.empty() && ns.back() == '/') ns.pop_back();
     return ns;
 }
@@ -127,6 +127,6 @@ inline std::string key(const std::string& suffix) {
     return namespace_prefix() + "/" + s.substr(start);
 }
 
-}  // namespace goat
+}  // namespace efdi
 
-#endif  // GOAT_CONNECT_HPP
+#endif  // EFDI_CONNECT_HPP

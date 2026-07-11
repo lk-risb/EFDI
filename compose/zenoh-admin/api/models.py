@@ -38,6 +38,18 @@ class RefreshToken(Base):
     user: Mapped["AdminUser"] = relationship(back_populates="tokens")
 
 
+class BrandSettings(Base):
+    __tablename__ = "brand_settings"
+
+    id: Mapped[str] = mapped_column(String(16), primary_key=True)
+    org_name: Mapped[str] = mapped_column(String(64), nullable=False)
+    accent_fill: Mapped[str] = mapped_column(String(7), nullable=False)
+    accent_fill_hover: Mapped[str] = mapped_column(String(7), nullable=False)
+    accent_text: Mapped[str] = mapped_column(String(7), nullable=False)
+    accent_ring: Mapped[str] = mapped_column(String(7), nullable=False)
+    logo_filename: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+
 class AuditLog(Base):
     __tablename__ = "audit_log"
 

@@ -40,7 +40,7 @@ subscribe: subscribe.c
 
 # Static link — produces self-contained binaries you can carry to an air-gapped host that has
 # libzenohc.a available at build time but no shared lib at runtime.
-static: CFLAGS += -DGOAT_STATIC
+static: CFLAGS += -DEFDI_STATIC
 static:
 	$(CC) $(CFLAGS) -o publish   publish.c   $(LDFLAGS) $(LDLIBS_STATIC)
 	$(CC) $(CFLAGS) -o subscribe subscribe.c $(LDFLAGS) $(LDLIBS_STATIC)

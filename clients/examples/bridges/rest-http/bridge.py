@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """rest-http bridge — talk to a goat-moon-pod over plain HTTP, no Zenoh code in your app.
 
-The bridge is itself a Zenoh client (mTLS, via the shared goat_connect helper). It exposes a
+The bridge is itself a Zenoh client (mTLS, via the shared efdi_connect helper). It exposes a
 tiny localhost HTTP API so any language/tool that can do an HTTP request — curl, MATLAB,
 old .NET, a PLC, a shell script — can publish and receive fabric data.
 
     pip install eclipse-zenoh
-    export GOAT_ROUTER=tls/127.0.0.1:7447 GOAT_CERT=... GOAT_KEY=... GOAT_CA=... GOAT_NAMESPACE=release/acme
+    export EFDI_ROUTER=tls/127.0.0.1:7447 EFDI_CERT=... EFDI_KEY=... EFDI_CA=... PARTNER_NAMESPACE=release/acme
     python3 bridge.py                     # serves on 127.0.0.1:8080
 
 Endpoints:
@@ -33,18 +33,18 @@ from urllib.parse import urlparse, parse_qs
 # this script (Docker copies it alongside), then on PATH/site-packages.
 _here = os.path.dirname(os.path.abspath(__file__))
 for _p in (os.path.join(_here, "..", "..", "..", "connect", "python"), _here):
-    if os.path.exists(os.path.join(_p, "goat_connect.py")):
+    if os.path.exists(os.path.join(_p, "efdi_connect.py")):
         sys.path.insert(0, _p)
         break
-import goat_connect  # noqa: E402
+import efdi_connect  # noqa: E402
 
 BIND = os.environ.get("BRIDGE_BIND", "127.0.0.1")
 PORT = int(os.environ.get("BRIDGE_PORT", "8080"))
 WEBHOOK_URL = os.environ.get("WEBHOOK_URL", "")
 WEBHOOK_KEYEXPR = os.environ.get("WEBHOOK_KEYEXPR", "")
 
-SESSION = goat_connect.session()
-NS = goat_connect.namespace()
+SESSION = efdi_connect.session()
+NS = efdi_connect.namespace()
 
 
 def _abs_key(suffix_or_key: str) -> str:

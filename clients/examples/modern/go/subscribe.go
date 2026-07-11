@@ -22,7 +22,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	goatconnect "example.com/goat-moon-pod-examples-go/connect"
+	efdiconnect "example.com/efdi-examples-go/connect"
 
 	"github.com/eclipse-zenoh/zenoh-go/zenoh"
 )
@@ -30,7 +30,7 @@ import (
 func main() {
 	zenoh.InitLoggerFromEnvOr("error")
 
-	ns, err := goatconnect.Namespace()
+	ns, err := efdiconnect.Namespace()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -47,7 +47,7 @@ func main() {
 		}
 	}
 
-	s, err := goatconnect.Session()
+	s, err := efdiconnect.Session()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "open session: %v\n", err)
 		os.Exit(1)

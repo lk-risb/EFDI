@@ -25,15 +25,16 @@ This guide covers deploying the sensor bridge stack on a Linux host. The stack i
 | UDP multicast `239.2.3.1:6969` | outbound | CoT delivery to ATAK |
 | TCP 7448 | localhost | Local Zenoh router |
 | TCP 7447 TLS | outbound | Remote Zenoh router (requires NetBird) |
+| HTTPS 8890 | inbound | Zenoh admin GUI (Caddy-terminated, internal CA — see §10) |
 | HTTPS | outbound | dronuradaras.lt REST API |
 
 ATAK devices must be on the same L2 segment as the server for multicast delivery. Cross-VLAN or cross-subnet deployments require a TAK Server (`cot-tcp` service).
 
 ### Certificates
 
-An EFDI-issued `goat-bundle` is required for Zenoh mTLS. Obtain from your EFDI administrator. The bundle is **never stored in this repository**.
+An EFDI-issued `goat-bundle` is required for Zenoh mTLS. Obtain from your EFDI administrator.
 
-The raw signed join bundle (`<handle>.cbor`, consumed once by `host/first-boot.sh`) should live outside the repo too — e.g. `~/Documents/<pod-name>/` — and be passed by path each time it's needed rather than copied into the working tree.
+The extracted mTLS material (`efdi-ca-root.pem`, `<NAMESPACE>-cert.pem`, `<NAMESPACE>-key.pem`) lives at `compose/certs/` — gitignored, never committed. The raw signed join bundle (`<handle>.cbor`) lives at `compose/state/goat-cli/` for any future `goat profile init`/`rotate` re-run — also gitignored. Both defaults are set by `start.sh`; override with `BUNDLE_DIR`/`POD_STATE_DIR` in `compose/.env` if you'd rather keep them outside the repo entirely.
 
 ---
 
@@ -48,10 +49,10 @@ cd efdi-moon-pod
 
 ### 2.2 Install the goat-bundle
 
-Place the bundle at `$HOME/goat-bundle/` (default path; override with `BUNDLE_DIR`):
+Place the bundle at `compose/certs/` (default path; override with `BUNDLE_DIR`):
 
 ```text
-~/goat-bundle/
+compose/certs/
 ├── efdi-ca-root.pem          # CA certificate (public)
 ├── <NAMESPACE>-cert.pem      # Node certificate
 └── <NAMESPACE>-key.pem       # Private key — restrict permissions
@@ -61,8 +62,8 @@ Place the bundle at `$HOME/goat-bundle/` (default path; override with `BUNDLE_DI
 
 ```bash
 # Verify
-ls ~/goat-bundle/*.pem
-chmod 600 ~/goat-bundle/*-key.pem
+ls compose/certs/*.pem
+chmod 600 compose/certs/*-key.pem
 ```
 
 ### 2.3 Create the Python virtual environment
@@ -105,7 +106,13 @@ Edit `compose/.env`. The file is read by `start.sh` with safe line-by-line parsi
 
 ```bash
 # ── Bundle path ──────────────────────────────────────────────────────────────
-BUNDLE_DIR=/home/<user>/goat-bundle
+# Defaults to compose/certs/ (in-repo, gitignored) if left unset — override only
+# to keep certs outside the repo entirely.
+#BUNDLE_DIR=/home/<user>/goat-bundle
+
+# ── Runtime state (logs, PID files, Zenoh config/certs) ─────────────────────
+# Defaults to compose/state/ (in-repo, gitignored) if left unset.
+#POD_STATE_DIR=/var/lib/goat-moon
 
 # ── Giraffe AMB radar (ASTERIX CAT-48/34) ───────────────────────────────────
 CAT48_PORT=30048               # UDP port the radar transmits on
@@ -123,10 +130,21 @@ CAT48_RADAR_NAME=Giraffe AMB   # Callsign displayed in ATAK
 TAK_HOST=127.0.0.1
 TAK_PORT=8087
 
-# ── SitaWare friendly-force tracking ────────────────────────────────────────
+# ── SitaWare HQ friendly-force tracking (inbound REST pull) ─────────────────
 SITAWARE_URL=https://sitaware.example.com
 SITAWARE_USER=
 SITAWARE_PASS=
+
+# ── NATO NFFI (STANAG 4677) friendly-force feed (inbound XML) ───────────────
+NFFI_HOST=
+NFFI_PORT=7010
+NFFI_FRAMING=length             # length | newline
+
+# ── SitaWare Edge (outbound NVG push) — separate product/host from HQ above ─
+SITAWARE_NVG_URL=
+SITAWARE_NVG_USER=
+SITAWARE_NVG_PASS=
+SITAWARE_NVG_SOURCE=efdi-live
 
 # ── Link-16 JREAP-C ─────────────────────────────────────────────────────────
 LINK16_PORT=                   # Leave empty if no Link-16 source
@@ -162,21 +180,23 @@ The interactive launcher displays all services with their readiness state. Toggl
   [ 3] [ ] link16         Link-16 JREAP-C datalink               LINK16_PORT not set
   [ 4] [ ] mavlink        MAVLink UAV telemetry                   MAVLINK_PORT not set
   [ 5] [ ] vmf            VMF MIL-STD-47001C messages            VMF_PORT not set
-  [ 6] [ ] sitaware       SitaWare friendly force tracking       SITAWARE_URL not set
-  [ 7] [ ] dronuradaras   dronuradaras.lt drone detection        ready
+  [ 6] [ ] sitaware       SitaWare HQ friendly force tracking (inbound REST)  will prompt for address+login
+  [ 7] [ ] nffi           NATO NFFI friendly force XML feed (inbound)         NFFI_HOST not set
+  [ 8] [ ] dronuradaras   dronuradaras.lt drone detection        ready
 
   Output layers
   ──────────────────────────────────────────────────────────
-  [ 8] [✓] cot-udp        CoT → ATAK UDP multicast 239.2.3.1:6969
-  [ 9] [✓] cot-tcp        CoT → TAK Server TCP
-  [10] [✓] track-fusion   Radar/ADS-B track correlation
+  [ 9] [✓] cot-udp        CoT → ATAK UDP multicast 239.2.3.1:6969
+  [10] [✓] cot-tcp        CoT → TAK Server TCP
+  [11] [ ] sitaware-nvg   EFDI tracks → SitaWare Edge (outbound NVG)          will prompt for address+login
+  [12] [✓] track-fusion   Radar/ADS-B track correlation
 ```
 
 **Launcher controls:**
 
 | Input | Action |
 | --- | --- |
-| `1`–`10` | Toggle individual service (space-separated for multiple) |
+| `1`–`12` | Toggle individual service (space-separated for multiple) |
 | `a` | Select all ready services |
 | `n` | Deselect all |
 | Enter | Launch selected services |
@@ -186,12 +206,13 @@ The interactive launcher displays all services with their readiness state. Toggl
 
 | Scenario | Selection |
 | --- | --- |
-| Giraffe radar + ATAK multicast | `1 2 8` |
-| Giraffe + drone detection + ATAK | `1 2 7 8` |
-| Giraffe + SitaWare + ATAK multicast | `1 2 6 8` |
-| Giraffe + SitaWare + drone detection + ATAK | `1 2 6 7 8` |
-| All sensors + TAK Server | `a`, then deselect `8` (cot-udp) |
-| Radar only, no ATAK (debug) | `1 2 10` |
+| Giraffe radar + ATAK multicast | `1 2 9` |
+| Giraffe + drone detection + ATAK | `1 2 8 9` |
+| Giraffe + SitaWare + ATAK multicast | `1 2 6 9` |
+| Giraffe + SitaWare + drone detection + ATAK | `1 2 6 8 9` |
+| EFDI tracks pushed out to SitaWare Edge | `1 2 11` |
+| All sensors + TAK Server | `a`, then deselect `9` (cot-udp) |
+| Radar only, no ATAK (debug) | `1 2 12` |
 
 Processes are tracked via PID files in `$POD_STATE_DIR/.pids/` and log to `$POD_STATE_DIR/logs/<service>.log`.
 
@@ -209,14 +230,17 @@ Processes are tracked via PID files in `$POD_STATE_DIR/.pids/` and log to `$POD_
 
 Set `TAK_HOST` and `TAK_PORT` in `.env`, then select `cot-tcp` instead of `cot-udp` in the launcher.
 
-### SitaWare friendly-force tracking
+### SitaWare HQ friendly-force tracking (inbound)
 
 SitaWare publishes all unit positions to ATAK automatically once the `sitaware` service is running. No ATAK-side configuration is required beyond normal CoT reception.
 
-**Required `.env` fields:**
+Leave `SITAWARE_URL`/`SITAWARE_USER`/`SITAWARE_PASS` unset in `.env` and the launcher prompts for the server address and login (username, then hidden password input) each time you select `sitaware` — or pre-fill them in `.env` to skip the prompt. (A second address can still be set via `SITAWARE_URL_FALLBACK` directly in `.env` for a genuine LAN-vs-mesh split — the interactive prompt only asks for one.)
+
+**`.env` fields:**
 
 ```bash
 SITAWARE_URL=https://<sitaware-host>
+SITAWARE_URL_FALLBACK=https://<netbird-mesh-ip>   # optional second path
 SITAWARE_USER=<username>
 SITAWARE_PASS=<password>
 SITAWARE_POLL_S=10   # optional — poll interval in seconds (default 10)
@@ -233,6 +257,33 @@ The bridge reads MIL-STD-2525B SIDC codes from SitaWare and routes each unit to 
 | Hostile | Air (A) | `…/air/sitaware/rest/hostile/aircraft/…` | `a-h-A-M-F` |
 | Friendly | Sea (S) | `…/sea/sitaware/rest/friendly/vessel/…` | `a-f-S-X-L` |
 | Hostile | Sea (S) | `…/sea/sitaware/rest/hostile/vessel/…` | `a-h-S-X-L` |
+
+### NATO NFFI friendly-force feed (inbound)
+
+`nffi` connects to an external NFFI (STANAG 4677 / FMN NFFI) TCP source — e.g. another C2 system, or SitaWare's own NFFI export — and publishes each unit to `…/land/nato/nffi/friendly/unit/tracks/v1`. Separate from `sitaware` (which pulls SitaWare HQ's own REST API); use `nffi` when the only interop path available is a raw NFFI feed.
+
+**`.env` fields:**
+
+```bash
+NFFI_HOST=<nffi-source-host>
+NFFI_PORT=7010                  # confirm with the NFFI source operator — not a fixed standard port
+NFFI_FRAMING=length             # length | newline — confirm framing with the source
+```
+
+### SitaWare Edge (outbound NVG)
+
+`sitaware-nvg` subscribes to all EFDI track topics and pushes them to a SitaWare **Edge** server via its NVG v2 REST API, so any SitaWare Frontline client connected to that Edge server sees EFDI tracks automatically — no separate Frontline integration needed. This is the reverse direction from `sitaware`/`nffi` above (EFDI → SitaWare, not SitaWare → EFDI), and typically a different host/credentials since SitaWare HQ and SitaWare Edge are usually separate servers.
+
+Leave `SITAWARE_NVG_URL`/`SITAWARE_NVG_USER`/`SITAWARE_NVG_PASS` unset and the launcher prompts for the address and login when you select `sitaware-nvg`.
+
+**`.env` fields:**
+
+```bash
+SITAWARE_NVG_URL=http://<sitaware-edge-host>:<port>   # port varies by deployment — confirm with SitaWare admin
+SITAWARE_NVG_USER=<username>
+SITAWARE_NVG_PASS=<password>
+SITAWARE_NVG_SOURCE=efdi-live    # NVG source name, created automatically on first push
+```
 
 ### Icon reference
 
@@ -259,11 +310,13 @@ The bridge reads MIL-STD-2525B SIDC codes from SitaWare and routes each unit to 
 | --- | --- | --- | --- |
 | `asterix` | `bridges/asterix_bridge.py` | `…/air/asterix/cat48/unknown/aircraft/tracks/v1` | Streaming UDP |
 | `dronuradaras` | `bridges/dronuradaras_bridge.py` | `…/land/dronuradaras/acoustic/neutral/sensor/status/v1` | 60 s device poll / 10 s detection poll |
-| `sitaware` | `bridges/sitaware_bridge.py` | `…/land/sitaware/rest/friendly/unit/tracks/v1` | Configurable REST |
+| `sitaware` | `bridges/sitaware_bridge.py` | `…/land/sitaware/rest/friendly/unit/tracks/v1` | Configurable REST poll |
+| `nffi` | `layers/nato_nffi_layer.py` | `…/land/nato/nffi/friendly/unit/tracks/v1` | Streaming TCP (NFFI XML) |
 | `link16` | `bridges/link16_bridge.py` | `…/air/link16/jreap/*/aircraft/tracks/v1` | Streaming UDP/TCP |
 | `mavlink` | `bridges/mavlink_bridge.py` | `…/air/mavlink/mav2/*/uav/tracks/v1` | Streaming UDP/TCP |
 | `cot-udp` | `layers/cot_layer.py` | Subscriber — all topics | Event-driven |
 | `cot-tcp` | `layers/cot_layer.py` | Subscriber — all topics | Event-driven |
+| `sitaware-nvg` | `layers/nato_nvg_layer.py` | Subscriber — all track topics | Event-driven, 10 s refresh |
 | `track-fusion` | `layers/track_fusion_layer.py` | CAT-48 + CAT-21 subscriber | Event-driven |
 
 ### Zenoh topic schema
@@ -321,7 +374,7 @@ docker compose -f compose/docker-compose.yml ps zenoh-router
 echo $ZENOH_LOCAL_ENDPOINT   # expected: tcp/127.0.0.1:7448
 
 # 3. Verify certificate files exist
-ls $GOAT_CERT_DIR/*.pem
+ls $EFDI_CERT_DIR/*.pem
 ```
 
 If `compose/.env` was loaded with bare `source compose/.env`, variables are not exported to child processes. Use `./start.sh` (which handles this), or:
@@ -421,7 +474,7 @@ import zenoh
 
 ORG       = "<YOUR_NAMESPACE>"
 _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", "tcp/127.0.0.1:7448")
-_CERT_DIR = os.environ.get("GOAT_CERT_DIR", os.path.dirname(__file__))
+_CERT_DIR = os.environ.get("EFDI_CERT_DIR", os.path.dirname(__file__))
 
 # Copy make_config() from any existing bridge — it is identical across all bridges.
 
@@ -497,7 +550,9 @@ In `layers/cot_layer.py`, add to `_TOPIC_COT`:
 
 ## 10. Zenoh Admin GUI
 
-A web GUI for viewing router status and editing `zenoh/config.json5` without SSH access, styled after the TAK admin panel.
+A web GUI for viewing router status and editing `zenoh/config.json5` without SSH access, styled after the TAK admin panel (reticle-corner cards, glass sidebar, accent glow, technical grid backdrop).
+
+The Dashboard's "Connected routers" panel lists every other zenoh instance (router or peer) this router has a live link to — pulled from the router's own admin space, same source as the subscriber/queryable topic lists, so it needs no separate configuration beyond the existing `pod-admin-introspect` ACL rule.
 
 ### Setup
 
@@ -518,10 +573,12 @@ ZENOH_ADMIN_FIRST_PASS=<set once, then blank it out after first login>
 
 ```bash
 cd compose
-docker compose up -d zenoh-admin-db zenoh-admin
+docker compose up -d zenoh-admin-db zenoh-admin zenoh-admin-proxy
 ```
 
-Then open `http://<pod-host>:8890`.
+Then open `https://<pod-host>:8890`.
+
+The panel itself (`zenoh-admin`) binds `127.0.0.1:8895` only — not directly reachable. A Caddy reverse proxy (`zenoh-admin-proxy`) terminates real TLS on `:8890` using Caddy's own internal CA (`local_certs` + `tls internal`, no external ACME/CA dependency), persisted in the `zenoh_admin_caddy_data` volume so the CA survives restarts. Your browser will show a self-signed-certificate warning on first visit — trust Caddy's local CA (or accept the warning) to proceed; there is no public certificate here by design, since this panel isn't meant to be internet-facing.
 
 ### Roles
 
@@ -564,15 +621,15 @@ Config lives at `${POD_STATE_DIR}/zenoh-test/config.json5` — same certs/namesp
 
 ## 11. Continuous Integration
 
-`.github/workflows/ci.yml` runs on every push/PR to `main`:
+Five workflows in `.github/workflows/` run on every push/PR to `main`:
 
-| Job | Checks |
+| Workflow | Checks |
 | --- | --- |
-| `shellcheck` | Lints every `.sh` script in the repo (`-S warning`) |
-| `compose-validate` | Confirms `compose/docker-compose.yml` parses as valid YAML |
-| `bridge-syntax` | `py_compile` on every file in `compose/bridge/bridges/` and `compose/bridge/layers/` |
-| `zenoh-admin-frontend` | `pnpm type-check` + `pnpm build` for `compose/zenoh-admin/ui` |
-| `docker-build` | Builds both `compose/bridge` and `compose/zenoh-admin` Docker images (no push) |
+| `shellcheck.yml` | Lints every `.sh` script in the repo (`-S warning`) |
+| `compose-validate.yml` | Confirms `compose/docker-compose.yml` parses as valid YAML |
+| `bridge-syntax.yml` | `py_compile` on every file in `compose/bridge/bridges/` and `compose/bridge/layers/` |
+| `zenoh-admin-frontend.yml` | `pnpm type-check` + `pnpm build` for `compose/zenoh-admin/ui` |
+| `docker-build.yml` | Builds both `compose/bridge` and `compose/zenoh-admin` Docker images (no push) |
 
 This catches syntax errors, TypeScript errors, and Dockerfile breakage before merge — it does **not** run the bridges themselves (most need real API keys/network access CI doesn't have).
 
@@ -613,6 +670,15 @@ This catches syntax errors, TypeScript errors, and Dockerfile breakage before me
 | 2026-07-05 | Fixed `dronuradaras_bridge.py` publishing only `is_online` sensors (22 of 199 registered) — now publishes all sensors with a known position, matching what the public dronuradaras.lt site shows |
 | 2026-07-05 | Added `.github/workflows/ci.yml`: compile-checks bridges/layers, type-checks + builds the zenoh-admin frontend, builds both Docker images on every push/PR |
 | 2026-07-05 | Added `shellcheck` and `compose-validate` CI jobs; fixed the one real finding (`compose/rebuild.sh` missing `cd ... \|\| exit`) and silenced a false-positive (`SC2163` on the intentional "export by dynamic name" idiom in `start.sh`/`stop.sh`/`run.sh`) |
+| 2026-07-10 | Fixed `nato_nvg_layer.py` reusing the inbound `sitaware_bridge.py`'s env var names (`SITAWARE_URL`/`USER`/`PASS`) — renamed to `SITAWARE_NVG_*` since HQ (inbound) and Edge (outbound) are usually separate hosts/credentials |
+| 2026-07-10 | Wired `nffi` (`layers/nato_nffi_layer.py`) and `sitaware-nvg` (`layers/nato_nvg_layer.py`) into `start.sh` — both existed in the repo but were never registered as launchable services |
+| 2026-07-10 | `start.sh`: `sitaware` and `sitaware-nvg` now prompt for username + hidden-input password at launch (previously only the server address was prompted; login had to be pre-set in `.env` with no interactive fallback) |
+| 2026-07-10 | Zenoh admin GUI: added a "Connected routers" panel — parses `router/transport/unicast/*` entries already present in the admin-space query used for the subscriber/queryable lists, no new ACL or query needed |
+| 2026-07-10 | Zenoh admin GUI: ported the TAK-hud visual language (`hud-card`, `hud-frame`/reticle corners, `hud-glass` sidebar, `hud-grid-bg` backdrop, accent-glow buttons, staggered fade-in) into `index.css`/`Layout.tsx`/dashboard |
+| 2026-07-11 | Zenoh admin GUI: full TAK port (not just style) — runtime branding via DB-backed store, theme toggle, notifications bell, username-change, all routes retrofitted with light/dark variants |
+| 2026-07-11 | Zenoh admin panel HTTPS: uvicorn now binds `127.0.0.1:8895` only; new `zenoh-admin-proxy` (Caddy) terminates real TLS on `:8890` via Caddy's internal CA, `on_demand` issuance (operators reach it by raw IP, no SNI) |
+| 2026-07-11 | `BUNDLE_DIR`/`POD_STATE_DIR` defaults moved from `$HOME/goat-bundle`/`$HOME/goat-moon` to `compose/certs/`/`compose/state/` (in-repo, gitignored) — scattered state across `$HOME` made cleanup unreliable |
+| 2026-07-11 | Added `dev.sh`: disposable local Postgres + directly-run uvicorn for zenoh-admin UI preview only, bypassing zenoh-router/certs/fabric entirely |
 
 ---
 

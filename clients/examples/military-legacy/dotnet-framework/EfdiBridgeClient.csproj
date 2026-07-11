@@ -8,8 +8,8 @@
   fully offline.
 
   Build with MSBuild (any VS 2015+ or Build Tools install):
-      msbuild GoatBridgeClient.csproj /p:Configuration=Release
-  -> produces bin\Release\GoatBridgeClient.exe
+      msbuild EfdiBridgeClient.csproj /p:Configuration=Release
+  -> produces bin\Release\EfdiBridgeClient.exe
 
   Or skip MSBuild entirely and use csc.exe directly (see README.md).
 -->
@@ -19,8 +19,8 @@
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
     <OutputType>Exe</OutputType>
-    <RootNamespace>GoatBridgeClient</RootNamespace>
-    <AssemblyName>GoatBridgeClient</AssemblyName>
+    <RootNamespace>EfdiBridgeClient</RootNamespace>
+    <AssemblyName>EfdiBridgeClient</AssemblyName>
     <!-- 4.x: use whatever your shop pins (v4.5 / v4.6.1 / v4.7.2 / v4.8 are all fine). -->
     <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>

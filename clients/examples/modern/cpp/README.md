@@ -2,7 +2,7 @@
 
 Idiomatic C++ against the pod, using the **official** Zenoh C++ binding
 [`zenoh-cpp`](https://github.com/eclipse-zenoh/zenoh-cpp) **1.9.0** plus the header-only
-[`connect/cpp/goat_connect.hpp`](../../../connect/cpp/goat_connect.hpp) helper.
+[`connect/cpp/efdi_connect.hpp`](../../../connect/cpp/efdi_connect.hpp) helper.
 
 ## Read this first: zenoh-cpp is a header-only wrapper over zenoh-c
 
@@ -54,12 +54,12 @@ The header-only connect helper is pulled in from `clients/connect/cpp/` via the 
 ## Setup (env)
 
 ```sh
-export GOAT_ROUTER="tls/127.0.0.1:7447"
-export GOAT_CERT="$HOME/.goat/contexts/default/mtls.cert.pem"
-export GOAT_KEY="$HOME/.goat/contexts/default/mtls.key.pem"
-export GOAT_CA="$HOME/.goat/contexts/default/ca-roots.pem"
-export GOAT_NAMESPACE="release/acme"
-# GOAT_VERIFY_NAME defaults to false (local pod at 127.0.0.1); set true for a DNS-named router.
+export EFDI_ROUTER="tls/127.0.0.1:7447"
+export EFDI_CERT="$HOME/.goat/contexts/default/mtls.cert.pem"
+export EFDI_KEY="$HOME/.goat/contexts/default/mtls.key.pem"
+export EFDI_CA="$HOME/.goat/contexts/default/ca-roots.pem"
+export PARTNER_NAMESPACE="release/acme"
+# EFDI_VERIFY_NAME defaults to false (local pod at 127.0.0.1); set true for a DNS-named router.
 ```
 
 ## Run — the round-trip
@@ -87,7 +87,7 @@ endpoint + the complete TLS object with `root_ca_certificate` / `connect_certifi
 parses it once with `zenoh::Config::from_str(...)`.
 
 When the router cert's SAN binds an **IP/mesh address** rather than the DNS name you dial, set
-`GOAT_VERIFY_NAME=false` (the default). A DNS-named remote router can use `true`.
+`EFDI_VERIFY_NAME=false` (the default). A DNS-named remote router can use `true`.
 
 ## Notes
 

@@ -1,7 +1,7 @@
 /* publish.c — send data to the goat fabric (C99 / zenoh-c 1.9.0).
  *
- *   export GOAT_ROUTER=tls/127.0.0.1:7447 GOAT_CERT=... GOAT_KEY=... GOAT_CA=... \
- *          GOAT_NAMESPACE=release/acme
+ *   export EFDI_ROUTER=tls/127.0.0.1:7447 EFDI_CERT=... EFDI_KEY=... EFDI_CA=... \
+ *          PARTNER_NAMESPACE=release/acme
  *   ./publish              # one JSON sample
  *   ./publish 50 200       # 50 samples, 200ms apart
  *
@@ -11,7 +11,7 @@
  * THE mTLS GOTCHA: the whole Zenoh config — including the transport/link/tls object — is built
  * as ONE json5 string and parsed with zc_config_from_str(). The TLS settings MUST stay in a
  * single object with enable_mtls:true; splitting them across separate inserts silently disables
- * the client-cert send path on Zenoh 1.x. See goat_config() below.
+ * the client-cert send path on Zenoh 1.x. See efdi_config() below.
  */
 
 #include <stdio.h>
@@ -33,9 +33,9 @@ static const char *env_or_die(const char *name) {
     return v;
 }
 
-/* goat_namespace — GOAT_NAMESPACE with any trailing '/' stripped, copied into `out`. */
-static void goat_namespace(char *out, size_t out_sz) {
-    const char *ns = env_or_die("GOAT_NAMESPACE");
+/* efdi_namespace — PARTNER_NAMESPACE with any trailing '/' stripped, copied into `out`. */
+static void efdi_namespace(char *out, size_t out_sz) {
+    const char *ns = env_or_die("PARTNER_NAMESPACE");
     size_t n = strlen(ns);
     while (n > 0 && ns[n - 1] == '/') n--;
     if (n >= out_sz) n = out_sz - 1;
@@ -43,15 +43,15 @@ static void goat_namespace(char *out, size_t out_sz) {
     out[n] = '\0';
 }
 
-/* goat_config — build the mTLS client config from the GOAT_* env vars (the one gotcha).
+/* efdi_config — build the mTLS client config from the GOAT_* env vars (the one gotcha).
  * Returns 0 on success; fills `cfg` with an owned config the caller must z_drop(). */
-static z_result_t goat_config(z_owned_config_t *cfg) {
-    const char *router = env_or_die("GOAT_ROUTER");
-    const char *ca     = env_or_die("GOAT_CA");
-    const char *cert   = env_or_die("GOAT_CERT");
-    const char *key    = env_or_die("GOAT_KEY");
+static z_result_t efdi_config(z_owned_config_t *cfg) {
+    const char *router = env_or_die("EFDI_ROUTER");
+    const char *ca     = env_or_die("EFDI_CA");
+    const char *cert   = env_or_die("EFDI_CERT");
+    const char *key    = env_or_die("EFDI_KEY");
 
-    const char *vn = getenv("GOAT_VERIFY_NAME");
+    const char *vn = getenv("EFDI_VERIFY_NAME");
     const char *verify_name =
         (vn != NULL && (strcmp(vn, "true") == 0 || strcmp(vn, "TRUE") == 0 ||
                         strcmp(vn, "True") == 0))
@@ -87,12 +87,12 @@ int main(int argc, char **argv) {
 
     /* key = <namespace>/sensors/temp */
     char ns[1024];
-    goat_namespace(ns, sizeof(ns));
+    efdi_namespace(ns, sizeof(ns));
     char key[1280];
     snprintf(key, sizeof(key), "%s/sensors/temp", ns);
 
     z_owned_config_t config;
-    if (goat_config(&config) < 0) {
+    if (efdi_config(&config) < 0) {
         fprintf(stderr, "failed to build config\n");
         return 1;
     }

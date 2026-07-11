@@ -31,13 +31,13 @@ option — then your app stays trivial and the bridge carries the complexity.
 ## Run them co-located with the pod (localhost)
 
 A bridge is the same kind of Zenoh client as everything else in `clients/`: it reads the same five
-env vars (`GOAT_ROUTER`, `GOAT_CERT`, `GOAT_KEY`, `GOAT_CA`, `GOAT_NAMESPACE`) and reuses
-[`connect/python/goat_connect.py`](../../connect/python/goat_connect.py) to open its mTLS session.
+env vars (`EFDI_ROUTER`, `EFDI_CERT`, `EFDI_KEY`, `EFDI_CA`, `PARTNER_NAMESPACE`) and reuses
+[`connect/python/efdi_connect.py`](../../connect/python/efdi_connect.py) to open its mTLS session.
 
 **Run the bridge on the same machine as the pod**, and have it expose its protocol on
 **`127.0.0.1` only**. The bridge holds your mTLS client identity, so its plaintext side (HTTP, the
 watched directory) is an unauthenticated door into the fabric — keep that door on localhost. If your
-app is on another host, put the bridge next to *that* app and point its `GOAT_ROUTER` at the pod's
+app is on another host, put the bridge next to *that* app and point its `EFDI_ROUTER` at the pod's
 mesh IP, but understand you've then moved the trust boundary to the link between bridge and pod
 (which is still mTLS) — never expose the plaintext side to a network you don't trust.
 

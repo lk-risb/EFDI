@@ -7,10 +7,10 @@
 // Real payloads can be anything (bytes, protobuf, CBOR); JSON here for legibility.
 //
 // IMPORTANT: zenoh-ts connects to the zenoh-plugin-remote-api over a WebSocket, NOT directly to
-// the router over mTLS. See ./README.md and ../../../connect/typescript/goat_connect.ts.
+// the router over mTLS. See ./README.md and ../../../connect/typescript/efdi_connect.ts.
 
 import { Encoding } from "@eclipse-zenoh/zenoh-ts";
-import { session, key } from "../../../connect/typescript/goat_connect.js";
+import { session, key } from "../../../connect/typescript/efdi_connect.js";
 
 async function main(): Promise<void> {
   const n = process.argv[2] ? parseInt(process.argv[2], 10) : 1;

@@ -11,10 +11,10 @@
  *   GET  http://127.0.0.1:8080/stream/<keyexpr>    Server-Sent Events, continuous
  *
  * Build & run: see README.md (csc.exe or the minimal old-style .csproj).
- *   GoatBridgeClient.exe pub sensors/temp {"temp_c":21.5}
- *   GoatBridgeClient.exe pub sensors/temp 21.5 10 200
- *   GoatBridgeClient.exe sub sensors/temp 5 60
- *   GoatBridgeClient.exe stream sensors/temp
+ *   EfdiBridgeClient.exe pub sensors/temp {"temp_c":21.5}
+ *   EfdiBridgeClient.exe pub sensors/temp 21.5 10 200
+ *   EfdiBridgeClient.exe sub sensors/temp 5 60
+ *   EfdiBridgeClient.exe stream sensors/temp
  *
  * The bridge base URL defaults to http://127.0.0.1:8080; override with the BRIDGE_URL env var.
  */
@@ -24,7 +24,7 @@ using System.Net;
 using System.Text;
 using System.Threading;
 
-namespace GoatBridgeClient
+namespace EfdiBridgeClient
 {
     internal static class Program
     {
@@ -39,9 +39,9 @@ namespace GoatBridgeClient
             if (args.Length < 2)
             {
                 Console.Error.WriteLine("usage:");
-                Console.Error.WriteLine("  GoatBridgeClient pub    <suffix>  <body> [count] [intervalMs]");
-                Console.Error.WriteLine("  GoatBridgeClient sub    <keyexpr> [count] [timeoutSec]");
-                Console.Error.WriteLine("  GoatBridgeClient stream <keyexpr>");
+                Console.Error.WriteLine("  EfdiBridgeClient pub    <suffix>  <body> [count] [intervalMs]");
+                Console.Error.WriteLine("  EfdiBridgeClient sub    <keyexpr> [count] [timeoutSec]");
+                Console.Error.WriteLine("  EfdiBridgeClient stream <keyexpr>");
                 return 2;
             }
 
