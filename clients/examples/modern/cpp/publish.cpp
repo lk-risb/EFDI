@@ -1,7 +1,7 @@
 // publish.cpp — send data to the goat fabric (modern C++ / zenoh-cpp 1.9.0).
 //
-//   export GOAT_ROUTER=tls/127.0.0.1:7447 GOAT_CERT=... GOAT_KEY=... GOAT_CA=... \
-//          GOAT_NAMESPACE=release/acme
+//   export EFDI_ROUTER=tls/127.0.0.1:7447 EFDI_CERT=... EFDI_KEY=... EFDI_CA=... \
+//          PARTNER_NAMESPACE=release/acme
 //   ./publish              # one JSON sample
 //   ./publish 50 0.2       # 50 samples, 200ms apart
 //
@@ -15,7 +15,7 @@
 #include <string>
 #include <thread>
 
-#include "goat_connect.hpp"  // from clients/connect/cpp (added to the include path by CMake)
+#include "efdi_connect.hpp"  // from clients/connect/cpp (added to the include path by CMake)
 #include "zenoh.hxx"
 
 using namespace zenoh;
@@ -26,9 +26,9 @@ int main(int argc, char** argv) {
             argc > 1 ? static_cast<std::size_t>(std::strtoul(argv[1], nullptr, 10)) : 1;
         const double interval = argc > 2 ? std::strtod(argv[2], nullptr) : 1.0;
 
-        const std::string key = goat::key("sensors/temp");
+        const std::string key = efdi::key("sensors/temp");
 
-        auto session = goat::session();
+        auto session = efdi::session();
         auto pub = session.declare_publisher(KeyExpr(key));
 
         for (std::size_t i = 0; i < n; ++i) {

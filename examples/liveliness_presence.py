@@ -25,17 +25,17 @@ Run two copies in different terminals (one as monitor, one as producer) to watch
 a join/leave, or run it once to see your own token reported back.
 
 Connection config comes from the goat profile the pod/bundle gives you:
-  GOAT_ROUTER     e.g. tls/<router-host>:7447
-  GOAT_MTLS_CERT  path to mtls.cert.pem
-  GOAT_MTLS_KEY   path to mtls.key.pem
-  GOAT_CA_ROOTS   path to ca-roots.pem
-  GOAT_PREFIX     your onboarded prefix, e.g. acme
-  GOAT_ROLE       "monitor" (watch presence) or "producer" (declare a token).
+  EFDI_ROUTER     e.g. tls/<router-host>:7447
+  EFDI_MTLS_CERT  path to mtls.cert.pem
+  EFDI_MTLS_KEY   path to mtls.key.pem
+  EFDI_CA_ROOTS   path to ca-roots.pem
+  PARTNER_NAMESPACE     your onboarded prefix, e.g. acme
+  EFDI_ROLE       "monitor" (watch presence) or "producer" (declare a token).
                   Default "monitor".
-  GOAT_NODE       a name for this node's token, e.g. sensor-7. Default "node-1".
+  EFDI_NODE       a name for this node's token, e.g. sensor-7. Default "node-1".
 
-Run:  GOAT_ROLE=monitor  python3 liveliness_presence.py
-      GOAT_ROLE=producer python3 liveliness_presence.py   # in another terminal
+Run:  EFDI_ROLE=monitor  python3 liveliness_presence.py
+      EFDI_ROLE=producer python3 liveliness_presence.py   # in another terminal
 Deps: pip install eclipse-zenoh==1.9.0
 """
 
@@ -50,13 +50,13 @@ def open_session() -> zenoh.Session:
     """Open an mTLS client session against the goat router, from env config."""
     conf = zenoh.Config()
     conf.insert_json5("mode", json.dumps("client"))
-    conf.insert_json5("connect/endpoints", json.dumps([os.environ["GOAT_ROUTER"]]))
+    conf.insert_json5("connect/endpoints", json.dumps([os.environ["EFDI_ROUTER"]]))
     conf.insert_json5("transport/link/tls/root_ca_certificate",
-                      json.dumps(os.environ["GOAT_CA_ROOTS"]))
+                      json.dumps(os.environ["EFDI_CA_ROOTS"]))
     conf.insert_json5("transport/link/tls/connect_certificate",
-                      json.dumps(os.environ["GOAT_MTLS_CERT"]))
+                      json.dumps(os.environ["EFDI_MTLS_CERT"]))
     conf.insert_json5("transport/link/tls/connect_private_key",
-                      json.dumps(os.environ["GOAT_MTLS_KEY"]))
+                      json.dumps(os.environ["EFDI_MTLS_KEY"]))
     return zenoh.open(conf)
 
 
@@ -96,9 +96,9 @@ def run_monitor(session: zenoh.Session, prefix: str) -> None:
 
 
 def main() -> None:
-    prefix = os.environ["GOAT_PREFIX"]
-    role = os.environ.get("GOAT_ROLE", "monitor")
-    node = os.environ.get("GOAT_NODE", "node-1")
+    prefix = os.environ["PARTNER_NAMESPACE"]
+    role = os.environ.get("EFDI_ROLE", "monitor")
+    node = os.environ.get("EFDI_NODE", "node-1")
     session = open_session()
     try:
         if role == "producer":

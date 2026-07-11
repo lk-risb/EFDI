@@ -34,11 +34,11 @@ Two knobs to set consciously:
     doesn't dump a backlog — see the `recovery_only` note below.
 
 Connection config comes from the goat profile the pod/bundle gives you:
-  GOAT_ROUTER     e.g. tls/<router-host>:7447   (profile.toml router_endpoint)
-  GOAT_MTLS_CERT  path to mtls.cert.pem
-  GOAT_MTLS_KEY   path to mtls.key.pem
-  GOAT_CA_ROOTS   path to ca-roots.pem
-  GOAT_KEY_EXPR   the key expression to subscribe to, e.g. acme/tracks/v1/**
+  EFDI_ROUTER     e.g. tls/<router-host>:7447   (profile.toml router_endpoint)
+  EFDI_MTLS_CERT  path to mtls.cert.pem
+  EFDI_MTLS_KEY   path to mtls.key.pem
+  EFDI_CA_ROOTS   path to ca-roots.pem
+  EFDI_KEY_EXPR   the key expression to subscribe to, e.g. acme/tracks/v1/**
 
 Run:  python3 resilient_subscriber.py
 Deps: pip install eclipse-zenoh==1.9.0
@@ -58,19 +58,19 @@ def open_session() -> zenoh.Session:
     """Open an mTLS client session against the goat router, from env config."""
     conf = zenoh.Config()
     conf.insert_json5("mode", json.dumps("client"))
-    conf.insert_json5("connect/endpoints", json.dumps([os.environ["GOAT_ROUTER"]]))
+    conf.insert_json5("connect/endpoints", json.dumps([os.environ["EFDI_ROUTER"]]))
     # mTLS — the fabric requires a chain-verifiable client cert.
     conf.insert_json5("transport/link/tls/root_ca_certificate",
-                      json.dumps(os.environ["GOAT_CA_ROOTS"]))
+                      json.dumps(os.environ["EFDI_CA_ROOTS"]))
     conf.insert_json5("transport/link/tls/connect_certificate",
-                      json.dumps(os.environ["GOAT_MTLS_CERT"]))
+                      json.dumps(os.environ["EFDI_MTLS_CERT"]))
     conf.insert_json5("transport/link/tls/connect_private_key",
-                      json.dumps(os.environ["GOAT_MTLS_KEY"]))
+                      json.dumps(os.environ["EFDI_MTLS_KEY"]))
     return zenoh.open(conf)
 
 
 def main() -> None:
-    key_expr = os.environ.get("GOAT_KEY_EXPR", "**")
+    key_expr = os.environ.get("EFDI_KEY_EXPR", "**")
     session = open_session()
 
     # HISTORY: on (re)connect, catch up the last hour. detect_late_publishers

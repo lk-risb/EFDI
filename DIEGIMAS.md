@@ -27,15 +27,16 @@
 | UDP multicast `239.2.3.1:6969` | iš serverio | CoT pristatymas į ATAK |
 | TCP 7448 | localhost | Vietinis Zenoh router |
 | TCP 7447 TLS | iš serverio | Nuotolinis Zenoh router (reikia NetBird) |
+| HTTPS 8890 | į serverį | Zenoh administravimo GUI (Caddy TLS, vidinis CA — žr. §10) |
 | HTTPS | iš serverio | dronuradaras.lt REST API |
 
 ATAK įrenginiai turi būti tame pačiame L2 tinklo segmente kaip serveris (multicast neperžengia VLAN ribų be maršrutizatoriaus konfigūracijos). Tarpvietiniam diegimui naudokite TAK serverį ir `cot-tcp` paslaugą.
 
 ### Sertifikatai
 
-Zenoh mTLS autentifikacijai reikalingas EFDI išduotas `goat-bundle`. Gaukite jį iš EFDI administratoriaus. **Bundle niekada nesaugomas šioje repozitorijoje.**
+Zenoh mTLS autentifikacijai reikalingas EFDI išduotas `goat-bundle`. Gaukite jį iš EFDI administratoriaus.
 
-Neapdorotas pasirašytas prisijungimo paketas (`<handle>.cbor`, vienkartiškai naudojamas `host/first-boot.sh`) taip pat turėtų būti laikomas už repozitorijos ribų — pvz. `~/Documents/<pod-pavadinimas>/` — ir nurodomas keliu kaskart, kai reikia, o ne kopijuojamas į darbinį katalogą.
+Ištraukta mTLS medžiaga (`efdi-ca-root.pem`, `<NAMESPACE>-cert.pem`, `<NAMESPACE>-key.pem`) saugoma `compose/certs/` — įtraukta į `.gitignore`, niekada nekomituojama. Neapdorotas pasirašytas prisijungimo paketas (`<handle>.cbor`) saugomas `compose/state/goat-cli/` bet kokiam būsimam `goat profile init`/`rotate` paleidimui — taip pat gitignored. Abu numatytieji keliai nustatomi `start.sh`; jei norite laikyti juos visai už repozitorijos ribų, perrašykite per `BUNDLE_DIR`/`POD_STATE_DIR` faile `compose/.env`.
 
 ---
 
@@ -50,10 +51,10 @@ cd efdi-moon-pod
 
 ### 2.2 goat-bundle įdiegimas
 
-Bundle patalpinkite į `$HOME/goat-bundle/` (numatytasis kelias; keičiamas per `BUNDLE_DIR`):
+Bundle patalpinkite į `compose/certs/` (numatytasis kelias; keičiamas per `BUNDLE_DIR`):
 
 ```text
-~/goat-bundle/
+compose/certs/
 ├── efdi-ca-root.pem          # CA sertifikatas (viešas)
 ├── <NAMESPACE>-cert.pem      # Mazgo sertifikatas
 └── <NAMESPACE>-key.pem       # Privatus raktas — apribokite prieigą
@@ -63,8 +64,8 @@ Bundle patalpinkite į `$HOME/goat-bundle/` (numatytasis kelias; keičiamas per 
 
 ```bash
 # Patikrinimas
-ls ~/goat-bundle/*.pem
-chmod 600 ~/goat-bundle/*-key.pem
+ls compose/certs/*.pem
+chmod 600 compose/certs/*-key.pem
 ```
 
 ### 2.3 Python virtualios aplinkos kūrimas
@@ -107,7 +108,13 @@ Redaguokite `compose/.env`. Failą `start.sh` nuskaito eilutė po eilutės saugi
 
 ```bash
 # ── Bundle kelias ────────────────────────────────────────────────────────────
-BUNDLE_DIR=/home/<vartotojas>/goat-bundle
+# Jei nenustatyta, numatytasis kelias yra compose/certs/ (repo viduje, gitignored) —
+# perrašykite tik jei norite laikyti sertifikatus visai už repo ribų.
+#BUNDLE_DIR=/home/<vartotojas>/goat-bundle
+
+# ── Vykdymo būsena (žurnalai, PID failai, Zenoh config/sertifikatai) ────────
+# Jei nenustatyta, numatytasis kelias yra compose/state/ (repo viduje, gitignored).
+#POD_STATE_DIR=/var/lib/goat-moon
 
 # ── Giraffe AMB radaras (ASTERIX CAT-48/34) ─────────────────────────────────
 CAT48_PORT=30048               # UDP prievadas, iš kurio radaras siunčia duomenis
@@ -125,10 +132,21 @@ CAT48_RADAR_NAME=Giraffe AMB   # Vardas, rodomas ATAK žemėlapyje
 TAK_HOST=127.0.0.1
 TAK_PORT=8087
 
-# ── SitaWare draugiškų pajėgų sekimas ───────────────────────────────────────
+# ── SitaWare HQ draugiškų pajėgų sekimas (gaunama REST) ─────────────────────
 SITAWARE_URL=https://sitaware.example.com
 SITAWARE_USER=
 SITAWARE_PASS=
+
+# ── NATO NFFI (STANAG 4677) draugiškų pajėgų srautas (gaunamas XML) ─────────
+NFFI_HOST=
+NFFI_PORT=7010
+NFFI_FRAMING=length             # length | newline
+
+# ── SitaWare Edge (siunčiamas NVG) — atskiras produktas/serveris nei HQ ─────
+SITAWARE_NVG_URL=
+SITAWARE_NVG_USER=
+SITAWARE_NVG_PASS=
+SITAWARE_NVG_SOURCE=efdi-live
 
 # ── Link-16 JREAP-C ─────────────────────────────────────────────────────────
 LINK16_PORT=                   # Palikite tuščią, jei Link-16 šaltinio nėra
@@ -164,21 +182,23 @@ Interaktyvus paleidiklis rodo visas paslaugas su jų parengties būsena. Įjunki
   [ 3] [ ] link16         Link-16 JREAP-C datalink               LINK16_PORT not set
   [ 4] [ ] mavlink        MAVLink UAV telemetry                   MAVLINK_PORT not set
   [ 5] [ ] vmf            VMF MIL-STD-47001C messages            VMF_PORT not set
-  [ 6] [ ] sitaware       SitaWare friendly force tracking       SITAWARE_URL not set
-  [ 7] [ ] dronuradaras   dronuradaras.lt drone detection        ready
+  [ 6] [ ] sitaware       SitaWare HQ friendly force tracking (inbound REST)  will prompt for address+login
+  [ 7] [ ] nffi           NATO NFFI friendly force XML feed (inbound)         NFFI_HOST not set
+  [ 8] [ ] dronuradaras   dronuradaras.lt drone detection        ready
 
   Output layers
   ──────────────────────────────────────────────────────────
-  [ 8] [✓] cot-udp        CoT → ATAK UDP multicast 239.2.3.1:6969
-  [ 9] [✓] cot-tcp        CoT → TAK Server TCP
-  [10] [✓] track-fusion   Radar/ADS-B track correlation
+  [ 9] [✓] cot-udp        CoT → ATAK UDP multicast 239.2.3.1:6969
+  [10] [✓] cot-tcp        CoT → TAK Server TCP
+  [11] [ ] sitaware-nvg   EFDI tracks → SitaWare Edge (outbound NVG)          will prompt for address+login
+  [12] [✓] track-fusion   Radar/ADS-B track correlation
 ```
 
 **Paleidiklio valdymas:**
 
 | Įvestis | Veiksmas |
 | --- | --- |
-| `1`–`10` | Įjungti / išjungti paslaugą (keli skaičiai atskiriami tarpu) |
+| `1`–`12` | Įjungti / išjungti paslaugą (keli skaičiai atskiriami tarpu) |
 | `a` | Pasirinkti visas paruoštas paslaugas |
 | `n` | Atžymėti visas |
 | Enter | Paleisti pažymėtas paslaugas |
@@ -188,12 +208,13 @@ Interaktyvus paleidiklis rodo visas paslaugas su jų parengties būsena. Įjunki
 
 | Scenarijus | Pasirinkimas |
 | --- | --- |
-| Giraffe radaras + ATAK multicast | `1 2 8` |
-| Giraffe + drono aptikimai + ATAK | `1 2 7 8` |
-| Giraffe + SitaWare + ATAK multicast | `1 2 6 8` |
-| Giraffe + SitaWare + drono aptikimai + ATAK | `1 2 6 7 8` |
-| Visi jutikliai + TAK serveris | `a`, tada atžymėkite `8` (cot-udp) |
-| Tik radaras be ATAK (derinimui) | `1 2 10` |
+| Giraffe radaras + ATAK multicast | `1 2 9` |
+| Giraffe + drono aptikimai + ATAK | `1 2 8 9` |
+| Giraffe + SitaWare + ATAK multicast | `1 2 6 9` |
+| Giraffe + SitaWare + drono aptikimai + ATAK | `1 2 6 8 9` |
+| EFDI takeliai siunčiami į SitaWare Edge | `1 2 11` |
+| Visi jutikliai + TAK serveris | `a`, tada atžymėkite `9` (cot-udp) |
+| Tik radaras be ATAK (derinimui) | `1 2 12` |
 
 Procesų PID failai saugomi `$POD_STATE_DIR/.pids/`, žurnalai rašomi į `$POD_STATE_DIR/logs/<paslauga>.log`.
 
@@ -211,14 +232,17 @@ Procesų PID failai saugomi `$POD_STATE_DIR/.pids/`, žurnalai rašomi į `$POD_
 
 Nustatykite `TAK_HOST` ir `TAK_PORT` faile `.env`, tada paleidiklyje pasirinkite `cot-tcp` vietoj `cot-udp`.
 
-### SitaWare draugiškų pajėgų sekimas
+### SitaWare HQ draugiškų pajėgų sekimas (gaunama kryptis)
 
 SitaWare vieneto pozicijos automatiškai publikuojamos į ATAK kai veikia `sitaware` paslauga. Jokios papildomos ATAK konfigūracijos nereikia.
 
-**Būtini `.env` laukai:**
+Palikite `SITAWARE_URL`/`SITAWARE_USER`/`SITAWARE_PASS` tuščius faile `.env` ir paleidiklis paklaus serverio adreso bei prisijungimo (vartotojo vardas, tada paslėptas slaptažodžio laukas) kaskart pasirinkus `sitaware` — arba užpildykite juos `.env` iš anksto, kad praleistumėte klausimą. (Antrą adresą vis tiek galima nustatyti per `SITAWARE_URL_FALLBACK` tiesiogiai `.env` faile, jei tikrai yra atskiras LAN/mesh kelias — interaktyvus klausimas paklaus tik vieno adreso.)
+
+**`.env` laukai:**
 
 ```bash
 SITAWARE_URL=https://<sitaware-serveris>
+SITAWARE_URL_FALLBACK=https://<netbird-mesh-ip>   # neprivaloma — antras kelias
 SITAWARE_USER=<vartotojo vardas>
 SITAWARE_PASS=<slaptažodis>
 SITAWARE_POLL_S=10   # neprivaloma — apklausos intervalas sekundėmis (numatytasis 10)
@@ -235,6 +259,33 @@ Bridge'as nuskaito MIL-STD-2525B SIDC kodus iš SitaWare ir nukreipia kiekvieną
 | Priešiškas | Oras (A) | `…/air/sitaware/rest/hostile/aircraft/…` | `a-h-A-M-F` |
 | Draugiškas | Jūra (S) | `…/sea/sitaware/rest/friendly/vessel/…` | `a-f-S-X-L` |
 | Priešiškas | Jūra (S) | `…/sea/sitaware/rest/hostile/vessel/…` | `a-h-S-X-L` |
+
+### NATO NFFI draugiškų pajėgų srautas (gaunama kryptis)
+
+`nffi` prisijungia prie išorinio NFFI (STANAG 4677 / FMN NFFI) TCP šaltinio — pvz., kitos C2 sistemos arba SitaWare pačios NFFI eksporto — ir publikuoja kiekvieną vienetą į `…/land/nato/nffi/friendly/unit/tracks/v1`. Atskira paslauga nuo `sitaware` (kuri traukia SitaWare HQ REST API); naudokite `nffi`, kai vienintelis prieinamas sąveikos kelias yra grynas NFFI srautas.
+
+**`.env` laukai:**
+
+```bash
+NFFI_HOST=<nffi-šaltinio-serveris>
+NFFI_PORT=7010                  # patikslinkite su NFFI šaltinio operatoriumi — ne fiksuotas standartinis portas
+NFFI_FRAMING=length             # length | newline — patikslinkite kadravimo formatą su šaltiniu
+```
+
+### SitaWare Edge (siunčiama kryptis, NVG)
+
+`sitaware-nvg` prenumeruoja visas EFDI takelių temas ir siunčia jas į SitaWare **Edge** serverį per jo NVG v2 REST API, todėl bet kuris SitaWare Frontline klientas, prijungtas prie to Edge serverio, automatiškai mato EFDI takelius — atskiros Frontline integracijos nereikia. Tai priešinga kryptis nei `sitaware`/`nffi` aukščiau (EFDI → SitaWare, ne SitaWare → EFDI), ir dažniausiai kitas serveris/prisijungimo duomenys, nes SitaWare HQ ir SitaWare Edge paprastai yra atskiri serveriai.
+
+Palikite `SITAWARE_NVG_URL`/`SITAWARE_NVG_USER`/`SITAWARE_NVG_PASS` tuščius ir paleidiklis paklaus adreso bei prisijungimo pasirinkus `sitaware-nvg`.
+
+**`.env` laukai:**
+
+```bash
+SITAWARE_NVG_URL=http://<sitaware-edge-serveris>:<portas>   # portas priklauso nuo diegimo — patikslinkite su SitaWare administratoriumi
+SITAWARE_NVG_USER=<vartotojo vardas>
+SITAWARE_NVG_PASS=<slaptažodis>
+SITAWARE_NVG_SOURCE=efdi-live    # NVG šaltinio pavadinimas, sukuriamas automatiškai pirmo siuntimo metu
+```
 
 ### Piktogramų žinynas
 
@@ -261,11 +312,13 @@ Bridge'as nuskaito MIL-STD-2525B SIDC kodus iš SitaWare ir nukreipia kiekvieną
 | --- | --- | --- | --- |
 | `asterix` | `bridges/asterix_bridge.py` | `…/air/asterix/cat48/unknown/aircraft/tracks/v1` | Srautinis UDP |
 | `dronuradaras` | `bridges/dronuradaras_bridge.py` | `…/land/dronuradaras/acoustic/neutral/sensor/status/v1` | Įrenginių apklausa 60 s / aptikimų apklausa 10 s |
-| `sitaware` | `bridges/sitaware_bridge.py` | `…/land/sitaware/rest/friendly/unit/tracks/v1` | Konfigūruojama REST |
+| `sitaware` | `bridges/sitaware_bridge.py` | `…/land/sitaware/rest/friendly/unit/tracks/v1` | Konfigūruojama REST apklausa |
+| `nffi` | `layers/nato_nffi_layer.py` | `…/land/nato/nffi/friendly/unit/tracks/v1` | Srautinis TCP (NFFI XML) |
 | `link16` | `bridges/link16_bridge.py` | `…/air/link16/jreap/*/aircraft/tracks/v1` | Srautinis UDP/TCP |
 | `mavlink` | `bridges/mavlink_bridge.py` | `…/air/mavlink/mav2/*/uav/tracks/v1` | Srautinis UDP/TCP |
 | `cot-udp` | `layers/cot_layer.py` | Prenumeratorius — visos temos | Įvykio valdomas |
 | `cot-tcp` | `layers/cot_layer.py` | Prenumeratorius — visos temos | Įvykio valdomas |
+| `sitaware-nvg` | `layers/nato_nvg_layer.py` | Prenumeratorius — visos takelių temos | Įvykio valdomas, 10 s atnaujinimas |
 | `track-fusion` | `layers/track_fusion_layer.py` | CAT-48 + CAT-21 prenumeratorius | Įvykio valdomas |
 
 ### Zenoh temų schema
@@ -323,7 +376,7 @@ docker compose -f compose/docker-compose.yml ps zenoh-router
 echo $ZENOH_LOCAL_ENDPOINT   # turi būti: tcp/127.0.0.1:7448
 
 # 3. Patikrinkite ar sertifikatų failai egzistuoja
-ls $GOAT_CERT_DIR/*.pem
+ls $EFDI_CERT_DIR/*.pem
 ```
 
 Jei `compose/.env` buvo įkeltas paprastu `source compose/.env`, kintamieji neeksportuojami į vaikininius procesus. Naudokite `./start.sh` (kuris tai tvarko automatiškai), arba:
@@ -423,7 +476,7 @@ import zenoh
 
 ORG       = "<YOUR_NAMESPACE>"
 _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", "tcp/127.0.0.1:7448")
-_CERT_DIR = os.environ.get("GOAT_CERT_DIR", os.path.dirname(__file__))
+_CERT_DIR = os.environ.get("EFDI_CERT_DIR", os.path.dirname(__file__))
 
 # make_config() nukopijuokite iš bet kurio esamo bridge — visiems ji identiška.
 
@@ -499,7 +552,9 @@ SERVICES=(... <pavadinimas> ...)
 
 ## 10. Zenoh administravimo GUI
 
-Web GUI stebėti routerio būseną ir redaguoti `zenoh/config.json5` be SSH prieigos, stiliaus pavyzdys — TAK admin panelė.
+Web GUI stebėti routerio būseną ir redaguoti `zenoh/config.json5` be SSH prieigos, stiliaus pavyzdys — TAK admin panelė (reticle kampų kortelės, stiklinis šoninis meniu, akcento švytėjimas, techninio tinklelio fonas).
+
+Skydelio "Connected routers" panelė rodo kiekvieną kitą zenoh egzempliorių (router ar peer), su kuriuo šis routeris turi gyvą ryšį — gaunama iš routerio pačio admin space, tas pats šaltinis kaip prenumeratorių/queryable temų sąrašai, tad papildomos konfigūracijos nereikia be jau esamos `pod-admin-introspect` ACL taisyklės.
 
 ### Nustatymas
 
@@ -520,10 +575,12 @@ ZENOH_ADMIN_FIRST_PASS=<nustatykite vieną kartą, po pirmo prisijungimo galite 
 
 ```bash
 cd compose
-docker compose up -d zenoh-admin-db zenoh-admin
+docker compose up -d zenoh-admin-db zenoh-admin zenoh-admin-proxy
 ```
 
-Tada atidarykite `http://<pod-host>:8890`.
+Tada atidarykite `https://<pod-host>:8890`.
+
+Pats skydelis (`zenoh-admin`) klausosi tik `127.0.0.1:8895` — tiesiogiai nepasiekiamas. Caddy reverse proxy (`zenoh-admin-proxy`) baigia tikrą TLS ant `:8890` naudodamas savo vidinį CA (`local_certs` + `tls internal`, be išorinio ACME/CA priklausomybės), išsaugotą `zenoh_admin_caddy_data` tome, kad CA išliktų po perkrovimų. Naršyklė pirmą kartą parodys savarankiškai pasirašyto sertifikato įspėjimą — pasitikėkite Caddy vidiniu CA (arba priimkite įspėjimą), kad tęstumėte; čia sąmoningai nėra viešo sertifikato, nes šis skydelis nėra skirtas interneto prieigai.
 
 ### Rolės
 
@@ -615,6 +672,11 @@ Tai pagauna sintaksės klaidas, TypeScript klaidas ir Dockerfile lūžimus prie�
 | 2026-07-05 | Ištaisyta `dronuradaras_bridge.py` — publikavo tik `is_online` jutiklius (22 iš 199 registruotų) — dabar publikuoja visus jutiklius su žinoma pozicija, atitinka tai, ką rodo viešas dronuradaras.lt puslapis |
 | 2026-07-05 | Pridėtas `.github/workflows/ci.yml`: tikrina bridge'ų/sluoksnių sintaksę, type-check + build zenoh-admin frontend'ui, sukuria abu Docker image'us kas kartą pushinant/darant PR |
 | 2026-07-05 | Pridėti `shellcheck` ir `compose-validate` CI job'ai; ištaisytas vienintelis realus radinys (`compose/rebuild.sh` trūko `cd ... \|\| exit`) ir nutildytas klaidingas teigiamas (`SC2163` dėl sąmoningo "export pagal dinaminį vardą" idiomo `start.sh`/`stop.sh`/`run.sh`) |
+| 2026-07-10 | Ištaisyta: `nato_nvg_layer.py` naudojo tuos pačius aplinkos kintamuosius kaip gaunamas `sitaware_bridge.py` (`SITAWARE_URL`/`USER`/`PASS`) — pervadinta į `SITAWARE_NVG_*`, nes HQ (gaunama) ir Edge (siunčiama) paprastai yra skirtingi serveriai/prisijungimo duomenys |
+| 2026-07-10 | Paslaugos `nffi` (`layers/nato_nffi_layer.py`) ir `sitaware-nvg` (`layers/nato_nvg_layer.py`) prijungtos prie `start.sh` — abi egzistavo repozitorijoje, bet niekada nebuvo registruotos kaip paleidžiamos paslaugos |
+| 2026-07-10 | `start.sh`: `sitaware` ir `sitaware-nvg` dabar paklausia vartotojo vardo ir paslėpto slaptažodžio paleidimo metu (anksčiau buvo klausiama tik serverio adreso; prisijungimo duomenys turėjo būti iš anksto nustatyti `.env`) |
+| 2026-07-10 | Zenoh admin GUI: pridėta "Connected routers" panelė — nuskaito `router/transport/unicast/*` įrašus, jau esančius admin space užklausoje, naudojamoje prenumeratorių/queryable sąrašams, jokios naujos ACL ar užklausos nereikia |
+| 2026-07-10 | Zenoh admin GUI: perkeltas TAK-hud vizualinis stilius (`hud-card`, `hud-frame`/reticle kampai, `hud-glass` šoninis meniu, `hud-grid-bg` fonas, akcento švytėjimo mygtukai, laipsniškas atsiradimo animacijos) į `index.css`/`Layout.tsx`/skydelį |
 
 ---
 

@@ -24,13 +24,24 @@ if [[ -f "$ENV_FILE" ]]; then
 fi
 
 export ZENOH_LOCAL_ENDPOINT="${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}"
-export GOAT_CERT_DIR="${BUNDLE_DIR:-$HOME/goat-bundle}"
+# Exported (not just used to derive EFDI_CERT_DIR) because docker-compose.yml
+# needs the real BUNDLE_DIR value itself to interpolate ${BUNDLE_DIR} volume
+# mounts for its dockerized bridges (e.g. openmeteo-bridge). Defaults inside
+# the repo, under compose/certs/ — gitignored, admins drop the router's
+# certificates here rather than scattering them somewhere in $HOME.
+export BUNDLE_DIR="${BUNDLE_DIR:-$SCRIPT_DIR/compose/certs}"
+export EFDI_CERT_DIR="$BUNDLE_DIR"
 
-# Runtime state (logs, PID files) lives outside the repo — same convention as
-# Zenoh's own config/certs (${POD_STATE_DIR}/zenoh/...). Keeps the working
-# tree free of unversioned junk.
-LOG_DIR="${POD_STATE_DIR:-$HOME/goat-moon}/logs"
-PID_DIR="${POD_STATE_DIR:-$HOME/goat-moon}/.pids"
+# Runtime state (logs, PID files, Zenoh's own config/certs under
+# ${POD_STATE_DIR}/zenoh/...) defaults inside the repo, under compose/state/ —
+# gitignored, keeps every path a dev needs to find in one place instead of
+# scattered across $HOME. Exported (not just a local default) because
+# `docker compose` (invoked later for zenoh-router) needs it in the real
+# environment to interpolate ${POD_STATE_DIR} in volume paths — it has no
+# access to this script's own defaulting logic.
+export POD_STATE_DIR="${POD_STATE_DIR:-$SCRIPT_DIR/compose/state}"
+LOG_DIR="$POD_STATE_DIR/logs"
+PID_DIR="$POD_STATE_DIR/.pids"
 mkdir -p "$LOG_DIR" "$PID_DIR"
 
 # ── Ensure venv ────────────────────────────────────────────────────────────
@@ -53,17 +64,19 @@ fi
 # ── Service registry ───────────────────────────────────────────────────────
 SERVICES=(
     zenoh
-    asterix link16 mavlink vmf sitaware dronuradaras
-    cot-udp cot-udp-tak cot-tcp track-fusion
+    asterix link16 mavlink vmf sitaware nffi dronuradaras
+    cot-udp cot-udp-tak cot-tcp sitaware-nvg track-fusion
 )
 
 declare -A SVC_CAT=(
     [zenoh]="Infrastructure"
     [asterix]="Sensor bridges"  [link16]="Sensor bridges"
     [mavlink]="Sensor bridges"  [vmf]="Sensor bridges"
-    [sitaware]="Sensor bridges" [dronuradaras]="Sensor bridges"
+    [sitaware]="Sensor bridges" [nffi]="Sensor bridges"
+    [dronuradaras]="Sensor bridges"
     [cot-udp]="Output layers"   [cot-udp-tak]="Output layers"
-    [cot-tcp]="Output layers"   [track-fusion]="Output layers"
+    [cot-tcp]="Output layers"   [sitaware-nvg]="Output layers"
+    [track-fusion]="Output layers"
 )
 
 declare -A SVC_DESC=(
@@ -72,11 +85,13 @@ declare -A SVC_DESC=(
     [link16]="Link-16 JREAP-C datalink"
     [mavlink]="MAVLink UAV telemetry"
     [vmf]="VMF MIL-STD-47001C messages"
-    [sitaware]="SitaWare friendly force tracking"
+    [sitaware]="SitaWare HQ friendly force tracking (inbound REST)"
+    [nffi]="NATO NFFI friendly force XML feed (inbound)"
     [dronuradaras]="dronuradaras.lt drone detection network"
     [cot-udp]="CoT → ATAK UDP multicast 239.2.3.1:6969 (same LAN only)"
     [cot-udp-tak]="CoT → UDP unicast direct to TAK Server (crosses NetBird/VPN)"
     [cot-tcp]="CoT → TAK Server TCP"
+    [sitaware-nvg]="EFDI tracks → SitaWare Edge (outbound NVG)"
     [track-fusion]="Radar/ADS-B track correlation"
 )
 
@@ -90,7 +105,9 @@ svc_ready() {
         mavlink)  [[ "${MAVLINK_PORT:-}" ]] ;;
         vmf)          [[ "${VMF_PORT:-}" ]] ;;
         sitaware)     return 0 ;;  # always ready; prompts for server IP at launch if unset
+        nffi)         [[ "${NFFI_HOST:-}" ]] ;;
         dronuradaras) return 0 ;;
+        sitaware-nvg) return 0 ;;  # always ready; prompts for address+login at launch if unset
         *)        return 0 ;;
     esac
 }
@@ -102,6 +119,13 @@ svc_hint() {
         link16)   echo "LINK16_PORT not set" ;;
         mavlink)  echo "MAVLINK_PORT not set" ;;
         vmf)      echo "VMF_PORT not set" ;;
+        nffi)     echo "NFFI_HOST not set" ;;
+        sitaware-nvg)
+            if [[ "${SITAWARE_NVG_URL:-}" ]]; then
+                echo "${SITAWARE_NVG_URL}"
+            else
+                echo "will prompt for address+login"
+            fi ;;
         sitaware)
             if [[ "${SITAWARE_URL:-}" ]]; then
                 [[ "${SITAWARE_URL_FALLBACK:-}" ]] && echo "${SITAWARE_URL} (+fallback)" || echo "${SITAWARE_URL}"
@@ -129,18 +153,27 @@ is_running() {
     [[ -f "$f" ]] && kill -0 "$(cat "$f")" 2>/dev/null
 }
 
-# Prompt for BOTH a LAN address and a NetBird mesh address for the same server.
-# Either may be left blank. Sets two caller-provided variable names (nameref-style
-# via printf -v) so both candidates can be kept as fallbacks — whichever network
-# path is actually up gets used.
-#   _prompt_dual_address <label> <lan_var> <netbird_var>
-_prompt_dual_address() {
-    local label="$1" lan_var="$2" nb_var="$3"
-    local lan_in nb_in
-    read -rp "$(printf "  ${BOLD}${label} LAN IP/URL${R} (same network, blank to skip): ")" lan_in
-    read -rp "$(printf "  ${BOLD}${label} NetBird IP/URL${R} (mesh VPN, blank to skip): ")" nb_in
-    printf -v "$lan_var" '%s' "$lan_in"
-    printf -v "$nb_var" '%s' "$nb_in"
+# Prompt for a single server address (blank to skip). One flat network routed
+# entirely over the VPN mesh here, so there's no separate LAN-vs-NetBird
+# address to ask for.
+#   _prompt_address <label> <addr_var>
+_prompt_address() {
+    local label="$1" addr_var="$2"
+    local addr_in
+    read -rp "$(printf "  ${BOLD}${label} IP/URL${R} (blank to skip): ")" addr_in
+    printf -v "$addr_var" '%s' "$addr_in"
+}
+
+# Prompt for a username and password (password input hidden via read -s).
+#   _prompt_credentials <label> <user_var> <pass_var>
+_prompt_credentials() {
+    local label="$1" user_var="$2" pass_var="$3"
+    local user_in pass_in
+    read -rp "$(printf "  ${BOLD}${label} username${R}: ")" user_in
+    read -rsp "$(printf "  ${BOLD}${label} password${R}: ")" pass_in
+    echo
+    printf -v "$user_var" '%s' "$user_in"
+    printf -v "$pass_var" '%s' "$pass_in"
 }
 
 # ── Launch helpers ─────────────────────────────────────────────────────────
@@ -214,19 +247,27 @@ launch() {
 
         sitaware)
             if [[ -z "${SITAWARE_URL:-}" && -z "${SITAWARE_URL_FALLBACK:-}" ]]; then
-                local sw_lan sw_nb
-                _prompt_dual_address "SitaWare Server" sw_lan sw_nb
-                if [[ -z "$sw_lan" && -z "$sw_nb" ]]; then
+                local sw_addr
+                _prompt_address "SitaWare Server" sw_addr
+                if [[ -z "$sw_addr" ]]; then
                     printf "  ${YELLOW}[skip]${R}  sitaware        no address entered\n"
                     return
                 fi
-                [[ -n "$sw_lan" ]] && export SITAWARE_URL="$sw_lan"
-                [[ -n "$sw_nb"  ]] && export SITAWARE_URL_FALLBACK="$sw_nb"
-                # Only a NetBird address was given — it becomes primary.
-                [[ -z "${SITAWARE_URL:-}" ]] && export SITAWARE_URL="$sw_nb" && unset SITAWARE_URL_FALLBACK
+                export SITAWARE_URL="$sw_addr"
+            fi
+            if [[ -z "${SITAWARE_USER:-}" ]]; then
+                local sw_user sw_pass
+                _prompt_credentials "SitaWare" sw_user sw_pass
+                export SITAWARE_USER="$sw_user"
+                export SITAWARE_PASS="$sw_pass"
             fi
             local sf=(); [[ "${SITAWARE_DISCOVER:-}" == "1" ]] && sf=(--discover)
             _start sitaware bridges/sitaware_bridge.py "${sf[@]}"
+            ;;
+
+        nffi)
+            local tnffi=(); [[ "${NFFI_FRAMING:-}" == "newline" ]] && tnffi=(--framing newline)
+            _start nffi layers/nato_nffi_layer.py "${tnffi[@]}"
             ;;
 
         dronuradaras)
@@ -242,8 +283,8 @@ launch() {
             local tak_udp_host2="${TAK_UDP_HOST_FALLBACK:-}"
             local tak_udp_port="${TAK_UDP_PORT:-8087}"
             if [[ -z "$tak_udp_host" && -z "$tak_udp_host2" ]]; then
-                _prompt_dual_address "TAK Server" tak_udp_host tak_udp_host2
-                if [[ -z "$tak_udp_host" && -z "$tak_udp_host2" ]]; then
+                _prompt_address "TAK Server" tak_udp_host
+                if [[ -z "$tak_udp_host" ]]; then
                     printf "  ${YELLOW}[skip]${R}  cot-udp-tak     no address entered\n"
                     return
                 fi
@@ -257,8 +298,8 @@ launch() {
             local tak_host="${TAK_HOST:-}"
             local tak_host2="${TAK_HOST_FALLBACK:-}"
             if [[ -z "$tak_host" && -z "$tak_host2" ]]; then
-                _prompt_dual_address "TAK Server" tak_host tak_host2
-                if [[ -z "$tak_host" && -z "$tak_host2" ]]; then
+                _prompt_address "TAK Server" tak_host
+                if [[ -z "$tak_host" ]]; then
                     printf "  ${YELLOW}[skip]${R}  cot-tcp         no address entered\n"
                     return
                 fi
@@ -266,6 +307,25 @@ launch() {
             local tcp_hosts=(); [[ -n "$tak_host"  ]] && tcp_hosts+=(--host "$tak_host")
             [[ -n "$tak_host2" ]] && tcp_hosts+=(--host "$tak_host2")
             _start cot-tcp layers/cot_layer.py "${tcp_hosts[@]}" --port "${TAK_PORT:-8087}"
+            ;;
+
+        sitaware-nvg)
+            if [[ -z "${SITAWARE_NVG_URL:-}" ]]; then
+                local nvg_addr
+                _prompt_address "SitaWare Edge (NVG)" nvg_addr
+                if [[ -z "$nvg_addr" ]]; then
+                    printf "  ${YELLOW}[skip]${R}  sitaware-nvg    no address entered\n"
+                    return
+                fi
+                export SITAWARE_NVG_URL="$nvg_addr"
+            fi
+            if [[ -z "${SITAWARE_NVG_USER:-}" ]]; then
+                local nvg_user nvg_pass
+                _prompt_credentials "SitaWare Edge" nvg_user nvg_pass
+                export SITAWARE_NVG_USER="$nvg_user"
+                export SITAWARE_NVG_PASS="$nvg_pass"
+            fi
+            _start sitaware-nvg layers/nato_nvg_layer.py
             ;;
 
         track-fusion)

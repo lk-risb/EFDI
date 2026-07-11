@@ -19,11 +19,11 @@ Publish.java / Subscribe.java  ──HTTP──▶  REST bridge (127.0.0.1:8080)
 1. **The REST bridge is running** next to the pod. Start it once (see
    [`../../bridges/rest-http/README.md`](../../bridges/rest-http/README.md)):
    ```sh
-   export GOAT_ROUTER=tls/127.0.0.1:7447 \
-          GOAT_CERT=$HOME/.goat/contexts/default/mtls.cert.pem \
-          GOAT_KEY=$HOME/.goat/contexts/default/mtls.key.pem \
-          GOAT_CA=$HOME/.goat/contexts/default/ca-roots.pem \
-          GOAT_NAMESPACE=release/acme
+   export EFDI_ROUTER=tls/127.0.0.1:7447 \
+          EFDI_CERT=$HOME/.goat/contexts/default/mtls.cert.pem \
+          EFDI_KEY=$HOME/.goat/contexts/default/mtls.key.pem \
+          EFDI_CA=$HOME/.goat/contexts/default/ca-roots.pem \
+          PARTNER_NAMESPACE=release/acme
    python3 bridge.py          # serves on http://127.0.0.1:8080
    ```
 2. **A JDK 8** (`javac -version` → `1.8.x`). Nothing else.

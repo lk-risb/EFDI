@@ -2,7 +2,7 @@
 
 Pure **C99** against the pod, for older or constrained toolchains: just libc + `libzenohc`, a
 `Makefile` (no CMake required), static-link guidance, and an **offline / air-gapped** build path.
-Each example is a single self-contained `.c` (the connect logic is inlined as `goat_config()` —
+Each example is a single self-contained `.c` (the connect logic is inlined as `efdi_config()` —
 no extra header to ship), so you can drop one file plus `libzenohc` onto a target and build it.
 
 Uses [`zenoh-c`](https://github.com/eclipse-zenoh/zenoh-c) **1.9.0** — the C library that the
@@ -70,12 +70,12 @@ make static                 # static-link libzenohc.a -> self-contained binaries
 ## Setup (env)
 
 ```sh
-export GOAT_ROUTER="tls/127.0.0.1:7447"
-export GOAT_CERT="$HOME/.goat/contexts/default/mtls.cert.pem"
-export GOAT_KEY="$HOME/.goat/contexts/default/mtls.key.pem"
-export GOAT_CA="$HOME/.goat/contexts/default/ca-roots.pem"
-export GOAT_NAMESPACE="release/acme"
-# GOAT_VERIFY_NAME defaults to false (local pod at 127.0.0.1); set true for a DNS-named router.
+export EFDI_ROUTER="tls/127.0.0.1:7447"
+export EFDI_CERT="$HOME/.goat/contexts/default/mtls.cert.pem"
+export EFDI_KEY="$HOME/.goat/contexts/default/mtls.key.pem"
+export EFDI_CA="$HOME/.goat/contexts/default/ca-roots.pem"
+export PARTNER_NAMESPACE="release/acme"
+# EFDI_VERIFY_NAME defaults to false (local pod at 127.0.0.1); set true for a DNS-named router.
 ```
 
 ## Run — the round-trip
@@ -105,13 +105,13 @@ but it won't connect" cause on offline hardware.
 Zenoh's TLS config must be one **whole json5 block** at `transport/link/tls` with
 **`enable_mtls: true`**. Setting the sub-keys one at a time silently does **not** turn on the
 client-cert send path on Zenoh 1.x — the session opens but the router rejects you, or you connect
-read-only. `goat_config()` in each `.c` builds the **entire** config (mode + connect endpoint +
+read-only. `efdi_config()` in each `.c` builds the **entire** config (mode + connect endpoint +
 the complete TLS object: `root_ca_certificate` / `connect_certificate` / `connect_private_key` /
 `enable_mtls` / `verify_name_on_connect`) as a single json5 string and parses it once with
 `zc_config_from_str()`.
 
 When the router cert's SAN binds an **IP/mesh address** rather than the DNS name you dial, set
-`GOAT_VERIFY_NAME=false` (the default). A DNS-named remote router can use `true`.
+`EFDI_VERIFY_NAME=false` (the default). A DNS-named remote router can use `true`.
 
 ## Notes / API accuracy
 

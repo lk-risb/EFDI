@@ -9,7 +9,7 @@
 #   cmake -B build -DCMAKE_PREFIX_PATH=/path/to/zenoh-install
 
 cmake_minimum_required(VERSION 3.16)
-project(goat_modern_cpp CXX)
+project(efdi_modern_cpp CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -18,12 +18,12 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # zenohcxx::zenohc imported target (header-only C++ wrappers + the linked libzenohc).
 find_package(zenohcxx REQUIRED)
 
-# Path to the header-only connect helper: clients/connect/cpp/goat_connect.hpp
-set(GOAT_CONNECT_CPP_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../connect/cpp"
-    CACHE PATH "Directory containing goat_connect.hpp")
+# Path to the header-only connect helper: clients/connect/cpp/efdi_connect.hpp
+set(EFDI_CONNECT_CPP_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../connect/cpp"
+    CACHE PATH "Directory containing efdi_connect.hpp")
 
 foreach(example publish subscribe)
   add_executable(${example} ${example}.cpp)
-  target_include_directories(${example} PRIVATE "${GOAT_CONNECT_CPP_DIR}")
+  target_include_directories(${example} PRIVATE "${EFDI_CONNECT_CPP_DIR}")
   target_link_libraries(${example} PRIVATE zenohcxx::zenohc)
 endforeach()

@@ -16,9 +16,9 @@ public final class Publish {
     public static void main(String[] args) throws Exception {
         int n = args.length > 0 ? Integer.parseInt(args[0]) : 1;
         double interval = args.length > 1 ? Double.parseDouble(args[1]) : 1.0;
-        String key = GoatConnect.key("sensors/temp");
+        String key = EfdiConnect.key("sensors/temp");
 
-        try (Session session = GoatConnect.session();
+        try (Session session = EfdiConnect.session();
              KeyExpr keyExpr = KeyExpr.tryFrom(key)) {
             Publisher pub = session.declarePublisher(keyExpr);
             for (int i = 0; i < n; i++) {

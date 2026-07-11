@@ -23,11 +23,11 @@ public final class Subscribe {
     private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("HH:mm:ss");
 
     public static void main(String[] args) throws Exception {
-        String keyexpr = args.length > 0 ? args[0] : GoatConnect.namespace() + "/**";
+        String keyexpr = args.length > 0 ? args[0] : EfdiConnect.namespace() + "/**";
         int limit = args.length > 1 ? Integer.parseInt(args[1]) : 0; // 0 = follow forever
         AtomicInteger seen = new AtomicInteger(0);
 
-        try (Session session = GoatConnect.session();
+        try (Session session = EfdiConnect.session();
              KeyExpr keyExpr = KeyExpr.tryFrom(keyexpr)) {
             Subscriber subscriber = session.declareSubscriber(keyExpr, sample -> onSample(sample, seen));
             System.out.println("subscribed: " + keyexpr + " (Ctrl-C to stop)");

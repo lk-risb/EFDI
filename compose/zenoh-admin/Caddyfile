@@ -1,0 +1,16 @@
+{
+	# Caddy's own internal CA — no external CA/ACME dependency required. Persisted
+	# in the caddy_data volume so it survives container restarts (otherwise a new
+	# CA would be minted every restart, forcing operators to re-trust it each time).
+	local_certs
+}
+
+:8890 {
+	# on_demand: operators reach this by raw IP (no DNS name), so Caddy can't know which
+	# hostname/IP to pre-issue a cert for — mint one for whatever identifier connects.
+	# Safe here since the issuer is the internal CA (local_certs), not public ACME.
+	tls internal {
+		on_demand
+	}
+	reverse_proxy 127.0.0.1:8895
+}

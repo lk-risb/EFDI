@@ -10,17 +10,17 @@
 //! depth, `*` for a single segment.
 
 #[tokio::main]
-async fn main() -> goat_connect::Result<()> {
+async fn main() -> efdi_connect::Result<()> {
     zenoh::init_log_from_env_or("error");
 
     let args: Vec<String> = std::env::args().collect();
     let keyexpr = match args.get(1) {
         Some(k) => k.clone(),
-        None => format!("{}/**", goat_connect::namespace()?),
+        None => format!("{}/**", efdi_connect::namespace()?),
     };
     let limit: usize = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(0); // 0 = forever
 
-    let session = goat_connect::session().await?;
+    let session = efdi_connect::session().await?;
     let subscriber = session.declare_subscriber(keyexpr.clone()).await?;
     println!("subscribed: {keyexpr} (Ctrl-C to stop)");
 

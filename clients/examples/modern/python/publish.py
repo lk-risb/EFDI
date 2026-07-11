@@ -2,7 +2,7 @@
 """publish.py — send data to the goat fabric (modern Python).
 
     pip install eclipse-zenoh
-    export GOAT_ROUTER=tls/127.0.0.1:7447 GOAT_CERT=... GOAT_KEY=... GOAT_CA=... GOAT_NAMESPACE=release/acme
+    export EFDI_ROUTER=tls/127.0.0.1:7447 EFDI_CERT=... EFDI_KEY=... EFDI_CA=... PARTNER_NAMESPACE=release/acme
     python3 publish.py                      # one JSON sample
     python3 publish.py 50 0.2               # 50 samples at 200ms
 
@@ -15,15 +15,15 @@ import time
 import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "..", "connect", "python"))
-import goat_connect
+import efdi_connect
 
 
 def main() -> None:
     n = int(sys.argv[1]) if len(sys.argv) > 1 else 1
     interval = float(sys.argv[2]) if len(sys.argv) > 2 else 1.0
-    key = goat_connect.key("sensors/temp")
+    key = efdi_connect.key("sensors/temp")
 
-    with goat_connect.session() as s:
+    with efdi_connect.session() as s:
         pub = s.declare_publisher(key)
         for i in range(n):
             payload = json.dumps({"ts": time.time(), "seq": i, "temp_c": 21.5 + i * 0.1})

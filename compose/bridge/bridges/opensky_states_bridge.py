@@ -29,10 +29,10 @@ ROUTER = "tls/zenoh.efdi.netbird.efdi-backbone.net:7447"
 ORG    = os.environ.get("PARTNER_NAMESPACE", "")
 TOPIC_ROOT = "LTU/CISB/" + ORG   # organization prefix precedes the pod namespace
 HERE   = os.path.dirname(os.path.abspath(__file__))
-# GOAT_CERT_DIR: directory containing efdi-ca-root.pem + ORG-{cert,key}.pem.
+# EFDI_CERT_DIR: directory containing efdi-ca-root.pem + ORG-{cert,key}.pem.
 # Defaults to HERE so the script works unchanged when run directly from the bundle.
-# In Docker set GOAT_CERT_DIR=/certs and mount the bundle certs there.
-_CERT_DIR = os.environ.get("GOAT_CERT_DIR", HERE)
+# In Docker set EFDI_CERT_DIR=/certs and mount the bundle certs there.
+_CERT_DIR = os.environ.get("EFDI_CERT_DIR", HERE)
 _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", ROUTER)
 
 OPENSKY_URL  = "https://opensky-network.org/api/states/all"

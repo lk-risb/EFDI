@@ -27,7 +27,7 @@ release/goat/**  --bridge subscribes-->  INBOX_DIR/release__goat__....bin  --you
 
 ```sh
 pip install eclipse-zenoh
-export GOAT_ROUTER=tls/127.0.0.1:7447 GOAT_CERT=... GOAT_KEY=... GOAT_CA=... GOAT_NAMESPACE=release/acme
+export EFDI_ROUTER=tls/127.0.0.1:7447 EFDI_CERT=... EFDI_KEY=... EFDI_CA=... PARTNER_NAMESPACE=release/acme
 export OUTBOX_DIR=./outbox INBOX_DIR=./inbox SUB_KEYEXPR='release/goat/**'
 python3 bridge.py
 ```

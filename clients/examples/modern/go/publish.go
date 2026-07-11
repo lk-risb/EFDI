@@ -2,7 +2,7 @@
 
 // publish.go — send data to the goat fabric (modern Go).
 //
-//	export GOAT_ROUTER=tls/127.0.0.1:7447 GOAT_CERT=... GOAT_KEY=... GOAT_CA=... GOAT_NAMESPACE=release/acme
+//	export EFDI_ROUTER=tls/127.0.0.1:7447 EFDI_CERT=... EFDI_KEY=... EFDI_CA=... PARTNER_NAMESPACE=release/acme
 //	go run publish.go            # one JSON sample
 //	go run publish.go 50 0.2     # 50 samples at 200ms
 //
@@ -20,7 +20,7 @@ import (
 	"strconv"
 	"time"
 
-	goatconnect "example.com/goat-moon-pod-examples-go/connect"
+	efdiconnect "example.com/efdi-examples-go/connect"
 
 	"github.com/eclipse-zenoh/zenoh-go/zenoh"
 )
@@ -41,13 +41,13 @@ func main() {
 		}
 	}
 
-	keyStr, err := goatconnect.Key("sensors/temp")
+	keyStr, err := efdiconnect.Key("sensors/temp")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 
-	s, err := goatconnect.Session()
+	s, err := efdiconnect.Session()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "open session: %v\n", err)
 		os.Exit(1)

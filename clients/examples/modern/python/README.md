@@ -1,7 +1,7 @@
 # Python — modern
 
 Idiomatic Python against the pod. Uses the official `eclipse-zenoh` client + the
-[`connect/python/goat_connect.py`](../../../connect/python/goat_connect.py) helper.
+[`connect/python/efdi_connect.py`](../../../connect/python/efdi_connect.py) helper.
 
 ## Setup
 

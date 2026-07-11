@@ -1,5 +1,5 @@
 [package]
-name = "goat-moon-pod-examples-rust"
+name = "efdi-examples-rust"
 version = "0.1.0"
 edition = "2021"
 license = "EPL-2.0 OR Apache-2.0"
@@ -13,8 +13,8 @@ name = "subscribe"
 path = "src/bin/subscribe.rs"
 
 [dependencies]
-# The goat-specific connect helper (in this repo). Mirrors connect/python/goat_connect.py.
-goat_connect = { path = "../../../connect/rust" }
+# The goat-specific connect helper (in this repo). Mirrors connect/python/efdi_connect.py.
+efdi_connect = { path = "../../../connect/rust" }
 
 # Plain Zenoh 1.x — pinned to the fleet's Zenoh 1.9.0. Async (tokio).
 zenoh = "=1.9.0"

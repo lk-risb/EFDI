@@ -25,7 +25,7 @@ java {
     }
 }
 
-// Pull the shared connect helper (GoatConnect.java) into compilation alongside the examples,
+// Pull the shared connect helper (EfdiConnect.java) into compilation alongside the examples,
 // mirroring how the Python/Go examples reach back into connect/<lang>/.
 sourceSets {
     main {

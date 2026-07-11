@@ -2,7 +2,7 @@
 
 Idiomatic Go against the pod. Uses the **official** Zenoh Go binding
 [`github.com/eclipse-zenoh/zenoh-go`](https://github.com/eclipse-zenoh/zenoh-go) (the `zenoh`
-package) plus the [`connect/go/goatconnect.go`](../../../connect/go/goatconnect.go) helper.
+package) plus the [`connect/go/efdiconnect.go`](../../../connect/go/efdiconnect.go) helper.
 
 ## Read this first: the binding is a cgo wrapper over zenoh-c
 
@@ -43,12 +43,12 @@ export LD_LIBRARY_PATH="/path/to/zenoh-c/lib:$LD_LIBRARY_PATH"   # macOS: DYLD_L
 ```sh
 go mod download
 # export GOAT_* per clients/README.md
-export GOAT_ROUTER="tls/127.0.0.1:7447"
-export GOAT_CERT="$HOME/.goat/contexts/default/mtls.cert.pem"
-export GOAT_KEY="$HOME/.goat/contexts/default/mtls.key.pem"
-export GOAT_CA="$HOME/.goat/contexts/default/ca-roots.pem"
-export GOAT_NAMESPACE="release/acme"
-# GOAT_VERIFY_NAME defaults to false (local pod at 127.0.0.1); set true for a DNS-named router.
+export EFDI_ROUTER="tls/127.0.0.1:7447"
+export EFDI_CERT="$HOME/.goat/contexts/default/mtls.cert.pem"
+export EFDI_KEY="$HOME/.goat/contexts/default/mtls.key.pem"
+export EFDI_CA="$HOME/.goat/contexts/default/ca-roots.pem"
+export PARTNER_NAMESPACE="release/acme"
+# EFDI_VERIFY_NAME defaults to false (local pod at 127.0.0.1); set true for a DNS-named router.
 ```
 
 ## Run
@@ -78,7 +78,7 @@ read-only. The helper does it the working way: it marshals the whole block
 `verify_name_on_connect`) and calls `Config.InsertJson5("transport/link/tls", <block>)` once.
 
 When the router cert's SAN binds an **IP/mesh address** rather than the DNS name you dial, set
-`GOAT_VERIFY_NAME=false` (the default). A DNS-named remote router can use `true`.
+`EFDI_VERIFY_NAME=false` (the default). A DNS-named remote router can use `true`.
 
 ## Notes
 

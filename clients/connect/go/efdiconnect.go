@@ -1,29 +1,29 @@
-// Package goatconnect — open an mTLS Zenoh session to a goat-moon-pod from env vars.
+// Package efdiconnect — open an mTLS Zenoh session to a goat-moon-pod from env vars.
 //
 // The ONLY goat-specific code you need. Everything else is plain Zenoh (the official
 // eclipse-zenoh/zenoh-go 1.x binding, which wraps zenoh-c via cgo).
 //
-//	import "<your-module>/connect/go" // package goatconnect
-//	s, _ := goatconnect.Session()
+//	import "<your-module>/connect/go" // package efdiconnect
+//	s, _ := efdiconnect.Session()
 //	defer s.Drop()
-//	ke, _ := zenoh.NewKeyExpr(goatconnect.Key("sensors/temp"))
+//	ke, _ := zenoh.NewKeyExpr(efdiconnect.Key("sensors/temp"))
 //	pub, _ := s.DeclarePublisher(ke, nil)
 //	pub.Put(zenoh.NewZBytesFromString("21.5"), nil)
 //
 // Env vars (see ../../README.md):
 //
-//	GOAT_ROUTER       tls/127.0.0.1:7447     pod Zenoh endpoint
-//	GOAT_CERT         path to your mTLS client cert (PEM)
-//	GOAT_KEY          path to your mTLS private key (PEM)
-//	GOAT_CA           path to the CA root that signs the router (PEM)
-//	GOAT_NAMESPACE    release/<you>          your owned prefix (publish under this)
-//	GOAT_VERIFY_NAME  "true"/"false"         TLS hostname verification (default false for a
+//	EFDI_ROUTER       tls/127.0.0.1:7447     pod Zenoh endpoint
+//	EFDI_CERT         path to your mTLS client cert (PEM)
+//	EFDI_KEY          path to your mTLS private key (PEM)
+//	EFDI_CA           path to the CA root that signs the router (PEM)
+//	PARTNER_NAMESPACE    release/<you>          your owned prefix (publish under this)
+//	EFDI_VERIFY_NAME  "true"/"false"         TLS hostname verification (default false for a
 //	                                         local pod reached at 127.0.0.1; "true" for a
 //	                                         DNS-named remote router)
 //
 // Build/link: this package transitively cgo-links zenoh-c. zenoh-c must be installed and
 // discoverable (CGO_CFLAGS / CGO_LDFLAGS / LD_LIBRARY_PATH). See ../../examples/modern/go/README.md.
-package goatconnect
+package efdiconnect
 
 import (
 	"encoding/json"
@@ -63,23 +63,23 @@ type tlsBlock struct {
 // send path on Zenoh 1.x — the session opens but the router rejects you or you connect
 // read-only. So we marshal the whole block and InsertJson5 it in a single call.
 func Config() (zenoh.Config, error) {
-	router, err := env("GOAT_ROUTER")
+	router, err := env("EFDI_ROUTER")
 	if err != nil {
 		return zenoh.Config{}, err
 	}
-	ca, err := env("GOAT_CA")
+	ca, err := env("EFDI_CA")
 	if err != nil {
 		return zenoh.Config{}, err
 	}
-	cert, err := env("GOAT_CERT")
+	cert, err := env("EFDI_CERT")
 	if err != nil {
 		return zenoh.Config{}, err
 	}
-	key, err := env("GOAT_KEY")
+	key, err := env("EFDI_KEY")
 	if err != nil {
 		return zenoh.Config{}, err
 	}
-	verifyName := strings.ToLower(os.Getenv("GOAT_VERIFY_NAME")) == "true"
+	verifyName := strings.ToLower(os.Getenv("EFDI_VERIFY_NAME")) == "true"
 
 	conf := zenoh.NewConfigDefault()
 
@@ -123,7 +123,7 @@ func Session() (zenoh.Session, error) {
 
 // Namespace returns your owned prefix, e.g. "release/acme" (trailing slash stripped).
 func Namespace() (string, error) {
-	ns, err := env("GOAT_NAMESPACE")
+	ns, err := env("PARTNER_NAMESPACE")
 	if err != nil {
 		return "", err
 	}
