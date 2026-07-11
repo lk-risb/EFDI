@@ -23,11 +23,11 @@ stops landing.
                     see the goat delivery-reconciliation pattern).
 
 Connection config comes from the goat profile the pod/bundle gives you:
-  GOAT_ROUTER         e.g. tls/<router-host>:7447   (profile.toml router_endpoint)
-  GOAT_MTLS_CERT      path to mtls.cert.pem
-  GOAT_MTLS_KEY       path to mtls.key.pem
-  GOAT_CA_ROOTS       path to ca-roots.pem
-  GOAT_PREFIX         your onboarded vendor prefix, e.g. acme
+  EFDI_ROUTER         e.g. tls/<router-host>:7447   (profile.toml router_endpoint)
+  EFDI_MTLS_CERT      path to mtls.cert.pem
+  EFDI_MTLS_KEY       path to mtls.key.pem
+  EFDI_CA_ROOTS       path to ca-roots.pem
+  PARTNER_NAMESPACE         your onboarded vendor prefix, e.g. acme
 
 Run:  python3 delivery_reconcile.py
 Deps: pip install eclipse-zenoh==1.9.0
@@ -44,14 +44,14 @@ def open_session() -> zenoh.Session:
     """Open an mTLS client session against the goat router, from env config."""
     conf = zenoh.Config()
     conf.insert_json5("mode", json.dumps("client"))
-    conf.insert_json5("connect/endpoints", json.dumps([os.environ["GOAT_ROUTER"]]))
+    conf.insert_json5("connect/endpoints", json.dumps([os.environ["EFDI_ROUTER"]]))
     # mTLS — the trial fabric requires a chain-verifiable client cert.
     conf.insert_json5("transport/link/tls/root_ca_certificate",
-                      json.dumps(os.environ["GOAT_CA_ROOTS"]))
+                      json.dumps(os.environ["EFDI_CA_ROOTS"]))
     conf.insert_json5("transport/link/tls/connect_certificate",
-                      json.dumps(os.environ["GOAT_MTLS_CERT"]))
+                      json.dumps(os.environ["EFDI_MTLS_CERT"]))
     conf.insert_json5("transport/link/tls/connect_private_key",
-                      json.dumps(os.environ["GOAT_MTLS_KEY"]))
+                      json.dumps(os.environ["EFDI_MTLS_KEY"]))
     return zenoh.open(conf)
 
 
@@ -82,7 +82,7 @@ def self_canary(session: zenoh.Session, prefix: str, intent_ledger: set[str]) ->
 
 
 def main() -> None:
-    prefix = os.environ["GOAT_PREFIX"]
+    prefix = os.environ["PARTNER_NAMESPACE"]
     session = open_session()
     intent_ledger: set[str] = set()
     sent_this_interval = 0

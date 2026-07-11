@@ -10,7 +10,7 @@ The bridge (running next to the pod on `127.0.0.1`) holds the Zenoh mTLS identit
 part. Your `.exe` just makes HTTP calls to localhost.
 
 ```
-GoatBridgeClient.exe  ──HTTP (HttpWebRequest)──▶  REST bridge (127.0.0.1:8080)  ──mTLS──▶  pod
+EfdiBridgeClient.exe  ──HTTP (HttpWebRequest)──▶  REST bridge (127.0.0.1:8080)  ──mTLS──▶  pod
    (BCL only, no NuGet)                              holds your certs               tls/127.0.0.1:7447
 ```
 
@@ -18,7 +18,7 @@ GoatBridgeClient.exe  ──HTTP (HttpWebRequest)──▶  REST bridge (127.0.0
 
 1. **The REST bridge is running** next to the pod (see
    [`../../bridges/rest-http/README.md`](../../bridges/rest-http/README.md)). Its environment carries
-   your namespace (`GOAT_NAMESPACE=release/acme`), so a bare suffix like `sensors/temp` becomes
+   your namespace (`PARTNER_NAMESPACE=release/acme`), so a bare suffix like `sensors/temp` becomes
    `release/acme/sensors/temp`.
 2. **A .NET Framework 4.x compiler** — either `csc.exe` (ships with every Framework install) or
    MSBuild / Visual Studio Build Tools. Nothing else.
@@ -32,20 +32,20 @@ Command Prompt (or with the full path):
 
 ```bat
 REM the exact path varies by Framework version; v4.x lives under the Microsoft.NET folder:
-C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe /out:GoatBridgeClient.exe Program.cs
+C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe /out:EfdiBridgeClient.exe Program.cs
 ```
 
 `Program.cs` references only `System.dll` (auto-referenced by `csc`), so that one line is the whole
-build. Produces `GoatBridgeClient.exe` next to the source.
+build. Produces `EfdiBridgeClient.exe` next to the source.
 
 ### Option B — the old-style `.csproj` with MSBuild
 
-`GoatBridgeClient.csproj` is a classic (non-SDK) project that references only the BCL — nothing to
+`EfdiBridgeClient.csproj` is a classic (non-SDK) project that references only the BCL — nothing to
 restore:
 
 ```bat
-msbuild GoatBridgeClient.csproj /p:Configuration=Release
-REM -> bin\Release\GoatBridgeClient.exe
+msbuild EfdiBridgeClient.csproj /p:Configuration=Release
+REM -> bin\Release\EfdiBridgeClient.exe
 ```
 
 Edit `<TargetFrameworkVersion>` in the `.csproj` to match whatever 4.x your shop pins (it's set to
@@ -55,16 +55,16 @@ Edit `<TargetFrameworkVersion>` in the `.csproj` to match whatever 4.x your shop
 
 ```bat
 REM Publish: POST a body to /pub/<suffix>
-GoatBridgeClient.exe pub sensors/temp {"temp_c":21.5}
-GoatBridgeClient.exe pub sensors/temp 21.5 10 200          REM 10 samples, 200 ms apart
+EfdiBridgeClient.exe pub sensors/temp {"temp_c":21.5}
+EfdiBridgeClient.exe pub sensors/temp 21.5 10 200          REM 10 samples, 200 ms apart
 
 REM Subscribe: block for N samples (GET /sub/<keyexpr>?count=N&timeout=S)
-GoatBridgeClient.exe sub sensors/temp                       REM wait for 1 sample
-GoatBridgeClient.exe sub sensors/temp 5 60                  REM wait for 5, up to 60s
-GoatBridgeClient.exe sub release/goat/** 3           REM inbound from goat (full key)
+EfdiBridgeClient.exe sub sensors/temp                       REM wait for 1 sample
+EfdiBridgeClient.exe sub sensors/temp 5 60                  REM wait for 5, up to 60s
+EfdiBridgeClient.exe sub release/goat/** 3           REM inbound from goat (full key)
 
 REM Stream continuously (GET /stream/<keyexpr>, Server-Sent Events)
-GoatBridgeClient.exe stream sensors/temp                    REM Ctrl-C to stop
+EfdiBridgeClient.exe stream sensors/temp                    REM Ctrl-C to stop
 ```
 
 `sub` / `stream` print the raw JSON the bridge returns — each sample is
@@ -72,8 +72,8 @@ GoatBridgeClient.exe stream sensors/temp                    REM Ctrl-C to stop
 deliberately add **no JSON dependency**; parse with whatever your shop already has, or just log the
 lines.
 
-**Quick round-trip:** in one window `GoatBridgeClient.exe stream sensors/temp`, in another
-`GoatBridgeClient.exe pub sensors/temp 21.5 5 500`.
+**Quick round-trip:** in one window `EfdiBridgeClient.exe stream sensors/temp`, in another
+`EfdiBridgeClient.exe pub sensors/temp 21.5 5 500`.
 
 > Override the bridge location with the `BRIDGE_URL` environment variable
 > (`set BRIDGE_URL=http://127.0.0.1:9000`); it defaults to `http://127.0.0.1:8080`.

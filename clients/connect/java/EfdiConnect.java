@@ -1,22 +1,22 @@
-// GoatConnect — open an mTLS Zenoh session to a goat-moon-pod from env vars.
+// EfdiConnect — open an mTLS Zenoh session to a goat-moon-pod from env vars.
 //
 // The ONLY goat-specific code you need. Everything else is plain Zenoh (the official
 // zenoh-java 1.x binding, io.zenoh, which bundles the native zenoh library as a resource).
 //
 //     import io.zenoh.Session;
-//     try (Session s = GoatConnect.session()) {
-//         var pub = s.declarePublisher(KeyExpr.tryFrom(GoatConnect.key("sensors/temp")));
+//     try (Session s = EfdiConnect.session()) {
+//         var pub = s.declarePublisher(KeyExpr.tryFrom(EfdiConnect.key("sensors/temp")));
 //         pub.put(ZBytes.from("21.5"));
 //     }
 //
 // Env vars (see ../../README.md):
 //
-//     GOAT_ROUTER       tls/127.0.0.1:7447     pod Zenoh endpoint
-//     GOAT_CERT         path to your mTLS client cert (PEM)
-//     GOAT_KEY          path to your mTLS private key (PEM)
-//     GOAT_CA           path to the CA root that signs the router (PEM)
-//     GOAT_NAMESPACE    release/<you>          your owned prefix (publish under this)
-//     GOAT_VERIFY_NAME  "true"/"false"         TLS hostname verification (default false for a
+//     EFDI_ROUTER       tls/127.0.0.1:7447     pod Zenoh endpoint
+//     EFDI_CERT         path to your mTLS client cert (PEM)
+//     EFDI_KEY          path to your mTLS private key (PEM)
+//     EFDI_CA           path to the CA root that signs the router (PEM)
+//     PARTNER_NAMESPACE    release/<you>          your owned prefix (publish under this)
+//     EFDI_VERIFY_NAME  "true"/"false"         TLS hostname verification (default false for a
 //                                              local pod reached at 127.0.0.1; "true" for a
 //                                              DNS-named remote router)
 //
@@ -29,9 +29,9 @@ import io.zenoh.Zenoh;
 import io.zenoh.exceptions.ZError;
 
 /** Bundle -> Zenoh session helper. All static; no instances. */
-public final class GoatConnect {
+public final class EfdiConnect {
 
-    private GoatConnect() {}
+    private EfdiConnect() {}
 
     /** Return the value of {@code name} or throw with an actionable message if unset/empty. */
     static String env(String name) {
@@ -54,11 +54,11 @@ public final class GoatConnect {
      * router rejects you, or you connect read-only. So we render the entire block and load it once.
      */
     public static Config config() throws ZError {
-        String router = env("GOAT_ROUTER");
-        String ca = env("GOAT_CA");
-        String cert = env("GOAT_CERT");
-        String key = env("GOAT_KEY");
-        boolean verifyName = "true".equalsIgnoreCase(System.getenv("GOAT_VERIFY_NAME"));
+        String router = env("EFDI_ROUTER");
+        String ca = env("EFDI_CA");
+        String cert = env("EFDI_CERT");
+        String key = env("EFDI_KEY");
+        boolean verifyName = "true".equalsIgnoreCase(System.getenv("EFDI_VERIFY_NAME"));
 
         // Hand-rolled json5/JSON — these values are file paths + a URL, no escaping concerns beyond
         // quoting. Keep the TLS object whole (the gotcha above).
@@ -84,7 +84,7 @@ public final class GoatConnect {
 
     /** Your owned prefix, e.g. {@code release/acme} (trailing slash stripped). */
     public static String namespace() {
-        String ns = env("GOAT_NAMESPACE");
+        String ns = env("PARTNER_NAMESPACE");
         int end = ns.length();
         while (end > 0 && ns.charAt(end - 1) == '/') {
             end--;

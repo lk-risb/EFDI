@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
   --color-accent-fill: var(--brand-accent-fill, #d4d4d8);
@@ -6,3 +7,101 @@
   --color-accent-text: var(--brand-accent-text, #18181b);
   --color-accent-ring: var(--brand-accent-ring, #a1a1aa);
 }
+
+/* HUD identity: uppercase, letter-spaced small labels used for table
+   headers, stat labels, and nav section dividers. */
+.hud-label {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* Glass panel — floating HUD surfaces (sidebar, cards, modals). Dark mode
+   only; light mode keeps the flat white/zinc surfaces already in place. */
+.dark .hud-glass {
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+/* Every accent-colored primary action (buttons using bg-accent-fill) gets an
+   ambient glow tied to the runtime branding accent color, not a fixed hex —
+   so a custom brand color still glows in its own hue. */
+.bg-accent-fill {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-accent-fill) 25%, transparent);
+  transition: box-shadow 200ms ease, transform 150ms ease;
+}
+.bg-accent-fill:hover {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-accent-fill) 40%, transparent),
+              0 0 16px color-mix(in srgb, var(--color-accent-fill) 20%, transparent);
+  transform: translateY(-1px);
+}
+.dark .bg-accent-fill {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-accent-fill) 40%, transparent),
+              0 0 20px color-mix(in srgb, var(--color-accent-fill) 25%, transparent);
+}
+.dark .bg-accent-fill:hover {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-accent-fill) 55%, transparent),
+              0 0 32px color-mix(in srgb, var(--color-accent-fill) 45%, transparent);
+}
+
+/* Floating card lift + accent-glow border on hover — applied via the
+   hud-card utility class on Dashboard/table container cards. Light mode
+   gets a softer lift/border cue; dark mode adds the full accent glow. */
+.hud-card {
+  transition: border-color 200ms ease, box-shadow 200ms ease, transform 200ms ease;
+}
+.hud-card:hover {
+  border-color: color-mix(in srgb, var(--color-accent-fill) 25%, transparent);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  transform: translateY(-2px);
+}
+.dark .hud-card:hover {
+  border-color: color-mix(in srgb, var(--color-accent-fill) 40%, transparent);
+  box-shadow: 0 0 24px color-mix(in srgb, var(--color-accent-fill) 12%, transparent);
+}
+
+@keyframes hud-fade-in-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.hud-enter {
+  animation: hud-fade-in-up 0.35s ease-out both;
+}
+.hud-enter-delay-1 { animation-delay: 0.05s; }
+.hud-enter-delay-2 { animation-delay: 0.1s; }
+
+@keyframes hud-pulse-dot {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 60%, transparent); }
+  50% { opacity: 0.6; box-shadow: 0 0 0 4px color-mix(in srgb, currentColor 0%, transparent); }
+}
+.hud-live-dot {
+  animation: hud-pulse-dot 2s ease-in-out infinite;
+}
+
+/* Technical grid texture — faint surveillance/schematic backdrop behind the
+   app's black canvas. Dark mode only, applied to the app's root surface. */
+.dark .hud-grid-bg {
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+/* Corner-bracket / reticle framing. Apply `hud-frame` (position: relative) to
+   the panel, then four `<span class="hud-corner hud-corner-{tl,tr,bl,br}">`
+   children (see HudCorners.tsx). */
+.hud-frame {
+  position: relative;
+}
+.hud-corner {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-color: var(--color-accent-fill);
+  opacity: 0.7;
+  pointer-events: none;
+}
+.hud-corner-tl { top: -1px; left: -1px; border-top: 2px solid; border-left: 2px solid; }
+.hud-corner-tr { top: -1px; right: -1px; border-top: 2px solid; border-right: 2px solid; }
+.hud-corner-bl { bottom: -1px; left: -1px; border-bottom: 2px solid; border-left: 2px solid; }
+.hud-corner-br { bottom: -1px; right: -1px; border-bottom: 2px solid; border-right: 2px solid; }

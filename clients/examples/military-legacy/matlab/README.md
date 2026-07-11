@@ -21,7 +21,7 @@ receive_filedrop.m  ◀──reads files──  file-drop bridge (INBOX_DIR)  �
 ## Prerequisites
 
 - **A bridge is running** next to the pod, with your namespace in its environment
-  (`GOAT_NAMESPACE=release/acme`):
+  (`PARTNER_NAMESPACE=release/acme`):
   - For `publish.m` / `receive_rest.m`: the **REST bridge** —
     [`../../bridges/rest-http/README.md`](../../bridges/rest-http/README.md).
   - For `receive_filedrop.m`: the **file-drop bridge** —

@@ -2,7 +2,7 @@
 
 Idiomatic TypeScript against the pod. Uses the **official** Zenoh TS/JS binding
 [`@eclipse-zenoh/zenoh-ts`](https://github.com/eclipse-zenoh/zenoh-ts) plus the
-[`connect/typescript/goat_connect.ts`](../../../connect/typescript/goat_connect.ts) helper.
+[`connect/typescript/efdi_connect.ts`](../../../connect/typescript/efdi_connect.ts) helper.
 
 ## READ THIS FIRST — zenoh-ts connects through a plugin, not directly to the router
 
@@ -10,7 +10,7 @@ This is the big difference from every other language in this tree, and it change
 model and the mTLS story:
 
 - The native bindings (Python/Go/Rust/Java) open a **direct Zenoh client session to the router over
-  mTLS**, and `GOAT_CERT`/`GOAT_KEY`/`GOAT_CA` are the client's mesh credentials. **The
+  mTLS**, and `EFDI_CERT`/`EFDI_KEY`/`EFDI_CA` are the client's mesh credentials. **The
   "one TLS block" gotcha lives there.**
 - `@eclipse-zenoh/zenoh-ts` does **not** speak the native Zenoh transport. It talks to the
   [`zenoh-plugin-remote-api`](https://github.com/eclipse-zenoh/zenoh-ts/tree/main/zenoh-plugin-remote-api)
@@ -42,7 +42,7 @@ Minimal `zenohd` config:
 {
   plugins: {
     remote_api: {
-      websocket_port: "10000"   // ws/<host>:10000 — what GOAT_WS points at
+      websocket_port: "10000"   // ws/<host>:10000 — what EFDI_WS points at
     }
   }
 }
@@ -57,15 +57,15 @@ This binding consumes a **different** set than the native ones:
 
 | Var | Used by zenoh-ts? | Meaning |
 |---|---|---|
-| `GOAT_WS` | yes (preferred) | remote-api plugin WebSocket locator, e.g. `ws/127.0.0.1:10000` |
-| `GOAT_ROUTER` | yes (fallback) | native router endpoint; if `GOAT_WS` is unset, the host is reused with port `10000` |
-| `GOAT_NAMESPACE` | yes | your owned prefix (publish under this) |
-| `GOAT_CERT` / `GOAT_KEY` / `GOAT_CA` / `GOAT_VERIFY_NAME` | **no** | present for parity with the other bundles; the plugin owns mesh-side mTLS. Only relevant here if you front the plugin with `wss://` and need a custom CA to trust it (see below). |
+| `EFDI_WS` | yes (preferred) | remote-api plugin WebSocket locator, e.g. `ws/127.0.0.1:10000` |
+| `EFDI_ROUTER` | yes (fallback) | native router endpoint; if `EFDI_WS` is unset, the host is reused with port `10000` |
+| `PARTNER_NAMESPACE` | yes | your owned prefix (publish under this) |
+| `EFDI_CERT` / `EFDI_KEY` / `EFDI_CA` / `EFDI_VERIFY_NAME` | **no** | present for parity with the other bundles; the plugin owns mesh-side mTLS. Only relevant here if you front the plugin with `wss://` and need a custom CA to trust it (see below). |
 
 ```sh
-export GOAT_WS="ws/127.0.0.1:10000"        # or leave unset to derive from GOAT_ROUTER's host
-export GOAT_ROUTER="tls/127.0.0.1:7447"
-export GOAT_NAMESPACE="release/acme"
+export EFDI_WS="ws/127.0.0.1:10000"        # or leave unset to derive from EFDI_ROUTER's host
+export EFDI_ROUTER="tls/127.0.0.1:7447"
+export PARTNER_NAMESPACE="release/acme"
 ```
 
 ## Setup & run (Node)
@@ -100,17 +100,17 @@ deno run --allow-net --allow-env --allow-read publish.ts 10 0.5
 
 ### Browser
 
-The same `goat_connect.ts` + example logic runs in the browser unchanged (browsers provide native
-`WebSocket`); bundle with Vite/esbuild and point `GOAT_WS` at a `wss://` plugin endpoint the page
+The same `efdi_connect.ts` + example logic runs in the browser unchanged (browsers provide native
+`WebSocket`); bundle with Vite/esbuild and point `EFDI_WS` at a `wss://` plugin endpoint the page
 is allowed to reach. There are no Node globals (`process.env`) in the browser — feed the locator
 and namespace in from your app config instead of `process.env`.
 
-## wss + a custom CA (the only place GOAT_CA matters here)
+## wss + a custom CA (the only place EFDI_CA matters here)
 
 If the plugin is fronted by `wss://` with a cert signed by a **private** CA, the WebSocket client
 (not zenoh-ts) must trust it:
 
-- **Node:** `export NODE_EXTRA_CA_CERTS="$GOAT_CA"` before running — Node's TLS stack (and the `ws`
+- **Node:** `export NODE_EXTRA_CA_CERTS="$EFDI_CA"` before running — Node's TLS stack (and the `ws`
   package) will then accept the server cert.
 - **Browser:** the CA must be in the OS/browser trust store; you can't inject it per-connection.
 

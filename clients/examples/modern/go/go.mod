@@ -1,4 +1,4 @@
-module example.com/goat-moon-pod-examples-go
+module example.com/efdi-examples-go
 
 go 1.22
 
@@ -7,8 +7,8 @@ go 1.22
 require github.com/eclipse-zenoh/zenoh-go v1.9.0
 
 // The goat-specific connect helper lives in this repo at clients/connect/go (package
-// goatconnect). We map its import path to that directory so the examples build in-tree
+// efdiconnect). We map its import path to that directory so the examples build in-tree
 // without publishing the helper as a separate module.
-require example.com/goat-moon-pod-examples-go/connect v0.0.0
+require example.com/efdi-examples-go/connect v0.0.0
 
-replace example.com/goat-moon-pod-examples-go/connect => ../../../connect/go
+replace example.com/efdi-examples-go/connect => ../../../connect/go

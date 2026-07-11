@@ -10,7 +10,7 @@ from .deps import require_role
 router = APIRouter(prefix="/api/status", tags=["status"])
 
 _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", "tcp/127.0.0.1:7448")
-_CERT_DIR = os.environ.get("GOAT_CERT_DIR", "")
+_CERT_DIR = os.environ.get("EFDI_CERT_DIR", "")
 _ORG = os.environ.get("PARTNER_NAMESPACE", "")
 
 # One persistent session for the lifetime of the process — same pattern every
@@ -43,6 +43,10 @@ def _get_session() -> "zenoh.Session":
 # Parses "@/<zid>/router/subscriber/<key-expr>" → the key-expr part.
 _SUBSCRIBER_RE = re.compile(r"^@/[^/]+/router/subscriber/(.+)$")
 _QUERYABLE_RE = re.compile(r"^@/[^/]+/router/queryable/(.+)$")
+# Parses "@/<zid>/router/transport/unicast/<peer-zid>" — one entry per live
+# link to another zenoh instance (router or peer), whatever this fabric is
+# federated with.
+_PEER_RE = re.compile(r"^@/[^/]+/router/transport/unicast/([^/]+)$")
 
 
 def _query_router_admin_space() -> dict:
@@ -65,6 +69,7 @@ def _query_router_admin_space() -> dict:
     subscribers: list[str] = []
     queryables: list[str] = []
     storages: list[str] = []
+    peers: dict[str, dict] = {}   # peer zid -> {zid, whatami, link_count}
     admin_space_reachable = False
 
     if router_zid:
@@ -89,6 +94,24 @@ def _query_router_admin_space() -> dict:
                     continue
                 if "/status/plugins/storage_manager/storages/" in key:
                     storages.append(key.rsplit("/", 1)[-1])
+                    continue
+                m = _PEER_RE.match(key)
+                if m:
+                    peer_zid = m.group(1)
+                    info = {"zid": peer_zid, "whatami": "unknown", "link_count": None}
+                    # Best-effort — payload shape isn't ACL-guaranteed like the
+                    # key-expr pattern is, so a peer still shows up (zid only)
+                    # even if this router build doesn't publish transport details.
+                    try:
+                        payload = json.loads(bytes(r.ok.payload).decode())
+                        if isinstance(payload, dict):
+                            info["whatami"] = payload.get("whatami", "unknown")
+                            links = payload.get("links")
+                            if isinstance(links, list):
+                                info["link_count"] = len(links)
+                    except Exception:
+                        pass
+                    peers[peer_zid] = info
         except Exception:
             pass
 
@@ -102,6 +125,8 @@ def _query_router_admin_space() -> dict:
         "queryable_count": len(queryables),
         "queryables": sorted(set(queryables)),
         "storages": sorted(set(storages)),
+        "peer_count": len(peers),
+        "peers": sorted(peers.values(), key=lambda p: p["zid"]),
     }
 
 

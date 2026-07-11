@@ -75,7 +75,7 @@ ROUTER    = "tls/zenoh.efdi.netbird.efdi-backbone.net:7447"
 ORG       = os.environ.get("PARTNER_NAMESPACE", "")
 TOPIC_ROOT = "LTU/CISB/" + ORG   # organization prefix precedes the pod namespace
 HERE      = os.path.dirname(os.path.abspath(__file__))
-_CERT_DIR = os.environ.get("GOAT_CERT_DIR", HERE)
+_CERT_DIR = os.environ.get("EFDI_CERT_DIR", HERE)
 _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", ROUTER)
 
 _SPATIAL_NM      = float(os.environ.get("FUSION_SPATIAL_NM",  "2.0"))

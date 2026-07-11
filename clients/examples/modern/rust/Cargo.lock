@@ -787,18 +787,18 @@ dependencies = [
 ]
 
 [[package]]
-name = "goat-moon-pod-examples-rust"
+name = "efdi-examples-rust"
 version = "0.1.0"
 dependencies = [
  "chrono",
- "goat_connect",
+ "efdi_connect",
  "serde_json",
  "tokio",
  "zenoh",
 ]
 
 [[package]]
-name = "goat_connect"
+name = "efdi_connect"
 version = "0.1.0"
 dependencies = [
  "serde_json",

@@ -1,7 +1,7 @@
 //! publish.rs — send data to the goat fabric (modern Rust).
 //!
 //! ```text
-//! export GOAT_ROUTER=tls/127.0.0.1:7447 GOAT_CERT=... GOAT_KEY=... GOAT_CA=... GOAT_NAMESPACE=release/acme
+//! export EFDI_ROUTER=tls/127.0.0.1:7447 EFDI_CERT=... EFDI_KEY=... EFDI_CA=... PARTNER_NAMESPACE=release/acme
 //! cargo run --bin publish              # one JSON sample
 //! cargo run --bin publish -- 50 0.2    # 50 samples at 200ms
 //! ```
@@ -14,16 +14,16 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use serde_json::json;
 
 #[tokio::main]
-async fn main() -> goat_connect::Result<()> {
+async fn main() -> efdi_connect::Result<()> {
     zenoh::init_log_from_env_or("error");
 
     let args: Vec<String> = std::env::args().collect();
     let n: usize = args.get(1).and_then(|s| s.parse().ok()).unwrap_or(1);
     let interval: f64 = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(1.0);
 
-    let key = goat_connect::key("sensors/temp")?;
+    let key = efdi_connect::key("sensors/temp")?;
 
-    let session = goat_connect::session().await?;
+    let session = efdi_connect::session().await?;
     let publisher = session.declare_publisher(key.clone()).await?;
 
     for i in 0..n {

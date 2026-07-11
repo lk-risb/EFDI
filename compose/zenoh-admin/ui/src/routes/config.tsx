@@ -1,9 +1,9 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
 import { Layout } from '@/components/Layout'
-import { apiJson, apiFetch } from '@/lib/api'
+import { apiJson, apiFetch, errorMessage } from '@/lib/api'
 import { useAuth } from '@/store/auth'
-import { toast } from 'sonner'
+import { notify } from '@/lib/notify'
 import { Save, RotateCw } from 'lucide-react'
 
 export const Route = createFileRoute('/config')({
@@ -38,7 +38,7 @@ const EMPTY_FIELDS: ConfigFields = {
 function Field({ label, help, children }: { label: string; help?: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1">
-      <label className="text-sm text-zinc-300">{label}</label>
+      <label className="text-sm text-zinc-700 dark:text-zinc-300">{label}</label>
       {children}
       {help && <p className="text-xs text-zinc-500">{help}</p>}
     </div>
@@ -63,7 +63,7 @@ function Toggle({ label, help, checked, disabled, onChange }: {
   return (
     <div className="flex items-start justify-between gap-4">
       <div>
-        <p className="text-sm text-zinc-300">{label}</p>
+        <p className="text-sm text-zinc-700 dark:text-zinc-300">{label}</p>
         {help && <p className="text-xs text-zinc-500 mt-0.5">{help}</p>}
       </div>
       <button
@@ -72,7 +72,7 @@ function Toggle({ label, help, checked, disabled, onChange }: {
         aria-checked={checked}
         disabled={disabled}
         onClick={() => onChange(!checked)}
-        className={`shrink-0 relative w-10 h-6 rounded-full transition-colors disabled:opacity-50 ${checked ? 'bg-accent-fill' : 'bg-zinc-700'}`}
+        className={`shrink-0 relative w-10 h-6 rounded-full transition-colors disabled:opacity-50 ${checked ? 'bg-accent-fill' : 'bg-zinc-300 dark:bg-zinc-700'}`}
       >
         <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform ${checked ? 'translate-x-4' : ''}`} />
       </button>
@@ -94,8 +94,8 @@ function ConfigPage() {
       const data = await apiJson<{ fields: ConfigFields; path: string }>('/api/config')
       setFields(data.fields)
       setPath(data.path)
-    } catch (e: any) {
-      toast.error(e.message)
+    } catch (e) {
+      notify.error(errorMessage(e))
     } finally {
       setLoading(false)
     }
@@ -118,18 +118,18 @@ function ConfigPage() {
       const body = await res.json().catch(() => ({ detail: res.statusText }))
       if (!res.ok) throw new Error(body.detail ?? res.statusText)
       if (body.restarted) {
-        toast.success('Config written, zenoh-router restarted')
+        notify.success('Config written, zenoh-router restarted')
       } else {
-        toast.warning(`Config written, restart failed: ${body.restart_error}`)
+        notify.error(`Config written, restart failed: ${body.restart_error}`)
       }
-    } catch (e: any) {
-      toast.error(e.message)
+    } catch (e) {
+      notify.error(errorMessage(e))
     } finally {
       setSaving(false)
     }
   }
 
-  const inputClass = "w-full px-3 py-2 rounded-md bg-zinc-800 border border-zinc-700 text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-accent-ring disabled:opacity-50"
+  const inputClass = "w-full px-3 py-2 rounded-md bg-zinc-200 dark:bg-[#1a1a1d] border border-zinc-300 dark:border-white/10 text-zinc-900 dark:text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-accent-ring disabled:opacity-50"
 
   return (
     <Layout>
@@ -141,7 +141,7 @@ function ConfigPage() {
           </div>
           <div className="flex items-center gap-2">
             <button onClick={load} disabled={loading}
-              className="flex items-center gap-2 px-3 py-2 rounded-md text-sm text-zinc-400 hover:text-white hover:bg-zinc-800/50 transition-colors disabled:opacity-50">
+              className="flex items-center gap-2 px-3 py-2 rounded-md text-sm text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-200/50 dark:hover:bg-white/[0.05] transition-colors disabled:opacity-50">
               <RotateCw size={14} /> Reload
             </button>
             {canWrite && (
@@ -153,9 +153,9 @@ function ConfigPage() {
           </div>
         </div>
         {!canWrite && (
-          <p className="text-xs text-yellow-400 mb-3">Your role can view but not edit this config.</p>
+          <p className="text-xs text-yellow-600 dark:text-yellow-400 mb-3">Your role can view but not edit this config.</p>
         )}
-        <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-5 space-y-4">
+        <div className="rounded-md border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#111113] p-5 space-y-4">
           <Field label="Local mTLS port" help="Mesh-facing listen port for goat-cli, audit-sink (default 7447)">
             <input type="number" min={1} max={65535} disabled={!canWrite} className={inputClass}
               value={fields.mtls_port} onChange={e => set('mtls_port', Number(e.target.value))} />
@@ -169,16 +169,16 @@ function ConfigPage() {
               {FABRIC_PRESETS.map(p => (
                 <button key={p.label} type="button" disabled={!canWrite}
                   onClick={() => set('fabric_endpoint', `tls/${p.host}:${p.port}`)}
-                  className="px-2.5 py-1 rounded-full text-xs border border-zinc-700 text-zinc-400 hover:text-white hover:border-zinc-500 transition-colors disabled:opacity-50">
+                  className="px-2.5 py-1 rounded-full text-xs border border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:border-zinc-500 transition-colors disabled:opacity-50">
                   {p.label}
                 </button>
               ))}
             </div>
             <div className="flex gap-2">
-              <div className="flex-1 flex items-center gap-2 bg-zinc-800 border border-zinc-700 rounded-md px-3 focus-within:ring-2 focus-within:ring-accent-ring">
+              <div className="flex-1 flex items-center gap-2 bg-zinc-200 dark:bg-[#1a1a1d] border border-zinc-300 dark:border-white/10 rounded-md px-3 focus-within:ring-2 focus-within:ring-accent-ring">
                 <span className="text-zinc-500 text-sm shrink-0">tls://</span>
                 <input type="text" disabled={!canWrite} placeholder="host or NetBird name"
-                  className="flex-1 py-2 bg-transparent text-white text-sm font-mono focus:outline-none disabled:opacity-50"
+                  className="flex-1 py-2 bg-transparent text-zinc-900 dark:text-white text-sm font-mono focus:outline-none disabled:opacity-50"
                   value={parseFabricEndpoint(fields.fabric_endpoint).host}
                   onChange={e => set('fabric_endpoint', `tls/${e.target.value}:${parseFabricEndpoint(fields.fabric_endpoint).port}`)} />
               </div>
@@ -196,7 +196,7 @@ function ConfigPage() {
             <input type="text" disabled={!canWrite} className={inputClass}
               value={fields.inbound_namespace} onChange={e => set('inbound_namespace', e.target.value)} />
           </Field>
-          <div className="pt-2 border-t border-zinc-800 space-y-4">
+          <div className="pt-2 border-t border-zinc-200 dark:border-white/10 space-y-4">
             <Toggle label="Verify name on connect" disabled={!canWrite}
               help="Verify the fabric endpoint's cert SAN against the DNS name dialed. Off by default: the gateway cert SAN binds the mesh IP, not the DNS name — turning this on can break the fabric connection."
               checked={fields.verify_name_on_connect} onChange={v => set('verify_name_on_connect', v)} />

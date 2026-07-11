@@ -1,8 +1,10 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useState } from 'react'
 import { useAuth } from '@/store/auth'
-import { brand } from '@/brand'
-import { toast } from 'sonner'
+import { errorMessage } from '@/lib/api'
+import { useBranding } from '@/store/branding'
+import { notify } from '@/lib/notify'
+import { HudCorners } from '@/components/HudCorners'
 
 export const Route = createFileRoute('/login')({
   component: LoginPage,
@@ -14,6 +16,8 @@ function LoginPage() {
   const [loading, setLoading] = useState(false)
   const { setToken } = useAuth()
   const navigate = useNavigate()
+  const orgName = useBranding((s) => s.orgName)
+  const logoUrl = useBranding((s) => s.logoUrl)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -33,45 +37,47 @@ function LoginPage() {
       const payload = JSON.parse(atob(access_token.split('.')[1]))
       setToken(access_token, payload.role, payload.username)
       navigate({ to: '/' })
-    } catch (err: any) {
-      toast.error(err.message)
+    } catch (err) {
+      notify.error(errorMessage(err))
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-zinc-950">
-      <div className="w-full max-w-sm space-y-6 p-8 rounded-xl border border-zinc-800 bg-zinc-900">
+    <div className="min-h-screen flex items-center justify-center bg-zinc-50 dark:bg-[#000000] hud-grid-bg">
+      <div className="hud-frame w-full max-w-sm space-y-6 p-8 rounded-md border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#111113] hud-glass">
+        <HudCorners />
         <div>
-          <h1 className="text-2xl font-bold text-white">{brand.orgName}</h1>
-          <p className="text-sm text-zinc-400 mt-1">Sign in to manage the Zenoh router</p>
+          {logoUrl && <img src={logoUrl} alt="" className="w-10 h-10 rounded object-contain mb-3" />}
+          <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-white">{orgName}</h1>
+          <p className="hud-label text-xs text-zinc-500 dark:text-zinc-500 mt-2">Sign in to manage the Zenoh router</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1">
-            <label className="text-sm text-zinc-300">Username</label>
+            <label className="hud-label text-xs text-zinc-500 dark:text-zinc-500">Username</label>
             <input
               type="text"
               value={username}
               onChange={e => setUsername(e.target.value)}
               required
-              className="w-full px-3 py-2 rounded-md bg-zinc-800 border border-zinc-700 text-white text-sm focus:outline-none focus:ring-2 focus:ring-accent-ring"
+              className="w-full px-3 py-2 rounded-md bg-zinc-200 dark:bg-[#1a1a1d] border border-zinc-300 dark:border-white/10 text-zinc-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-accent-ring"
             />
           </div>
           <div className="space-y-1">
-            <label className="text-sm text-zinc-300">Password</label>
+            <label className="hud-label text-xs text-zinc-500 dark:text-zinc-500">Password</label>
             <input
               type="password"
               value={password}
               onChange={e => setPassword(e.target.value)}
               required
-              className="w-full px-3 py-2 rounded-md bg-zinc-800 border border-zinc-700 text-white text-sm focus:outline-none focus:ring-2 focus:ring-accent-ring"
+              className="w-full px-3 py-2 rounded-md bg-zinc-200 dark:bg-[#1a1a1d] border border-zinc-300 dark:border-white/10 text-zinc-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-accent-ring"
             />
           </div>
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-2 rounded-md bg-accent-fill hover:bg-accent-fill-hover text-accent-text text-sm font-medium disabled:opacity-50 transition-colors"
+            className="w-full py-2.5 rounded-md bg-accent-fill hover:bg-accent-fill-hover text-accent-text text-sm font-semibold uppercase tracking-wider disabled:opacity-50 transition-colors"
           >
             {loading ? 'Signing in…' : 'Sign in'}
           </button>

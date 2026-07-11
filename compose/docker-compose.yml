@@ -1,20 +1,19 @@
-# moon-pod — v0 data-plane bundle.
+# EFDI moon-pod — v0 data-plane bundle.
 #
-# Runs the containerizable data-plane services. The WireGuard mesh client (goat-clientd)
-# runs on the HOST as a systemd service (see ../host/), NOT here — see ../docs/architecture.md.
+# Runs the containerizable data-plane services. The NetBird mesh client runs on the HOST
+# directly (see ../host/first-boot.sh), NOT here.
 #
-# network_mode: host so each service binds the pod's mesh IP directly (the mesh is maintained
-# by the host's goat-clientd). No netns sidecar, no NAT gymnastics.
+# network_mode: host so each service binds the pod's mesh IP directly. No netns sidecar, no
+# NAT gymnastics.
 #
-# Values come from .env (copied from .env.example, populated by first-boot.sh from the active
-# profile + the minted artifacts). Images are pinned by digest (ADR 0859). zenoh-router uses an
-# ALREADY-PUBLISHED image — no local build context.
+# Values come from .env (copied from .env.example). Images are pinned by digest (ADR 0859).
+# zenoh-router uses an ALREADY-PUBLISHED image — no local build context.
 
 services:
   zenoh-router:
     # Upstream eclipse/zenoh, pinned by content digest (ADR 0858 upstream pivot).
     image: eclipse/zenoh:1.9.0@sha256:157965d71e0bfd0a044d76a985ff0e5c306ad3968929168fb9678cd2a7fec23f
-    container_name: goat-moon-zenoh-router
+    container_name: efdi-pod-zenoh-router
     network_mode: host
     restart: unless-stopped
     environment:
@@ -40,7 +39,7 @@ services:
     # Config: ${POD_STATE_DIR}/zenoh-test/config.json5. Not started by default — `docker compose
     # --profile test up -d zenoh-router-test`.
     image: eclipse/zenoh:1.9.0@sha256:157965d71e0bfd0a044d76a985ff0e5c306ad3968929168fb9678cd2a7fec23f
-    container_name: goat-moon-zenoh-router-test
+    container_name: efdi-pod-zenoh-router-test
     network_mode: host
     restart: "no"
     profiles:
@@ -60,7 +59,7 @@ services:
   opensky-bridge:
     build:
       context: ./bridge
-    container_name: goat-moon-opensky-bridge
+    container_name: efdi-pod-opensky-bridge
     network_mode: host
     restart: unless-stopped
     depends_on:
@@ -68,7 +67,7 @@ services:
         condition: service_healthy
     environment:
       # Scripts live in the image (from ./bridge/); certs come from the bundle.
-      - GOAT_CERT_DIR=/certs
+      - EFDI_CERT_DIR=/certs
       - ZENOH_LOCAL_ENDPOINT=${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}
     volumes:
       - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
@@ -78,16 +77,16 @@ services:
   aisstream-bridge:
     build:
       context: ./bridge
-    container_name: goat-moon-aisstream-bridge
+    container_name: efdi-pod-aisstream-bridge
     network_mode: host
     restart: unless-stopped
     depends_on:
       zenoh-router:
         condition: service_healthy
     environment:
-      - GOAT_CERT_DIR=/certs
+      - EFDI_CERT_DIR=/certs
       - ZENOH_LOCAL_ENDPOINT=${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}
-      - AISSTREAM_KEY=${AISSTREAM_KEY:?set AISSTREAM_KEY in .env}
+      - AISSTREAM_KEY=${AISSTREAM_KEY:-}
     command: ["python3", "/app/aisstream_ws_bridge.py"]
     volumes:
       - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
@@ -97,14 +96,14 @@ services:
   openmeteo-bridge:
     build:
       context: ./bridge
-    container_name: goat-moon-openmeteo-bridge
+    container_name: efdi-pod-openmeteo-bridge
     network_mode: host
     restart: unless-stopped
     depends_on:
       zenoh-router:
         condition: service_healthy
     environment:
-      - GOAT_CERT_DIR=/certs
+      - EFDI_CERT_DIR=/certs
       - ZENOH_LOCAL_ENDPOINT=${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}
     command: ["python3", "/app/openmeteo_forecast_bridge.py"]
     volumes:
@@ -115,14 +114,14 @@ services:
   meteo-lt-bridge:
     build:
       context: ./bridge
-    container_name: goat-moon-meteo-lt-bridge
+    container_name: efdi-pod-meteo-lt-bridge
     network_mode: host
     restart: unless-stopped
     depends_on:
       zenoh-router:
         condition: service_healthy
     environment:
-      - GOAT_CERT_DIR=/certs
+      - EFDI_CERT_DIR=/certs
       - ZENOH_LOCAL_ENDPOINT=${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}
     command: ["python3", "/app/meteolt_forecast_bridge.py"]
     volumes:
@@ -133,14 +132,14 @@ services:
   yr-no-bridge:
     build:
       context: ./bridge
-    container_name: goat-moon-yr-no-bridge
+    container_name: efdi-pod-yr-no-bridge
     network_mode: host
     restart: unless-stopped
     depends_on:
       zenoh-router:
         condition: service_healthy
     environment:
-      - GOAT_CERT_DIR=/certs
+      - EFDI_CERT_DIR=/certs
       - ZENOH_LOCAL_ENDPOINT=${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}
     command: ["python3", "/app/yrno_forecast_bridge.py"]
     volumes:
@@ -151,16 +150,16 @@ services:
   n2yo-bridge:
     build:
       context: ./bridge
-    container_name: goat-moon-n2yo-bridge
+    container_name: efdi-pod-n2yo-bridge
     network_mode: host
     restart: unless-stopped
     depends_on:
       zenoh-router:
         condition: service_healthy
     environment:
-      - GOAT_CERT_DIR=/certs
+      - EFDI_CERT_DIR=/certs
       - ZENOH_LOCAL_ENDPOINT=${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}
-      - N2YO_KEY=${N2YO_KEY:?set N2YO_KEY in .env}
+      - N2YO_KEY=${N2YO_KEY:-}
     command: ["python3", "/app/n2yo_satpos_bridge.py"]
     volumes:
       - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
@@ -170,14 +169,14 @@ services:
   osm-bridge:
     build:
       context: ./bridge
-    container_name: goat-moon-osm-bridge
+    container_name: efdi-pod-osm-bridge
     network_mode: host
     restart: unless-stopped
     depends_on:
       zenoh-router:
         condition: service_healthy
     environment:
-      - GOAT_CERT_DIR=/certs
+      - EFDI_CERT_DIR=/certs
       - ZENOH_LOCAL_ENDPOINT=${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}
     command: ["python3", "/app/osm_overpass_bridge.py"]
     volumes:
@@ -188,14 +187,14 @@ services:
   purpleair-bridge:
     build:
       context: ./bridge
-    container_name: goat-moon-purpleair-bridge
+    container_name: efdi-pod-purpleair-bridge
     network_mode: host
     restart: unless-stopped
     depends_on:
       zenoh-router:
         condition: service_healthy
     environment:
-      - GOAT_CERT_DIR=/certs
+      - EFDI_CERT_DIR=/certs
       - ZENOH_LOCAL_ENDPOINT=${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}
       - PURPLEAIR_KEY=${PURPLEAIR_KEY:-}
     command: ["python3", "/app/purpleair_sensor_bridge.py"]
@@ -207,14 +206,14 @@ services:
   aprs-bridge:
     build:
       context: ./bridge
-    container_name: goat-moon-aprs-bridge
+    container_name: efdi-pod-aprs-bridge
     network_mode: host
     restart: unless-stopped
     depends_on:
       zenoh-router:
         condition: service_healthy
     environment:
-      - GOAT_CERT_DIR=/certs
+      - EFDI_CERT_DIR=/certs
       - ZENOH_LOCAL_ENDPOINT=${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}
     command: ["python3", "/app/aprsis_bridge.py"]
     volumes:
@@ -226,14 +225,14 @@ services:
     build:
       context: ./bridge
       dockerfile: Dockerfile.cmems
-    container_name: goat-moon-cmems-bridge
+    container_name: efdi-pod-cmems-bridge
     network_mode: host
     restart: unless-stopped
     depends_on:
       zenoh-router:
         condition: service_healthy
     environment:
-      - GOAT_CERT_DIR=/certs
+      - EFDI_CERT_DIR=/certs
       - ZENOH_LOCAL_ENDPOINT=${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}
       - COPERNICUSMARINE_SERVICE_USERNAME=${CMEMS_USER:-}
       - COPERNICUSMARINE_SERVICE_PASSWORD=${CMEMS_PASS:-}
@@ -245,14 +244,14 @@ services:
   notam-bridge:
     build:
       context: ./bridge
-    container_name: goat-moon-notam-bridge
+    container_name: efdi-pod-notam-bridge
     network_mode: host
     restart: unless-stopped
     depends_on:
       zenoh-router:
         condition: service_healthy
     environment:
-      - GOAT_CERT_DIR=/certs
+      - EFDI_CERT_DIR=/certs
       - ZENOH_LOCAL_ENDPOINT=${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}
       - ICAO_NOTAM_KEY=${ICAO_NOTAM_KEY:-}
     command: ["python3", "/app/icao_notam_bridge.py"]
@@ -264,14 +263,14 @@ services:
   fr24-bridge:
     build:
       context: ./bridge
-    container_name: goat-moon-fr24-bridge
+    container_name: efdi-pod-fr24-bridge
     network_mode: host
     restart: unless-stopped
     depends_on:
       zenoh-router:
         condition: service_healthy
     environment:
-      - GOAT_CERT_DIR=/certs
+      - EFDI_CERT_DIR=/certs
       - ZENOH_LOCAL_ENDPOINT=${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}
       - FR24_KEY=${FR24_KEY:-}
     command: ["python3", "/app/fr24_live_bridge.py"]
@@ -283,14 +282,14 @@ services:
   windy-bridge:
     build:
       context: ./bridge
-    container_name: goat-moon-windy-bridge
+    container_name: efdi-pod-windy-bridge
     network_mode: host
     restart: unless-stopped
     depends_on:
       zenoh-router:
         condition: service_healthy
     environment:
-      - GOAT_CERT_DIR=/certs
+      - EFDI_CERT_DIR=/certs
       - ZENOH_LOCAL_ENDPOINT=${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}
       - WINDY_KEY=${WINDY_KEY:-}
     command: ["python3", "/app/windy_forecast_bridge.py"]
@@ -302,14 +301,14 @@ services:
   here-traffic-bridge:
     build:
       context: ./bridge
-    container_name: goat-moon-here-traffic-bridge
+    container_name: efdi-pod-here-traffic-bridge
     network_mode: host
     restart: unless-stopped
     depends_on:
       zenoh-router:
         condition: service_healthy
     environment:
-      - GOAT_CERT_DIR=/certs
+      - EFDI_CERT_DIR=/certs
       - ZENOH_LOCAL_ENDPOINT=${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}
       - HERE_KEY=${HERE_KEY:-}
     command: ["python3", "/app/here_traffic_bridge.py"]
@@ -321,14 +320,14 @@ services:
   airplaneslive-bridge:
     build:
       context: ./bridge
-    container_name: goat-moon-airplaneslive-bridge
+    container_name: efdi-pod-airplaneslive-bridge
     network_mode: host
     restart: unless-stopped
     depends_on:
       zenoh-router:
         condition: service_healthy
     environment:
-      - GOAT_CERT_DIR=/certs
+      - EFDI_CERT_DIR=/certs
       - ZENOH_LOCAL_ENDPOINT=${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}
     command: ["python3", "/app/airplaneslive_adsb_bridge.py"]
     volumes:
@@ -339,14 +338,14 @@ services:
   atak-cot-udp:
     build:
       context: ./bridge
-    container_name: goat-moon-atak-cot-udp
+    container_name: efdi-pod-atak-cot-udp
     network_mode: host
     restart: unless-stopped
     depends_on:
       zenoh-router:
         condition: service_healthy
     environment:
-      - GOAT_CERT_DIR=/certs
+      - EFDI_CERT_DIR=/certs
       - ZENOH_LOCAL_ENDPOINT=${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}
     command: >
       python3 /app/cot_layer.py
@@ -361,14 +360,14 @@ services:
   atak-cot-tcp:
     build:
       context: ./bridge
-    container_name: goat-moon-atak-cot-tcp
+    container_name: efdi-pod-atak-cot-tcp
     network_mode: host
     restart: unless-stopped
     depends_on:
       zenoh-router:
         condition: service_healthy
     environment:
-      - GOAT_CERT_DIR=/certs
+      - EFDI_CERT_DIR=/certs
       - ZENOH_LOCAL_ENDPOINT=${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}
       - TAK_HOST=${TAK_HOST:-127.0.0.1}
       - TAK_PORT=${TAK_PORT:-8087}
@@ -384,14 +383,14 @@ services:
   cat62-bridge:
     build:
       context: ./bridge
-    container_name: goat-moon-cat62-bridge
+    container_name: efdi-pod-cat62-bridge
     network_mode: host
     restart: unless-stopped
     depends_on:
       zenoh-router:
         condition: service_healthy
     environment:
-      - GOAT_CERT_DIR=/certs
+      - EFDI_CERT_DIR=/certs
       - ZENOH_LOCAL_ENDPOINT=${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}
       - RADAR_HOST=${RADAR_HOST:-127.0.0.1}
       - RADAR_PORT=${RADAR_PORT:-30002}
@@ -409,14 +408,14 @@ services:
   sitaware-nvg-bridge:
     build:
       context: ./bridge
-    container_name: goat-moon-sitaware-nvg-bridge
+    container_name: efdi-pod-sitaware-nvg-bridge
     network_mode: host
     restart: unless-stopped
     depends_on:
       zenoh-router:
         condition: service_healthy
     environment:
-      - GOAT_CERT_DIR=/certs
+      - EFDI_CERT_DIR=/certs
       - ZENOH_LOCAL_ENDPOINT=${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}
       - SITAWARE_URL=${SITAWARE_URL:-}
       - SITAWARE_USER=${SITAWARE_USER:-}
@@ -437,7 +436,7 @@ services:
 
   zenoh-admin-db:
     image: postgres:16-alpine
-    container_name: goat-moon-zenoh-admin-db
+    container_name: efdi-pod-zenoh-admin-db
     network_mode: host
     restart: unless-stopped
     environment:
@@ -456,7 +455,7 @@ services:
   zenoh-admin:
     build:
       context: ./zenoh-admin
-    container_name: goat-moon-zenoh-admin
+    container_name: efdi-pod-zenoh-admin
     network_mode: host
     restart: unless-stopped
     depends_on:
@@ -465,7 +464,7 @@ services:
       zenoh-admin-db:
         condition: service_healthy
     environment:
-      - GOAT_CERT_DIR=/certs
+      - EFDI_CERT_DIR=/certs
       - PARTNER_NAMESPACE=${PARTNER_NAMESPACE}
       - ZENOH_LOCAL_ENDPOINT=${ZENOH_ADMIN_ZENOH_ENDPOINT:-tcp/127.0.0.1:7448}
       - ZENOH_CONFIG_PATH=/zenoh-config/config.json5
@@ -480,6 +479,23 @@ services:
       - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
       - ${POD_STATE_DIR}/zenoh:/zenoh-config
       - ../host/zenoh-router.json5.tmpl:/zenoh-config-template/zenoh-router.json5.tmpl:ro
+      - ${POD_STATE_DIR}/zenoh-admin-data:/data
       - /var/run/docker.sock:/var/run/docker.sock
     healthcheck:
       disable: true
+
+  zenoh-admin-proxy:
+    image: caddy:2-alpine
+    container_name: efdi-pod-zenoh-admin-proxy
+    network_mode: host
+    restart: unless-stopped
+    depends_on:
+      - zenoh-admin
+    volumes:
+      - ./zenoh-admin/Caddyfile:/etc/caddy/Caddyfile:ro
+      - zenoh_admin_caddy_data:/data
+    healthcheck:
+      disable: true
+
+volumes:
+  zenoh_admin_caddy_data:

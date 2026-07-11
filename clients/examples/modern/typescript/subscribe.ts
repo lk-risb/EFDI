@@ -8,10 +8,10 @@
 // * for a single segment.
 //
 // IMPORTANT: zenoh-ts connects to the zenoh-plugin-remote-api over a WebSocket, NOT directly to
-// the router over mTLS. See ./README.md and ../../../connect/typescript/goat_connect.ts.
+// the router over mTLS. See ./README.md and ../../../connect/typescript/efdi_connect.ts.
 
 import { RingChannel, Sample, ChannelReceiver } from "@eclipse-zenoh/zenoh-ts";
-import { session, namespace } from "../../../connect/typescript/goat_connect.js";
+import { session, namespace } from "../../../connect/typescript/efdi_connect.js";
 
 async function main(): Promise<void> {
   const keyexpr = process.argv[2] ?? `${namespace()}/**`;

@@ -45,7 +45,7 @@ else
 fi
 
 export ZENOH_LOCAL_ENDPOINT="${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}"
-export GOAT_CERT_DIR="${BUNDLE_DIR:-$HOME/goat-bundle}"
+export EFDI_CERT_DIR="${BUNDLE_DIR:-$HOME/goat-bundle}"
 
 # ---------------------------------------------------------------------------
 # Venv setup

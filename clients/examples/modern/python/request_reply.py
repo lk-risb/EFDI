@@ -14,12 +14,12 @@ import os
 import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "..", "connect", "python"))
-import goat_connect
+import efdi_connect
 
 
 def serve() -> None:
-    key = goat_connect.key("status")
-    with goat_connect.session() as s:
+    key = efdi_connect.key("status")
+    with efdi_connect.session() as s:
         def on_query(query):
             query.reply(key, b'{"status":"ok","uptime_s":42}')
             print(f"answered query for {query.selector}", flush=True)
@@ -34,8 +34,8 @@ def serve() -> None:
 
 
 def get() -> None:
-    key = goat_connect.key("status")
-    with goat_connect.session() as s:
+    key = efdi_connect.key("status")
+    with efdi_connect.session() as s:
         replies = s.get(key)
         for reply in replies:
             try:

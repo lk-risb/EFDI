@@ -13,15 +13,15 @@ import os
 import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "..", "connect", "python"))
-import goat_connect
+import efdi_connect
 
 
 def main() -> None:
-    keyexpr = sys.argv[1] if len(sys.argv) > 1 else f"{goat_connect.namespace()}/**"
+    keyexpr = sys.argv[1] if len(sys.argv) > 1 else f"{efdi_connect.namespace()}/**"
     limit = int(sys.argv[2]) if len(sys.argv) > 2 else 0  # 0 = follow forever
     seen = 0
 
-    with goat_connect.session() as s:
+    with efdi_connect.session() as s:
         def on_sample(sample):
             nonlocal seen
             payload = bytes(sample.payload)
