@@ -41,6 +41,29 @@ _FIXED_SUBSTITUTIONS = {
 _SAFE_NAMESPACE_RE = re.compile(r"^[A-Za-z0-9._/-]+$")
 _SAFE_ENDPOINT_RE = re.compile(r"^[A-Za-z0-9._/:-]+$")
 
+# Single source of truth for the org prefix — rw-mounted here, ro-mounted into
+# every bridge (see namespace_prefix.py + docker-compose.yml). Writing it +
+# restarting the data plane is how a WebUI prefix change goes live without
+# recreating containers (their env is baked at create time).
+_PREFIX_FILE = os.environ.get("NAMESPACE_PREFIX_FILE", "/namespace-prefix")
+_DEFAULT_PREFIX = "LTU/CISB"
+
+
+def _read_prefix_file() -> str:
+    try:
+        with open(_PREFIX_FILE) as f:
+            v = f.read().strip()
+        if v:
+            return v
+    except OSError:
+        pass
+    return os.environ.get("NAMESPACE_PREFIX", _DEFAULT_PREFIX)
+
+
+def _write_prefix_file(value: str) -> None:
+    with open(_PREFIX_FILE, "w") as f:
+        f.write(value + "\n")
+
 
 class ConfigFields(BaseModel):
     mtls_port: int
@@ -48,6 +71,7 @@ class ConfigFields(BaseModel):
     fabric_endpoint: str
     partner_namespace: str
     inbound_namespace: str
+    namespace_prefix: str
     verify_name_on_connect: bool
     plugins_loading_enabled: bool
 
