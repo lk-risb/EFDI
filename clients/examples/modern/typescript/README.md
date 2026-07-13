@@ -79,7 +79,7 @@ npm install
 npm run subscribe                              # everything under your namespace
 npm run publish                                # one JSON sample to <ns>/sensors/temp
 npm run publish -- 50 0.2                       # 50 samples, 200ms apart
-npm run subscribe -- 'release/goat/**'   # inbound data from goat
+npm run subscribe -- 'release/<partner>/**'   # inbound data from a partner
 npm run subscribe -- '<keyexpr>' 5              # stop after 5 samples
 ```
 

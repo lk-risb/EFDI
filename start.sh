@@ -40,6 +40,9 @@ export EFDI_CERT_DIR="$BUNDLE_DIR"
 # environment to interpolate ${POD_STATE_DIR} in volume paths — it has no
 # access to this script's own defaulting logic.
 export POD_STATE_DIR="${POD_STATE_DIR:-$SCRIPT_DIR/compose/state}"
+# Host-launched bridges read the same prefix state file the admin writes + the
+# containerized bridges mount at /namespace-prefix (see namespace_prefix.py).
+export NAMESPACE_PREFIX_FILE="${POD_STATE_DIR}/namespace-prefix"
 LOG_DIR="$POD_STATE_DIR/logs"
 PID_DIR="$POD_STATE_DIR/.pids"
 mkdir -p "$LOG_DIR" "$PID_DIR"

@@ -1,4 +1,4 @@
-# EFDI Moon-Pod — Diegimo instrukcija
+# EFDI — Diegimo instrukcija
 
 > **Platforma:** Linux · **Zenoh:** 1.9.0 · **Python:** 3.10+
 >
@@ -34,9 +34,9 @@ ATAK įrenginiai turi būti tame pačiame L2 tinklo segmente kaip serveris (mult
 
 ### Sertifikatai
 
-Zenoh mTLS autentifikacijai reikalingas EFDI išduotas `goat-bundle`. Gaukite jį iš EFDI administratoriaus.
+Zenoh mTLS sertifikatai išduodami savarankiškai — jokio išorinio CA ar vendor bundle. `scripts/gen-certs.sh <namespace>` sugeneruoja (vieną kartą) EFDI root CA faile `compose/certs/efdi-ca-root.pem`/`efdi-ca-root-key.pem`, tada pasirašo lapo sertifikatą+raktą nurodytam namespace; tas pats root CA naudojamas visiems vėlesniems namespace'ams.
 
-Ištraukta mTLS medžiaga (`efdi-ca-root.pem`, `<NAMESPACE>-cert.pem`, `<NAMESPACE>-key.pem`) saugoma `compose/certs/` — įtraukta į `.gitignore`, niekada nekomituojama. Neapdorotas pasirašytas prisijungimo paketas (`<handle>.cbor`) saugomas `compose/state/goat-cli/` bet kokiam būsimam `goat profile init`/`rotate` paleidimui — taip pat gitignored. Abu numatytieji keliai nustatomi `start.sh`; jei norite laikyti juos visai už repozitorijos ribų, perrašykite per `BUNDLE_DIR`/`POD_STATE_DIR` faile `compose/.env`.
+Sugeneruota medžiaga (`efdi-ca-root.pem`, `<NAMESPACE>-cert.pem`, `<NAMESPACE>-key.pem`) saugoma `compose/certs/` — įtraukta į `.gitignore`, niekada nekomituojama. Numatytasis kelias nustatomas `start.sh`; jei norite laikyti jį visai už repozitorijos ribų, perrašykite per `BUNDLE_DIR` faile `compose/.env`.
 
 ---
 
@@ -45,22 +45,27 @@ Ištraukta mTLS medžiaga (`efdi-ca-root.pem`, `<NAMESPACE>-cert.pem`, `<NAMESPA
 ### 2.1 Repozitorijos klonavimas
 
 ```bash
-git clone <repo-url> efdi-moon-pod
-cd efdi-moon-pod
+git clone <repo-url> EFDI
+cd EFDI
 ```
 
-### 2.2 goat-bundle įdiegimas
+### 2.2 Sertifikatų generavimas
 
-Bundle patalpinkite į `compose/certs/` (numatytasis kelias; keičiamas per `BUNDLE_DIR`):
+```bash
+scripts/gen-certs.sh <namespace>   # pvz. scripts/gen-certs.sh 1851281db70ccc0409dad4ecfc874cf5
+```
+
+Tai sukuria:
 
 ```text
 compose/certs/
-├── efdi-ca-root.pem          # CA sertifikatas (viešas)
+├── efdi-ca-root.pem          # EFDI root CA sertifikatas (viešas)
+├── efdi-ca-root-key.pem      # EFDI root CA privatus raktas — saugokite, juo pasirašomas kiekvieno pod'o lapo sertifikatas
 ├── <NAMESPACE>-cert.pem      # Mazgo sertifikatas
 └── <NAMESPACE>-key.pem       # Privatus raktas — apribokite prieigą
 ```
 
-`<NAMESPACE>` — jūsų pod'ui priskirtas šešioliktainis UUID (pvz. `<YOUR_NAMESPACE>`).
+`<NAMESPACE>` turi sutapti su `PARTNER_NAMESPACE` faile `compose/.env`.
 
 ```bash
 # Patikrinimas
@@ -110,11 +115,11 @@ Redaguokite `compose/.env`. Failą `start.sh` nuskaito eilutė po eilutės saugi
 # ── Bundle kelias ────────────────────────────────────────────────────────────
 # Jei nenustatyta, numatytasis kelias yra compose/certs/ (repo viduje, gitignored) —
 # perrašykite tik jei norite laikyti sertifikatus visai už repo ribų.
-#BUNDLE_DIR=/home/<vartotojas>/goat-bundle
+#BUNDLE_DIR=/home/<vartotojas>/efdi-certs
 
 # ── Vykdymo būsena (žurnalai, PID failai, Zenoh config/sertifikatai) ────────
 # Jei nenustatyta, numatytasis kelias yra compose/state/ (repo viduje, gitignored).
-#POD_STATE_DIR=/var/lib/goat-moon
+#POD_STATE_DIR=/var/lib/efdi-pod
 
 # ── Giraffe AMB radaras (ASTERIX CAT-48/34) ─────────────────────────────────
 CAT48_PORT=30048               # UDP prievadas, iš kurio radaras siunčia duomenis
@@ -598,7 +603,7 @@ Konfigūracijos skirtukas rodo struktūrizuotus laukus, ne žalią JSON5 — kie
 
 | Laukas | Poveikis |
 | --- | --- |
-| Vietinis mTLS portas | Tinklui skirtas listen portas goat-cli, audit-sink (numatytasis 7447) |
+| Vietinis mTLS portas | Tinklui skirtas listen portas skirtas bridges, audit-sink (numatytasis 7447) |
 | Vietinis TCP portas | Plaintext, tik vietinis listen portas bridge'ams + šiam GUI (numatytasis 7448) |
 | Fabric endpoint | Goat pusės / kolegos endpoint, į kurį šis pod'as skambina — įvedamas kaip atskiri Host + Port laukai (schema visada `tls`, niekada nerodoma); yra vieno paspaudimo šablonai anksčiau naudotiems endpoint'ams |
 | Partner namespace | Šio pod'o first-party publish/subscribe prefiksas (jo slotas) — **keičiant šią reikšmę, kita fabric pusė taip pat turi leisti naują reikšmę savo ACL, kitaip publikacijos tyliai nustoja pasiekti** |

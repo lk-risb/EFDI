@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""rest-http bridge — talk to a goat-moon-pod over plain HTTP, no Zenoh code in your app.
+"""rest-http bridge — talk to an EFDI pod over plain HTTP, no Zenoh code in your app.
 
 The bridge is itself a Zenoh client (mTLS, via the shared efdi_connect helper). It exposes a
 tiny localhost HTTP API so any language/tool that can do an HTTP request — curl, MATLAB,
@@ -48,7 +48,7 @@ NS = efdi_connect.namespace()
 
 
 def _abs_key(suffix_or_key: str) -> str:
-    # An absolute fabric key (e.g. release/goat/...) is passed through; a bare suffix is
+    # An absolute fabric key (e.g. release/<partner>/...) is passed through; a bare suffix is
     # scoped under your namespace.
     s = suffix_or_key.lstrip("/")
     return s if s.startswith(NS + "/") or s == NS else f"{NS}/{s}"

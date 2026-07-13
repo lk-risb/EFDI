@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Modern TypeScript pub/sub examples for a goat-moon-pod (via the Zenoh remote-api plugin).",
+  "description": "Modern TypeScript pub/sub examples for an EFDI pod (via the Zenoh remote-api plugin).",
   "scripts": {
     "publish": "tsx --import ./ws-polyfill.ts publish.ts",
     "subscribe": "tsx --import ./ws-polyfill.ts subscribe.ts",

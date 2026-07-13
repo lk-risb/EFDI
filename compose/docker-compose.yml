@@ -1,4 +1,4 @@
-# EFDI moon-pod — v0 data-plane bundle.
+# EFDI — v0 data-plane bundle.
 #
 # Runs the containerizable data-plane services. The NetBird mesh client runs on the HOST
 # directly (see ../host/first-boot.sh), NOT here.
@@ -56,24 +56,6 @@ services:
       timeout: 5s
       retries: 5
 
-  opensky-bridge:
-    build:
-      context: ./bridge
-    container_name: efdi-pod-opensky-bridge
-    network_mode: host
-    restart: unless-stopped
-    depends_on:
-      zenoh-router:
-        condition: service_healthy
-    environment:
-      # Scripts live in the image (from ./bridge/); certs come from the bundle.
-      - EFDI_CERT_DIR=/certs
-      - ZENOH_LOCAL_ENDPOINT=${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}
-    volumes:
-      - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
-    healthcheck:
-      disable: true
-
   aisstream-bridge:
     build:
       context: ./bridge
@@ -90,24 +72,7 @@ services:
     command: ["python3", "/app/aisstream_ws_bridge.py"]
     volumes:
       - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
-    healthcheck:
-      disable: true
-
-  openmeteo-bridge:
-    build:
-      context: ./bridge
-    container_name: efdi-pod-openmeteo-bridge
-    network_mode: host
-    restart: unless-stopped
-    depends_on:
-      zenoh-router:
-        condition: service_healthy
-    environment:
-      - EFDI_CERT_DIR=/certs
-      - ZENOH_LOCAL_ENDPOINT=${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}
-    command: ["python3", "/app/openmeteo_forecast_bridge.py"]
-    volumes:
-      - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
+      - ${POD_STATE_DIR}/namespace-prefix:/namespace-prefix:ro
     healthcheck:
       disable: true
 
@@ -126,80 +91,7 @@ services:
     command: ["python3", "/app/meteolt_forecast_bridge.py"]
     volumes:
       - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
-    healthcheck:
-      disable: true
-
-  yr-no-bridge:
-    build:
-      context: ./bridge
-    container_name: efdi-pod-yr-no-bridge
-    network_mode: host
-    restart: unless-stopped
-    depends_on:
-      zenoh-router:
-        condition: service_healthy
-    environment:
-      - EFDI_CERT_DIR=/certs
-      - ZENOH_LOCAL_ENDPOINT=${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}
-    command: ["python3", "/app/yrno_forecast_bridge.py"]
-    volumes:
-      - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
-    healthcheck:
-      disable: true
-
-  n2yo-bridge:
-    build:
-      context: ./bridge
-    container_name: efdi-pod-n2yo-bridge
-    network_mode: host
-    restart: unless-stopped
-    depends_on:
-      zenoh-router:
-        condition: service_healthy
-    environment:
-      - EFDI_CERT_DIR=/certs
-      - ZENOH_LOCAL_ENDPOINT=${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}
-      - N2YO_KEY=${N2YO_KEY:-}
-    command: ["python3", "/app/n2yo_satpos_bridge.py"]
-    volumes:
-      - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
-    healthcheck:
-      disable: true
-
-  osm-bridge:
-    build:
-      context: ./bridge
-    container_name: efdi-pod-osm-bridge
-    network_mode: host
-    restart: unless-stopped
-    depends_on:
-      zenoh-router:
-        condition: service_healthy
-    environment:
-      - EFDI_CERT_DIR=/certs
-      - ZENOH_LOCAL_ENDPOINT=${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}
-    command: ["python3", "/app/osm_overpass_bridge.py"]
-    volumes:
-      - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
-    healthcheck:
-      disable: true
-
-  purpleair-bridge:
-    build:
-      context: ./bridge
-    container_name: efdi-pod-purpleair-bridge
-    network_mode: host
-    restart: unless-stopped
-    depends_on:
-      zenoh-router:
-        condition: service_healthy
-    environment:
-      - EFDI_CERT_DIR=/certs
-      - ZENOH_LOCAL_ENDPOINT=${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}
-      - PURPLEAIR_KEY=${PURPLEAIR_KEY:-}
-    command: ["python3", "/app/purpleair_sensor_bridge.py"]
-    volumes:
-      - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
+      - ${POD_STATE_DIR}/namespace-prefix:/namespace-prefix:ro
     healthcheck:
       disable: true
 
@@ -218,102 +110,7 @@ services:
     command: ["python3", "/app/aprsis_bridge.py"]
     volumes:
       - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
-    healthcheck:
-      disable: true
-
-  cmems-bridge:
-    build:
-      context: ./bridge
-      dockerfile: Dockerfile.cmems
-    container_name: efdi-pod-cmems-bridge
-    network_mode: host
-    restart: unless-stopped
-    depends_on:
-      zenoh-router:
-        condition: service_healthy
-    environment:
-      - EFDI_CERT_DIR=/certs
-      - ZENOH_LOCAL_ENDPOINT=${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}
-      - COPERNICUSMARINE_SERVICE_USERNAME=${CMEMS_USER:-}
-      - COPERNICUSMARINE_SERVICE_PASSWORD=${CMEMS_PASS:-}
-    volumes:
-      - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
-    healthcheck:
-      disable: true
-
-  notam-bridge:
-    build:
-      context: ./bridge
-    container_name: efdi-pod-notam-bridge
-    network_mode: host
-    restart: unless-stopped
-    depends_on:
-      zenoh-router:
-        condition: service_healthy
-    environment:
-      - EFDI_CERT_DIR=/certs
-      - ZENOH_LOCAL_ENDPOINT=${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}
-      - ICAO_NOTAM_KEY=${ICAO_NOTAM_KEY:-}
-    command: ["python3", "/app/icao_notam_bridge.py"]
-    volumes:
-      - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
-    healthcheck:
-      disable: true
-
-  fr24-bridge:
-    build:
-      context: ./bridge
-    container_name: efdi-pod-fr24-bridge
-    network_mode: host
-    restart: unless-stopped
-    depends_on:
-      zenoh-router:
-        condition: service_healthy
-    environment:
-      - EFDI_CERT_DIR=/certs
-      - ZENOH_LOCAL_ENDPOINT=${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}
-      - FR24_KEY=${FR24_KEY:-}
-    command: ["python3", "/app/fr24_live_bridge.py"]
-    volumes:
-      - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
-    healthcheck:
-      disable: true
-
-  windy-bridge:
-    build:
-      context: ./bridge
-    container_name: efdi-pod-windy-bridge
-    network_mode: host
-    restart: unless-stopped
-    depends_on:
-      zenoh-router:
-        condition: service_healthy
-    environment:
-      - EFDI_CERT_DIR=/certs
-      - ZENOH_LOCAL_ENDPOINT=${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}
-      - WINDY_KEY=${WINDY_KEY:-}
-    command: ["python3", "/app/windy_forecast_bridge.py"]
-    volumes:
-      - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
-    healthcheck:
-      disable: true
-
-  here-traffic-bridge:
-    build:
-      context: ./bridge
-    container_name: efdi-pod-here-traffic-bridge
-    network_mode: host
-    restart: unless-stopped
-    depends_on:
-      zenoh-router:
-        condition: service_healthy
-    environment:
-      - EFDI_CERT_DIR=/certs
-      - ZENOH_LOCAL_ENDPOINT=${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}
-      - HERE_KEY=${HERE_KEY:-}
-    command: ["python3", "/app/here_traffic_bridge.py"]
-    volumes:
-      - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
+      - ${POD_STATE_DIR}/namespace-prefix:/namespace-prefix:ro
     healthcheck:
       disable: true
 
@@ -332,6 +129,7 @@ services:
     command: ["python3", "/app/airplaneslive_adsb_bridge.py"]
     volumes:
       - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
+      - ${POD_STATE_DIR}/namespace-prefix:/namespace-prefix:ro
     healthcheck:
       disable: true
 
@@ -354,6 +152,7 @@ services:
       --udp
     volumes:
       - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
+      - ${POD_STATE_DIR}/namespace-prefix:/namespace-prefix:ro
     healthcheck:
       disable: true
 
@@ -377,6 +176,7 @@ services:
       --port ${TAK_PORT:-8087}
     volumes:
       - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
+      - ${POD_STATE_DIR}/namespace-prefix:/namespace-prefix:ro
     healthcheck:
       disable: true
 
@@ -400,6 +200,7 @@ services:
       --radar-port ${RADAR_PORT:-30002}
     volumes:
       - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
+      - ${POD_STATE_DIR}/namespace-prefix:/namespace-prefix:ro
     healthcheck:
       disable: true
     profiles:
@@ -429,6 +230,7 @@ services:
       --source ${SITAWARE_SOURCE:-efdi-live}
     volumes:
       - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
+      - ${POD_STATE_DIR}/namespace-prefix:/namespace-prefix:ro
     healthcheck:
       disable: true
     profiles:
@@ -452,6 +254,45 @@ services:
       timeout: 5s
       retries: 5
 
+  # Scoped Docker API access for zenoh-admin: CONTAINERS+POST only (needed for
+  # container.get()/.restart() on the zenoh-router container), everything else
+  # (IMAGES, NETWORKS, VOLUMES, EXEC, BUILD, SECRETS, SWARM, ...) denied — so a
+  # bug in the network-reachable admin API can't reach the full Docker Engine
+  # API (container-create with host binds, exec into other containers, etc)
+  # the way a raw /var/run/docker.sock mount would allow. Loopback-only.
+  docker-socket-proxy:
+    image: tecnativa/docker-socket-proxy:0.2.0
+    container_name: efdi-pod-docker-socket-proxy
+    restart: unless-stopped
+    environment:
+      - CONTAINERS=1
+      - POST=1
+      - IMAGES=0
+      - NETWORKS=0
+      - VOLUMES=0
+      - EXEC=0
+      - BUILD=0
+      - COMMIT=0
+      - CONFIGS=0
+      - DISTRIBUTION=0
+      - INFO=1
+      - NODES=0
+      - PLUGINS=0
+      - SECRETS=0
+      - SERVICES=0
+      - SESSION=0
+      - SWARM=0
+      - SYSTEM=0
+      - TASKS=0
+      - VERSION=1
+      - AUTH=0
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - "127.0.0.1:2375:2375"
+    healthcheck:
+      disable: true
+
   zenoh-admin:
     build:
       context: ./zenoh-admin
@@ -463,6 +304,8 @@ services:
         condition: service_healthy
       zenoh-admin-db:
         condition: service_healthy
+      docker-socket-proxy:
+        condition: service_started
     environment:
       - EFDI_CERT_DIR=/certs
       - PARTNER_NAMESPACE=${PARTNER_NAMESPACE}
@@ -475,12 +318,19 @@ services:
       - ZENOH_ADMIN_SECRET_KEY=${ZENOH_ADMIN_SECRET_KEY:?set ZENOH_ADMIN_SECRET_KEY in .env}
       - ZENOH_ADMIN_FIRST_USER=${ZENOH_ADMIN_FIRST_USER:-admin}
       - ZENOH_ADMIN_FIRST_PASS=${ZENOH_ADMIN_FIRST_PASS:-}
+      - ZENOH_ADMIN_TRUSTED_PARENT_CERT_PATH=${ZENOH_ADMIN_TRUSTED_PARENT_CERT_PATH:-}
+      - ZENOH_ADMIN_TRUSTED_PARENT_CN=${ZENOH_ADMIN_TRUSTED_PARENT_CN:-}
+      - ZENOH_ADMIN_TRUSTED_ROOT_CERT_PATHS=${ZENOH_ADMIN_TRUSTED_ROOT_CERT_PATHS:-}
+      - ZENOH_ADMIN_TRUSTED_ROOT_CNS=${ZENOH_ADMIN_TRUSTED_ROOT_CNS:-}
+      - ZENOH_ADMIN_DEV_CORS_ORIGIN=${ZENOH_ADMIN_DEV_CORS_ORIGIN:-}
+      - ZENOH_ROUTER_CONTAINER=${ZENOH_ROUTER_CONTAINER:-efdi-pod-zenoh-router}
+      - DOCKER_HOST=tcp://127.0.0.1:2375
     volumes:
       - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
       - ${POD_STATE_DIR}/zenoh:/zenoh-config
       - ../host/zenoh-router.json5.tmpl:/zenoh-config-template/zenoh-router.json5.tmpl:ro
       - ${POD_STATE_DIR}/zenoh-admin-data:/data
-      - /var/run/docker.sock:/var/run/docker.sock
+      - ${POD_STATE_DIR}/namespace-prefix:/namespace-prefix:rw
     healthcheck:
       disable: true
 

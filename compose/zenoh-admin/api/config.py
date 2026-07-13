@@ -20,7 +20,12 @@ CONFIG_PATH = os.environ.get("ZENOH_CONFIG_PATH", "/zenoh-config/config.json5")
 # (instead of hand-editing the live JSON5) means a saved config can never
 # drift from the template's structure — only the 5 templated values change.
 TEMPLATE_PATH = os.environ.get("ZENOH_TEMPLATE_PATH", "/zenoh-config-template/zenoh-router.json5.tmpl")
-ZENOH_ROUTER_SERVICE_LABEL = "goat-moon-zenoh-router"
+# Name of THIS pod's zenoh-router container — the one this admin instance
+# restarts + health-checks. Env-configurable (not hardcoded) so multiple pods
+# can share one Docker host/daemon without cross-restarting each other's router
+# (e.g. a multi-pod-per-host test rig, or HA co-location). Defaults to the
+# standard single-pod-per-host name.
+ZENOH_ROUTER_SERVICE_LABEL = os.environ.get("ZENOH_ROUTER_CONTAINER", "efdi-pod-zenoh-router")
 
 # Paths inside the zenoh-router container — fixed by the compose volume layout,
 # never user-editable (see host/zenoh-router.json5.tmpl header + first-boot.sh).
@@ -142,6 +147,24 @@ def _render_config(fields: ConfigFields) -> str:
     return rendered
 
 
+def write_config_to_disk(rendered: str) -> None:
+    with open(CONFIG_PATH, "w") as f:
+        f.write(rendered)
+
+
+def restart_router_container() -> tuple[bool, str | None]:
+    """Returns (restarted, restart_error) — restart_error is None on success."""
+    try:
+        client = docker.from_env()
+        container = client.containers.get(ZENOH_ROUTER_SERVICE_LABEL)
+        container.restart(timeout=15)
+        return True, None
+    except NotFound:
+        return False, f"Container '{ZENOH_ROUTER_SERVICE_LABEL}' not found"
+    except DockerException as exc:
+        return False, str(exc)
+
+
 @router.get("")
 async def get_config(_=Depends(require_role("admin", "superadmin"))):
     if not os.path.isfile(CONFIG_PATH):
@@ -162,21 +185,8 @@ async def put_config(
     actor=Depends(require_role("superadmin")),
 ):
     rendered = _render_config(fields)
-
-    with open(CONFIG_PATH, "w") as f:
-        f.write(rendered)
-
-    restarted = False
-    restart_error = None
-    try:
-        client = docker.from_env()
-        container = client.containers.get(ZENOH_ROUTER_SERVICE_LABEL)
-        container.restart(timeout=15)
-        restarted = True
-    except NotFound:
-        restart_error = f"Container '{ZENOH_ROUTER_SERVICE_LABEL}' not found"
-    except DockerException as exc:
-        restart_error = str(exc)
+    write_config_to_disk(rendered)
+    restarted, restart_error = restart_router_container()
 
     await write_audit(db, actor.id, "update_zenoh_config",
                        "restarted" if restarted else f"write ok, restart failed: {restart_error}")

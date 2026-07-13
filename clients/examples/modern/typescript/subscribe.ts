@@ -1,7 +1,7 @@
-// subscribe.ts — receive data from the goat fabric (modern TypeScript).
+// subscribe.ts — receive data from the EFDI fabric (modern TypeScript).
 //
 //   npm run subscribe                                  # your namespace, follow forever
-//   npm run subscribe -- 'release/goat/**'      # inbound data goat sends you
+//   npm run subscribe -- 'release/<partner>/**'      # inbound data a partner sends you
 //   npm run subscribe -- '<keyexpr>' 5                 # exit after 5 samples
 //
 // Default key-expr is '<namespace>/**' (everything under your prefix). Use ** for any depth,

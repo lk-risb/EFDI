@@ -62,7 +62,8 @@ import zenoh
 
 ROUTER    = "tls/zenoh.efdi.netbird.efdi-backbone.net:7447"
 ORG       = os.environ.get("PARTNER_NAMESPACE", "")
-TOPIC_ROOT = "LTU/CISB/" + ORG   # organization prefix precedes the pod namespace
+from namespace_prefix import prefix
+TOPIC_ROOT = prefix() + "/" + ORG   # org prefix (configurable) precedes the pod namespace
 HERE      = os.path.dirname(os.path.abspath(__file__))
 _CERT_DIR = os.environ.get("EFDI_CERT_DIR", HERE)
 _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", ROUTER)
@@ -343,6 +344,11 @@ def run(args):
         print("  Server : {}{}".format(_BASE_URLS[0], api_path), flush=True)
     print("  Poll   : {}s".format(_POLL_S), flush=True)
     print("  TLS    : {}".format("verify" if _TLS_VERIFY else "skip-verify"), flush=True)
+    if not _TLS_VERIFY:
+        print("  WARNING: SITAWARE_TLS_VERIFY=0 — certificate verification is OFF. "
+              "HTTP Basic Auth credentials for this connection are exposed to anyone "
+              "who can MITM the path to the SitaWare server. Only use this for a "
+              "known self-signed cert on a trusted network.", flush=True)
 
     consecutive_errors = 0
     last_used_base = None

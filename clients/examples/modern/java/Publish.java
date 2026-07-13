@@ -1,4 +1,4 @@
-// Publish.java — send data to the goat fabric (modern Java, JDK 17+).
+// Publish.java — send data to the EFDI fabric (modern Java, JDK 17+).
 //
 //   ./gradlew run -Pmain=Publish                 # one JSON sample
 //   ./gradlew run -Pmain=Publish --args="50 0.2" # 50 samples at 200ms

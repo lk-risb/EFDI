@@ -10,14 +10,7 @@ let refreshPromise: Promise<string | null> | null = null
 
 async function refreshToken(): Promise<string | null> {
   if (refreshPromise) return refreshPromise
-  refreshPromise = (async () => {
-    const res = await fetch(`${BASE}/auth/refresh`, { method: 'POST', credentials: 'include' })
-    if (!res.ok) return null
-    const data = await res.json()
-    const payload = JSON.parse(atob(data.access_token.split('.')[1]))
-    useAuth.getState().setToken(data.access_token, payload.role, payload.username)
-    return data.access_token
-  })()
+  refreshPromise = useAuth.getState().restoreSession()
   try {
     return await refreshPromise
   } finally {

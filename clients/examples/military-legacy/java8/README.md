@@ -20,9 +20,9 @@ Publish.java / Subscribe.java  ──HTTP──▶  REST bridge (127.0.0.1:8080)
    [`../../bridges/rest-http/README.md`](../../bridges/rest-http/README.md)):
    ```sh
    export EFDI_ROUTER=tls/127.0.0.1:7447 \
-          EFDI_CERT=$HOME/.goat/contexts/default/mtls.cert.pem \
-          EFDI_KEY=$HOME/.goat/contexts/default/mtls.key.pem \
-          EFDI_CA=$HOME/.goat/contexts/default/ca-roots.pem \
+          EFDI_CERT=$HOME/efdi-certs/mtls-cert.pem \
+          EFDI_KEY=$HOME/efdi-certs/mtls-key.pem \
+          EFDI_CA=$HOME/efdi-certs/ca-root.pem \
           PARTNER_NAMESPACE=release/acme
    python3 bridge.py          # serves on http://127.0.0.1:8080
    ```
@@ -57,7 +57,7 @@ java Publish sensors/temp '21.5' 10 200            # 10 samples, 200 ms apart
 ```sh
 java Subscribe sensors/temp                        # wait for 1 sample under your namespace
 java Subscribe sensors/temp 5 60                   # wait for 5 samples, up to 60 s
-java Subscribe 'release/goat/**' 3          # inbound data from goat (full key, passed through)
+java Subscribe 'release/<partner>/**' 3          # inbound data from a partner (full key, passed through)
 java Subscribe sensors/temp stream                 # follow continuously (Ctrl-C to stop)
 ```
 
@@ -70,7 +70,7 @@ hand-rolled split), or just logs them.
 **Quick round-trip:** in one terminal `java Subscribe sensors/temp stream`, in another
 `java Publish sensors/temp '21.5' 5 500`. The samples appear in the subscriber.
 
-> Use full keys with `**` quoted in the shell (`'release/goat/**'`) so the glob isn't expanded
+> Use full keys with `**` quoted in the shell (`'release/<partner>/**'`) so the glob isn't expanded
 > by your shell before Java sees it.
 
 ## OFFLINE / air-gapped notes

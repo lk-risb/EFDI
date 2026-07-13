@@ -1,4 +1,4 @@
-// publish.ts — send data to the goat fabric (modern TypeScript).
+// publish.ts — send data to the EFDI fabric (modern TypeScript).
 //
 //   npm install && npm run publish              # one JSON sample
 //   npm run publish -- 50 0.2                    # 50 samples at 200ms

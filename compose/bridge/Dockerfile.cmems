@@ -1,8 +1,0 @@
-FROM python:3.12-slim
-# copernicusmarine pulls xarray, dask, netcdf4 and needs C build tools — image is ~1 GB.
-# Install build deps first; copernicusmarine has C extensions that fail on slim without them.
-RUN apt-get update && apt-get install -y --no-install-recommends gcc g++ libffi-dev && rm -rf /var/lib/apt/lists/*
-RUN pip install --no-cache-dir eclipse-zenoh==1.9.0 copernicusmarine
-WORKDIR /app
-COPY bridges/cmems_marine_bridge.py ./
-CMD ["python3", "/app/cmems_bridge.py"]

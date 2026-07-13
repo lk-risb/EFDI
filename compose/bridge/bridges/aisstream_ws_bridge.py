@@ -33,7 +33,8 @@ import zenoh
 
 ROUTER = "tls/zenoh.efdi.netbird.efdi-backbone.net:7447"
 ORG    = os.environ.get("PARTNER_NAMESPACE", "")
-TOPIC_ROOT = "LTU/CISB/" + ORG   # organization prefix precedes the pod namespace
+from namespace_prefix import prefix
+TOPIC_ROOT = prefix() + "/" + ORG   # org prefix (configurable) precedes the pod namespace
 HERE   = os.path.dirname(os.path.abspath(__file__))
 _CERT_DIR = os.environ.get("EFDI_CERT_DIR", HERE)
 _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", ROUTER)
@@ -340,14 +341,15 @@ def make_config() -> "zenoh.Config":
 
 def main():
     ap = argparse.ArgumentParser(description="aisstream.io → Zenoh bridge")
-    ap.add_argument("--apikey", default=os.environ.get("AISSTREAM_KEY", ""),
-                    help="aisstream.io API key")
     ap.add_argument("--bbox", type=json.loads, default=DEFAULT_BBOX,
                     help='[[min_lat,min_lon],[max_lat,max_lon]]')
     ap.add_argument("--topic-suffix", default="tracks/v1")
     args = ap.parse_args()
+    # API key is env-var only (not a CLI flag) — a CLI arg would be visible to
+    # any other local user via `ps`/`/proc/<pid>/cmdline`.
+    args.apikey = os.environ.get("AISSTREAM_KEY", "")
     if not args.apikey:
-        ap.error("API key required — use --apikey or set AISSTREAM_KEY")
+        ap.error("AISSTREAM_KEY environment variable required")
     run(args)
 
 

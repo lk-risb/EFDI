@@ -71,9 +71,9 @@ make static                 # static-link libzenohc.a -> self-contained binaries
 
 ```sh
 export EFDI_ROUTER="tls/127.0.0.1:7447"
-export EFDI_CERT="$HOME/.goat/contexts/default/mtls.cert.pem"
-export EFDI_KEY="$HOME/.goat/contexts/default/mtls.key.pem"
-export EFDI_CA="$HOME/.goat/contexts/default/ca-roots.pem"
+export EFDI_CERT="$HOME/efdi-certs/mtls-cert.pem"
+export EFDI_KEY="$HOME/efdi-certs/mtls-key.pem"
+export EFDI_CA="$HOME/efdi-certs/ca-root.pem"
 export PARTNER_NAMESPACE="release/acme"
 # EFDI_VERIFY_NAME defaults to false (local pod at 127.0.0.1); set true for a DNS-named router.
 ```
@@ -84,7 +84,7 @@ export PARTNER_NAMESPACE="release/acme"
 ./publish               # publish one JSON sample to <namespace>/sensors/temp
 ./publish 50 200        # 50 samples, 200ms apart (interval is MILLISECONDS in C)
 ./subscribe             # receive everything under your namespace (<ns>/**)
-./subscribe 'release/goat/**'   # inbound data from goat
+./subscribe 'release/<partner>/**'   # inbound data from a partner
 ./subscribe '<keyexpr>' 5              # stop after 5 samples
 ```
 

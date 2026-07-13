@@ -1,7 +1,7 @@
-/* subscribe.c — receive data from the goat fabric (C99 / zenoh-c 1.9.0).
+/* subscribe.c — receive data from the EFDI fabric (C99 / zenoh-c 1.9.0).
  *
  *   ./subscribe                              # your own namespace (<ns>/**), follow forever
- *   ./subscribe 'release/goat/**'     # inbound data goat sends you
+ *   ./subscribe 'release/<partner>/**'     # inbound data a partner sends you
  *   ./subscribe '<keyexpr>' 5                # exit after 5 samples
  *
  * Plain C99, minimal deps (libc + libzenohc). Default key-expr is <namespace>/** (everything
@@ -43,7 +43,7 @@ static void efdi_namespace(char *out, size_t out_sz) {
     out[n] = '\0';
 }
 
-/* efdi_config — build the mTLS client config from the GOAT_* env vars (the one gotcha). */
+/* efdi_config — build the mTLS client config from the EFDI_* env vars (the one gotcha). */
 static z_result_t efdi_config(z_owned_config_t *cfg) {
     const char *router = env_or_die("EFDI_ROUTER");
     const char *ca     = env_or_die("EFDI_CA");

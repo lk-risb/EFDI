@@ -1,5 +1,5 @@
 function samples = receive_rest(keyexpr, varargin)
-%RECEIVE_REST  Receive N samples from a goat-moon-pod via the local REST bridge.
+%RECEIVE_REST  Receive N samples from an EFDI pod via the local REST bridge.
 %
 %   This is NOT a Zenoh client. It does an HTTP GET against the REST bridge
 %   (clients/examples/bridges/rest-http/), which holds the Zenoh mTLS identity and
@@ -11,7 +11,7 @@ function samples = receive_rest(keyexpr, varargin)
 %   Usage:
 %       s = receive_rest('sensors/temp')               % wait for 1 sample
 %       s = receive_rest('sensors/temp', 'Count', 5)   % wait for 5
-%       s = receive_rest('release/goat/**', 'Count', 3, 'TimeoutSec', 60)
+%       s = receive_rest('release/<partner>/**', 'Count', 3, 'TimeoutSec', 60)
 %
 %   Returns a struct array; each element has fields:
 %       .key   - the full fabric key,  e.g. 'release/acme/sensors/temp'

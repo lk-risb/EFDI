@@ -1,16 +1,115 @@
 @import "tailwindcss";
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* Self-hosted (not Google Fonts CDN) — this panel needs to work in
+   disconnected/air-gapped deployments, so no runtime dependency on an
+   external font host. Latin + Latin Extended-A only (covers Lithuanian
+   diacritics); other scripts fall back to the system font. */
+@font-face {
+  font-family: "Chakra Petch";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./assets/fonts/ChakraPetch-400-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122;
+}
+@font-face {
+  font-family: "Chakra Petch";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./assets/fonts/ChakraPetch-400-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-024F, U+0300-0331, U+1E00-1EFF;
+}
+@font-face {
+  font-family: "Chakra Petch";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("./assets/fonts/ChakraPetch-500-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122;
+}
+@font-face {
+  font-family: "Chakra Petch";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("./assets/fonts/ChakraPetch-500-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-024F, U+0300-0331, U+1E00-1EFF;
+}
+@font-face {
+  font-family: "Chakra Petch";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("./assets/fonts/ChakraPetch-600-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122;
+}
+@font-face {
+  font-family: "Chakra Petch";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("./assets/fonts/ChakraPetch-600-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-024F, U+0300-0331, U+1E00-1EFF;
+}
+@font-face {
+  font-family: "Chakra Petch";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("./assets/fonts/ChakraPetch-700-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122;
+}
+@font-face {
+  font-family: "Chakra Petch";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("./assets/fonts/ChakraPetch-700-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-024F, U+0300-0331, U+1E00-1EFF;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("./assets/fonts/JetBrainsMono-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("./assets/fonts/JetBrainsMono-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-024F, U+0300-0331, U+1E00-1EFF;
+}
+
 @theme {
-  --color-accent-fill: var(--brand-accent-fill, #d4d4d8);
-  --color-accent-fill-hover: var(--brand-accent-fill-hover, #e4e4e7);
-  --color-accent-text: var(--brand-accent-text, #18181b);
-  --color-accent-ring: var(--brand-accent-ring, #a1a1aa);
+  --color-accent-fill: var(--brand-accent-fill, #2dd4bf);
+  --color-accent-fill-hover: var(--brand-accent-fill-hover, #5eead4);
+  --color-accent-text: var(--brand-accent-text, #052e2b);
+  --color-accent-ring: var(--brand-accent-ring, #2dd4bf);
+
+  /* HUD dark-surface scale — numbered token system giving the existing
+     hardcoded dark: hex values (already used throughout the HUD redesign)
+     actual names. Dark-mode HUD surfaces only — the light theme keeps its
+     existing zinc/white palette untouched. */
+  --color-hud-0: #050506;
+  --color-hud-1: #111113;
+  --color-hud-2: #1a1a1d;
+  --color-hud-3: #232326;
+  --color-hud-4: #2b2b2f;
+
+  --font-display: "Chakra Petch", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 /* HUD identity: uppercase, letter-spaced small labels used for table
    headers, stat labels, and nav section dividers. */
 .hud-label {
+  font-family: var(--font-display);
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
@@ -95,6 +194,7 @@
 }
 .hud-corner {
   position: absolute;
+  z-index: 1001;
   width: 14px;
   height: 14px;
   border-color: var(--color-accent-fill);

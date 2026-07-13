@@ -25,13 +25,14 @@ import re
 import socket
 import struct
 import time
-import xml.etree.ElementTree as ET
 
+import defusedxml.ElementTree as ET
 import zenoh
 
 ROUTER    = "tls/zenoh.efdi.netbird.efdi-backbone.net:7447"
 ORG       = os.environ.get("PARTNER_NAMESPACE", "")
-TOPIC_ROOT = "LTU/CISB/" + ORG   # organization prefix precedes the pod namespace
+from namespace_prefix import prefix
+TOPIC_ROOT = prefix() + "/" + ORG   # org prefix (configurable) precedes the pod namespace
 HERE      = os.path.dirname(os.path.abspath(__file__))
 _CERT_DIR = os.environ.get("EFDI_CERT_DIR", HERE)
 _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", ROUTER)
@@ -111,7 +112,9 @@ def parse_nffi(xml_bytes: bytes) -> list[dict]:
     """Parse an NFFI XML document; return list of unit track dicts."""
     try:
         root = ET.fromstring(xml_bytes)
-    except ET.ParseError as exc:
+    except (ET.ParseError, ValueError) as exc:
+        # defusedxml raises DefusedXmlException (a ValueError subclass, not
+        # ET.ParseError) on entity-expansion/external-reference attacks.
         print("NFFI XML parse error:", exc, flush=True)
         return []
 

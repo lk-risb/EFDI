@@ -51,7 +51,7 @@ publish('sensors/temp', '21.5', 'Count', 10, 'IntervalSec', 0.2)   % 10 samples,
 ```matlab
 s = receive_rest('sensors/temp');                          % wait for 1 sample
 s = receive_rest('sensors/temp', 'Count', 5, 'TimeoutSec', 60);
-s = receive_rest('release/goat/**', 'Count', 3);    % inbound from goat (full key)
+s = receive_rest('release/<partner>/**', 'Count', 3);    % inbound from a partner (full key)
 disp(s(1).key)      % 'release/acme/sensors/temp'
 disp(s(1).text)     % '21.5'   (or s(1).b64 for non-UTF-8 bytes)
 ```
@@ -62,7 +62,7 @@ disp(s(1).text)     % '21.5'   (or s(1).b64 for non-UTF-8 bytes)
 ## Receive (files) — `receive_filedrop.m`
 
 The most locked-down path: **no network call at all.** The file-drop bridge writes each inbound
-sample into `INBOX_DIR` as a `.bin` file named by its key (`release__goat__sensors__temp.<ms>.bin`).
+sample into `INBOX_DIR` as a `.bin` file named by its key (`release__partner-b__sensors__temp.<ms>.bin`).
 Files appear atomically, so any file you can `dir` is complete. `receive_filedrop` polls the folder,
 reverses the name back to a key, and reads the bytes:
 
