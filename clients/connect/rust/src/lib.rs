@@ -1,6 +1,6 @@
-//! efdi_connect — open an mTLS Zenoh session to a goat-moon-pod from env vars.
+//! efdi_connect — open an mTLS Zenoh session to an EFDI pod from env vars.
 //!
-//! The ONLY goat-specific code you need. Everything else is plain Zenoh (the official
+//! The ONLY EFDI-specific code you need. Everything else is plain Zenoh (the official
 //! `zenoh` crate, 1.x).
 //!
 //! ```no_run
@@ -41,7 +41,7 @@ fn env_var(name: &str) -> Result<String> {
     }
 }
 
-/// Build the Zenoh client config from the GOAT_* env vars.
+/// Build the Zenoh client config from the EFDI_* env vars.
 ///
 /// CRITICAL GOTCHA: the mTLS TLS settings are inserted as ONE json5 object at
 /// `transport/link/tls` with `enable_mtls: true`. Inserting the sub-keys individually
@@ -91,7 +91,7 @@ pub fn namespace() -> Result<String> {
 }
 
 /// Build a fully-qualified key under your namespace: `key("sensors/temp")` ->
-/// `"release/acme/sensors/temp"`. Pass an absolute key (e.g. `"release/goat/**"`) only
+/// `"release/acme/sensors/temp"`. Pass an absolute key (e.g. `"release/<partner>/**"`) only
 /// if you have rights to it.
 pub fn key(suffix: &str) -> Result<String> {
     Ok(format!("{}/{}", namespace()?, suffix.trim_start_matches('/')))

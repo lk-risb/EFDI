@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# EFDI moon-pod — self-issued mTLS certs for the Zenoh fabric.
+# EFDI — self-issued mTLS certs for the Zenoh fabric.
 #
 # No external CA, no vendor bundle/portal: this script generates (once) an EFDI root CA at
 # compose/certs/efdi-ca-root.pem + compose/certs/efdi-ca-root-key.pem (gitignored, keep this
@@ -49,6 +49,13 @@ openssl x509 -req -in "$CSR" -CA "$CA_CERT" -CAkey "$CA_KEY" -CAcreateserial \
   -days 825 -sha256 -out "$LEAF_CERT"
 rm -f "$CSR"
 chmod 600 "$LEAF_KEY"
+# Group-readable by the fixed non-root GID every EFDI container (bridges,
+# zenoh-admin) runs as (see compose/bridge/Dockerfile*, compose/zenoh-admin/
+# Dockerfile) — those processes open this key themselves for their own mTLS
+# identity, and BUNDLE_DIR is mounted into them read-only, so this is the only
+# way they can read it without running as root or the host's key owner.
+chgrp 10001 "$LEAF_KEY" 2>/dev/null || true
+chmod 640 "$LEAF_KEY"
 
 echo "==> done:"
 echo "    CA root:  ${CA_CERT}"

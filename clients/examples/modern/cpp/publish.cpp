@@ -1,4 +1,4 @@
-// publish.cpp — send data to the goat fabric (modern C++ / zenoh-cpp 1.9.0).
+// publish.cpp — send data to the EFDI fabric (modern C++ / zenoh-cpp 1.9.0).
 //
 //   export EFDI_ROUTER=tls/127.0.0.1:7447 EFDI_CERT=... EFDI_KEY=... EFDI_CA=... \
 //          PARTNER_NAMESPACE=release/acme

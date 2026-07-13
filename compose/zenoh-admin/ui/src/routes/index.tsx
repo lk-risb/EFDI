@@ -211,28 +211,6 @@ function SystemStatCard({ icon: Icon, label, value, state = 'ok' }: { icon: Luci
   )
 }
 
-function CertList({ certs }: { certs: CertInfo[] }) {
-  if (certs.length === 0) return null
-  return (
-    <div className="rounded-md border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#111113] p-4 mb-6 hud-card">
-      <span className="text-[10px] font-semibold tracking-wider text-zinc-500 uppercase">Certificates</span>
-      <div className="mt-3 space-y-2">
-        {certs.map(c => {
-          const state = c.days_remaining < 7 ? 'critical' : c.days_remaining < 30 ? 'warn' : 'ok'
-          const textClass = state === 'critical' ? 'text-red-600 dark:text-red-400' : state === 'warn' ? 'text-yellow-600 dark:text-yellow-400' : 'text-green-600 dark:text-green-400'
-          return (
-            <div key={c.name} className="flex items-center justify-between text-sm">
-              <span className="font-mono text-zinc-700 dark:text-zinc-300">{c.name}</span>
-              <span className="text-zinc-500">{c.expires_at}</span>
-              <span className={cn('font-mono text-xs', textClass)}>{c.days_remaining}d remaining</span>
-            </div>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
 function ServiceCard({ service }: { service: ServiceState }) {
   const running = service.status === 'running'
   return (
@@ -312,8 +290,6 @@ function DashboardPage() {
             ))
           )}
         </div>
-        {system && <CertList certs={system.certs} />}
-
         {services.length > 0 && (
           <>
             <h2 className="hud-label text-sm font-semibold text-zinc-600 dark:text-zinc-400 mb-3">Services</h2>

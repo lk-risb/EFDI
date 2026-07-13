@@ -8,7 +8,7 @@ Idiomatic Python against the pod. Uses the official `eclipse-zenoh` client + the
 ```sh
 python3 -m venv venv && . venv/bin/activate     # Windows: venv\Scripts\activate
 pip install eclipse-zenoh                         # 1.x, matches the fabric's Zenoh 1.9.0
-# export GOAT_* per clients/README.md
+# export EFDI_* per clients/README.md
 ```
 
 ## Run
@@ -17,7 +17,7 @@ pip install eclipse-zenoh                         # 1.x, matches the fabric's Ze
 python3 publish.py                 # publish one JSON sample to <namespace>/sensors/temp
 python3 publish.py 50 0.2          # 50 samples, 200ms apart
 python3 subscribe.py               # receive everything under your namespace
-python3 subscribe.py 'release/goat/**'   # inbound data from goat
+python3 subscribe.py 'release/<partner>/**'   # inbound data from a partner
 python3 request_reply.py serve     # answer queries (queryable)
 python3 request_reply.py get       # query it
 ```

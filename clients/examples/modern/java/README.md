@@ -19,11 +19,11 @@ all you need. No separate `zenoh-c` install, no `LD_LIBRARY_PATH`.
 ## Setup
 
 ```sh
-# export GOAT_* per clients/README.md
+# export EFDI_* per clients/README.md
 export EFDI_ROUTER="tls/127.0.0.1:7447"
-export EFDI_CERT="$HOME/.goat/contexts/default/mtls.cert.pem"
-export EFDI_KEY="$HOME/.goat/contexts/default/mtls.key.pem"
-export EFDI_CA="$HOME/.goat/contexts/default/ca-roots.pem"
+export EFDI_CERT="$HOME/efdi-certs/mtls-cert.pem"
+export EFDI_KEY="$HOME/efdi-certs/mtls-key.pem"
+export EFDI_CA="$HOME/efdi-certs/ca-root.pem"
 export PARTNER_NAMESPACE="release/acme"
 # EFDI_VERIFY_NAME defaults to false (local pod at 127.0.0.1); set true for a DNS-named router.
 ```
@@ -42,7 +42,7 @@ gradle wrapper        # writes gradlew + gradle/wrapper/ (one-time, needs Gradle
 ./gradlew run -Pmain=Publish                                  # one JSON sample to <ns>/sensors/temp
 ./gradlew run -Pmain=Publish --args="50 0.2"                  # 50 samples, 200ms apart
 ./gradlew run -Pmain=Subscribe                                # everything under your namespace
-./gradlew run -Pmain=Subscribe --args="release/goat/**"  # inbound data from goat
+./gradlew run -Pmain=Subscribe --args="release/<partner>/**"  # inbound data from a partner
 ./gradlew run -Pmain=Subscribe --args="<keyexpr> 5"           # stop after 5 samples
 ```
 

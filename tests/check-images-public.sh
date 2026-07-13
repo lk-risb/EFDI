@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # check-images-public.sh — assert every image referenced in compose/docker-compose.yml is
-# ANONYMOUSLY pullable. A partner-custodial pod has no DesertGOAT ghcr credentials, so a private
+# ANONYMOUSLY pullable. A partner-custodial pod has no private-registry credentials, so a private
 # image is a hard deploy blocker (the first live the sandbox deploy hit exactly this with
-# goat-audit-subscriber). Run before any pod deploy; wire into CI for the pod repo.
+# audit-sink). Run before any pod deploy; wire into CI for the pod repo.
 #
 # Uses the registry HTTP API (no docker daemon needed): for each image, fetch an anonymous
 # pull token and HEAD the manifest. 200 = public, 401/403 = private.
@@ -57,8 +57,8 @@ done
 if [ "$fail" -ne 0 ]; then
   echo
   echo "FAIL: at least one pod image is not anonymously pullable. A partner pod cannot pull it."
-  echo "      Make DesertGOAT ghcr images public:"
-  echo "      https://github.com/orgs/DesertGOAT/packages/container/<image>/settings (Danger Zone → Public)"
+  echo "      Make the image public in its registry:"
+  echo "      https://github.com/orgs/risblicencijos/packages/container/<image>/settings (Danger Zone → Public)"
   exit 1
 fi
 echo

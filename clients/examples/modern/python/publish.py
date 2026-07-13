@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""publish.py — send data to the goat fabric (modern Python).
+"""publish.py — send data to the EFDI fabric (modern Python).
 
     pip install eclipse-zenoh
     export EFDI_ROUTER=tls/127.0.0.1:7447 EFDI_CERT=... EFDI_KEY=... EFDI_CA=... PARTNER_NAMESPACE=release/acme

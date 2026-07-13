@@ -1,6 +1,6 @@
-// efdi_connect.hpp — open an mTLS Zenoh session to a goat-moon-pod from env vars.
+// efdi_connect.hpp — open an mTLS Zenoh session to an EFDI pod from env vars.
 //
-// Header-only. The ONLY goat-specific code you need; everything else is plain Zenoh
+// Header-only. The ONLY EFDI-specific code you need; everything else is plain Zenoh
 // (the official zenoh-cpp 1.x binding over zenoh-c).
 //
 //     #include "efdi_connect.hpp"
@@ -65,7 +65,7 @@ inline std::string json_escape(const std::string& s) {
     return out;
 }
 
-// config() builds the Zenoh client config from the GOAT_* env vars.
+// config() builds the Zenoh client config from the EFDI_* env vars.
 //
 // CRITICAL GOTCHA: the mTLS TLS settings live in ONE json5 object at "transport/link/tls" with
 // enable_mtls=true. Inserting the sub-keys individually
@@ -118,7 +118,7 @@ inline std::string namespace_prefix() {
 }
 
 // key() builds a fully-qualified key under your namespace: key("sensors/temp") ->
-// "release/acme/sensors/temp". Pass an absolute key (e.g. "release/goat/**") only if you
+// "release/acme/sensors/temp". Pass an absolute key (e.g. "release/<partner>/**") only if you
 // have rights to it.
 inline std::string key(const std::string& suffix) {
     std::string s = suffix;

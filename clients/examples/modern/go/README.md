@@ -42,11 +42,11 @@ export LD_LIBRARY_PATH="/path/to/zenoh-c/lib:$LD_LIBRARY_PATH"   # macOS: DYLD_L
 
 ```sh
 go mod download
-# export GOAT_* per clients/README.md
+# export EFDI_* per clients/README.md
 export EFDI_ROUTER="tls/127.0.0.1:7447"
-export EFDI_CERT="$HOME/.goat/contexts/default/mtls.cert.pem"
-export EFDI_KEY="$HOME/.goat/contexts/default/mtls.key.pem"
-export EFDI_CA="$HOME/.goat/contexts/default/ca-roots.pem"
+export EFDI_CERT="$HOME/efdi-certs/mtls-cert.pem"
+export EFDI_KEY="$HOME/efdi-certs/mtls-key.pem"
+export EFDI_CA="$HOME/efdi-certs/ca-root.pem"
 export PARTNER_NAMESPACE="release/acme"
 # EFDI_VERIFY_NAME defaults to false (local pod at 127.0.0.1); set true for a DNS-named router.
 ```
@@ -60,7 +60,7 @@ they live in one directory without two `main()`s colliding. Run them with `go ru
 go run publish.go                 # publish one JSON sample to <namespace>/sensors/temp
 go run publish.go 50 0.2          # 50 samples, 200ms apart
 go run subscribe.go               # receive everything under your namespace
-go run subscribe.go 'release/goat/**'   # inbound data from goat
+go run subscribe.go 'release/<partner>/**'   # inbound data from a partner
 go run subscribe.go '<keyexpr>' 5              # stop after 5 samples
 ```
 

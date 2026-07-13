@@ -26,7 +26,7 @@ curl -X POST http://127.0.0.1:8080/pub/sensors/temp -d '21.5'
 ```sh
 curl 'http://127.0.0.1:8080/sub/sensors/temp?count=3'
 # -> [{"key":"release/acme/sensors/temp","ts":...,"text":"21.5"}, ...]
-curl 'http://127.0.0.1:8080/sub/release/goat/**?count=1'   # inbound from goat
+curl 'http://127.0.0.1:8080/sub/release/<partner>/**?count=1'   # inbound from a partner
 ```
 
 **Stream continuously** (Server-Sent Events — one `data:` line per sample):
@@ -36,14 +36,14 @@ curl -N http://127.0.0.1:8080/stream/sensors/temp
 
 **Outbound webhook** (push every matching sample into your own system, no client at all):
 ```sh
-WEBHOOK_URL=https://my-system.local/ingest WEBHOOK_KEYEXPR='release/goat/**' \
+WEBHOOK_URL=https://my-system.local/ingest WEBHOOK_KEYEXPR='release/<partner>/**' \
   python3 bridge.py
 ```
 
 ## Keys
 
 A bare path like `sensors/temp` is scoped under your namespace (`release/acme/sensors/temp`). A
-full fabric key you have read rights to (e.g. `release/goat/...`) is passed through as-is.
+full fabric key you have read rights to (e.g. `release/<partner>/...`) is passed through as-is.
 `*` = one segment, `**` = any depth.
 
 ## Security
@@ -56,5 +56,5 @@ full fabric key you have read rights to (e.g. `release/goat/...`) is passed thro
 ## Run as a compose sidecar (optional)
 
 Build the image with the provided `Dockerfile` and add it to the pod's compose with
-`network_mode: host` and the `GOAT_*` env, mounting the cert dir read-only. (The bridge needs the
+`network_mode: host` and the `EFDI_*` env, mounting the cert dir read-only. (The bridge needs the
 same mTLS material the pod's other clients use.)

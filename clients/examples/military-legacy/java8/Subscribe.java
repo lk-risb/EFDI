@@ -1,5 +1,5 @@
 /*
- * Subscribe.java — receive from a goat-moon-pod on JDK 8, with ZERO dependencies.
+ * Subscribe.java — receive from an EFDI pod on JDK 8, with ZERO dependencies.
  *
  * This is NOT a Zenoh client. It does an HTTP GET against the local REST bridge
  * (clients/examples/bridges/rest-http/), which holds the Zenoh mTLS identity and
@@ -13,7 +13,7 @@
  *   javac Subscribe.java
  *   java Subscribe sensors/temp            # wait for 1 sample under your namespace
  *   java Subscribe sensors/temp 5 60       # wait for 5 samples, up to 60s
- *   java Subscribe release/goat/** 3   # inbound data from goat
+ *   java Subscribe release/<partner>/** 3   # inbound data from a partner
  *   java Subscribe sensors/temp stream     # follow continuously (Ctrl-C to stop)
  *
  * The bridge returns each sample as JSON: {"key":"...","ts":...,"text":"..."} (or "b64" for

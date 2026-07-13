@@ -3,12 +3,7 @@
     "ponytail@ponytail": true,
     "context7@claude-plugins-official": true,
     "claude-obsidian@agricidaniel-claude-obsidian": true,
-    "firecrawl@claude-plugins-official": true,
     "compound-engineering@compound-engineering-plugin": true,
-    "supabase@claude-plugins-official": true,
-    "chrome-devtools-mcp@claude-plugins-official": true,
-    "playwright@claude-plugins-official": true,
-    "stripe@claude-plugins-official": true,
-    "vercel@claude-plugins-official": true
+    "playwright@claude-plugins-official": true
   }
 }

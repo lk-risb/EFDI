@@ -1,4 +1,4 @@
-# EFDI Moon-Pod — Deployment Guide
+# EFDI — Deployment Guide
 
 > **Platform:** Linux · **Zenoh:** 1.9.0 · **Python:** 3.10+
 
@@ -32,9 +32,9 @@ ATAK devices must be on the same L2 segment as the server for multicast delivery
 
 ### Certificates
 
-An EFDI-issued `goat-bundle` is required for Zenoh mTLS. Obtain from your EFDI administrator.
+Zenoh mTLS certs are self-issued — no external CA or vendor bundle. `scripts/gen-certs.sh <namespace>` generates (once) an EFDI root CA at `compose/certs/efdi-ca-root.pem`/`efdi-ca-root-key.pem`, then signs a leaf cert+key for the given namespace, reusing the same root CA for every namespace after the first run.
 
-The extracted mTLS material (`efdi-ca-root.pem`, `<NAMESPACE>-cert.pem`, `<NAMESPACE>-key.pem`) lives at `compose/certs/` — gitignored, never committed. The raw signed join bundle (`<handle>.cbor`) lives at `compose/state/goat-cli/` for any future `goat profile init`/`rotate` re-run — also gitignored. Both defaults are set by `start.sh`; override with `BUNDLE_DIR`/`POD_STATE_DIR` in `compose/.env` if you'd rather keep them outside the repo entirely.
+The generated material (`efdi-ca-root.pem`, `<NAMESPACE>-cert.pem`, `<NAMESPACE>-key.pem`) lives at `compose/certs/` — gitignored, never committed. Default path is set by `start.sh`; override with `BUNDLE_DIR` in `compose/.env` if you'd rather keep it outside the repo entirely.
 
 ---
 
@@ -43,22 +43,27 @@ The extracted mTLS material (`efdi-ca-root.pem`, `<NAMESPACE>-cert.pem`, `<NAMES
 ### 2.1 Clone the repository
 
 ```bash
-git clone <repo-url> efdi-moon-pod
-cd efdi-moon-pod
+git clone <repo-url> EFDI
+cd EFDI
 ```
 
-### 2.2 Install the goat-bundle
+### 2.2 Generate certificates
 
-Place the bundle at `compose/certs/` (default path; override with `BUNDLE_DIR`):
+```bash
+scripts/gen-certs.sh <namespace>   # e.g. scripts/gen-certs.sh 1851281db70ccc0409dad4ecfc874cf5
+```
+
+This produces:
 
 ```text
 compose/certs/
-├── efdi-ca-root.pem          # CA certificate (public)
+├── efdi-ca-root.pem          # EFDI root CA certificate (public)
+├── efdi-ca-root-key.pem      # EFDI root CA private key — keep safe, signs every pod's leaf cert
 ├── <NAMESPACE>-cert.pem      # Node certificate
 └── <NAMESPACE>-key.pem       # Private key — restrict permissions
 ```
 
-`<NAMESPACE>` is the hex UUID assigned to your pod (e.g. `<YOUR_NAMESPACE>`).
+`<NAMESPACE>` must match `PARTNER_NAMESPACE` in `compose/.env`.
 
 ```bash
 # Verify
@@ -108,11 +113,11 @@ Edit `compose/.env`. The file is read by `start.sh` with safe line-by-line parsi
 # ── Bundle path ──────────────────────────────────────────────────────────────
 # Defaults to compose/certs/ (in-repo, gitignored) if left unset — override only
 # to keep certs outside the repo entirely.
-#BUNDLE_DIR=/home/<user>/goat-bundle
+#BUNDLE_DIR=/home/<user>/efdi-certs
 
 # ── Runtime state (logs, PID files, Zenoh config/certs) ─────────────────────
 # Defaults to compose/state/ (in-repo, gitignored) if left unset.
-#POD_STATE_DIR=/var/lib/goat-moon
+#POD_STATE_DIR=/var/lib/efdi-pod
 
 # ── Giraffe AMB radar (ASTERIX CAT-48/34) ───────────────────────────────────
 CAT48_PORT=30048               # UDP port the radar transmits on
@@ -596,9 +601,9 @@ The Config tab exposes structured fields, not raw JSON5 — each save re-renders
 
 | Field | Effect |
 | --- | --- |
-| Local mTLS port | Mesh-facing listen port for goat-cli, audit-sink (default 7447) |
+| Local mTLS port | Mesh-facing listen port for bridges, audit-sink (default 7447) |
 | Local TCP port | Plaintext local-only listen port for bridges + this GUI (default 7448) |
-| Fabric endpoint | The goat-side/peer endpoint this pod dials out to — entered as separate Host + Port fields (scheme is always `tls`, never exposed); one-click presets are available for previously-used endpoints |
+| Fabric endpoint | The peer endpoint this pod dials out to — entered as separate Host + Port fields (scheme is always `tls`, never exposed); one-click presets are available for previously-used endpoints |
 | Partner namespace | This pod's first-party publish/subscribe prefix (its slot) — **changing this requires the other side of the fabric to also allow the new value in its ACL, or publishes silently stop reaching it** |
 | Inbound namespace | Bilateral prefix the fabric publishes TO this pod |
 | Verify name on connect | Off by default — the gateway cert SAN binds the mesh IP, not the DNS name dialed; turning this on can break the fabric connection |
@@ -679,6 +684,7 @@ This catches syntax errors, TypeScript errors, and Dockerfile breakage before me
 | 2026-07-11 | Zenoh admin panel HTTPS: uvicorn now binds `127.0.0.1:8895` only; new `zenoh-admin-proxy` (Caddy) terminates real TLS on `:8890` via Caddy's internal CA, `on_demand` issuance (operators reach it by raw IP, no SNI) |
 | 2026-07-11 | `BUNDLE_DIR`/`POD_STATE_DIR` defaults moved from `$HOME/goat-bundle`/`$HOME/goat-moon` to `compose/certs/`/`compose/state/` (in-repo, gitignored) — scattered state across `$HOME` made cleanup unreliable |
 | 2026-07-11 | Added `dev.sh`: disposable local Postgres + directly-run uvicorn for zenoh-admin UI preview only, bypassing zenoh-router/certs/fabric entirely |
+| 2026-07-11 | Removed the external "goat" vendor entirely: certs are now self-issued via `scripts/gen-certs.sh` (EFDI root CA, no portal/CBOR bundle), containers renamed `goat-moon-*` → `efdi-pod-*`, `GOAT_CERT_DIR` env var renamed `EFDI_CERT_DIR`, `host/first-boot.sh` rewritten to read `compose/.env` directly and drop the `goat-clientd` wrapper (NetBird is called natively — it was always EFDI's own asset, not vendor lock-in), `profiles/` directory removed (orphaned by the rewrite) |
 
 ---
 

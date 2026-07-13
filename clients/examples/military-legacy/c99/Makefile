@@ -1,4 +1,4 @@
-# C99 goat-moon-pod examples — zenoh-c 1.9.0.
+# C99 EFDI pod examples — zenoh-c 1.9.0.
 #
 #   make                       # build ./publish and ./subscribe (dynamic link)
 #   make ZENOHC=/opt/zenoh-c   # zenoh-c installed to a non-default prefix

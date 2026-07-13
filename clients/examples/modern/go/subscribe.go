@@ -1,9 +1,9 @@
 //go:build ignore
 
-// subscribe.go — receive data from the goat fabric (modern Go).
+// subscribe.go — receive data from the EFDI fabric (modern Go).
 //
 //	go run subscribe.go                            # your own namespace, follow forever
-//	go run subscribe.go 'release/goat/**'   # inbound data goat sends you
+//	go run subscribe.go 'release/<partner>/**'   # inbound data a partner sends you
 //	go run subscribe.go '<keyexpr>' 5              # exit after 5 samples
 //
 // Default key-expr is '<namespace>/**' (everything under your prefix). Use ** for any depth,

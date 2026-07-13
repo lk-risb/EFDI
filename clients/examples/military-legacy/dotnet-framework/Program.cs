@@ -1,5 +1,5 @@
 /*
- * Program.cs — publish to / receive from a goat-moon-pod on .NET FRAMEWORK 4.x.
+ * Program.cs — publish to / receive from an EFDI pod on .NET FRAMEWORK 4.x.
  *
  * This is NOT a Zenoh client. It speaks plain HTTP to the local REST bridge
  * (clients/examples/bridges/rest-http/), which runs next to the pod on 127.0.0.1

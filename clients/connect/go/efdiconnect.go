@@ -1,6 +1,6 @@
-// Package efdiconnect — open an mTLS Zenoh session to a goat-moon-pod from env vars.
+// Package efdiconnect — open an mTLS Zenoh session to an EFDI pod from env vars.
 //
-// The ONLY goat-specific code you need. Everything else is plain Zenoh (the official
+// The ONLY EFDI-specific code you need. Everything else is plain Zenoh (the official
 // eclipse-zenoh/zenoh-go 1.x binding, which wraps zenoh-c via cgo).
 //
 //	import "<your-module>/connect/go" // package efdiconnect
@@ -55,7 +55,7 @@ type tlsBlock struct {
 	VerifyNameOnConnect bool   `json:"verify_name_on_connect"`
 }
 
-// Config builds the Zenoh client config from the GOAT_* env vars.
+// Config builds the Zenoh client config from the EFDI_* env vars.
 //
 // CRITICAL GOTCHA: the mTLS TLS settings are inserted as ONE json5 object at
 // "transport/link/tls" with enable_mtls=true. Inserting the sub-keys individually
@@ -131,7 +131,7 @@ func Namespace() (string, error) {
 }
 
 // Key builds a fully-qualified key under your namespace: Key("sensors/temp") ->
-// "release/acme/sensors/temp". Pass an absolute key (e.g. "release/goat/**") only if
+// "release/acme/sensors/temp". Pass an absolute key (e.g. "release/<partner>/**") only if
 // you have rights to it.
 func Key(suffix string) (string, error) {
 	ns, err := Namespace()

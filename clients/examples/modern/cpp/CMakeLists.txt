@@ -1,4 +1,4 @@
-# Modern C++ goat-moon-pod examples — zenoh-cpp 1.9.0 (over zenoh-c).
+# Modern C++ EFDI pod examples — zenoh-cpp 1.9.0 (over zenoh-c).
 #
 #   cmake -B build -DCMAKE_BUILD_TYPE=Release
 #   cmake --build build

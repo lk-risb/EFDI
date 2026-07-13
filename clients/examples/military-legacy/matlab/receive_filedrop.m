@@ -6,7 +6,7 @@ function receive_filedrop(inboxDir, varargin)
 %   sample into INBOX_DIR as a file named by its key (slashes -> '__') plus a
 %   millisecond timestamp, e.g.:
 %
-%       release__goat__sensors__temp.1717000000123.bin
+%       release__partner-b__sensors__temp.1717000000123.bin
 %
 %   Files appear ATOMICALLY (the bridge writes a '.'-prefixed temp then renames), so
 %   a file you can see is complete. This function polls the directory, reads each new
