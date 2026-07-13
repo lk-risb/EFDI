@@ -1,6 +1,6 @@
 //go:build ignore
 
-// publish.go — send data to the goat fabric (modern Go).
+// publish.go — send data to the EFDI fabric (modern Go).
 //
 //	export EFDI_ROUTER=tls/127.0.0.1:7447 EFDI_CERT=... EFDI_KEY=... EFDI_CA=... PARTNER_NAMESPACE=release/acme
 //	go run publish.go            # one JSON sample

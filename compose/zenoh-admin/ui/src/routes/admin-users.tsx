@@ -1,6 +1,8 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
 import { Layout } from '@/components/Layout'
+import { PageHeader } from '@/components/PageHeader'
+import { HudCorners } from '@/components/HudCorners'
 import { apiJson, apiFetch, errorMessage } from '@/lib/api'
 import { useAuth } from '@/store/auth'
 import { notify } from '@/lib/notify'
@@ -126,16 +128,15 @@ function AdminUsersPage() {
   return (
     <Layout>
       <div className="p-6">
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-xl font-semibold">Admin Users</h1>
-          <div className="flex items-center gap-4">
-            <button onClick={() => setShowNew(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-accent-fill hover:bg-accent-fill-hover text-accent-text text-sm rounded-md transition-colors">
-              <UserPlus size={14} /> New Admin
-            </button>
-          </div>
-        </div>
-        <div className="rounded-md border border-zinc-200 dark:border-white/10 overflow-hidden">
+        <PageHeader title="Admin Users" count={users.length} countLabel="users" actions={
+          <button onClick={() => setShowNew(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-accent-fill hover:bg-accent-fill-hover text-accent-text text-sm rounded-md transition-colors">
+            <UserPlus size={14} /> New Admin
+          </button>
+        } />
+        <div className="hud-frame relative hud-enter">
+          <HudCorners />
+          <div className="rounded-md border border-zinc-200 dark:border-white/10 overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-zinc-100 dark:bg-[#111113] text-zinc-600 dark:text-zinc-400">
               <tr>
@@ -168,6 +169,7 @@ function AdminUsersPage() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       </div>
       {showNew && <NewAdminModal onClose={() => setShowNew(false)} onCreated={load} />}

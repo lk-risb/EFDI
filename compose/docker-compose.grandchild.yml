@@ -1,0 +1,96 @@
+# EFDI — throwaway SECOND pod ("child") for testing router federation against
+# the primary pod defined in docker-compose.yml, on this SAME host. Not part
+# of the normal deployment — only zenoh-router + zenoh-admin + its own DB are
+# stood up (no bridges, no Caddy — hit zenoh-admin's port directly for testing).
+# Shares the primary pod's docker-socket-proxy (compose/docker-compose.yml) —
+# scoped Docker API access, container-name-agnostic, no reason to duplicate it.
+#
+# Usage:
+#   export BUNDLE_DIR="$(pwd)/certs" POD_STATE_DIR="$(pwd)/state-child"
+#   docker compose -f docker-compose.child.yml up -d --build
+
+services:
+  zenoh-router-child:
+    image: eclipse/zenoh:1.9.0@sha256:157965d71e0bfd0a044d76a985ff0e5c306ad3968929168fb9678cd2a7fec23f
+    container_name: efdi-gc-zenoh-router
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      - RUST_LOG=${ZENOH_LOG:-info}
+    volumes:
+      - ${POD_STATE_DIR:?set in shell env}/zenoh/config.json5:/etc/zenoh/config.json5:ro
+      - ${POD_STATE_DIR}/zenoh/tls:/etc/zenoh/tls:ro
+      - ${POD_STATE_DIR}/zenoh/rocksdb:/var/lib/zenoh/rocksdb
+    command: ["-c", "/etc/zenoh/config.json5"]
+    healthcheck:
+      test: ["CMD-SHELL", "true"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  zenoh-admin-db-child:
+    image: postgres:16-alpine
+    container_name: efdi-gc-zenoh-admin-db
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=${ZENOH_ADMIN_DB_USER_CHILD:?set ZENOH_ADMIN_DB_USER_CHILD}
+      - POSTGRES_PASSWORD=${ZENOH_ADMIN_DB_PASSWORD_CHILD:?set ZENOH_ADMIN_DB_PASSWORD_CHILD}
+      - POSTGRES_DB=admin
+      - PGPORT=${ZENOH_ADMIN_DB_PORT_CHILD:-5434}
+    volumes:
+      - ${POD_STATE_DIR}/zenoh-admin/pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${ZENOH_ADMIN_DB_USER_CHILD} -p ${ZENOH_ADMIN_DB_PORT_CHILD:-5434}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  zenoh-admin-child:
+    build:
+      context: ./zenoh-admin
+    container_name: efdi-gc-zenoh-admin
+    network_mode: host
+    restart: unless-stopped
+    # docker-socket-proxy lives in the primary pod's docker-compose.yml project
+    # and is already running (shared, container-agnostic) — not declared here
+    # since a depends_on can't cross compose files/projects.
+    depends_on:
+      zenoh-router-child:
+        condition: service_healthy
+      zenoh-admin-db-child:
+        condition: service_healthy
+    # Dockerfile CMD hardcodes 127.0.0.1:8895 (the primary pod's zenoh-admin
+    # already holds that port on this shared host) — bind a different loopback
+    # port for the child instead.
+    command: ["uvicorn", "api.main:app", "--host", "127.0.0.1", "--port", "8897"]
+    environment:
+      - EFDI_CERT_DIR=/certs
+      - PARTNER_NAMESPACE=${PARTNER_NAMESPACE_CHILD:?set PARTNER_NAMESPACE_CHILD}
+      - ZENOH_LOCAL_ENDPOINT=tcp/127.0.0.1:${ZENOH_LOCAL_TCP_PORT_CHILD:-7458}
+      - ZENOH_CONFIG_PATH=/zenoh-config/config.json5
+      - ZENOH_TEMPLATE_PATH=/zenoh-config-template/zenoh-router.json5.tmpl
+      - ZENOH_ADMIN_DB_USER=${ZENOH_ADMIN_DB_USER_CHILD:?set ZENOH_ADMIN_DB_USER_CHILD}
+      - ZENOH_ADMIN_DB_PASSWORD=${ZENOH_ADMIN_DB_PASSWORD_CHILD:?set ZENOH_ADMIN_DB_PASSWORD_CHILD}
+      - ZENOH_ADMIN_DB_ADDRESS=127.0.0.1:${ZENOH_ADMIN_DB_PORT_CHILD:-5434}
+      - ZENOH_ADMIN_SECRET_KEY=${ZENOH_ADMIN_SECRET_KEY_CHILD:?set ZENOH_ADMIN_SECRET_KEY_CHILD}
+      - ZENOH_ADMIN_FIRST_USER=${ZENOH_ADMIN_FIRST_USER_CHILD:-admin}
+      - ZENOH_ADMIN_FIRST_PASS=${ZENOH_ADMIN_FIRST_PASS_CHILD:-}
+      - ZENOH_ADMIN_TRUSTED_PARENT_CERT_PATH=${ZENOH_ADMIN_TRUSTED_PARENT_CERT_PATH_CHILD}
+      - ZENOH_ADMIN_TRUSTED_PARENT_CN=${ZENOH_ADMIN_TRUSTED_PARENT_CN_CHILD}
+      - ZENOH_ADMIN_TRUSTED_ROOT_CERT_PATHS=${ZENOH_ADMIN_TRUSTED_ROOT_CERT_PATHS_CHILD:-}
+      - ZENOH_ADMIN_TRUSTED_ROOT_CNS=${ZENOH_ADMIN_TRUSTED_ROOT_CNS_CHILD:-}
+      # This pod's OWN router container (see child compose for rationale).
+      - ZENOH_ROUTER_CONTAINER=efdi-gc-zenoh-router
+      - DOCKER_HOST=tcp://127.0.0.1:2375
+    volumes:
+      - ${BUNDLE_DIR:?set BUNDLE_DIR in shell env}:/certs:ro
+      - ${POD_STATE_DIR}/zenoh:/zenoh-config
+      - ../host/zenoh-router.json5.tmpl:/zenoh-config-template/zenoh-router.json5.tmpl:ro
+      - ${POD_STATE_DIR}/zenoh-admin-data:/data
+    healthcheck:
+      disable: true
+
+networks:
+  default:
+    name: efdi-gc-default

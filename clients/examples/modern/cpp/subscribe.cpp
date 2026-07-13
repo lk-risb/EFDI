@@ -1,7 +1,7 @@
-// subscribe.cpp — receive data from the goat fabric (modern C++ / zenoh-cpp 1.9.0).
+// subscribe.cpp — receive data from the EFDI fabric (modern C++ / zenoh-cpp 1.9.0).
 //
 //   ./subscribe                              # your own namespace (<ns>/**), follow forever
-//   ./subscribe 'release/goat/**'     # inbound data goat sends you
+//   ./subscribe 'release/<partner>/**'     # inbound data a partner sends you
 //   ./subscribe '<keyexpr>' 5                # exit after 5 samples
 //
 // Default key-expr is <namespace>/** (everything under your prefix). Use ** for any depth,

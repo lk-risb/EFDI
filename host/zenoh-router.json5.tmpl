@@ -1,4 +1,4 @@
-// EFDI moon-pod — pod-side Zenoh router config TEMPLATE.
+// EFDI — pod-side Zenoh router config TEMPLATE.
 //
 // Rendered by host/first-boot.sh via `envsubst` into ${POD_STATE_DIR}/zenoh/config.json5.
 // Every value below comes from compose/.env — nothing stack-specific is hardcoded.
@@ -9,6 +9,8 @@
 //   ${ZENOH_FABRIC_ENDPOINT}  the remote endpoint this pod dials OUT to (set in compose/.env)
 //   ${PARTNER_NAMESPACE}      the pod's first-party write/read prefix (its slot, or release/<partner>)
 //   ${INBOUND_NAMESPACE}      the bilateral prefix the fabric publishes TO the pod (compose/.env-driven)
+//   ${NAMESPACE_PREFIX}       the org prefix (variable depth, e.g. LTU/CISB); pod writes under ${NAMESPACE_PREFIX}/${PARTNER_NAMESPACE}
+//   ${NAMESPACE_ROOT}         first segment of the prefix; scopes mesh-wide federation/topology wildcards
 //   ${POD_CERT_PEM}           pod leaf cert  (from scripts/gen-certs.sh)
 //   ${POD_KEY_PEM}            pod leaf key   (from scripts/gen-certs.sh)
 //   ${CA_ROOTS_PEM}           EFDI root CA   (from scripts/gen-certs.sh)
@@ -21,8 +23,13 @@
 
   // Local listen: mTLS for mesh-facing pod-side clients (audit-sink, peers), plaintext TCP
   // for local-only clients (bridges, zenoh-admin GUI) — matches the "local-tcp" ACL subject below.
+  // The plaintext port binds loopback ONLY: local-tcp's ACL subject grants full
+  // pod-firstparty/pod-inbound/pod-admin-introspect/pod-federation-config trust to
+  // ANY tcp connection with no cert/credential check, so this port must never be
+  // reachable off-box — every local-tcp client is itself a container on this same
+  // host (network_mode: host shares the loopback across all of them).
   listen: {
-    endpoints: ["tls/0.0.0.0:${ZENOH_LISTEN_PORT}", "tcp/0.0.0.0:${ZENOH_LOCAL_TCP_PORT}"],
+    endpoints: ["tls/0.0.0.0:${ZENOH_LISTEN_PORT}", "tcp/127.0.0.1:${ZENOH_LOCAL_TCP_PORT}"],
   },
 
   // Dial OUT to the remote fabric endpoint (a peer router, or nothing yet on an isolated pod).
@@ -58,8 +65,8 @@
     storage_manager: {
       storages: {
         efdi_live: {
-          // LTU/CISB/ org prefix precedes the pod namespace — see bridge TOPIC_ROOT.
-          key_expr: "LTU/CISB/${PARTNER_NAMESPACE}/**",
+          // ${NAMESPACE_PREFIX} org prefix (configurable) precedes the pod namespace — see bridge TOPIC_ROOT.
+          key_expr: "${NAMESPACE_PREFIX}/${PARTNER_NAMESPACE}/**",
           volume: { id: "memory" },
         },
       },
@@ -78,8 +85,8 @@
         messages: ["put", "delete", "declare_subscriber", "query", "declare_queryable", "reply"],
         flows: ["egress", "ingress"],
         permission: "allow",
-        // LTU/CISB/ org prefix precedes the pod namespace — see bridge TOPIC_ROOT.
-        key_exprs: ["LTU/CISB/${PARTNER_NAMESPACE}/**"],
+        // ${NAMESPACE_PREFIX} org prefix (configurable) precedes the pod namespace — see bridge TOPIC_ROOT.
+        key_exprs: ["${NAMESPACE_PREFIX}/${PARTNER_NAMESPACE}/**"],
       },
       {
         // Inbound bilateral data from the fabric: subscribe/deliver only (no pod writes here).
@@ -100,6 +107,53 @@
         permission: "allow",
         key_exprs: ["@/**"],
       },
+      {
+        // Router federation (config push/pull + status reporting + topology
+        // autodiscovery) rides @config/v1 + @config/status/v1 + @topology/v1
+        // under EVERY pod's namespace, mesh-wide — a deliberate wildcard
+        // covering all descendants, not just direct children. Reason:
+        // federation trees run thousands of routers deep
+        // (HQ -> child -> grandchild -> ...), and a push has to reach any
+        // descendant regardless of hop count. Scoping this ACL to only
+        // directly-registered children (an earlier, narrower version of this
+        // rule) breaks exactly that: an intermediate hop with no ACL
+        // awareness of a namespace two levels below it silently drops the
+        // relay — confirmed by live testing. Enumerating every descendant in
+        // every intermediate's ACL doesn't scale either (one new leaf router
+        // would mean rewriting + restarting every router on its path to HQ).
+        // The `@` prefix already excludes this traffic from pod-firstparty's
+        // ${NAMESPACE_PREFIX}/${PARTNER_NAMESPACE}/** coverage (Zenoh doesn't match
+        // wildcards across '@'-prefixed chunks — the same reason
+        // pod-admin-introspect above needs its own rule for @/**) and from
+        // the efdi_live storage plugin's retention (deliberate: config
+        // payloads shouldn't be persisted as regular mesh data). This rule
+        // only restores TRANSPORT reachability for that sub-tree — it does
+        // not grant authority to apply anything: the receiving pod's
+        // federation_apply.py independently verifies every envelope's
+        // signature against its own configured trusted signers (its
+        // immediate parent, ZENOH_ADMIN_TRUSTED_PARENT_CERT_PATH/_CN, plus
+        // any currently-active HQ/root signers,
+        // ZENOH_ADMIN_TRUSTED_ROOT_CERT_PATHS/_CNS) before acting on it,
+        // exactly like pod-firstparty already relies on payload-level trust
+        // rather than ACL identity for everything else it covers. Every
+        // participant able to reach this rule at all is already an mTLS peer
+        // holding a cert issued by our own root CA (see the mtls-peer
+        // subject below) or a same-host local-tcp client — a mesh-wide
+        // relay-only wildcard here does not let an untrusted party touch
+        // anything.
+        //
+        // put + declare_subscriber only — the feature is pure pub/sub
+        // (federation_apply.py subscribes + puts, federation.py puts,
+        // federation_status.py subscribes); it never uses Zenoh's
+        // query/queryable/reply primitives, so granting those verbs on a
+        // rule that ships to every pod's router would be a gratuitous
+        // least-privilege violation.
+        id: "pod-federation-config",
+        messages: ["put", "declare_subscriber"],
+        flows: ["egress", "ingress"],
+        permission: "allow",
+        key_exprs: ["${NAMESPACE_ROOT}/**/@config/v1", "${NAMESPACE_ROOT}/**/@config/status/v1", "${NAMESPACE_ROOT}/**/@topology/v1"],
+      },
     ],
     subjects: [
       {
@@ -114,8 +168,8 @@
       },
     ],
     policies: [
-      { rules: ["pod-firstparty", "pod-inbound", "pod-admin-introspect"], subjects: ["mtls-peer"] },
-      { rules: ["pod-firstparty", "pod-inbound", "pod-admin-introspect"], subjects: ["local-tcp"] },
+      { rules: ["pod-firstparty", "pod-inbound", "pod-admin-introspect", "pod-federation-config"], subjects: ["mtls-peer"] },
+      { rules: ["pod-firstparty", "pod-inbound", "pod-admin-introspect", "pod-federation-config"], subjects: ["local-tcp"] },
     ],
   },
 }

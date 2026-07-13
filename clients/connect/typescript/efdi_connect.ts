@@ -1,4 +1,4 @@
-// efdi_connect — open a Zenoh session to a goat-moon-pod from env vars (TypeScript).
+// efdi_connect — open a Zenoh session to an EFDI pod from env vars (TypeScript).
 //
 // READ THIS, IT'S DIFFERENT FROM THE OTHER LANGUAGES.
 //
@@ -8,7 +8,7 @@
 // `wss://`). Its `Config` takes a single locator string and nothing else — there is no
 // client-cert / TLS block to configure on this side. See the README for the full caveat.
 //
-// So the goat-specific job here is:
+// So the EFDI-specific job here is:
 //   1. Figure out the WebSocket locator for the pod's remote-api plugin (EFDI_WS, or derived
 //      from EFDI_ROUTER's host).
 //   2. Provide key()/namespace() so your keys land under your owned prefix — identical semantics
@@ -88,7 +88,7 @@ export function namespace(): string {
 
 /**
  * Build a fully-qualified key under your namespace: key("sensors/temp") ->
- * "release/acme/sensors/temp". Pass an absolute key (e.g. "release/goat/**") only if you
+ * "release/acme/sensors/temp". Pass an absolute key (e.g. "release/<partner>/**") only if you
  * have rights to it.
  */
 export function key(suffix: string): string {

@@ -18,6 +18,13 @@ REFRESH_TOKEN_EXPIRE_DAYS = 7
 LOCKOUT_ATTEMPTS = 5
 LOCKOUT_MINUTES = 15
 
+# Fixed bcrypt hash with no matching password, verified against on an unknown
+# username so pwd_ctx.verify() always runs one bcrypt round regardless of
+# whether the username exists — otherwise a known-user login incurs ~100ms of
+# bcrypt work while an unknown-user login returns immediately, letting an
+# attacker enumerate valid usernames by timing /auth/login responses.
+_DUMMY_HASH = "$2b$12$C6UzMDM.H6dfI/f/IKcEeO7oCe1cJXTh8g3wJHKfB8YkKuNAZbEUC"
+
 
 @router.post("/login", response_model=TokenResponse)
 async def login(body: LoginRequest, response: Response, db: AsyncSession = Depends(get_db)):
@@ -29,7 +36,8 @@ async def login(body: LoginRequest, response: Response, db: AsyncSession = Depen
     if user and user.locked_until and user.locked_until.replace(tzinfo=timezone.utc) > now:
         raise HTTPException(status_code=429, detail="Account temporarily locked")
 
-    if not user or not pwd_ctx.verify(body.password, user.password_hash):
+    password_ok = pwd_ctx.verify(body.password, user.password_hash if user else _DUMMY_HASH)
+    if not user or not password_ok:
         if user:
             user.failed_logins += 1
             if user.failed_logins >= LOCKOUT_ATTEMPTS:
@@ -50,7 +58,7 @@ async def login(body: LoginRequest, response: Response, db: AsyncSession = Depen
     db.add(RefreshToken(user_id=user.id, token_hash=token_hash, expires_at=expires))
     await db.commit()
 
-    response.set_cookie("refresh_token", raw_refresh, httponly=True, samesite="lax", max_age=60 * 60 * 24 * REFRESH_TOKEN_EXPIRE_DAYS)
+    response.set_cookie("refresh_token", raw_refresh, httponly=True, samesite="lax", secure=True, max_age=60 * 60 * 24 * REFRESH_TOKEN_EXPIRE_DAYS)
     await write_audit(db, user.id, "login")
     return TokenResponse(access_token=access_token)
 

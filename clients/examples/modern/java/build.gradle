@@ -1,7 +1,7 @@
-// Gradle build for the modern Java goat-moon-pod examples.
+// Gradle build for the modern Java EFDI pod examples.
 //
 //   ./gradlew run -Pmain=Publish
-//   ./gradlew run -Pmain=Subscribe --args="release/goat/**"
+//   ./gradlew run -Pmain=Subscribe --args="release/<partner>/**"
 //
 // JDK 17+. The zenoh-java-jvm artifact bundles the native Zenoh library as a resource — no
 // separate zenoh-c install needed.

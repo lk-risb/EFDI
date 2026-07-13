@@ -1,6 +1,6 @@
-// EfdiConnect — open an mTLS Zenoh session to a goat-moon-pod from env vars.
+// EfdiConnect — open an mTLS Zenoh session to an EFDI pod from env vars.
 //
-// The ONLY goat-specific code you need. Everything else is plain Zenoh (the official
+// The ONLY EFDI-specific code you need. Everything else is plain Zenoh (the official
 // zenoh-java 1.x binding, io.zenoh, which bundles the native zenoh library as a resource).
 //
 //     import io.zenoh.Session;
@@ -45,7 +45,7 @@ public final class EfdiConnect {
     }
 
     /**
-     * Build the Zenoh client config from the GOAT_* env vars.
+     * Build the Zenoh client config from the EFDI_* env vars.
      *
      * <p>CRITICAL GOTCHA: the mTLS settings are emitted as ONE json5 object under
      * {@code transport/link/tls} with {@code enable_mtls: true}, and the whole config is loaded in
@@ -94,7 +94,7 @@ public final class EfdiConnect {
 
     /**
      * Build a fully-qualified key under your namespace: {@code key("sensors/temp")} ->
-     * {@code release/acme/sensors/temp}. Pass an absolute key (e.g. {@code release/goat/**})
+     * {@code release/acme/sensors/temp}. Pass an absolute key (e.g. {@code release/<partner>/**})
      * only if you have rights to it.
      */
     public static String key(String suffix) {

@@ -1,4 +1,4 @@
-/* publish.c — send data to the goat fabric (C99 / zenoh-c 1.9.0).
+/* publish.c — send data to the EFDI fabric (C99 / zenoh-c 1.9.0).
  *
  *   export EFDI_ROUTER=tls/127.0.0.1:7447 EFDI_CERT=... EFDI_KEY=... EFDI_CA=... \
  *          PARTNER_NAMESPACE=release/acme
@@ -43,7 +43,7 @@ static void efdi_namespace(char *out, size_t out_sz) {
     out[n] = '\0';
 }
 
-/* efdi_config — build the mTLS client config from the GOAT_* env vars (the one gotcha).
+/* efdi_config — build the mTLS client config from the EFDI_* env vars (the one gotcha).
  * Returns 0 on success; fills `cfg` with an owned config the caller must z_drop(). */
 static z_result_t efdi_config(z_owned_config_t *cfg) {
     const char *router = env_or_die("EFDI_ROUTER");

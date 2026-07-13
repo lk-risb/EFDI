@@ -1,5 +1,5 @@
 function publish(suffix, body, varargin)
-%PUBLISH  Publish a value to a goat-moon-pod from MATLAB, via the local REST bridge.
+%PUBLISH  Publish a value to an EFDI pod from MATLAB, via the local REST bridge.
 %
 %   This is NOT a Zenoh client. It POSTs an HTTP body to the REST bridge
 %   (clients/examples/bridges/rest-http/), which runs next to the pod on 127.0.0.1

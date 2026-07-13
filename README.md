@@ -2,25 +2,25 @@
 
 # EFDI
 
-**Partner-custodial sensor bridge stack — tactical sensors → Zenoh pub/sub → ATAK CoT, on your own hardware, under your own custody.**
+**Partner-custodial sensor bridge stack — tactical sensors → Zenoh pub/sub → ATAK CoT / SitaWare, on your own hardware, under your own custody.**
 
-w[![Zenoh](https://img.shields.io/badge/Zenoh-1.9.0-blue)](https://zenoh.io/)
+[![Zenoh](https://img.shields.io/badge/Zenoh-1.9.0-blue)](https://zenoh.io/)
 [![Python](https://img.shields.io/badge/Python-3.12-blue?logo=python&logoColor=white)](https://www.python.org/)
 [![Docker](https://img.shields.io/badge/Docker%20Compose-2496ED?logo=docker&logoColor=white)](https://docs.docker.com/compose/)
 [![ATAK](https://img.shields.io/badge/ATAK-CoT-4c9a4c)](https://tak.gov/)
 [![License](https://img.shields.io/badge/License-Apache--2.0-blue)](https://www.apache.org/licenses/LICENSE-2.0)
 
-[![shellcheck](https://github.com/risblicencijos/efdi-moon-pod/actions/workflows/shellcheck.yml/badge.svg)](https://github.com/risblicencijos/efdi-moon-pod/actions/workflows/shellcheck.yml)
-[![compose-validate](https://github.com/risblicencijos/efdi-moon-pod/actions/workflows/compose-validate.yml/badge.svg)](https://github.com/risblicencijos/efdi-moon-pod/actions/workflows/compose-validate.yml)
-[![bridge-syntax](https://github.com/risblicencijos/efdi-moon-pod/actions/workflows/bridge-syntax.yml/badge.svg)](https://github.com/risblicencijos/efdi-moon-pod/actions/workflows/bridge-syntax.yml)
-[![zenoh-admin-frontend](https://github.com/risblicencijos/efdi-moon-pod/actions/workflows/zenoh-admin-frontend.yml/badge.svg)](https://github.com/risblicencijos/efdi-moon-pod/actions/workflows/zenoh-admin-frontend.yml)
-[![docker-build](https://github.com/risblicencijos/efdi-moon-pod/actions/workflows/docker-build.yml/badge.svg)](https://github.com/risblicencijos/efdi-moon-pod/actions/workflows/docker-build.yml)
+[![shellcheck](https://github.com/risblicencijos/EFDI/actions/workflows/shellcheck.yml/badge.svg)](https://github.com/risblicencijos/EFDI/actions/workflows/shellcheck.yml)
+[![compose-validate](https://github.com/risblicencijos/EFDI/actions/workflows/compose-validate.yml/badge.svg)](https://github.com/risblicencijos/EFDI/actions/workflows/compose-validate.yml)
+[![bridge-syntax](https://github.com/risblicencijos/EFDI/actions/workflows/bridge-syntax.yml/badge.svg)](https://github.com/risblicencijos/EFDI/actions/workflows/bridge-syntax.yml)
+[![zenoh-admin-frontend](https://github.com/risblicencijos/EFDI/actions/workflows/zenoh-admin-frontend.yml/badge.svg)](https://github.com/risblicencijos/EFDI/actions/workflows/zenoh-admin-frontend.yml)
+[![docker-build](https://github.com/risblicencijos/EFDI/actions/workflows/docker-build.yml/badge.svg)](https://github.com/risblicencijos/EFDI/actions/workflows/docker-build.yml)
 
 </div>
 
-The **EFDI-goat-pod** ingests data from tactical sensors (radars, drone detection networks, datalinks, UAV telemetry), routes everything through a local Zenoh publish/subscribe fabric, and delivers it to ATAK as Cursor-on-Target (CoT) over UDP multicast or TAK Server TCP.
+The **EFDI pod** ingests data from tactical sensors (radars, drone detection networks, datalinks, UAV telemetry), routes everything through a local Zenoh publish/subscribe fabric, and delivers it to ATAK as Cursor-on-Target (CoT) over UDP multicast or TAK Server TCP.
 
-This repository is the EFDI-partner collaboration surface. It carries **no goat-internal infrastructure, credentials, or private links** — everything here is safe to develop against openly.
+This repository is the EFDI-partner collaboration surface. It carries **no partner-internal infrastructure, credentials, or private links** — everything here is safe to develop against openly.
 
 ---
 
@@ -76,7 +76,7 @@ Client onboarding is certificate-based: each pod gets a signed mTLS bundle issue
 
 ### SitaWare integration (bidirectional)
 
-Three independent paths, each optional and separately configured — enable whichever your deployment actually has:
+Three independent paths, each optional and separately configured — enable whichever your deployment actually has. HQ and Edge are typically separate SitaWare products/hosts with separate credentials, which is why they use disjoint env-var prefixes (`SITAWARE_*` vs `SITAWARE_NVG_*`) rather than sharing one.
 
 | Direction | Bridge/layer | Path |
 |---|---|---|
@@ -84,7 +84,11 @@ Three independent paths, each optional and separately configured — enable whic
 | Inbound | `nato_nffi_layer.py` | NATO NFFI (STANAG 4677) XML feed → EFDI (streaming TCP) |
 | Outbound | `nato_nvg_layer.py` | EFDI tracks → SitaWare **Edge** NVG v2 REST API (push) |
 
-HQ and Edge are typically separate SitaWare products/hosts with separate credentials — see `SITAWARE_*` vs `SITAWARE_NVG_*` in `compose/.env.example`.
+**`sitaware_bridge.py` (inbound, HQ)** — polls `SITAWARE_API_PATH` (default `/rest/v2/units`) on a `SITAWARE_POLL_S`-second interval (default 10s) over HTTP basic auth. Supports a primary + fallback base URL (`SITAWARE_URL` / `SITAWARE_URL_FALLBACK`) — useful when the same SitaWare host is reachable both on the LAN and over a mesh VPN like NetBird — and retries whichever URL last succeeded first. `SITAWARE_TLS_VERIFY=0` skips certificate validation for self-signed HQ deployments. Each unit's SIDC (NATO APP-6 symbol code) is mapped to a Zenoh topic and tagged with `SITAWARE_SOURCE` so downstream consumers can tell SitaWare-origin tracks apart from radar/ADS-B ones.
+
+**`nato_nffi_layer.py` (inbound, NFFI)** — a raw TCP listener for STANAG 4677 friendly-force XML, independent of SitaWare's own REST API. Supports both message-framing conventions NFFI feeds use in practice: 4-byte big-endian length-prefixed (`--framing length`, the default) or newline-delimited XML documents (`--framing newline`) — set via `NFFI_FRAMING` in `compose/.env`.
+
+**`nato_nvg_layer.py` (outbound, Edge)** — pushes every EFDI track update as a NATO Vector Graphics (NVG) 2.0 item via `PUT` to the SitaWare Edge REST API, so any SitaWare Frontline client connected to that Edge server sees EFDI tracks live. Each item carries position, speed, course, and a SIDC-derived symbol; deleted/stale tracks are removed with a corresponding NVG delete call rather than left stale on the Edge map.
 
 ---
 

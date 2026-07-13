@@ -2,7 +2,7 @@
 name = "efdi_connect"
 version = "0.1.0"
 edition = "2021"
-description = "Open an mTLS Zenoh session to a goat-moon-pod from env vars (the only goat-specific code you need)."
+description = "Open an mTLS Zenoh session to an EFDI pod from env vars (the only EFDI-specific code you need)."
 license = "EPL-2.0 OR Apache-2.0"
 
 [dependencies]

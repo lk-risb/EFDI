@@ -58,3 +58,20 @@ class AuditLog(Base):
     action: Mapped[str] = mapped_column(String(128), nullable=False)
     detail: Mapped[str | None] = mapped_column(Text, nullable=True)
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+
+class FederatedChild(Base):
+    __tablename__ = "federated_children"
+
+    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=_uuid)
+    name: Mapped[str] = mapped_column(String(64), nullable=False)
+    namespace: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
+    created_by: Mapped[str] = mapped_column(ForeignKey("admin_users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    # Populated by federation_status.py's subscriber (Task 7) as status reports
+    # arrive on this child's @config/status/v1 topic — None until the first
+    # push+status round-trip completes.
+    last_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    last_status_version: Mapped[int | None] = mapped_column(nullable=True)
+    last_status_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_status_error: Mapped[str | None] = mapped_column(String(512), nullable=True)

@@ -55,9 +55,9 @@ The header-only connect helper is pulled in from `clients/connect/cpp/` via the 
 
 ```sh
 export EFDI_ROUTER="tls/127.0.0.1:7447"
-export EFDI_CERT="$HOME/.goat/contexts/default/mtls.cert.pem"
-export EFDI_KEY="$HOME/.goat/contexts/default/mtls.key.pem"
-export EFDI_CA="$HOME/.goat/contexts/default/ca-roots.pem"
+export EFDI_CERT="$HOME/efdi-certs/mtls-cert.pem"
+export EFDI_KEY="$HOME/efdi-certs/mtls-key.pem"
+export EFDI_CA="$HOME/efdi-certs/ca-root.pem"
 export PARTNER_NAMESPACE="release/acme"
 # EFDI_VERIFY_NAME defaults to false (local pod at 127.0.0.1); set true for a DNS-named router.
 ```
@@ -68,7 +68,7 @@ export PARTNER_NAMESPACE="release/acme"
 ./build/publish              # publish one JSON sample to <namespace>/sensors/temp
 ./build/publish 50 0.2       # 50 samples, 200ms apart
 ./build/subscribe            # receive everything under your namespace (<ns>/**)
-./build/subscribe 'release/goat/**'   # inbound data from goat
+./build/subscribe 'release/<partner>/**'   # inbound data from a partner
 ./build/subscribe '<keyexpr>' 5              # stop after 5 samples
 ```
 

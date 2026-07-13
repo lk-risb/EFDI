@@ -29,7 +29,7 @@ if [[ -f "$ENV_FILE" ]]; then
 fi
 
 # Must match start.sh's PID_DIR.
-PID_DIR="${POD_STATE_DIR:-$HOME/goat-moon}/.pids"
+PID_DIR="${POD_STATE_DIR:-$HOME/efdi-pod}/.pids"
 
 stop_scripts() {
     local pattern="${1:-*}"

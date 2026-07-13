@@ -1,4 +1,4 @@
-//! publish.rs — send data to the goat fabric (modern Rust).
+//! publish.rs — send data to the EFDI fabric (modern Rust).
 //!
 //! ```text
 //! export EFDI_ROUTER=tls/127.0.0.1:7447 EFDI_CERT=... EFDI_KEY=... EFDI_CA=... PARTNER_NAMESPACE=release/acme

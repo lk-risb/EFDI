@@ -5,6 +5,7 @@ import { apiJson, apiFetch, errorMessage } from '@/lib/api'
 import { useAuth } from '@/store/auth'
 import { notify } from '@/lib/notify'
 import { Save, RotateCw } from 'lucide-react'
+import { HudCorners } from '@/components/HudCorners'
 
 export const Route = createFileRoute('/config')({
   beforeLoad: () => {
@@ -33,6 +34,12 @@ const EMPTY_FIELDS: ConfigFields = {
   inbound_namespace: '',
   verify_name_on_connect: false,
   plugins_loading_enabled: true,
+}
+
+interface FederatedChild {
+  id: string
+  name: string
+  namespace: string
 }
 
 function Field({ label, help, children }: { label: string; help?: string; children: React.ReactNode }) {
@@ -87,6 +94,8 @@ function ConfigPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const canWrite = role === 'superadmin'
+  const [children, setChildren] = useState<FederatedChild[]>([])
+  const [target, setTarget] = useState<string>('local')
 
   async function load() {
     setLoading(true)
@@ -103,24 +112,35 @@ function ConfigPage() {
 
   useEffect(() => { load() }, [])
 
+  useEffect(() => {
+    apiJson<FederatedChild[]>('/api/federation').then(setChildren).catch(() => {})
+  }, [])
+
   function set<K extends keyof ConfigFields>(key: K, value: ConfigFields[K]) {
     setFields(f => ({ ...f, [key]: value }))
   }
 
   async function handleSave() {
+    if (!canWrite) return
     setSaving(true)
     try {
-      const res = await apiFetch('/api/config', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(fields),
-      })
+      const res = target === 'local'
+        ? await apiFetch('/api/config', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(fields),
+          })
+        : await apiFetch(`/api/federation/${target}/push-config`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(fields),
+          })
       const body = await res.json().catch(() => ({ detail: res.statusText }))
       if (!res.ok) throw new Error(body.detail ?? res.statusText)
-      if (body.restarted) {
-        notify.success('Config written, zenoh-router restarted')
+      if (target === 'local') {
+        notify.success(body.restarted ? 'Config written, zenoh-router restarted' : `Config written, restart failed: ${body.restart_error}`)
       } else {
-        notify.error(`Config written, restart failed: ${body.restart_error}`)
+        notify.success(`Config pushed to child (version ${body.version})`)
       }
     } catch (e) {
       notify.error(errorMessage(e))
@@ -152,11 +172,22 @@ function ConfigPage() {
             )}
           </div>
         </div>
+        {children.length > 0 && (
+          <div className="mb-4 space-y-1">
+            <label className="text-sm text-zinc-700 dark:text-zinc-300">Push target</label>
+            <select value={target} onChange={e => setTarget(e.target.value)}
+              className="w-full sm:w-64 px-3 py-2 rounded-md bg-zinc-200 dark:bg-[#1a1a1d] border border-zinc-300 dark:border-white/10 text-zinc-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-accent-ring">
+              <option value="local">This pod</option>
+              {children.map(c => <option key={c.id} value={c.id}>{c.name} ({c.namespace})</option>)}
+            </select>
+          </div>
+        )}
         {!canWrite && (
           <p className="text-xs text-yellow-600 dark:text-yellow-400 mb-3">Your role can view but not edit this config.</p>
         )}
-        <div className="rounded-md border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#111113] p-5 space-y-4">
-          <Field label="Local mTLS port" help="Mesh-facing listen port for goat-cli, audit-sink (default 7447)">
+        <div className="hud-frame relative rounded-md border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#111113] p-5 space-y-4">
+          <HudCorners />
+          <Field label="Local mTLS port" help="Mesh-facing listen port for bridges, audit-sink (default 7447)">
             <input type="number" min={1} max={65535} disabled={!canWrite} className={inputClass}
               value={fields.mtls_port} onChange={e => set('mtls_port', Number(e.target.value))} />
           </Field>
@@ -164,7 +195,7 @@ function ConfigPage() {
             <input type="number" min={1} max={65535} disabled={!canWrite} className={inputClass}
               value={fields.local_tcp_port} onChange={e => set('local_tcp_port', Number(e.target.value))} />
           </Field>
-          <Field label="Fabric endpoint" help="The goat-side endpoint this pod dials out to (always mTLS — scheme is fixed)">
+          <Field label="Fabric endpoint" help="The peer endpoint this pod dials out to (always mTLS — scheme is fixed)">
             <div className="flex flex-wrap gap-2 mb-2">
               {FABRIC_PRESETS.map(p => (
                 <button key={p.label} type="button" disabled={!canWrite}

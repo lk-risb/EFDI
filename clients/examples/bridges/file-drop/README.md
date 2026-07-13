@@ -13,7 +13,7 @@ where you can't (or won't) install a Zenoh client or run an HTTP call.
 your app  --writes-->  OUTBOX_DIR/sensors/temp   --bridge publishes-->  release/acme/sensors/temp
                                                   (then moves file to OUTBOX_DIR/.sent/)
 
-release/goat/**  --bridge subscribes-->  INBOX_DIR/release__goat__....bin  --your app reads
+release/<partner>/**  --bridge subscribes-->  INBOX_DIR/release__partner-b__....bin  --your app reads
 ```
 
 - **Send:** drop (or `cp`/move) a file into `OUTBOX_DIR`. Its path *under the outbox* becomes the
@@ -28,7 +28,7 @@ release/goat/**  --bridge subscribes-->  INBOX_DIR/release__goat__....bin  --you
 ```sh
 pip install eclipse-zenoh
 export EFDI_ROUTER=tls/127.0.0.1:7447 EFDI_CERT=... EFDI_KEY=... EFDI_CA=... PARTNER_NAMESPACE=release/acme
-export OUTBOX_DIR=./outbox INBOX_DIR=./inbox SUB_KEYEXPR='release/goat/**'
+export OUTBOX_DIR=./outbox INBOX_DIR=./inbox SUB_KEYEXPR='release/<partner>/**'
 python3 bridge.py
 ```
 

@@ -66,7 +66,7 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 ---
 
-## Project: efdi-moon-pod ASTERIX Bridge
+## Project: EFDI
 
 ### What this is
 ASTERIX radar bridge → Zenoh pub/sub → CoT XML → ATAK. Decodes CAT-34 (monoradar service), CAT-48 (monoradar targets), CAT-21 (ADS-B), CAT-20 (MLAT), CAT-62 (system tracks). Key files:

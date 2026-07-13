@@ -1,8 +1,8 @@
-//! subscribe.rs — receive data from the goat fabric (modern Rust).
+//! subscribe.rs — receive data from the EFDI fabric (modern Rust).
 //!
 //! ```text
 //! cargo run --bin subscribe                              # your own namespace, follow forever
-//! cargo run --bin subscribe -- 'release/goat/**'  # inbound data goat sends you
+//! cargo run --bin subscribe -- 'release/<partner>/**'  # inbound data a partner sends you
 //! cargo run --bin subscribe -- '<keyexpr>' 5             # exit after 5 samples
 //! ```
 //!

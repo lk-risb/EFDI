@@ -12,7 +12,7 @@ The bridge (itself a Zenoh mTLS client via efdi_connect) does two things:
 
     pip install eclipse-zenoh
     export EFDI_ROUTER=tls/127.0.0.1:7447 EFDI_CERT=... EFDI_KEY=... EFDI_CA=... PARTNER_NAMESPACE=release/acme
-    export OUTBOX_DIR=./outbox INBOX_DIR=./inbox SUB_KEYEXPR='release/goat/**'
+    export OUTBOX_DIR=./outbox INBOX_DIR=./inbox SUB_KEYEXPR='release/<partner>/**'
     python3 bridge.py
 
 Poll-based (stdlib only, no watchdog dependency) so it runs anywhere, offline, on any OS.

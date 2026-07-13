@@ -61,7 +61,7 @@ EfdiBridgeClient.exe pub sensors/temp 21.5 10 200          REM 10 samples, 200 m
 REM Subscribe: block for N samples (GET /sub/<keyexpr>?count=N&timeout=S)
 EfdiBridgeClient.exe sub sensors/temp                       REM wait for 1 sample
 EfdiBridgeClient.exe sub sensors/temp 5 60                  REM wait for 5, up to 60s
-EfdiBridgeClient.exe sub release/goat/** 3           REM inbound from goat (full key)
+EfdiBridgeClient.exe sub release/<partner>/** 3           REM inbound from a partner (full key)
 
 REM Stream continuously (GET /stream/<keyexpr>, Server-Sent Events)
 EfdiBridgeClient.exe stream sensors/temp                    REM Ctrl-C to stop

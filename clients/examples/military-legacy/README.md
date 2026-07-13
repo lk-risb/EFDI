@@ -88,7 +88,7 @@ http://127.0.0.1:8080/...` works but no data flows, suspect the bridge→pod TLS
 
 - You publish to keys **under your namespace** (`release/<you>/...`). With the REST bridge a bare
   suffix like `sensors/temp` is automatically scoped to `release/<you>/sensors/temp`. A full key you
-  have read rights to (e.g. `release/goat/**`) is passed through as-is.
+  have read rights to (e.g. `release/<partner>/**`) is passed through as-is.
 - The fabric is **payload-agnostic** — bytes are bytes. These examples send JSON text because it's
   readable, but you can send anything. The REST bridge returns received text as `"text"` in its JSON,
   or base64 as `"b64"` if the bytes aren't valid UTF-8.

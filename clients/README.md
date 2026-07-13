@@ -1,6 +1,6 @@
-# clients — send & receive data with a goat-moon-pod
+# clients — send & receive data with an EFDI pod
 
-This tree is for **the people consuming the pod**: how to publish data to the goat fabric and
+This tree is for **the people consuming the pod**: how to publish data to the EFDI fabric and
 receive data from it, in your language and with your tooling. Pick the path that fits you:
 
 | You are… | Start here |
@@ -16,8 +16,8 @@ The pod runs a **Zenoh router** on your machine. You talk to it as a **Zenoh cli
 Three operations, that's the whole API:
 
 1. **Publish** (`put`) to keys under **your namespace** — e.g. `release/<you>/sensors/temp`.
-2. **Subscribe** (`sub`) to keys you're allowed to read — your own, plus `release/goat/**`
-   for data goat sends you (when the relationship is bilateral).
+2. **Subscribe** (`sub`) to keys you're allowed to read — your own, plus `release/<partner>/**`
+   for data a partner sends you (when the relationship is bilateral).
 3. **Query** (`get`) for the latest/historical value of a key (optional).
 
 Keys are slash-paths (`a/b/c`); subscriptions can use `*` (one segment) and `**` (any depth).
@@ -30,24 +30,24 @@ secrets:
 | Env var | What it is | Example |
 |---|---|---|
 | `EFDI_ROUTER` | the pod's Zenoh endpoint | `tls/127.0.0.1:7447` (the pod is on your box) |
-| `EFDI_CERT` | your mTLS client certificate (PEM) | `/etc/goat/mycert.pem` |
-| `EFDI_KEY` | your mTLS private key (PEM) | `/etc/goat/mykey.pem` |
-| `EFDI_CA` | the CA root that signs the router (PEM) | `/etc/goat/ca-root.pem` |
+| `EFDI_CERT` | your mTLS client certificate (PEM) | `/etc/efdi/mycert.pem` |
+| `EFDI_KEY` | your mTLS private key (PEM) | `/etc/efdi/mykey.pem` |
+| `EFDI_CA` | the CA root that signs the router (PEM) | `/etc/efdi/ca-root.pem` |
 | `PARTNER_NAMESPACE` | the prefix you own (publish under this) | `release/acme` |
 
-> The pod's own `goat profile init` writes these to `~/.goat/contexts/default/`
-> (`mtls.cert.pem`, `mtls.key.pem`, `ca-roots.pem`). For a downstream consumer the operator
-> hands you a small cert bundle the same way. **If the pod is on your machine, `EFDI_ROUTER` is
-> `tls/127.0.0.1:7447`.** If you connect to a remote pod/router over the mesh, it's that host's
-> mesh IP.
+> The pod's own `scripts/gen-certs.sh <namespace>` writes these to `compose/certs/`
+> (`<namespace>-cert.pem`, `<namespace>-key.pem`, `efdi-ca-root.pem`). For a downstream consumer
+> your EFDI administrator hands you a copy of the same three files out-of-band. **If the pod is
+> on your machine, `EFDI_ROUTER` is `tls/127.0.0.1:7447`.** If you connect to a remote pod/router
+> over the mesh, it's that host's mesh IP.
 
 A copy-paste setup:
 
 ```sh
 export EFDI_ROUTER="tls/127.0.0.1:7447"
-export EFDI_CERT="$HOME/.goat/contexts/default/mtls.cert.pem"
-export EFDI_KEY="$HOME/.goat/contexts/default/mtls.key.pem"
-export EFDI_CA="$HOME/.goat/contexts/default/ca-roots.pem"
+export EFDI_CERT="$HOME/efdi-certs/mtls-cert.pem"
+export EFDI_KEY="$HOME/efdi-certs/mtls-key.pem"
+export EFDI_CA="$HOME/efdi-certs/ca-root.pem"
 export PARTNER_NAMESPACE="release/acme"
 ```
 
@@ -71,7 +71,7 @@ Examples target **Zenoh 1.9.0** (the fleet-pinned version — see the pod's
 
 ```
 clients/
-├── connect/            minimal "bundle → Zenoh session" helper per language (the only goat-specific bit)
+├── connect/            minimal "cert bundle → Zenoh session" helper per language (the only per-language wiring you need)
 ├── examples/
 │   ├── modern/         idiomatic pub / sub / request-reply per language
 │   ├── military-legacy/ older toolchains, offline/air-gapped, file/HTTP fallbacks

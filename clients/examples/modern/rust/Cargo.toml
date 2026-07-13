@@ -13,7 +13,7 @@ name = "subscribe"
 path = "src/bin/subscribe.rs"
 
 [dependencies]
-# The goat-specific connect helper (in this repo). Mirrors connect/python/efdi_connect.py.
+# The EFDI-specific connect helper (in this repo). Mirrors connect/python/efdi_connect.py.
 efdi_connect = { path = "../../../connect/rust" }
 
 # Plain Zenoh 1.x — pinned to the fleet's Zenoh 1.9.0. Async (tokio).

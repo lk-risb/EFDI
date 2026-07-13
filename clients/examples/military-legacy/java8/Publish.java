@@ -1,5 +1,5 @@
 /*
- * Publish.java — publish to a goat-moon-pod from JDK 8, with ZERO dependencies.
+ * Publish.java — publish to an EFDI pod from JDK 8, with ZERO dependencies.
  *
  * This is NOT a Zenoh client. It POSTs an HTTP body to the local REST bridge
  * (clients/examples/bridges/rest-http/), which runs next to the pod on 127.0.0.1

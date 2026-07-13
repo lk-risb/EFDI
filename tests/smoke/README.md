@@ -11,8 +11,8 @@ assert:
 
 - **Outbound:** publish on `${PARTNER_NAMESPACE}/test/ping` at the pod side → received at the
   stub-remote side.
-- **Inbound:** publish on `release/goat/test/pong` at the stub-remote side → received via
-  `goat-cli sub` at the pod side.
+- **Inbound:** publish on `${INBOUND_NAMESPACE}/test/pong` at the stub-remote side → received via
+  a Zenoh subscriber (e.g. `clients/examples/modern/python/subscribe.py`) at the pod side.
 - **ACL negative:** publish outside `${PARTNER_NAMESPACE}/**` → **denied** (default-deny holds).
 - **Audit:** both deliveries appear as append-only NDJSON lines in `${POD_STATE_DIR}/audit/`.
 
@@ -20,12 +20,15 @@ This is the gate that runs in CI. TODO: implement `loopback.sh` + a stub-remote 
 
 ### 2. Live EFDI-sandbox validation (slow step, on the validation host)
 
-Run the real `first-boot.sh efdi <bundle.cbor>` against the **live EFDI sandbox fabric**
-(sandbox router directly; no partner-net, no release-bridge), then:
+Run the real `first-boot.sh` (as root, after populating `compose/.env`) against the **live EFDI
+sandbox fabric** (sandbox router directly; no partner-net, no release-bridge), then:
 
-- `goat doctor` → mesh up, router handshake, fabric reachable.
-- `goat-cli pub release/<partner>/test/...` → observed on the fabric.
-- `goat-cli sub release/goat/...` → observed at the pod (when a counterpart publishes).
+- `netbird status` → mesh up; the pub/sub round trip below confirms router handshake + fabric
+  reachability.
+- A Zenoh publisher (e.g. `clients/examples/modern/python/publish.py`) on
+  `release/<partner>/test/...` → observed on the fabric.
+- A Zenoh subscriber on `${INBOUND_NAMESPACE}/...` → observed at the pod (when a counterpart
+  publishes).
 - Audit NDJSON accumulates on the LUKS volume.
 
 TODO: capture this as `live-efdi.md` runbook once `first-boot.sh` is wired.

@@ -1,7 +1,7 @@
-// Subscribe.java — receive data from the goat fabric (modern Java, JDK 17+).
+// Subscribe.java — receive data from the EFDI fabric (modern Java, JDK 17+).
 //
 //   ./gradlew run -Pmain=Subscribe                                   # your namespace, forever
-//   ./gradlew run -Pmain=Subscribe --args="release/goat/**"   # inbound data from goat
+//   ./gradlew run -Pmain=Subscribe --args="release/<partner>/**"   # inbound data from a partner
 //   ./gradlew run -Pmain=Subscribe --args="<keyexpr> 5"              # exit after 5 samples
 //
 // Default key-expr is '<namespace>/**' (everything under your prefix). Use ** for any depth,

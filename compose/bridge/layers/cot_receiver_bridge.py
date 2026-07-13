@@ -35,13 +35,14 @@ import os
 import socket
 import threading
 import time
-import xml.etree.ElementTree as ET
 
+import defusedxml.ElementTree as ET
 import zenoh
 
 ROUTER    = "tls/zenoh.efdi.netbird.efdi-backbone.net:7447"
 ORG       = os.environ.get("PARTNER_NAMESPACE", "")
-TOPIC_ROOT = "LTU/CISB/" + ORG   # organization prefix precedes the pod namespace
+from namespace_prefix import prefix
+TOPIC_ROOT = prefix() + "/" + ORG   # org prefix (configurable) precedes the pod namespace
 HERE      = os.path.dirname(os.path.abspath(__file__))
 _CERT_DIR = os.environ.get("EFDI_CERT_DIR", HERE)
 _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", ROUTER)
@@ -50,8 +51,8 @@ RECONNECT_S = 10
 BUFSIZE     = 65536
 
 
-def _netbird_ip() -> str:
-    """Return the NetBird mesh IP (wt0 interface), or fallback to hostname."""
+def _netbird_ip() -> str | None:
+    """Return the NetBird mesh IP (wt0 interface), or None if not found."""
     for iface in ("wt0", "netbird0"):
         try:
             import subprocess
@@ -63,7 +64,7 @@ def _netbird_ip() -> str:
                     return tok.split("/")[0]
         except Exception:
             pass
-    return socket.gethostname()
+    return None
 
 
 def make_config() -> "zenoh.Config":
@@ -92,7 +93,11 @@ def _parse_cot(xml_str: str) -> dict | None:
     """Parse a CoT XML event into a flat track dict for Zenoh publishing."""
     try:
         root = ET.fromstring(xml_str.strip())
-    except ET.ParseError:
+    except (ET.ParseError, ValueError):
+        # defusedxml raises DefusedXmlException (a ValueError subclass, not
+        # ET.ParseError) for entity-expansion/external-reference attacks —
+        # this listener accepts XML from an unauthenticated network peer, so
+        # both malformed XML and a malicious payload must fail the same way.
         return None
     if root.tag != "event":
         return None
@@ -193,13 +198,24 @@ def handle_connection(sock: socket.socket, addr, session: "zenoh.Session", verbo
 
 
 def run_listen(port: int, session: "zenoh.Session", verbose: bool):
+    our_ip = _netbird_ip()
+    # Bind the NetBird mesh IP specifically, not 0.0.0.0 — this listener has no
+    # auth of its own (see module docstring: any TCP peer that connects gets its
+    # CoT accepted as a genuine track), so binding every interface would also
+    # accept connections over the pod's LAN/public IP, not just the intended
+    # NetBird tunnel. Falls back to 0.0.0.0 only if NetBird isn't up yet, since
+    # refusing to start is worse than a narrower, logged exposure window.
+    bind_ip = our_ip or "0.0.0.0"
+    if our_ip is None:
+        print("CoT RX WARNING: NetBird interface (wt0/netbird0) not found — "
+              "listening on 0.0.0.0, reachable from any network this host is on, "
+              "not just NetBird", flush=True)
     srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    srv.bind(("0.0.0.0", port))
+    srv.bind((bind_ip, port))
     srv.listen(5)
-    our_ip = _netbird_ip()
-    print("CoT RX listening on 0.0.0.0:{}".format(port), flush=True)
-    print("Tell remote: connect to {}:{} (TCP)".format(our_ip, port), flush=True)
+    print("CoT RX listening on {}:{}".format(bind_ip, port), flush=True)
+    print("Tell remote: connect to {}:{} (TCP)".format(our_ip or socket.gethostname(), port), flush=True)
     while True:
         try:
             sock, addr = srv.accept()

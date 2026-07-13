@@ -1,6 +1,6 @@
-"""efdi_connect — open an mTLS Zenoh session to a goat-moon-pod from env vars.
+"""efdi_connect — open an mTLS Zenoh session to an EFDI pod from env vars.
 
-The ONLY goat-specific code you need. Everything else is plain Zenoh (eclipse-zenoh 1.x).
+The ONLY EFDI-specific code you need. Everything else is plain Zenoh (eclipse-zenoh 1.x).
 
     pip install eclipse-zenoh
 
@@ -71,5 +71,5 @@ def namespace() -> str:
 def key(suffix: str) -> str:
     """Build a fully-qualified key under your namespace: key('sensors/temp') ->
     'release/acme/sensors/temp'. Pass an absolute key (starts with a non-namespace prefix)
-    only if you have rights to it (e.g. subscribing to 'release/goat/**')."""
+    only if you have rights to it (e.g. subscribing to 'release/<partner>/**')."""
     return f"{namespace()}/{suffix.lstrip('/')}"
