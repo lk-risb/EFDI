@@ -29,10 +29,11 @@ import urllib.error
 import urllib.request
 
 import zenoh
+from http_json import read_json_response
+from namespace_prefix import prefix
 
 ROUTER = "tls/zenoh.efdi.netbird.efdi-backbone.net:7447"
 ORG    = os.environ.get("PARTNER_NAMESPACE", "")
-from namespace_prefix import prefix
 TOPIC_ROOT = prefix() + "/" + ORG   # org prefix (configurable) precedes the pod namespace
 HERE   = os.path.dirname(os.path.abspath(__file__))
 
@@ -94,7 +95,7 @@ def _get(path: str) -> dict | None:
     req = urllib.request.Request(url, headers=_HEADERS)
     try:
         with urllib.request.urlopen(req, timeout=10) as resp:
-            return json.loads(resp.read().decode("utf-8"))
+            return read_json_response(resp)
     except (urllib.error.URLError, json.JSONDecodeError) as exc:
         print("dronuradaras fetch error [{}]: {}".format(path, exc), flush=True)
         return None

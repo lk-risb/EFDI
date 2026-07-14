@@ -31,17 +31,20 @@ Run:
 
 import argparse
 import json
+import math
 import os
+import re
 import socket
 import threading
 import time
+from datetime import datetime, timezone
 
 import defusedxml.ElementTree as ET
 import zenoh
+from namespace_prefix import prefix
 
 ROUTER    = "tls/zenoh.efdi.netbird.efdi-backbone.net:7447"
 ORG       = os.environ.get("PARTNER_NAMESPACE", "")
-from namespace_prefix import prefix
 TOPIC_ROOT = prefix() + "/" + ORG   # org prefix (configurable) precedes the pod namespace
 HERE      = os.path.dirname(os.path.abspath(__file__))
 _CERT_DIR = os.environ.get("EFDI_CERT_DIR", HERE)
@@ -105,6 +108,11 @@ def _parse_cot(xml_str: str) -> dict | None:
     cot_type = root.get("type", "")
     uid      = root.get("uid", "")
     ts_str   = root.get("time", "")
+    if not (isinstance(uid, str) and 1 <= len(uid) <= 256):
+        return None
+    if not (isinstance(cot_type, str) and 1 <= len(cot_type) <= 128 and
+            re.fullmatch(r"[A-Za-z0-9_.-]+", cot_type)):
+        return None
 
     point = root.find("point")
     if point is None:
@@ -115,6 +123,21 @@ def _parse_cot(xml_str: str) -> dict | None:
         hae = float(point.get("hae", 9999999))
     except (TypeError, ValueError):
         return None
+    if not all(math.isfinite(v) for v in (lat, lon, hae)):
+        return None
+    if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+        return None
+
+    received_ts = time.time()
+    try:
+        event_ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
+        if event_ts.tzinfo is None:
+            event_ts = event_ts.replace(tzinfo=timezone.utc)
+        source_ts = event_ts.timestamp()
+        if not math.isfinite(source_ts):
+            source_ts = received_ts
+    except (TypeError, ValueError, OverflowError):
+        source_ts = received_ts
 
     detail   = root.find("detail") or ET.Element("detail")
     contact  = detail.find("contact")
@@ -130,9 +153,15 @@ def _parse_cot(xml_str: str) -> dict | None:
             heading  = float(track_el.get("course", 0))
         except (TypeError, ValueError):
             pass
+    if not math.isfinite(speed_ms) or speed_ms < 0:
+        speed_ms = 0.0
+    if not math.isfinite(heading):
+        heading = 0.0
+    heading %= 360.0
 
     return {
-        "_ts":          time.time(),
+        "_ts":          source_ts,
+        "_received_ts": received_ts,
         "_src":         "cot_rx",
         "cot_type":     cot_type,
         "uid":          uid,
@@ -148,7 +177,16 @@ def _parse_cot(xml_str: str) -> dict | None:
 
 def _topic(track: dict) -> str:
     aff = _affiliation(track.get("cot_type", "a-u-A"))
-    return "{}/air/radar/cot/{}/aircraft/tracks/v1".format(TOPIC_ROOT, aff)
+    parts = str(track.get("cot_type", "a-u-A")).split("-")
+    dimension = parts[2].upper() if len(parts) > 2 else "A"
+    domain, entity = {
+        "A": ("air", "aircraft"),
+        "G": ("land", "unit"),
+        "S": ("sea", "vessel"),
+        "U": ("sea", "vessel"),
+        "P": ("space", "satellite"),
+    }.get(dimension, ("air", "aircraft"))
+    return "{}/{}/radar/cot/{}/{}/tracks/v1".format(TOPIC_ROOT, domain, aff, entity)
 
 
 def _split_messages(buf: str) -> tuple[list[str], str]:
@@ -177,6 +215,9 @@ def handle_connection(sock: socket.socket, addr, session: "zenoh.Session", verbo
             if not data:
                 break
             buf += data.decode("utf-8", errors="replace")
+            if len(buf) > 10_000_000:
+                print("CoT RX connection closed: incomplete message exceeds 10 MB", flush=True)
+                break
             messages, buf = _split_messages(buf)
             for xml_str in messages:
                 track = _parse_cot(xml_str)
@@ -197,19 +238,19 @@ def handle_connection(sock: socket.socket, addr, session: "zenoh.Session", verbo
         print("CoT RX disconnected: {}".format(addr), flush=True)
 
 
-def run_listen(port: int, session: "zenoh.Session", verbose: bool):
+def run_listen(port: int, session: "zenoh.Session", verbose: bool, requested_bind: str = ""):
     our_ip = _netbird_ip()
     # Bind the NetBird mesh IP specifically, not 0.0.0.0 — this listener has no
     # auth of its own (see module docstring: any TCP peer that connects gets its
     # CoT accepted as a genuine track), so binding every interface would also
     # accept connections over the pod's LAN/public IP, not just the intended
-    # NetBird tunnel. Falls back to 0.0.0.0 only if NetBird isn't up yet, since
-    # refusing to start is worse than a narrower, logged exposure window.
-    bind_ip = our_ip or "0.0.0.0"
-    if our_ip is None:
+    # NetBird tunnel. An explicit --bind/COT_RX_BIND can opt into another
+    # interface; the safe automatic fallback is loopback.
+    bind_ip = requested_bind or our_ip or "127.0.0.1"
+    if our_ip is None and not requested_bind:
         print("CoT RX WARNING: NetBird interface (wt0/netbird0) not found — "
-              "listening on 0.0.0.0, reachable from any network this host is on, "
-              "not just NetBird", flush=True)
+              "listening on 127.0.0.1 only; pass --bind explicitly to expose "
+              "another interface", flush=True)
     srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     srv.bind((bind_ip, port))
@@ -245,6 +286,8 @@ def main():
                       help="Listen for incoming CoT connections on PORT")
     mode.add_argument("--connect", metavar="IP:PORT",
                       help="Connect to remote CoT source (e.g. 100.x.x.x:8089)")
+    ap.add_argument("--bind", default=os.environ.get("COT_RX_BIND", ""),
+                    help="Listen address override (default: NetBird IP, else 127.0.0.1)")
     ap.add_argument("--verbose", "-v", action="store_true",
                     help="Print each received CoT track")
     args = ap.parse_args()
@@ -252,7 +295,7 @@ def main():
     session = zenoh.open(make_config())
     try:
         if args.listen:
-            run_listen(args.listen, session, args.verbose)
+            run_listen(args.listen, session, args.verbose, args.bind)
         else:
             host, port_str = args.connect.rsplit(":", 1)
             run_connect(host, int(port_str), session, args.verbose)

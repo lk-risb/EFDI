@@ -153,7 +153,7 @@ SITAWARE_NVG_SOURCE=efdi-live
 
 # ── Link-16 JREAP-C ─────────────────────────────────────────────────────────
 LINK16_PORT=                   # Leave empty if no Link-16 source
-LINK16_TCP=                    # Set to 1 for TCP mode, empty for UDP
+# Link-16 currently accepts JREAP-C UDP only; TCP needs the gateway framing ICD.
 
 # ── MAVLink ─────────────────────────────────────────────────────────────────
 MAVLINK_PORT=
@@ -262,6 +262,8 @@ The bridge reads MIL-STD-2525B SIDC codes from SitaWare and routes each unit to 
 | Hostile | Air (A) | `…/air/sitaware/rest/hostile/aircraft/…` | `a-h-A-M-F` |
 | Friendly | Sea (S) | `…/sea/sitaware/rest/friendly/vessel/…` | `a-f-S-X-L` |
 | Hostile | Sea (S) | `…/sea/sitaware/rest/hostile/vessel/…` | `a-h-S-X-L` |
+| Friendly / Hostile / Neutral / Unknown | Space (P) | `…/space/sitaware/rest/<affiliation>/satellite/…` | matching `a-<affiliation>-P` |
+| Any | Special operations forces (F) | `…/land/sitaware/rest/<affiliation>/unit/…` | matching ground-unit type |
 
 ### NATO NFFI friendly-force feed (inbound)
 
@@ -317,12 +319,14 @@ SITAWARE_NVG_SOURCE=efdi-live    # NVG source name, created automatically on fir
 | `dronuradaras` | `bridges/dronuradaras_bridge.py` | `…/land/dronuradaras/acoustic/neutral/sensor/status/v1` | 60 s device poll / 10 s detection poll |
 | `sitaware` | `bridges/sitaware_bridge.py` | `…/land/sitaware/rest/friendly/unit/tracks/v1` | Configurable REST poll |
 | `nffi` | `layers/nato_nffi_layer.py` | `…/land/nato/nffi/friendly/unit/tracks/v1` | Streaming TCP (NFFI XML) |
-| `link16` | `bridges/link16_bridge.py` | `…/air/link16/jreap/*/aircraft/tracks/v1` | Streaming UDP/TCP |
+| `link16` | `bridges/link16_bridge.py` | `…/air/link16/jreap/*/aircraft/tracks/v1` | Streaming UDP |
 | `mavlink` | `bridges/mavlink_bridge.py` | `…/air/mavlink/mav2/*/uav/tracks/v1` | Streaming UDP/TCP |
 | `cot-udp` | `layers/cot_layer.py` | Subscriber — all topics | Event-driven |
 | `cot-tcp` | `layers/cot_layer.py` | Subscriber — all topics | Event-driven |
 | `sitaware-nvg` | `layers/nato_nvg_layer.py` | Subscriber — all track topics | Event-driven, 10 s refresh |
 | `track-fusion` | `layers/track_fusion_layer.py` | CAT-48 + CAT-21 subscriber | Event-driven |
+
+> **ASTERIX editions:** CAT-48 follows EUROCONTROL Edition 1.32 and CAT-34 follows Edition 1.29. CAT-20, CAT-21, and CAT-62 currently use legacy compatibility UAPs and print a warning when enabled; do not connect modern CAT-20 1.9, CAT-21 2.2+, or CAT-62 1.21 feeds until their exact decoder profiles are implemented. Link-16 accepts UDP only because the gateway's TCP framing is not yet documented.
 
 ### Zenoh topic schema
 
@@ -649,7 +653,6 @@ This catches syntax errors, TypeScript errors, and Dockerfile breakage before me
 | 2026-06-16 | `airplanes.live` bridge: regional ADS-B feed + worldwide military aircraft tracking |
 | 2026-06-16 | ICAO NOTAM bridge: live NOTAM ingestion via ICAO Dataservices API |
 | 2026-06-16 | FlightRadar24 bridge: FR24 commercial feed integration |
-| 2026-06-16 | Windy bridge: point-forecast API integration |
 | 2026-06-16 | Protocol Buffer definitions for new track types (`aircraft_track`, `ais_track`, `aprs_track`, `cat62_track`) |
 | 2026-06-17/18 | Quality-of-life improvements: bridge robustness, layer deduplication, track fusion tuning |
 | 2026-06-18 | ASTERIX full-decode design specification document added |

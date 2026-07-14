@@ -1,0 +1,26 @@
+fix: restore native bridge runtime and harden protocol adapters
+
+- keep only router/admin/database/proxy infrastructure in Docker and run all
+  sensor bridges and output layers as PID-managed Python scripts
+- fix native launcher imports, PID reuse checks, complete all-mode coverage,
+  shared runtime paths, namespace state, and infrastructure-only rebuilds
+- finish signed federation topology/status UI, replay protection, namespace
+  configuration, OIDC hardening, refresh rotation, and database migrations
+- harden HTTP, AIS WebSocket, CoT, SitaWare HQ, SitaWare Edge NVG, NFFI,
+  SAPIENT, STANAG 4586, ASTERIX, Link-16, MAVLink, and VMF input handling
+- correct SitaWare affiliation and SIDC dimension routing and complete CoT/NVG
+  air, land, sea, and space affiliation coverage
+- update CAT-48 decoding for Edition 1.32 fields and mark CAT-20/21/62 tables
+  as legacy compatibility UAPs instead of claiming unsupported modern editions
+- disable unframed Link-16 TCP ingestion while retaining JREAP-C UDP support
+- remove Windy, yr.no, PurpleAir, OSM/Overpass, and N2YO bridges and schemas
+- bound external API responses and remove tracked bytecode artifacts
+
+Verification:
+- 23 bridge/layer entrypoints load and expose CLI help successfully
+- Python compile and Ruff fatal checks pass across bridges, layers, and admin
+- SitaWare/NVG/CoT round trips, malicious XML rejection, CAT-48 field decoding,
+  ASTERIX framing rejection, and bounded HTTP response checks pass
+- frontend type-check and production build pass
+- shell syntax, warning-level ShellCheck, Compose config, and diff checks pass
+- Python and frontend dependency audits report no known vulnerabilities

@@ -39,7 +39,7 @@ Zenoh topics published:
 
 Configuration (compose/.env):
     LINK16_PORT=3010           # JREAP-C UDP listen port (default: 3010)
-    LINK16_TCP=0               # set 1 for TCP server mode instead of UDP
+    LINK16_TCP=0               # reserved; TCP requires a gateway framing ICD
 
 Run:
     venv/bin/python3 link16_bridge.py
@@ -51,14 +51,13 @@ import json
 import os
 import socket
 import struct
-import threading
 import time
 
 import zenoh
+from namespace_prefix import prefix
 
 ROUTER    = "tls/zenoh.efdi.netbird.efdi-backbone.net:7447"
 ORG       = os.environ.get("PARTNER_NAMESPACE", "")
-from namespace_prefix import prefix
 TOPIC_ROOT = prefix() + "/" + ORG   # org prefix (configurable) precedes the pod namespace
 HERE      = os.path.dirname(os.path.abspath(__file__))
 _CERT_DIR = os.environ.get("EFDI_CERT_DIR", HERE)
@@ -181,7 +180,9 @@ def _parse_jreap_header(data: bytes) -> tuple[int, int, bytes]:
     """Parse 4-byte JREAP-C PDU header.  Returns (pdu_type, seq_num, payload)."""
     if len(data) < 4:
         raise ValueError("Packet too short for JREAP-C header")
-    version  = data[0]   # should be 0x01
+    version  = data[0]
+    if version != 0x01:
+        raise ValueError("Unsupported JREAP-C version: {}".format(version))
     pdu_type = data[1]   # 0x00=init 0x01=J-series 0x02=keepalive 0x03=term
     seq_num  = struct.unpack(">H", data[2:4])[0]
     return pdu_type, seq_num, data[4:]
@@ -345,10 +346,10 @@ def decode_j32(words: list[bytes]) -> dict | None:
 #   8-11  Sub-label = 0010 (J2.2)
 #  12-23  Source Track Number (STN, 12-bit own-force ID)
 #  24-48  Latitude (25-bit signed BAM)
-#  49-74  Longitude MSBs (26 bits, MSB portion)
+#  49-74  Longitude (26-bit signed BAM)
 #
 # Word 1:
-#  75-85  Longitude LSBs (remaining bits)
+#  75-85  First continuation-word field
 #  86-95  Altitude (10-bit, 100 ft/LSB, offset)
 #  96-107 Speed (12-bit unsigned, 1 kt/LSB)
 # 108-118 Heading (11-bit unsigned BAM)
@@ -366,8 +367,7 @@ def decode_j22(words: list[bytes]) -> dict | None:
     lat_deg      = lat_raw * (180.0 / (1 << 24))
 
     lon_msb      = r.u(49, 26)
-    lon_lsb      = r.u(75, 11) if len(words) > 1 else 0
-    lon_raw_u    = (lon_msb << 0)                      # MSBs already 26-bit
+    lon_raw_u    = lon_msb                             # complete 26-bit BAM field
     lon_raw_s    = lon_raw_u - (1 << 25) if lon_raw_u >= (1 << 25) else lon_raw_u
     lon_deg      = lon_raw_s * (360.0 / (1 << 26))
 
@@ -529,43 +529,6 @@ def run_udp(port: int, session: "zenoh.Session", verbose: bool):
         process_packet(data, session, verbose)
 
 
-def _tcp_client(conn, addr, session, verbose):
-    print("Link 16 TCP connected: {}".format(addr), flush=True)
-    buf = b""
-    try:
-        while True:
-            chunk = conn.recv(4096)
-            if not chunk:
-                break
-            buf += chunk
-            # JREAP-C over TCP: each PDU is self-delimiting via word count
-            # Read 4-byte header, then extract words until payload exhausted
-            while len(buf) >= 4:
-                # Peek at a word count field if available, otherwise process 4+10 chunks
-                process_packet(buf, session, verbose)
-                buf = buf[4 + ((len(buf) - 4) // WORD_BYTES) * WORD_BYTES:]
-                break
-    except OSError:
-        pass
-    finally:
-        conn.close()
-        print("Link 16 TCP disconnected: {}".format(addr), flush=True)
-
-
-def run_tcp(port: int, session: "zenoh.Session", verbose: bool):
-    srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    srv.bind(("0.0.0.0", port))
-    srv.listen(5)
-    ip = _netbird_ip()
-    print("Link 16 JREAP-C TCP server on 0.0.0.0:{}".format(port), flush=True)
-    print("Tell JREAP gateway: connect to {}:{}".format(ip, port), flush=True)
-    while True:
-        conn, addr = srv.accept()
-        threading.Thread(target=_tcp_client, args=(conn, addr, session, verbose),
-                         daemon=True).start()
-
-
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -579,6 +542,12 @@ def main():
     ap.add_argument("--verbose", "-v", action="store_true")
     args = ap.parse_args()
 
+    if args.tcp:
+        ap.error(
+            "--tcp is disabled: this bridge has no verified JREAP-C stream "
+            "framing/length ICD. Use UDP or implement the gateway's documented framing."
+        )
+
     session = zenoh.open(make_config())
     print("Link 16 bridge started", flush=True)
     print("  Topics:", flush=True)
@@ -586,10 +555,7 @@ def main():
         print("    {} {} → {}".format(dom, aff, topic.split(ORG + "/")[1]), flush=True)
 
     try:
-        if args.tcp:
-            run_tcp(args.port, session, args.verbose)
-        else:
-            run_udp(args.port, session, args.verbose)
+        run_udp(args.port, session, args.verbose)
     except KeyboardInterrupt:
         pass
     finally:

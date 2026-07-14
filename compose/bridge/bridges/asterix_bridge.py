@@ -47,10 +47,10 @@ import threading
 import time
 
 import zenoh
+from namespace_prefix import prefix
 
 ROUTER    = "tls/zenoh.efdi.netbird.efdi-backbone.net:7447"
 ORG       = os.environ.get("PARTNER_NAMESPACE", "")
-from namespace_prefix import prefix
 TOPIC_ROOT = prefix() + "/" + ORG   # org prefix (configurable) precedes the pod namespace
 HERE      = os.path.dirname(os.path.abspath(__file__))
 _CERT_DIR = os.environ.get("EFDI_CERT_DIR", HERE)
@@ -131,7 +131,10 @@ def iter_frames_tcp(sock: socket.socket):
         cat    = header[0]
         length = struct.unpack(">H", header[1:3])[0]
         if length < 3:
-            continue
+            # There is no sync marker in an ASTERIX byte stream.  Continuing
+            # after an impossible length would interpret payload bytes as a
+            # new header and silently corrupt every subsequent record.
+            raise ValueError("invalid ASTERIX frame length: {}".format(length))
         data = _recv_exact(sock, length - 3)
         yield cat, data
 
@@ -171,6 +174,16 @@ def _skip_fx_field(data: bytes, pos: int) -> int:
         if not (b & 0x01):
             break
     return pos
+
+
+def _skip_len_field(data: bytes, pos: int) -> int:
+    """Skip an ASTERIX length-prefixed RE/SP item (length includes itself)."""
+    if pos >= len(data):
+        return len(data)
+    length = data[pos]
+    if length < 1 or pos + length > len(data):
+        return len(data)
+    return pos + length
 
 
 # ---------------------------------------------------------------------------
@@ -493,7 +506,7 @@ def decode_cat034(data: bytes) -> dict | None:
 
 
 # ---------------------------------------------------------------------------
-# CAT-048 decoder  (Monoradar Target Reports, Edition 1.15)
+# CAT-048 decoder  (Monoradar Target Reports, Edition 1.32)
 # ---------------------------------------------------------------------------
 
 def decode_cat048_record(data: bytes, pos: int,
@@ -627,16 +640,21 @@ def decode_cat048_record(data: bytes, pos: int,
             if pos >= len(data): return track, len(data)
             b = data[pos]; pos += 1
             if b & 0x80: track["track_tentative"] = True
-            if b & 0x20: track["track_doubtful"]  = True   # DOU at B6
-            if b & 0x10: track["track_manoeuvre"] = True   # MAH at B5
-            cdm = (b & 0x0C) >> 2                           # CDM at B4-B3
+            rad = (b >> 5) & 0x03
+            track["track_sensor"] = ("combined", "psr", "ssr_mode_s", "invalid")[rad]
+            if b & 0x10: track["track_doubtful"]  = True
+            if b & 0x08: track["track_manoeuvre"] = True
+            cdm = (b >> 1) & 0x03
             if   cdm == 1: track["vertical_trend"] = "climbing"
             elif cdm == 2: track["vertical_trend"] = "descending"
+            elif cdm == 3: track["vertical_trend"] = "unknown"
             if b & 0x01:
                 if pos >= len(data): return track, len(data)
                 b = data[pos]; pos += 1
                 if b & 0x80: track["track_end"]   = True
                 if b & 0x40: track["track_ghost"]  = True
+                track["track_suppression"] = (b >> 3) & 0x07
+                if b & 0x04: track["slant_range_correction"] = True
                 while b & 0x01:
                     if pos >= len(data): break
                     b = data[pos]; pos += 1
@@ -644,8 +662,8 @@ def decode_cat048_record(data: bytes, pos: int,
             if pos + 4 > len(data): return track, len(data)
             track["track_sigma_x_nm"] = round(data[pos]     / 128.0, 4)
             track["track_sigma_y_nm"] = round(data[pos + 1] / 128.0, 4)
-            track["track_sigma_h_ft"] = data[pos + 2] * 25
-            track["track_sigma_v_kt"] = round(data[pos + 3] / 128.0 * 3600.0, 1)
+            track["track_sigma_v_kt"] = round(data[pos + 2] * (2 ** -14) * 3600.0, 2)
+            track["track_sigma_heading_deg"] = round(data[pos + 3] * 360.0 / 4096.0, 2)
             pos += 4
         elif frn == 15:                 # I048/030  Warning/Error Conditions (FX repeating type codes)
             # Each octet: bits 7-1 = condition code (1-127), bit 0 = FX
@@ -697,15 +715,23 @@ def decode_cat048_record(data: bytes, pos: int,
             if pos + 2 > len(data): return track, len(data)
             b0 = data[pos]; b1 = data[pos + 1]
             com  = (b0 >> 5) & 0x07
-            stat = (b0 >> 3) & 0x03
-            if com: track["com_capability"] = com
-            _STAT230 = ("", "standby", "airborne", "ground")
-            if stat: track["transponder_status"] = _STAT230[stat]
-            if b0 & 0x04: track["si_code"]       = True   # SI (vs II) code capable
-            if b0 & 0x02: track["mssc"]          = True   # Mode-S specific services
-            if b0 & 0x01: track["altitude_25ft"] = True   # ARC: 25 ft reporting
-            if b1 & 0x80: track["aic"]           = True   # aircraft ID capability
-            # b1 bits 6-2: BDS 1,0 capability bits (B1A/B1B) — skip
+            stat = (b0 >> 2) & 0x07
+            track["com_capability"] = com
+            _STAT230 = (
+                "no_alert_no_spi_airborne", "no_alert_no_spi_ground",
+                "alert_no_spi_airborne", "alert_no_spi_ground",
+                "alert_spi", "no_alert_spi", "unassigned", "unknown",
+            )
+            track["transponder_status"] = _STAT230[stat]
+            if stat in (1, 3): track["on_ground"] = True
+            if stat in (2, 3, 4): track["alert"] = True
+            if stat in (4, 5): track["spi"] = True
+            track["interrogator_code_capability"] = "II" if (b0 & 0x02) else "SI"
+            if b1 & 0x80: track["mssc"]          = True
+            if b1 & 0x40: track["altitude_25ft"] = True
+            if b1 & 0x20: track["aic"]           = True
+            track["bds10_b1a"] = bool(b1 & 0x10)
+            track["bds10_b1b"] = b1 & 0x0F
             pos += 2
         elif frn == 21:                 # I048/260  ACAS RA (7 bytes = BDS 3,0)
             if pos + 7 > len(data): return track, len(data)
@@ -713,10 +739,28 @@ def decode_cat048_record(data: bytes, pos: int,
             pos += 7
         elif frn == 22:                 # I048/055  Mode-1
             if pos >= len(data): return track, len(data)
-            track["mode1"] = "{:02o}".format(data[pos] & 0x3F); pos += 1
+            b = data[pos]; pos += 1
+            track["mode1"] = "{:02o}".format(b & 0x1F)
+            if b & 0x80: track["mode1_invalid"]  = True
+            if b & 0x40: track["mode1_garbled"]  = True
+            if b & 0x20: track["mode1_smoothed"] = True
         elif frn == 23:                 # I048/050  Mode-2 Code (2 bytes, lower 12 bits)
             if pos + 2 > len(data): return track, len(data)
-            track["mode2"] = "{:04o}".format(_u16(data[pos:pos + 2]) & 0x0FFF); pos += 2
+            w = _u16(data[pos:pos + 2]); pos += 2
+            track["mode2"] = "{:04o}".format(w & 0x0FFF)
+            if w & 0x8000: track["mode2_invalid"]  = True
+            if w & 0x4000: track["mode2_garbled"]  = True
+            if w & 0x2000: track["mode2_smoothed"] = True
+        elif frn == 24:                 # I048/065  Mode-1 confidence/quality
+            if pos >= len(data): return track, len(data)
+            track["mode1_quality_mask"] = data[pos]; pos += 1
+        elif frn == 25:                 # I048/060  Mode-2 confidence/quality
+            if pos + 2 > len(data): return track, len(data)
+            track["mode2_quality_mask"] = _u16(data[pos:pos + 2]); pos += 2
+        elif frn == 26:                 # I048/RE  Reserved Expansion Field
+            pos = _skip_len_field(data, pos)
+        elif frn == 27:                 # I048/SP  Special Purpose Field
+            pos = _skip_len_field(data, pos)
         else: break
 
     if "icao24" not in track:
@@ -727,7 +771,7 @@ def decode_cat048_record(data: bytes, pos: int,
 
 
 # ---------------------------------------------------------------------------
-# CAT-020 decoder  (MLAT Target Reports, Edition 1.9)
+# CAT-020 compatibility decoder (legacy UAP; not Edition 1.9)
 # ---------------------------------------------------------------------------
 
 def decode_cat020_record(data: bytes, pos: int):
@@ -865,7 +909,7 @@ def decode_cat020_record(data: bytes, pos: int):
 
 
 # ---------------------------------------------------------------------------
-# CAT-021 decoder  (ADS-B Target Reports, Edition 2.4)
+# CAT-021 compatibility decoder (legacy pre-2.2 UAP; not Edition 2.4+)
 # ---------------------------------------------------------------------------
 
 def decode_cat021_record(data: bytes, pos: int):
@@ -1303,7 +1347,7 @@ def _decode_i062_390(data: bytes, pos: int) -> tuple[dict, int]:
 
 
 # ---------------------------------------------------------------------------
-# CAT-062 decoder  (System Track Updates)
+# CAT-062 compatibility decoder (legacy UAP; not Edition 1.21)
 # ---------------------------------------------------------------------------
 
 def decode_cat62_record(data: bytes, pos: int):
@@ -1799,6 +1843,8 @@ def _process_tcp_conn(conn, addr, label, handlers, verbose):
         _process_stream(iter_frames_tcp(conn), handlers, verbose)
     except EOFError:
         pass
+    except ValueError as exc:
+        print("{} TCP protocol error from {}: {}".format(label, addr, exc), flush=True)
     finally:
         conn.close()
         print("{} TCP disconnected: {}".format(label, addr), flush=True)
@@ -1845,7 +1891,7 @@ def _run_cat62(host: str, port: int, udp: bool, handler, verbose: bool):
             sock.connect((host, port))
             print("CAT-62 TCP connected to {}:{}".format(host, port), flush=True)
             _process_stream(iter_frames_tcp(sock), {CAT_062: handler}, verbose)
-        except (EOFError, ConnectionRefusedError, OSError) as exc:
+        except (EOFError, ValueError, ConnectionRefusedError, OSError) as exc:
             print("CAT-62 error: {} — reconnecting in {}s".format(
                 exc, RECONNECT_DELAY_S), flush=True)
             if sock:
@@ -1922,6 +1968,16 @@ def main():
         print("  --cat48-port  --cat21-port  --cat20-port  --cat62-host/--cat62-udp",
               flush=True)
         return
+
+    # These compatibility tables predate the currently published EUROCONTROL
+    # UAPs.  Keep them available for existing gateways, but never imply that a
+    # modern stream is safe to decode without confirming its edition/ICD.
+    if args.cat20_port:
+        print("WARNING: CAT-20 uses a legacy compatibility UAP; confirm the producer ICD", flush=True)
+    if args.cat21_port:
+        print("WARNING: CAT-21 uses a legacy pre-2.2 UAP; CAT-21 2.2+ is not supported", flush=True)
+    if args.cat62_host or args.cat62_udp:
+        print("WARNING: CAT-62 uses a legacy compatibility UAP; Edition 1.21 is not supported", flush=True)
 
     session = zenoh.open(make_config())
     pubs    = []

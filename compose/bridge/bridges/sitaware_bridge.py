@@ -19,7 +19,8 @@ SIDC battle dimension (char 3):
     G → ground → land/**/friendly|hostile|.../unit/tracks/v1
     S → sea    → sea/**/friendly|hostile|.../vessel/tracks/v1
     U → subsurface → sea/**/…/vessel/tracks/v1
-    F → space  → space/**/civ/satellite/tracks/v1
+    P → space  → space/**/friendly|hostile|.../satellite/tracks/v1
+    F → special operations forces → land/**/…/unit/tracks/v1
 
 Configuration (compose/.env):
     SITAWARE_URL=https://10.0.0.1          # base URL of SitaWare server (LAN, primary)
@@ -56,13 +57,14 @@ import time
 import urllib.request
 import urllib.error
 import base64
+import math
 import ssl
 
 import zenoh
+from namespace_prefix import prefix
 
 ROUTER    = "tls/zenoh.efdi.netbird.efdi-backbone.net:7447"
 ORG       = os.environ.get("PARTNER_NAMESPACE", "")
-from namespace_prefix import prefix
 TOPIC_ROOT = prefix() + "/" + ORG   # org prefix (configurable) precedes the pod namespace
 HERE      = os.path.dirname(os.path.abspath(__file__))
 _CERT_DIR = os.environ.get("EFDI_CERT_DIR", HERE)
@@ -128,7 +130,8 @@ _DIM_CONFIG = {
     "G": ("land",  "unit",     "G"),
     "S": ("sea",   "vessel",   "S"),
     "U": ("sea",   "vessel",   "U"),   # subsurface → sea topic
-    "F": ("space", "satellite","P"),
+    "P": ("space", "satellite", "P"),
+    "F": ("land",  "unit",      "G"),   # special operations forces
 }
 
 
@@ -145,11 +148,11 @@ def sidc_to_topic(sidc: str) -> str:
     cfg  = _DIM_CONFIG.get(dim_char, ("land", "unit", "G"))
     domain, entity, _ = cfg
 
-    # Air units from SitaWare are military by definition — use mil/ slot
-    # so cot_layer picks up a-f-A-M-F / a-h-A-M-F (swept-wing icons).
+    # Preserve SitaWare's explicit affiliation. Routing these through the generic
+    # "mil" slot loses friendly/hostile state because those topics infer it from
+    # ICAO addresses, which friendly-force records normally do not carry.
     if domain == "air":
-        slot = "mil" if aff in ("friendly", "hostile") else "civ"
-        return "{}/air/sitaware/rest/{}/aircraft/tracks/v1".format(TOPIC_ROOT, slot)
+        return "{}/air/sitaware/rest/{}/aircraft/tracks/v1".format(TOPIC_ROOT, aff)
 
     return "{}/{}/sitaware/rest/{}/{}/tracks/v1".format(TOPIC_ROOT, domain, aff, entity)
 
@@ -175,7 +178,10 @@ def _http_get(url: str) -> dict | list | None:
     req.add_header("Accept", "application/json")
     try:
         with urllib.request.urlopen(req, context=_make_ssl_ctx(), timeout=10) as resp:
-            return json.loads(resp.read().decode("utf-8"))
+            body = resp.read(10_000_001)
+            if len(body) > 10_000_000:
+                raise ValueError("SitaWare response exceeds 10 MB")
+            return json.loads(body.decode("utf-8"))
     except urllib.error.HTTPError as e:
         if e.code == 404:
             return None          # caller handles 404 as "try next path"
@@ -265,16 +271,27 @@ def normalise_unit(raw: dict) -> dict | None:
         lat = float(lat); lon = float(lon)
     except (TypeError, ValueError):
         return None
+    if not (math.isfinite(lat) and math.isfinite(lon)) or not (-90 <= lat <= 90 and -180 <= lon <= 180):
+        return None
 
     alt_raw = _get(raw, "position.altitude", "position.alt",
                    "altitude", "alt", "Altitude")
-    alt_m = float(alt_raw) if alt_raw is not None else None
+    try:
+        alt_m = float(alt_raw) if alt_raw is not None else None
+    except (TypeError, ValueError):
+        alt_m = None
+    if alt_m is not None and not math.isfinite(alt_m):
+        alt_m = None
 
     # Identity
     uid      = str(_get(raw, "uid", "id", "unitId", "UnitId", "uuid", default=""))
     name     = str(_get(raw, "name", "label", "callsign", "Name", "Label", default=""))
     sidc     = str(_get(raw, "sidc", "SIDC", "symbolCode", "SymbolCode", default=""))
     callsign = str(_get(raw, "callsign", "Callsign", "name", "label", default=name))
+    uid = uid.strip()
+    callsign = callsign.strip()
+    if not uid and not callsign:
+        return None
 
     # Kinematics
     speed_raw   = _get(raw, "speed", "Speed", "groundSpeed")
@@ -284,7 +301,7 @@ def normalise_unit(raw: dict) -> dict | None:
         "_ts":         time.time(),
         "_src":        _SOURCE,
         "uid":         uid,
-        "callsign":    callsign.strip(),
+        "callsign":    callsign,
         "lat_deg":     round(lat, 6),
         "lon_deg":     round(lon, 6),
         "sidc":        sidc,
@@ -293,12 +310,16 @@ def normalise_unit(raw: dict) -> dict | None:
         track["alt_m"] = round(alt_m, 1)
     if speed_raw is not None:
         try:
-            track["speed_ms"] = round(float(speed_raw), 2)
+            speed = float(speed_raw)
+            if math.isfinite(speed) and speed >= 0:
+                track["speed_ms"] = round(speed, 2)
         except (TypeError, ValueError):
             pass
     if heading_raw is not None:
         try:
-            track["heading_deg"] = round(float(heading_raw), 1)
+            heading = float(heading_raw)
+            if math.isfinite(heading):
+                track["heading_deg"] = round(heading % 360.0, 1)
         except (TypeError, ValueError):
             pass
 
@@ -349,6 +370,9 @@ def run(args):
               "HTTP Basic Auth credentials for this connection are exposed to anyone "
               "who can MITM the path to the SitaWare server. Only use this for a "
               "known self-signed cert on a trusted network.", flush=True)
+    if _USER and any(url.lower().startswith("http://") for url in _BASE_URLS):
+        print("  WARNING: SitaWare Basic Auth is being sent over plain HTTP; "
+              "use HTTPS or an authenticated encrypted tunnel.", flush=True)
 
     consecutive_errors = 0
     last_used_base = None

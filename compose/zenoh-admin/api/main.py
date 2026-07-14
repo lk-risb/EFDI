@@ -20,6 +20,9 @@ from .federation_apply import start_federation_subscriber
 from .federation_status import start_federation_status_subscriber
 from .federation import router as federation_router
 from .publish_script import router as publish_script_router
+from .oidc import router as oidc_router, OIDC_ENABLED
+from .topology import router as topology_router, start_topology
+from .deps import SECRET_KEY
 
 
 @asynccontextmanager
@@ -27,14 +30,47 @@ async def lifespan(app: FastAPI):
     await ensure_database()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # Idempotent column-add for the OIDC linkage fields — create_all only
+        # creates missing tables, never alters an existing admin_users, so a
+        # pod upgraded from a pre-OIDC schema needs this explicit migration.
+        await conn.execute(text(
+            "ALTER TABLE admin_users "
+            "ADD COLUMN IF NOT EXISTS auth_provider VARCHAR(16) NOT NULL DEFAULT 'local', "
+            "ADD COLUMN IF NOT EXISTS oidc_subject VARCHAR(255)"
+        ))
+        await conn.execute(text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS ix_admin_users_oidc_subject "
+            "ON admin_users (oidc_subject)"
+        ))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_refresh_tokens_user_id "
+            "ON refresh_tokens (user_id)"
+        ))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_federated_children_created_by "
+            "ON federated_children (created_by)"
+        ))
+        await conn.execute(text(
+            "ALTER TABLE federated_children "
+            "ALTER COLUMN last_status_version TYPE BIGINT"
+        ))
     await _ensure_first_user()
 
     loop = asyncio.get_running_loop()
     federation_session = start_federation_subscriber(loop)
     federation_status_session = start_federation_status_subscriber(loop)
+    topology_session, topology_task = start_topology(loop)
 
     yield
 
+    if topology_task is not None:
+        topology_task.cancel()
+        try:
+            await topology_task
+        except asyncio.CancelledError:
+            pass
+    if topology_session is not None:
+        topology_session.close()
     if federation_session is not None:
         federation_session.close()
     if federation_status_session is not None:
@@ -55,6 +91,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Signed session cookie — authlib stores the OAuth state/nonce here across the
+# IdP redirect round-trip. Added ONLY when OIDC is actually enabled: SessionMiddleware
+# pulls in itsdangerous, an OIDC-only dependency, so importing it unconditionally
+# would break boot on a deployment (e.g. a local dev venv) that skipped the
+# optional OIDC deps. Reuses the JWT secret. https_only matches the secure
+# refresh cookie — OIDC is prod-only (needs a real IdP + an https redirect URL).
+if OIDC_ENABLED:
+    from starlette.middleware.sessions import SessionMiddleware
+    app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY, same_site="lax", https_only=True)
+
 app.include_router(auth_router)
 app.include_router(admin_users_router)
 app.include_router(status_router)
@@ -63,6 +109,8 @@ app.include_router(health_router)
 app.include_router(branding_router)
 app.include_router(federation_router)
 app.include_router(publish_script_router)
+app.include_router(oidc_router)
+app.include_router(topology_router)
 
 
 class SPAStaticFiles(StaticFiles):

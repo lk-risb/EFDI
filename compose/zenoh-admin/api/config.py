@@ -1,5 +1,7 @@
 import os
 import re
+import stat
+import tempfile
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, field_validator
 import json5
@@ -63,6 +65,8 @@ def _read_prefix_file() -> str:
 def _write_prefix_file(value: str) -> None:
     with open(_PREFIX_FILE, "w") as f:
         f.write(value + "\n")
+        f.flush()
+        os.fsync(f.fileno())
 
 
 class ConfigFields(BaseModel):
@@ -75,7 +79,7 @@ class ConfigFields(BaseModel):
     verify_name_on_connect: bool
     plugins_loading_enabled: bool
 
-    @field_validator("partner_namespace", "inbound_namespace")
+    @field_validator("partner_namespace", "inbound_namespace", "namespace_prefix")
     @classmethod
     def _check_safe_namespace(cls, v: str) -> str:
         if not _SAFE_NAMESPACE_RE.match(v):
@@ -112,8 +116,9 @@ def _extract_fields(raw: str) -> ConfigFields:
 
     fabric_endpoint = data["connect"]["endpoints"][0]
 
+    namespace_prefix = _read_prefix_file()
     storage_key_expr = data["plugins"]["storage_manager"]["storages"]["efdi_live"]["key_expr"]
-    m = re.match(r"LTU/CISB/(.+)/\*\*$", storage_key_expr)
+    m = re.match(re.escape(namespace_prefix) + r"/(.+)/\*\*$", storage_key_expr)
     partner_namespace = m.group(1) if m else ""
 
     inbound_namespace = ""
@@ -132,6 +137,7 @@ def _extract_fields(raw: str) -> ConfigFields:
         fabric_endpoint=fabric_endpoint,
         partner_namespace=partner_namespace,
         inbound_namespace=inbound_namespace,
+        namespace_prefix=namespace_prefix,
         verify_name_on_connect=verify_name_on_connect,
         plugins_loading_enabled=plugins_loading_enabled,
     )
@@ -149,6 +155,8 @@ def _render_config(fields: ConfigFields) -> str:
         "ZENOH_FABRIC_ENDPOINT": fields.fabric_endpoint,
         "PARTNER_NAMESPACE": fields.partner_namespace,
         "INBOUND_NAMESPACE": fields.inbound_namespace,
+        "NAMESPACE_PREFIX": fields.namespace_prefix,
+        "NAMESPACE_ROOT": fields.namespace_prefix.split("/")[0],
         "ZENOH_VERIFY_NAME_ON_CONNECT": "true" if fields.verify_name_on_connect else "false",
         "ZENOH_PLUGINS_LOADING_ENABLED": "true" if fields.plugins_loading_enabled else "false",
         **_FIXED_SUBSTITUTIONS,
@@ -171,9 +179,32 @@ def _render_config(fields: ConfigFields) -> str:
     return rendered
 
 
+def atomic_write(path: str, content: str) -> None:
+    """Durably replace a state file without exposing readers to partial data."""
+    directory = os.path.dirname(path) or "."
+    fd, temporary_path = tempfile.mkstemp(prefix=f".{os.path.basename(path)}.", dir=directory)
+    try:
+        if os.path.exists(path):
+            os.fchmod(fd, stat.S_IMODE(os.stat(path).st_mode))
+        with os.fdopen(fd, "w") as f:
+            f.write(content)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(temporary_path, path)
+    except Exception:
+        try:
+            os.close(fd)
+        except OSError:
+            pass
+        try:
+            os.unlink(temporary_path)
+        except OSError:
+            pass
+        raise
+
+
 def write_config_to_disk(rendered: str) -> None:
-    with open(CONFIG_PATH, "w") as f:
-        f.write(rendered)
+    atomic_write(CONFIG_PATH, rendered)
 
 
 def restart_router_container() -> tuple[bool, str | None]:
@@ -208,11 +239,17 @@ async def put_config(
     db: AsyncSession = Depends(get_db),
     actor=Depends(require_role("superadmin")),
 ):
+    previous_prefix = _read_prefix_file()
     rendered = _render_config(fields)
     write_config_to_disk(rendered)
+    _write_prefix_file(fields.namespace_prefix)
     restarted, restart_error = restart_router_container()
+    native_restart_required = fields.namespace_prefix != previous_prefix
 
     await write_audit(db, actor.id, "update_zenoh_config",
-                       "restarted" if restarted else f"write ok, restart failed: {restart_error}")
+                       ("restarted" if restarted else f"write ok, restart failed: {restart_error}")
+                       + (", native bridge restart required" if native_restart_required else ""))
 
-    return {"status": "written", "restarted": restarted, "restart_error": restart_error}
+    return {"status": "written", "restarted": restarted,
+            "restart_error": restart_error,
+            "native_process_restart_required": native_restart_required}

@@ -22,6 +22,7 @@ interface ConfigFields {
   fabric_endpoint: string
   partner_namespace: string
   inbound_namespace: string
+  namespace_prefix: string
   verify_name_on_connect: boolean
   plugins_loading_enabled: boolean
 }
@@ -32,6 +33,7 @@ const EMPTY_FIELDS: ConfigFields = {
   fabric_endpoint: '',
   partner_namespace: '',
   inbound_namespace: '',
+  namespace_prefix: '',
   verify_name_on_connect: false,
   plugins_loading_enabled: true,
 }
@@ -138,7 +140,10 @@ function ConfigPage() {
       const body = await res.json().catch(() => ({ detail: res.statusText }))
       if (!res.ok) throw new Error(body.detail ?? res.statusText)
       if (target === 'local') {
-        notify.success(body.restarted ? 'Config written, zenoh-router restarted' : `Config written, restart failed: ${body.restart_error}`)
+        const result = body.restarted ? 'Config written, zenoh-router restarted' : `Config written, restart failed: ${body.restart_error}`
+        notify.success(body.native_process_restart_required
+          ? `${result}. Restart native bridge scripts to apply the new namespace prefix.`
+          : result)
       } else {
         notify.success(`Config pushed to child (version ${body.version})`)
       }
@@ -218,6 +223,10 @@ function ConfigPage() {
                 value={parseFabricEndpoint(fields.fabric_endpoint).port}
                 onChange={e => set('fabric_endpoint', `tls/${parseFabricEndpoint(fields.fabric_endpoint).host}:${e.target.value}`)} />
             </div>
+          </Field>
+          <Field label="Org namespace prefix" help="Your org's topic prefix — first segment fixed, rest is any depth (e.g. LTU/CISB, LTU/CISB/LTK). Saving restarts the router and all bridges.">
+            <input type="text" disabled={!canWrite} className={inputClass}
+              value={fields.namespace_prefix} onChange={e => set('namespace_prefix', e.target.value)} />
           </Field>
           <Field label="Partner namespace" help="This pod's first-party publish/subscribe prefix (its slot)">
             <input type="text" disabled={!canWrite} className={inputClass}

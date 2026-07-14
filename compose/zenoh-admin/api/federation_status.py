@@ -10,7 +10,26 @@ from .deps import write_audit
 from .models import FederatedChild
 
 _OWN_NAMESPACE = os.environ.get("PARTNER_NAMESPACE", "")
-_STATUS_KEY_PREFIX = "LTU/CISB/"
+_PREFIX_FILE = os.environ.get("NAMESPACE_PREFIX_FILE", "/namespace-prefix")
+
+
+def _prefix() -> str:
+    try:
+        with open(_PREFIX_FILE) as f:
+            v = f.read().strip()
+        if v:
+            return v
+    except OSError:
+        pass
+    return os.environ.get("NAMESPACE_PREFIX", "LTU/CISB")
+
+
+# Prefix-based (not root-based): child.namespace rows store the sub-path under
+# the FULL org prefix (the push topic is f"{prefix}/{child.namespace}/..."), so
+# status keys must be parsed the same way for _record_status to match rows.
+# Read once at import; a live prefix change (Config tab) is picked up on the
+# next admin restart, same as the subscription wildcard below.
+_STATUS_KEY_PREFIX = _prefix() + "/"
 _STATUS_KEY_SUFFIX = "/@config/status/v1"
 _STATUS_WILDCARD = f"{_STATUS_KEY_PREFIX}**{_STATUS_KEY_SUFFIX}"
 
@@ -33,10 +52,22 @@ async def _record_status(namespace: str, version: int, health: str, error: str |
         if child is None:
             # Status from a namespace we don't have a FederatedChild row for.
             # Deliberately no audit entry here (unlike a matched status) —
-            # the wildcard subscription (LTU/CISB/**/@config/status/v1)
+            # the wildcard subscription ({prefix}/**/@config/status/v1)
             # spans the whole mesh, so an unmatched namespace is the
             # expected common case, not an anomaly worth an audit-log
             # entry per occurrence. A matched status (below) is audited.
+            #
+            # A stderr log line IS emitted though (not an audit): #76 debugging
+            # needs to see a status that arrived but matched no row — that's the
+            # "same prefix, wrong leaf" mismatch (e.g. HQ registered the child
+            # under a namespace string that differs from the child pod's actual
+            # PARTNER_NAMESPACE). The other mismatch mode — child on a different
+            # NAMESPACE_PREFIX — never reaches this callback at all (its key
+            # falls outside HQ's subscription wildcard), so it shows as the
+            # ABSENCE of any log line here; compare against the startup
+            # "subscribed on ..." line to spot it.
+            print(f"[federation-status] status received for namespace={namespace!r} "
+                  f"(v{version}, {health}) but no FederatedChild row matches — ignoring", flush=True)
             return
         from datetime import datetime, timezone
         child.last_status = health
@@ -44,6 +75,8 @@ async def _record_status(namespace: str, version: int, health: str, error: str |
         child.last_status_at = datetime.now(timezone.utc)
         child.last_status_error = error
         await db.commit()
+        print(f"[federation-status] status matched child={namespace!r} "
+              f"(v{version}, {health})", flush=True)
         await write_audit(
             db, None, "federation_status_received",
             f"child={namespace}, version={version}, health={health}" + (f", error={error}" if error else ""),
@@ -81,6 +114,14 @@ def _handle_status_sample(loop: asyncio.AbstractEventLoop, sample):
     version = body.get("version", -1)
     health = body.get("health", "unknown")
     error = body.get("error")
+    if not isinstance(version, int) or isinstance(version, bool):
+        return
+    if health not in {"ok", "rejected", "rolled_back"}:
+        return
+    if error is not None and not isinstance(error, str):
+        return
+    if error is not None:
+        error = error[:512]
     asyncio.run_coroutine_threadsafe(_record_status(namespace, version, health, error), loop)
 
 

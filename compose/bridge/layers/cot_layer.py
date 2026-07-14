@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""cot_layer.py — Zenoh EFDI track topics → TAK Server / ATAK CoT bridge.
+r"""cot_layer.py — Zenoh EFDI track topics → TAK Server / ATAK CoT bridge.
 
 Subscribes to all EFDI track topics and forwards position updates as
 Cursor-on-Target (CoT) XML to a TAK Server over TCP.
@@ -24,7 +24,6 @@ Zenoh topics consumed (5 main categories):
   LAND:  <ORG>/land/civ/tracks/v1   → CoT a-f-G-E-V-C (friendly ground vehicle)
          <ORG>/land/aprs/tracks/v1  → CoT a-n-G-I   (APRS stations / digipeaters / wx)
          <ORG>/land/nffi/tracks/v1  → CoT a-f-G-U-C (NATO NFFI friendly forces)
-         <ORG>/land/geo/v1          → CoT (OSM aerodrome/port/military, 24h stale)
   SEA:   <ORG>/sea/civ/tracks/v1    → CoT a-f-S-X-L / a-h-S-X-L (hostile if RU/BY MMSI)
   SPACE: <ORG>/space/tracks/v1      → CoT a-f-P     (satellite)
 
@@ -53,6 +52,7 @@ from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 import zenoh
+from namespace_prefix import prefix
 
 try:
     import mgrs as _mgrs_lib
@@ -64,7 +64,6 @@ except Exception:
 
 ROUTER    = "tls/zenoh.efdi.netbird.efdi-backbone.net:7447"
 ORG       = os.environ.get("PARTNER_NAMESPACE", "")
-from namespace_prefix import prefix
 TOPIC_ROOT = prefix() + "/" + ORG   # org prefix (configurable) precedes the pod namespace
 HERE      = os.path.dirname(os.path.abspath(__file__))
 _CERT_DIR = os.environ.get("EFDI_CERT_DIR", HERE)
@@ -77,9 +76,7 @@ SEA_STALE_S    = 300     # vessels: Class B sends every 30-180s; 5 min covers wo
 LAND_STALE_S   = 120     # ground vehicles and APRS mobiles
 COT_STALE_S    = AIR_STALE_S  # default (air)
 SAT_STALE_S    = 300     # satellites: polled every 60s, 5 min gives 5× margin
-GEO_STALE_S    = 86400   # 24 h for fixed infrastructure (OSM features)
 ENV_STALE_S    = 3600    # weather stations: polled every 15–30 min, 1 h gives plenty of margin
-SENSOR_STALE_S = 1800    # air quality sensors: polled every 10 min, 30 min stale
 RECONNECT_S    = 5
 SEND_TIMEOUT_S = 10
 
@@ -203,6 +200,7 @@ _TOPIC_COT = {
     # AIR — full affiliation matrix
     "air/**/friendly/aircraft/**": ("a-f-A-M-F",   AIR_STALE_S),
     "air/**/hostile/aircraft/**":  ("a-h-A-M-F",   AIR_STALE_S),
+    "air/**/neutral/aircraft/**":  ("a-n-A-M-F",   AIR_STALE_S),
     "air/**/hostile/uav/**":       ("a-h-A-M-F-Q", AIR_STALE_S),
     # SEA — full affiliation matrix
     "sea/**/civ/vessel/**":      (_sea_type,      SEA_STALE_S),
@@ -210,11 +208,15 @@ _TOPIC_COT = {
     "sea/**/friendly/vessel/**": ("a-f-S-X-L",   SEA_STALE_S),
     "sea/**/hostile/vessel/**":  ("a-h-S-X-L",   SEA_STALE_S),
     "sea/**/neutral/vessel/**":  ("a-n-S-X-L",   SEA_STALE_S),
+    "sea/**/unknown/vessel/**":  ("a-u-S-X-L",   SEA_STALE_S),
     # SPACE
     "space/**/civ/satellite/**": ("a-f-P",        SAT_STALE_S),
+    "space/**/friendly/satellite/**": ("a-f-P",   SAT_STALE_S),
+    "space/**/hostile/satellite/**":  ("a-h-P",   SAT_STALE_S),
+    "space/**/neutral/satellite/**":  ("a-n-P",   SAT_STALE_S),
+    "space/**/unknown/satellite/**":  ("a-u-P",   SAT_STALE_S),
     # ENV — weather stations and air quality sensors show as ground icons
     "env/weather/station/**":    ("a-n-G-I-R",   ENV_STALE_S),
-    "env/air_quality/station/**":("a-n-G-I-R",   SENSOR_STALE_S),
     # RADAR SENSOR SITES — CAT-34 status publishes here; rendered as radar marker + stat card
     "land/**/neutral/radar/**":  ("a-f-G-E-S-R", LAND_STALE_S * 2),
     # ACOUSTIC / RF SENSOR SITES — sensor box; recolors green/yellow/red by
@@ -252,30 +254,6 @@ _APRS_SYM_COT = {
 
 def _aprs_cot_type(track: dict) -> str:
     return _APRS_SYM_COT.get(track.get("symbol", ""), "a-u-G")
-
-# OSM feature_type → CoT type for fixed infrastructure.
-# Civilian features are neutral (a-n-) so they never get flipped to hostile.
-# Military is friendly (a-f-) so _geo_cot_type() can flip RU/BY bases to hostile.
-_OSM_COT = {
-    "aerodrome":   "a-n-G-I-B-A",  # neutral aerodrome (civilian shared infrastructure)
-    "port":        "a-n-G-I-B-O",  # neutral port
-    "military":    "a-f-G-I-B-M",  # friendly military base → flipped to hostile for RU/BY
-    "station":     "a-n-G-I",      # neutral ground installation (railway)
-}
-
-# ISO 3166-1 alpha-2 country codes of hostile states in this scenario
-_HOSTILE_CC = {"RU", "BY"}
-
-def _geo_cot_type(track: dict, base_type: str) -> str:
-    """Flip friendly (a-f-) to hostile (a-h-) for features in RU/BY territory.
-    Only the OSM country_code tag is used — no bbox fallback to avoid false
-    positives for EU installations near the Belarus/Kaliningrad border."""
-    if not base_type.startswith("a-f-"):
-        return base_type  # neutral/unknown types stay unchanged
-    cc = (track.get("country_code") or "").upper()
-    if cc in _HOSTILE_CC:
-        return base_type.replace("a-f-", "a-h-", 1)
-    return base_type
 
 # ---------------------------------------------------------------------------
 # Embedded icon generator — stdlib only, no Pillow needed.
@@ -600,17 +578,17 @@ def _ts(ts: float) -> str:
 def _uid(track: dict) -> str:
     # Use the stable radio identifier — source-agnostic so the same
     # aircraft/vessel reported by multiple APIs merges to one ATAK point.
-    for key, prefix in (
+    for key, id_prefix in (
         ("icao24",    "ICAO"),   # same hex regardless of OpenSky/FR24/airplaneslive
         ("mmsi",      "MMSI"),   # same MMSI from all AIS feeds
-        ("sat_id",    "SAT"),    # NORAD catalogue number (n2yo)
+        ("sat_id",    "SAT"),    # satellite catalogue number
         ("radar_id",  "RAD"),    # CAT-48 PSR track (no Mode-S) — SAC/SIC/track_num
         ("sensor_id", "SENS"),
-        ("osm_id",    "OSM"),
+        ("uid",       "UID"),
     ):
         v = track.get(key)
         if v:
-            return "EFDI-{}-{}".format(prefix, str(v).upper())
+            return "EFDI-{}-{}".format(id_prefix, str(v).upper())
     src = track.get("_src", "efdi")
     cs = (track.get("callsign") or "").strip()
     if cs:
@@ -619,7 +597,7 @@ def _uid(track: dict) -> str:
 
 
 def _callsign(track: dict, uid: str) -> str:
-    # Named features (OSM, vessels, satellites)
+    # Named vessels, satellites, and sensors
     for key in ("name", "ship_name", "sat_name", "sensor_name"):
         v = track.get(key)
         if v and str(v).strip():
@@ -1088,7 +1066,7 @@ def _build_remarks(track: dict, cot_type: str) -> str:
         _sec("IDENTITY",   ident_l)
         _sec("KINEMATICS", kinem_l)
 
-    else:                # ---- GROUND / ENV / APRS / OSM ------------------
+    else:                # ---- GROUND / ENV / APRS ------------------------
         def _sec(title, buf):
             if buf:
                 lines.append("─── {} ───".format(title))
@@ -1191,7 +1169,7 @@ def _build_remarks(track: dict, cot_type: str) -> str:
             _sec("SENSOR", sensor_l)
             _sec("ALERT",  alert_l)
 
-        elif src in ("openmeteo", "meteolt", "yrno", "windy"):   # WEATHER
+        elif src in ("openmeteo", "meteolt"):   # WEATHER
             place = (track.get("place_name") or track.get("place_code") or src).upper()
             ident_l = []; env_l = []
             if time_str: ident_l.append("TIME: {}".format(time_str))
@@ -1224,64 +1202,22 @@ def _build_remarks(track: dict, cot_type: str) -> str:
             _sec("WEATHER",     ident_l)
             _sec("CONDITIONS",  env_l)
 
-        elif src == "purpleair":   # AIR QUALITY
-            name = track.get("sensor_name") or "Sensor #{}".format(track.get("sensor_id", "?"))
-            ident_l = []; env_l = []
+        else:                      # APRS / vehicles
+            ident_l = []; kinem_l = []
             if time_str: ident_l.append("TIME: {}".format(time_str))
-            ident_l.append("SENSOR: {}".format(name))
+            _r("CALL", (track.get("callsign") or "").strip().upper() or None, ident_l)
             if lat is not None: ident_l.append("LAT: {:.5f}°".format(round(lat, 5)))
             if lon is not None: ident_l.append("LON: {:.5f}°".format(round(lon, 5)))
             if lat is not None and lon is not None:
                 ident_l.extend(_mgrs_lines(lat, lon))
-            aqi = track.get("aqi"); aqicat = track.get("aqi_category", "")
-            if aqi is not None:
-                env_l.append("AQI: {} ({})".format(int(aqi), aqicat) if aqicat else "AQI: {}".format(int(aqi)))
-            for key, label in (("pm25_ugm3", "PM2.5"), ("pm10_ugm3", "PM10"), ("pm1_ugm3", "PM1")):
-                v = track.get(key)
-                if v is not None: env_l.append("{}: {} µg/m³".format(label, round(float(v), 1)))
-            t = track.get("temperature_c"); rh = track.get("relative_humidity_pct")
-            if t  is not None: env_l.append("TEMP: {} °C".format(round(float(t), 1)))
-            if rh is not None: env_l.append("HUMIDITY: {}%".format(int(rh)))
-            p = track.get("pressure_hpa")
-            if p  is not None: env_l.append("PRESSURE: {} hPa".format(round(float(p), 1)))
-            env_l.append("SRC: {}".format(src))
-            _sec("AIR QUALITY", ident_l)
-            _sec("READINGS",    env_l)
-
-        else:                      # APRS / OSM / vehicles
-            feat = track.get("feature_type")
-            if feat:               # OSM geo feature
-                ident_l = []
-                if time_str: ident_l.append("TIME: {}".format(time_str))
-                feat_label = {"aerodrome": "AERODROME", "port": "PORT",
-                              "military": "MILITARY BASE", "station": "STATION"}.get(feat, feat.upper())
-                ident_l.append("TYPE: {}".format(feat_label))
-                _r("NAME",    track.get("name"),    ident_l)
-                _r("ICAO",    track.get("icao") or track.get("aerodrome_icao"), ident_l)
-                _r("IATA",    track.get("iata"),    ident_l)
-                _r("COUNTRY", (track.get("country_code") or "").upper() or None, ident_l)
-                if lat is not None: ident_l.append("LAT: {:.5f}°".format(round(lat, 5)))
-                if lon is not None: ident_l.append("LON: {:.5f}°".format(round(lon, 5)))
-                if lat is not None and lon is not None:
-                    ident_l.extend(_mgrs_lines(lat, lon))
-                ident_l.append("SRC: {}".format(src))
-                _sec("GEO FEATURE", ident_l)
-            else:                  # APRS or vehicle
-                ident_l = []; kinem_l = []
-                if time_str: ident_l.append("TIME: {}".format(time_str))
-                _r("CALL", (track.get("callsign") or "").strip().upper() or None, ident_l)
-                if lat is not None: ident_l.append("LAT: {:.5f}°".format(round(lat, 5)))
-                if lon is not None: ident_l.append("LON: {:.5f}°".format(round(lon, 5)))
-                if lat is not None and lon is not None:
-                    ident_l.extend(_mgrs_lines(lat, lon))
-                spd = _speed_ms(track)
-                if spd:
-                    kinem_l.append("HDG: {}°".format(int(_course(track))))
-                    kinem_l.append("SPD: {} kt / {} km/h".format(
-                        round(spd / 0.514444, 1), round(spd * 3.6, 1)))
-                kinem_l.append("SRC: {}".format(src))
-                _sec("IDENTITY",   ident_l)
-                _sec("KINEMATICS", kinem_l)
+            spd = _speed_ms(track)
+            if spd:
+                kinem_l.append("HDG: {}°".format(int(_course(track))))
+                kinem_l.append("SPD: {} kt / {} km/h".format(
+                    round(spd / 0.514444, 1), round(spd * 3.6, 1)))
+            kinem_l.append("SRC: {}".format(src))
+            _sec("IDENTITY",   ident_l)
+            _sec("KINEMATICS", kinem_l)
     return "\n".join(lines)
 
 
@@ -1294,11 +1230,16 @@ def _hae(track: dict) -> float:
         ("alt_3d_ft",   0.3048),   # CAT-048 I048/110 3D radar height
         ("alt_ft",      0.3048),   # FR24
         ("alt_m",       1.0),
-        ("alt_km",      1000.0),   # n2yo satellites
+        ("alt_km",      1000.0),   # satellites
     ):
         v = track.get(key)
-        if v is not None and float(v) != 0:
-            return round(float(v) * scale, 1)
+        if v is not None:
+            try:
+                number = float(v) * scale
+            except (TypeError, ValueError, OverflowError):
+                continue
+            if math.isfinite(number) and number != 0:
+                return round(number, 1)
     return 9999999.0
 
 
@@ -1311,7 +1252,12 @@ def _speed_ms(track: dict) -> float:
     ):
         v = track.get(key)
         if v is not None:
-            return round(float(v) * scale, 2)
+            try:
+                number = float(v) * scale
+            except (TypeError, ValueError, OverflowError):
+                continue
+            if math.isfinite(number) and number >= 0:
+                return round(number, 2)
     return 0.0
 
 
@@ -1319,7 +1265,12 @@ def _course(track: dict) -> float:
     for key in ("heading_deg", "track_deg", "cog_deg"):  # cog_deg = AIS
         v = track.get(key)
         if v is not None:
-            return round(float(v), 1)
+            try:
+                number = float(v)
+            except (TypeError, ValueError, OverflowError):
+                continue
+            if math.isfinite(number):
+                return round(number % 360.0, 1)
     return 0.0
 
 
@@ -1329,7 +1280,21 @@ def track_to_cot(track: dict, cot_type: str, stale_s: float = COT_STALE_S) -> st
     if lat is None or lon is None:
         return None
 
-    now   = float(track.get("_ts", time.time()))
+    try:
+        lat = float(lat)
+        lon = float(lon)
+        now = float(track.get("_ts", time.time()))
+        stale_s = float(stale_s)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if not (math.isfinite(lat) and math.isfinite(lon)):
+        return None
+    if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+        return None
+    if not math.isfinite(now):
+        now = time.time()
+    if not math.isfinite(stale_s) or stale_s <= 0:
+        return None
     stale = now + stale_s
     uid   = _uid(track)
     cs    = _callsign(track, uid)
@@ -1344,8 +1309,8 @@ def track_to_cot(track: dict, cot_type: str, stale_s: float = COT_STALE_S) -> st
         "stale":   _ts(stale),
     })
     ET.SubElement(event, "point", {
-        "lat": str(round(float(lat), 6)),
-        "lon": str(round(float(lon), 6)),
+        "lat": str(round(lat, 6)),
+        "lon": str(round(lon, 6)),
         "hae": str(_hae(track)),
         "ce":  "9999999.0",
         "le":  "9999999.0",
@@ -1548,6 +1513,13 @@ def make_handler(cot_type_or_fn, sender, verbose: bool, stale_s: float = COT_STA
         else:
             cot_type     = cot_type_or_fn(track) if callable(cot_type_or_fn) else cot_type_or_fn
             stale_s_used = stale_s
+            # A CoT receiver is a protocol gateway, not a classifier: retain a
+            # syntactically safe source type so round-trips do not silently turn
+            # friendly/hostile/ground/sea events into a generic air symbol.
+            original_type = track.get("cot_type") if src == "cot_rx" else None
+            if (isinstance(original_type, str) and 1 <= len(original_type) <= 128 and
+                    re.fullmatch(r"[A-Za-z0-9_.-]+", original_type)):
+                cot_type = original_type
             # Emergency squawk → force red hostile + one-shot GeoChat alert
             sq = str(track.get("squawk") or "")
             if sq in _EMERGENCY_SQUAWK and "-A-" in cot_type:
@@ -1651,28 +1623,6 @@ def make_radar_status_handler(sender, verbose: bool):
     return handler
 
 
-def make_geo_handler(sender, verbose: bool):
-    """Handler for OSM land/geo features — maps feature_type to CoT type with 24h stale.
-    Hostile country (RU/BY) features are flipped to a-h- affiliation."""
-    def handler(sample):
-        try:
-            track = json.loads(bytes(sample.payload).decode())
-        except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
-            return
-        feature_type = track.get("feature_type", "")
-        base_type = _OSM_COT.get(feature_type, "a-n-G-I")
-        cot_type  = _geo_cot_type(track, base_type)
-        xml = track_to_cot(track, cot_type, stale_s=GEO_STALE_S)
-        if xml is None:
-            return
-        sender.send(xml)
-        if verbose:
-            cc = track.get("country_code", "??")
-            print("CoT {} {} {} [{}]".format(
-                cot_type, feature_type, track.get("name", "?"), cc), flush=True)
-    return handler
-
-
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -1704,12 +1654,6 @@ def run(args):
         subs.append(session.declare_subscriber(
             key, make_handler(cot_type, sender, args.verbose, stale_s=stale_s)))
         print("SUB {} → {} stale={}s".format(key, fn, stale_s), flush=True)
-
-    # Geo features (aerodromes, ports, military bases) — 24h stale
-    # Matches: land/{vendor}/{protocol}/neutral/geo/features/v1
-    geo_key = "{}/land/**/neutral/geo/**".format(TOPIC_ROOT)
-    subs.append(session.declare_subscriber(geo_key, make_geo_handler(sender, args.verbose)))
-    print("SUB {} → [geo features, 24h stale]".format(geo_key), flush=True)
 
     # Radar sensor site status (CAT-34) — updates _radar_status dict + renders CoT marker
     radar_key = "{}/land/asterix/cat34/neutral/radar/**".format(TOPIC_ROOT)

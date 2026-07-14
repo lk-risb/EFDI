@@ -6,7 +6,7 @@ import time
 
 import zenoh
 
-from .config import CONFIG_PATH, _extract_fields, write_config_to_disk, restart_router_container
+from .config import CONFIG_PATH, _extract_fields, atomic_write, write_config_to_disk, restart_router_container
 from .db import SessionLocal
 from .deps import write_audit
 from .federation_crypto import verify_envelope, FederationVerifyError
@@ -25,6 +25,18 @@ if len(_TRUSTED_ROOT_CERT_PATHS) != len(_TRUSTED_ROOT_CNS):
           "ignoring root trust entirely (immediate-parent trust, if configured, is unaffected)", flush=True)
     _TRUSTED_ROOT_CERT_PATHS, _TRUSTED_ROOT_CNS = [], []
 _OWN_NAMESPACE = os.environ.get("PARTNER_NAMESPACE", "")
+_PREFIX_FILE = os.environ.get("NAMESPACE_PREFIX_FILE", "/namespace-prefix")
+
+
+def _prefix() -> str:
+    try:
+        with open(_PREFIX_FILE) as f:
+            v = f.read().strip()
+        if v:
+            return v
+    except OSError:
+        pass
+    return os.environ.get("NAMESPACE_PREFIX", "LTU/CISB")
 
 
 def _trusted_signers() -> list[tuple[str, str]]:
@@ -55,8 +67,7 @@ def _read_last_seen_version() -> int:
 
 
 def _write_last_seen_version(version: int) -> None:
-    with open(_LAST_SEEN_VERSION_PATH, "w") as f:
-        f.write(str(version))
+    atomic_write(_LAST_SEEN_VERSION_PATH, str(version))
 
 # How long to wait for the router to come back healthy after a restart before
 # rolling back. Matches the dashboard's own existing health-check cadence
@@ -79,11 +90,11 @@ _STATUS_PUBLISH_INTERVAL_S = 2
 
 
 def _status_topic() -> str:
-    return f"LTU/CISB/{_OWN_NAMESPACE}/@config/status/v1"
+    return f"{_prefix()}/{_OWN_NAMESPACE}/@config/status/v1"
 
 
 def _config_topic() -> str:
-    return f"LTU/CISB/{_OWN_NAMESPACE}/@config/v1"
+    return f"{_prefix()}/{_OWN_NAMESPACE}/@config/v1"
 
 
 def _open_local_session() -> "zenoh.Session":
@@ -154,7 +165,12 @@ def _router_is_healthy() -> bool:
     try:
         client = docker.from_env()
         container = client.containers.get(ZENOH_ROUTER_SERVICE_LABEL)
-        return container.status == "running"
+        container.reload()
+        state = container.attrs.get("State", {})
+        if state.get("Status") != "running":
+            return False
+        health = state.get("Health", {}).get("Status")
+        return health == "healthy" if health is not None else True
     except (NotFound, DockerException):
         return False
 
@@ -273,8 +289,20 @@ def _handle_config_push(session: "zenoh.Session", loop: asyncio.AbstractEventLoo
         )
         return
 
-    version = payload.get("version", -1)
-    rendered = payload.get("config", "")
+    version = payload.get("version")
+    rendered = payload.get("config")
+    if not isinstance(version, int) or isinstance(version, bool) or version < 0:
+        _publish_status(session, -1, "rejected", "signed payload has invalid version")
+        asyncio.run_coroutine_threadsafe(
+            _record_audit("federation_config_rejected", "signed payload has invalid version"), loop,
+        )
+        return
+    if not isinstance(rendered, str):
+        _publish_status(session, version, "rejected", "signed payload config is not text")
+        asyncio.run_coroutine_threadsafe(
+            _record_audit("federation_config_rejected", f"version={version}, config is not text"), loop,
+        )
+        return
 
     last_seen = _read_last_seen_version()
     if version <= last_seen:

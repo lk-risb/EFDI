@@ -28,10 +28,10 @@ import time
 
 import defusedxml.ElementTree as ET
 import zenoh
+from namespace_prefix import prefix
 
 ROUTER    = "tls/zenoh.efdi.netbird.efdi-backbone.net:7447"
 ORG       = os.environ.get("PARTNER_NAMESPACE", "")
-from namespace_prefix import prefix
 TOPIC_ROOT = prefix() + "/" + ORG   # org prefix (configurable) precedes the pod namespace
 HERE      = os.path.dirname(os.path.abspath(__file__))
 _CERT_DIR = os.environ.get("EFDI_CERT_DIR", HERE)
@@ -194,7 +194,7 @@ def iter_frames_length(sock: socket.socket):
         raw_len = _recv_exact(sock, 4)
         length  = struct.unpack(">I", raw_len)[0]
         if length == 0 or length > 10_000_000:
-            continue
+            raise ValueError(f"invalid NFFI frame length: {length}")
         yield _recv_exact(sock, length)
 
 
@@ -204,6 +204,8 @@ def iter_frames_newline(sock: socket.socket):
     buf = b""
     for line in f:
         buf += line
+        if len(buf) > 10_000_000:
+            raise ValueError("NFFI newline frame exceeds 10 MB")
         # Emit when we have a complete XML document (rough heuristic)
         stripped = buf.strip()
         if stripped and stripped.startswith(b"<") and (
@@ -245,7 +247,7 @@ def run(args):
                                 track["nffi_affil"], track["callsign"],
                                 track["lat_deg"], track["lon_deg"]), flush=True)
 
-            except (EOFError, OSError, TimeoutError) as exc:
+            except (EOFError, OSError, TimeoutError, ValueError) as exc:
                 print("NFFI connection error: {} — retry in {}s".format(exc, RECONNECT_S), flush=True)
                 try:
                     sock.close()

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# stop.sh — stop all bridges started by run.sh
+# stop.sh — stop native bridges/layers started by start.sh or run.sh
 #
 # Usage:
 #   ./stop.sh           # stop everything (bridges + layers + zenoh)
@@ -9,6 +9,7 @@
 #   ./stop.sh zenoh     # stop zenoh router only
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BRIDGE_DIR="$SCRIPT_DIR/compose/bridge"
 ENV_FILE="$SCRIPT_DIR/compose/.env"
 MODE="${1:-all}"
 
@@ -28,8 +29,17 @@ if [[ -f "$ENV_FILE" ]]; then
     done < "$ENV_FILE"
 fi
 
-# Must match start.sh's PID_DIR.
-PID_DIR="${POD_STATE_DIR:-$HOME/efdi-pod}/.pids"
+# Must match start.sh/run.sh's in-repo default.
+PID_DIR="${POD_STATE_DIR:-$SCRIPT_DIR/compose/state}/.pids"
+
+is_bridge_pid() {
+    local pid="$1" arg
+    [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null && [[ -r "/proc/$pid/cmdline" ]] || return 1
+    while IFS= read -r -d '' arg; do
+        [[ "$arg" == "$BRIDGE_DIR/"* ]] && return 0
+    done < "/proc/$pid/cmdline"
+    return 1
+}
 
 stop_scripts() {
     local pattern="${1:-*}"
@@ -38,10 +48,10 @@ stop_scripts() {
         [[ -f "$pid_file" ]] || continue
         name="$(basename "$pid_file" .pid)"
         pid="$(cat "$pid_file")"
-        if kill -0 "$pid" 2>/dev/null; then
+        if is_bridge_pid "$pid"; then
             kill "$pid" 2>/dev/null && echo "  [stop] $name (pid $pid)"
         else
-            echo "  [gone] $name was not running"
+            echo "  [gone] $name PID file is stale or belongs to another process"
         fi
         rm -f "$pid_file"
     done
@@ -52,9 +62,9 @@ stop_zenoh() {
     docker compose -f "$SCRIPT_DIR/compose/docker-compose.yml" stop zenoh-router 2>/dev/null || true
 }
 
-_OPEN_API_BRIDGES=(airplaneslive aisstream aprs fr24 opensky openmeteo meteolt yrno osm n2yo purpleair windy here-traffic notam)
+_OPEN_API_BRIDGES=(airplaneslive aisstream aprs fr24 opensky openmeteo meteolt here-traffic notam dronuradaras cmems)
 _GIRAFFE_BRIDGES=(cat48 cat21 cat20 link16 mavlink vmf cot-rx)
-_LAYERS=(cot-udp cot-tcp cat62 cat48 cat21 cat20 link16 mavlink vmf cot-rx track-fusion sapient nffi sitaware stanag4586)
+_LAYERS=(cot-udp cot-tcp cat62 cat48 cat21 cat20 link16 mavlink vmf cot-rx track-fusion sapient nffi sitaware sitaware-nvg stanag4586)
 
 case "$MODE" in
     all)

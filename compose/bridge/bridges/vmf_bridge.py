@@ -36,10 +36,10 @@ import struct
 import time
 
 import zenoh
+from namespace_prefix import prefix
 
 ROUTER    = "tls/zenoh.efdi.netbird.efdi-backbone.net:7447"
 ORG       = os.environ.get("PARTNER_NAMESPACE", "")
-from namespace_prefix import prefix
 TOPIC_ROOT = prefix() + "/" + ORG   # org prefix (configurable) precedes the pod namespace
 HERE      = os.path.dirname(os.path.abspath(__file__))
 _CERT_DIR = os.environ.get("EFDI_CERT_DIR", HERE)
@@ -225,7 +225,7 @@ def _decode_k05_2(br: _BitReader, hdr: dict) -> dict | None:
             track["heading_deg"] = round(hdg_raw * (360.0 / 4096), 1)
         return track
 
-    except (IndexError, Exception) as e:
+    except Exception:
         return None
 
 

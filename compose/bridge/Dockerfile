@@ -4,7 +4,7 @@ WORKDIR /app
 # Scripts are the source of truth here; certs come from BUNDLE_DIR at /certs (see compose.yml).
 # bridges/ = data ingestion (sensor/API → Zenoh)
 # layers/  = protocol converters and output (Zenoh → TAK/NATO/SitaWare)
-COPY namespace_prefix.py bridges/*.py layers/*.py ./
+COPY namespace_prefix.py http_json.py bridges/*.py layers/*.py ./
 # No writable mounts (certs come in read-only) — drop root, nothing needs it.
 # Fixed UID:GID 10001:10001 — scripts/gen-certs.sh chgrp's each leaf private
 # key to GID 10001 so this user can read it despite the /certs mount being :ro.
