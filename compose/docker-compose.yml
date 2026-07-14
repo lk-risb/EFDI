@@ -1,7 +1,9 @@
-# EFDI — v0 data-plane bundle.
+# EFDI infrastructure bundle.
 #
-# Runs the containerizable data-plane services. The NetBird mesh client runs on the HOST
-# directly (see ../host/first-boot.sh), NOT here.
+# Only the Zenoh router and its admin stack are containerized. Sensor bridges
+# and output layers run as native Python processes via ../start.sh or ../run.sh;
+# keeping them out of Compose preserves per-process logs/PIDs and avoids a
+# container/restart loop for every optional integration.
 #
 # network_mode: host so each service binds the pod's mesh IP directly. No netns sidecar, no
 # NAT gymnastics.
@@ -56,191 +58,12 @@ services:
       timeout: 5s
       retries: 5
 
-  aisstream-bridge:
-    build:
-      context: ./bridge
-    container_name: efdi-pod-aisstream-bridge
-    network_mode: host
-    restart: unless-stopped
-    depends_on:
-      zenoh-router:
-        condition: service_healthy
-    environment:
-      - EFDI_CERT_DIR=/certs
-      - ZENOH_LOCAL_ENDPOINT=${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}
-      - AISSTREAM_KEY=${AISSTREAM_KEY:-}
-    command: ["python3", "/app/aisstream_ws_bridge.py"]
-    volumes:
-      - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
-      - ${POD_STATE_DIR}/namespace-prefix:/namespace-prefix:ro
-    healthcheck:
-      disable: true
-
-  meteo-lt-bridge:
-    build:
-      context: ./bridge
-    container_name: efdi-pod-meteo-lt-bridge
-    network_mode: host
-    restart: unless-stopped
-    depends_on:
-      zenoh-router:
-        condition: service_healthy
-    environment:
-      - EFDI_CERT_DIR=/certs
-      - ZENOH_LOCAL_ENDPOINT=${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}
-    command: ["python3", "/app/meteolt_forecast_bridge.py"]
-    volumes:
-      - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
-      - ${POD_STATE_DIR}/namespace-prefix:/namespace-prefix:ro
-    healthcheck:
-      disable: true
-
-  aprs-bridge:
-    build:
-      context: ./bridge
-    container_name: efdi-pod-aprs-bridge
-    network_mode: host
-    restart: unless-stopped
-    depends_on:
-      zenoh-router:
-        condition: service_healthy
-    environment:
-      - EFDI_CERT_DIR=/certs
-      - ZENOH_LOCAL_ENDPOINT=${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}
-    command: ["python3", "/app/aprsis_bridge.py"]
-    volumes:
-      - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
-      - ${POD_STATE_DIR}/namespace-prefix:/namespace-prefix:ro
-    healthcheck:
-      disable: true
-
-  airplaneslive-bridge:
-    build:
-      context: ./bridge
-    container_name: efdi-pod-airplaneslive-bridge
-    network_mode: host
-    restart: unless-stopped
-    depends_on:
-      zenoh-router:
-        condition: service_healthy
-    environment:
-      - EFDI_CERT_DIR=/certs
-      - ZENOH_LOCAL_ENDPOINT=${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}
-    command: ["python3", "/app/airplaneslive_adsb_bridge.py"]
-    volumes:
-      - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
-      - ${POD_STATE_DIR}/namespace-prefix:/namespace-prefix:ro
-    healthcheck:
-      disable: true
-
-  atak-cot-udp:
-    build:
-      context: ./bridge
-    container_name: efdi-pod-atak-cot-udp
-    network_mode: host
-    restart: unless-stopped
-    depends_on:
-      zenoh-router:
-        condition: service_healthy
-    environment:
-      - EFDI_CERT_DIR=/certs
-      - ZENOH_LOCAL_ENDPOINT=${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}
-    command: >
-      python3 /app/cot_layer.py
-      --host 239.2.3.1
-      --port 6969
-      --udp
-    volumes:
-      - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
-      - ${POD_STATE_DIR}/namespace-prefix:/namespace-prefix:ro
-    healthcheck:
-      disable: true
-
-  atak-cot-tcp:
-    build:
-      context: ./bridge
-    container_name: efdi-pod-atak-cot-tcp
-    network_mode: host
-    restart: unless-stopped
-    depends_on:
-      zenoh-router:
-        condition: service_healthy
-    environment:
-      - EFDI_CERT_DIR=/certs
-      - ZENOH_LOCAL_ENDPOINT=${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}
-      - TAK_HOST=${TAK_HOST:-127.0.0.1}
-      - TAK_PORT=${TAK_PORT:-8087}
-    command: >
-      python3 /app/cot_layer.py
-      --host ${TAK_HOST:-127.0.0.1}
-      --port ${TAK_PORT:-8087}
-    volumes:
-      - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
-      - ${POD_STATE_DIR}/namespace-prefix:/namespace-prefix:ro
-    healthcheck:
-      disable: true
-
-  cat62-bridge:
-    build:
-      context: ./bridge
-    container_name: efdi-pod-cat62-bridge
-    network_mode: host
-    restart: unless-stopped
-    depends_on:
-      zenoh-router:
-        condition: service_healthy
-    environment:
-      - EFDI_CERT_DIR=/certs
-      - ZENOH_LOCAL_ENDPOINT=${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}
-      - RADAR_HOST=${RADAR_HOST:-127.0.0.1}
-      - RADAR_PORT=${RADAR_PORT:-30002}
-    command: >
-      python3 /app/cat62_layer.py
-      --radar-host ${RADAR_HOST:-127.0.0.1}
-      --radar-port ${RADAR_PORT:-30002}
-    volumes:
-      - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
-      - ${POD_STATE_DIR}/namespace-prefix:/namespace-prefix:ro
-    healthcheck:
-      disable: true
-    profiles:
-      - radar
-
-  sitaware-nvg-bridge:
-    build:
-      context: ./bridge
-    container_name: efdi-pod-sitaware-nvg-bridge
-    network_mode: host
-    restart: unless-stopped
-    depends_on:
-      zenoh-router:
-        condition: service_healthy
-    environment:
-      - EFDI_CERT_DIR=/certs
-      - ZENOH_LOCAL_ENDPOINT=${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}
-      - SITAWARE_URL=${SITAWARE_URL:-}
-      - SITAWARE_USER=${SITAWARE_USER:-}
-      - SITAWARE_PASS=${SITAWARE_PASS:-}
-      - SITAWARE_SOURCE=${SITAWARE_SOURCE:-efdi-live}
-    command: >
-      python3 /app/nato_nvg_layer.py
-      --url ${SITAWARE_URL:-}
-      --user ${SITAWARE_USER:-}
-      --password ${SITAWARE_PASS:-}
-      --source ${SITAWARE_SOURCE:-efdi-live}
-    volumes:
-      - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
-      - ${POD_STATE_DIR}/namespace-prefix:/namespace-prefix:ro
-    healthcheck:
-      disable: true
-    profiles:
-      - sitaware
-
   zenoh-admin-db:
     image: postgres:16-alpine
     container_name: efdi-pod-zenoh-admin-db
     network_mode: host
     restart: unless-stopped
+    command: ["postgres", "-c", "listen_addresses=127.0.0.1"]
     environment:
       - POSTGRES_USER=${ZENOH_ADMIN_DB_USER:?set ZENOH_ADMIN_DB_USER in .env}
       - POSTGRES_PASSWORD=${ZENOH_ADMIN_DB_PASSWORD:?set ZENOH_ADMIN_DB_PASSWORD in .env}
@@ -324,6 +147,17 @@ services:
       - ZENOH_ADMIN_TRUSTED_ROOT_CNS=${ZENOH_ADMIN_TRUSTED_ROOT_CNS:-}
       - ZENOH_ADMIN_DEV_CORS_ORIGIN=${ZENOH_ADMIN_DEV_CORS_ORIGIN:-}
       - ZENOH_ROUTER_CONTAINER=${ZENOH_ROUTER_CONTAINER:-efdi-pod-zenoh-router}
+      # Optional OIDC SSO — unset issuer/client = disabled, password login only.
+      - OIDC_ISSUER=${OIDC_ISSUER:-}
+      - OIDC_CLIENT_ID=${OIDC_CLIENT_ID:-}
+      - OIDC_CLIENT_SECRET=${OIDC_CLIENT_SECRET:-}
+      - OIDC_PROVIDER_NAME=${OIDC_PROVIDER_NAME:-SSO}
+      - OIDC_SCOPES=${OIDC_SCOPES:-openid profile email groups}
+      - OIDC_GROUPS_CLAIM=${OIDC_GROUPS_CLAIM:-groups}
+      - OIDC_REDIRECT_URL=${OIDC_REDIRECT_URL:-}
+      - OIDC_ROLE_MAP=${OIDC_ROLE_MAP:-}
+      - OIDC_DEFAULT_ROLE=${OIDC_DEFAULT_ROLE:-readonly}
+      - OIDC_POST_LOGIN_URL=${OIDC_POST_LOGIN_URL:-/}
       - DOCKER_HOST=tcp://127.0.0.1:2375
     volumes:
       - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro

@@ -191,10 +191,7 @@ if [ -n "${CAT48_PORT:-}" ]; then
 fi
 
 section "Link-16 / JREAP-C"
-ask_opt LINK16_PORT "Link-16 UDP/TCP port (leave blank to skip)" ""
-if [ -n "${LINK16_PORT:-}" ]; then
-    ask_opt LINK16_TCP "TCP mode? (1=TCP, leave blank=UDP)" ""
-fi
+ask_opt LINK16_PORT "Link-16 JREAP-C UDP port (leave blank to skip)" ""
 
 section "MAVLink"
 ask_opt MAVLINK_PORT "MAVLink UDP/TCP port (leave blank to skip)" ""
@@ -353,7 +350,6 @@ fi
     echo ""
     echo "# ── Sensor ports ──────────────────────────────────────────────────────"
     [ -n "${LINK16_PORT:-}"  ] && echo "LINK16_PORT=${LINK16_PORT}"
-    [ -n "${LINK16_TCP:-}"   ] && echo "LINK16_TCP=${LINK16_TCP}"
     [ -n "${MAVLINK_PORT:-}" ] && echo "MAVLINK_PORT=${MAVLINK_PORT}"
     [ -n "${MAVLINK_TCP:-}"  ] && echo "MAVLINK_TCP=${MAVLINK_TCP}"
     [ -n "${VMF_PORT:-}"     ] && echo "VMF_PORT=${VMF_PORT}"

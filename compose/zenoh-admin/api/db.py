@@ -1,6 +1,6 @@
 import os
 import asyncpg
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
 
 POSTGRES_USER = os.environ["ZENOH_ADMIN_DB_USER"]

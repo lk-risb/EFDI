@@ -46,7 +46,7 @@ This repository is the EFDI-partner collaboration surface. It carries **no partn
 [dronuradaras.lt]──REST/HTTPS──► dronuradaras_bridge  ─┤
 [SitaWare HQ]    ──REST/HTTPS──► sitaware_bridge      ─┤──► Zenoh router (local) ──► cot_layer ──► ATAK
 [NFFI source]    ──TCP/XML─────► nato_nffi_layer      ─┤                                      ├──► TAK Server
-[Link-16]        ──UDP/TCP────► link16_bridge         ─┤                                      └──► nato_nvg_layer ──► SitaWare Edge
+[Link-16]        ──UDP────────► link16_bridge         ─┤                                      └──► nato_nvg_layer ──► SitaWare Edge
 [MAVLink]        ──UDP/TCP────► mavlink_bridge        ─┘              └──► track_fusion_layer
 ```
 
@@ -64,13 +64,15 @@ Each bridge publishes tracks to a Zenoh router under a structured topic hierarch
 | `sitaware_bridge` | SitaWare HQ friendly-force REST polling (inbound) |
 | `nato_nffi_layer` | NATO NFFI (STANAG 4677) friendly-force XML feed (inbound) |
 | `nato_nvg_layer` | EFDI tracks → SitaWare Edge NVG v2 push (outbound) |
-| `link16_bridge` | JREAP-C UDP/TCP |
+| `link16_bridge` | JREAP-C UDP; TCP requires a verified gateway framing ICD |
 | `mavlink_bridge` | MAVLink 2 UDP/TCP |
 | `cot_layer` | CoT XML output — UDP multicast + TAK Server TCP |
 | `track_fusion_layer` | ASTERIX CAT-48 / CAT-21 correlation |
 | `zenoh-admin` | FastAPI + React panel — router status, config editing, service health |
 
 All bridges are lightweight Python processes with no shared state beyond the Zenoh session. They publish self-describing JSON payloads. The CoT layer translates any incoming Zenoh topic to the appropriate MIL-STD-2525C CoT type using a topic-pattern → CoT-type map — adding a new sensor requires no changes to the output layer.
+
+ASTERIX compatibility is edition-specific. CAT-48 is aligned to EUROCONTROL Edition 1.32 and CAT-34 to Edition 1.29. The existing CAT-20, CAT-21, and CAT-62 tables are retained only as legacy compatibility UAPs; they emit startup warnings and must not be used for modern CAT-20 1.9, CAT-21 2.2+, or CAT-62 1.21 streams without implementing the producer's exact edition/ICD. Link-16/JREAP-C field layouts are likewise gateway-profile dependent; UDP is available, while TCP is intentionally disabled until its stream framing is documented.
 
 Client onboarding is certificate-based: each pod gets a signed mTLS bundle issued by EFDI, scoped to its own namespace. Services run as individual host processes managed by PID files in `compose/state/.pids/`. The only containerised components are the Zenoh router and the zenoh-admin panel — this keeps the data path inspectable, restartable in isolation, and free of container networking overhead.
 
@@ -124,7 +126,7 @@ See [INSTALL.md](INSTALL.md) for the full network prerequisites table.
 | SitaWare HQ bridge | ✅ | Friendly-force REST polling (inbound) |
 | NATO NFFI layer | ✅ | STANAG 4677 friendly-force XML feed (inbound) |
 | SitaWare Edge (NVG) layer | ✅ | EFDI tracks → SitaWare Edge push (outbound) |
-| Link-16 bridge | ✅ | JREAP-C UDP/TCP |
+| Link-16 bridge | ✅ | JREAP-C UDP |
 | MAVLink bridge | ✅ | MAVLink 2 UDP/TCP |
 | CoT output layer | ✅ | UDP multicast + TAK Server TCP |
 | Track fusion layer | ✅ | ASTERIX CAT-48 / CAT-21 correlation |

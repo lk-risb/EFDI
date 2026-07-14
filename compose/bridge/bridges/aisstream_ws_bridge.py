@@ -22,6 +22,7 @@ Run:
 
 import argparse
 import base64
+import hashlib
 import json
 import os
 import socket
@@ -30,10 +31,10 @@ import struct
 import time
 
 import zenoh
+from namespace_prefix import prefix
 
 ROUTER = "tls/zenoh.efdi.netbird.efdi-backbone.net:7447"
 ORG    = os.environ.get("PARTNER_NAMESPACE", "")
-from namespace_prefix import prefix
 TOPIC_ROOT = prefix() + "/" + ORG   # org prefix (configurable) precedes the pod namespace
 HERE   = os.path.dirname(os.path.abspath(__file__))
 _CERT_DIR = os.environ.get("EFDI_CERT_DIR", HERE)
@@ -47,6 +48,9 @@ AISSTREAM_PATH = "/v0/stream"
 DEFAULT_BBOX = [[[41, 14], [62, 35]], [[41, 30], [55, 45]]]
 
 RECONNECT_DELAY_S = 10.0
+MAX_WS_HANDSHAKE_BYTES = 65_536
+MAX_WS_FRAME_BYTES = 10_000_000
+_WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
 _NAV_STATUS = {
     0: "under_way_engine", 1: "at_anchor", 2: "not_under_command",
@@ -113,9 +117,26 @@ def ws_connect(host: str, path: str) -> ssl.SSLSocket:
 
     resp = b""
     while b"\r\n\r\n" not in resp:
-        resp += sock.recv(4096)
-    if b"101" not in resp:
+        # Read only through the HTTP terminator so bytes from the first
+        # WebSocket frame are never consumed and discarded with the upgrade.
+        chunk = sock.recv(1)
+        if not chunk:
+            raise EOFError("connection closed during WebSocket upgrade")
+        resp += chunk
+        if len(resp) > MAX_WS_HANDSHAKE_BYTES:
+            raise ConnectionError("WebSocket upgrade response exceeds size limit")
+    header_block = resp.split(b"\r\n\r\n", 1)[0]
+    lines = header_block.decode("latin-1").split("\r\n")
+    if not lines or not lines[0].startswith(("HTTP/1.1 101 ", "HTTP/1.0 101 ")):
         raise ConnectionError("WebSocket upgrade failed: " + resp[:200].decode(errors="replace"))
+    headers = {}
+    for line in lines[1:]:
+        if ":" in line:
+            name, value = line.split(":", 1)
+            headers[name.strip().lower()] = value.strip()
+    expected = base64.b64encode(hashlib.sha1((key + _WS_GUID).encode()).digest()).decode()
+    if headers.get("sec-websocket-accept") != expected:
+        raise ConnectionError("WebSocket upgrade returned an invalid accept key")
     return sock
 
 
@@ -136,6 +157,7 @@ def ws_send(sock: ssl.SSLSocket, text: str):
 def ws_recv(sock: ssl.SSLSocket) -> str | None:
     """Read one WebSocket frame; return text payload or None (ping/non-text)."""
     h = _recv_exact(sock, 2)
+    final = bool(h[0] & 0x80)
     opcode = h[0] & 0x0F
     masked = bool(h[1] & 0x80)
     n = h[1] & 0x7F
@@ -143,14 +165,19 @@ def ws_recv(sock: ssl.SSLSocket) -> str | None:
         n = struct.unpack("!H", _recv_exact(sock, 2))[0]
     elif n == 127:
         n = struct.unpack("!Q", _recv_exact(sock, 8))[0]
-    mask_key = _recv_exact(sock, 4) if masked else b""
-    payload = _recv_exact(sock, n)
+    if n > MAX_WS_FRAME_BYTES:
+        raise ConnectionError("WebSocket frame exceeds size limit")
     if masked:
-        payload = bytes(b ^ mask_key[i % 4] for i, b in enumerate(payload))
+        raise ConnectionError("server sent an invalid masked WebSocket frame")
+    if not final:
+        raise ConnectionError("fragmented WebSocket frames are not supported")
+    payload = _recv_exact(sock, n)
     if opcode == 0x8:
         raise EOFError("server sent close frame")
     if opcode == 0x9:  # ping → pong
-        sock.sendall(b"\x8A\x00")
+        if n > 125:
+            raise ConnectionError("invalid oversized WebSocket control frame")
+        sock.sendall(bytes([0x8A, n]) + payload)
         return None
     if opcode in (0x1, 0x2):
         return payload.decode("utf-8", errors="replace")

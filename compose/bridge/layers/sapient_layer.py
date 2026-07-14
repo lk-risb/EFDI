@@ -23,10 +23,10 @@ import struct
 import time
 
 import zenoh
+from namespace_prefix import prefix
 
 ROUTER    = "tls/zenoh.efdi.netbird.efdi-backbone.net:7447"
 ORG       = os.environ.get("PARTNER_NAMESPACE", "")
-from namespace_prefix import prefix
 TOPIC_ROOT = prefix() + "/" + ORG   # org prefix (configurable) precedes the pod namespace
 HERE      = os.path.dirname(os.path.abspath(__file__))
 _CERT_DIR = os.environ.get("EFDI_CERT_DIR", HERE)
@@ -255,7 +255,7 @@ def iter_sapient_frames(sock: socket.socket):
     while True:
         length = struct.unpack(">I", _recv_exact(sock, 4))[0]
         if length == 0 or length > 1_000_000:
-            continue
+            raise ValueError(f"invalid SAPIENT frame length: {length}")
         yield _recv_exact(sock, length)
 
 
@@ -294,7 +294,7 @@ def run(args):
                             track["sapient_class"], track["sensor_id"],
                             track["lat_deg"], track["lon_deg"]), flush=True)
 
-            except (EOFError, OSError, TimeoutError) as exc:
+            except (EOFError, OSError, TimeoutError, ValueError) as exc:
                 print("SAPIENT connection error: {} — retry in {}s".format(exc, RECONNECT_S), flush=True)
                 try:
                     sock.close()

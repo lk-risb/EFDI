@@ -27,10 +27,11 @@ import urllib.error
 import urllib.request
 
 import zenoh
+from http_json import read_json_response
+from namespace_prefix import prefix
 
 ROUTER    = "tls/zenoh.efdi.netbird.efdi-backbone.net:7447"
 ORG       = os.environ.get("PARTNER_NAMESPACE", "")
-from namespace_prefix import prefix
 TOPIC_ROOT = prefix() + "/" + ORG   # org prefix (configurable) precedes the pod namespace
 HERE      = os.path.dirname(os.path.abspath(__file__))
 _CERT_DIR = os.environ.get("EFDI_CERT_DIR", HERE)
@@ -73,7 +74,7 @@ def fetch(url: str) -> list:
     })
     try:
         with urllib.request.urlopen(req, timeout=15) as resp:
-            data = json.loads(resp.read().decode())
+            data = read_json_response(resp)
             return data.get("ac", [])
     except (urllib.error.URLError, urllib.error.HTTPError, json.JSONDecodeError) as exc:
         print("airplanes.live fetch error:", exc, flush=True)

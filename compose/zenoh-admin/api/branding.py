@@ -18,7 +18,7 @@ _superadmin = require_role("superadmin")
 _HEX_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
 
 _DEFAULTS = {
-    "org_name": "Zenoh Admin",
+    "org_name": "EFDI Zenoh Console",
     "accent_fill": "#d4d4d8",
     "accent_fill_hover": "#e4e4e7",
     "accent_text": "#18181b",

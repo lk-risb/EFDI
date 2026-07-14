@@ -13,7 +13,7 @@ interface BrandingState {
 }
 
 const DEFAULTS = {
-  orgName: 'Zenoh Admin',
+  orgName: 'EFDI Zenoh Console',
   accentFill: '#d4d4d8',
   accentFillHover: '#e4e4e7',
   accentText: '#18181b',

@@ -17,10 +17,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BRIDGE_DIR="$SCRIPT_DIR/compose/bridge"
 ENV_FILE="$SCRIPT_DIR/compose/.env"
 VENV="$BRIDGE_DIR/venv"
-LOG_DIR="$SCRIPT_DIR/logs"
-PID_DIR="$SCRIPT_DIR/.pids"
-
-mkdir -p "$LOG_DIR" "$PID_DIR"
 
 # ---------------------------------------------------------------------------
 # Load .env
@@ -45,7 +41,14 @@ else
 fi
 
 export ZENOH_LOCAL_ENDPOINT="${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}"
-export EFDI_CERT_DIR="${BUNDLE_DIR:-$HOME/efdi-certs}"
+export BUNDLE_DIR="${BUNDLE_DIR:-$SCRIPT_DIR/compose/certs}"
+export EFDI_CERT_DIR="$BUNDLE_DIR"
+export POD_STATE_DIR="${POD_STATE_DIR:-$SCRIPT_DIR/compose/state}"
+export NAMESPACE_PREFIX_FILE="${POD_STATE_DIR}/namespace-prefix"
+export PYTHONPATH="$BRIDGE_DIR${PYTHONPATH:+:$PYTHONPATH}"
+LOG_DIR="$POD_STATE_DIR/logs"
+PID_DIR="$POD_STATE_DIR/.pids"
+mkdir -p "$LOG_DIR" "$PID_DIR"
 
 # ---------------------------------------------------------------------------
 # Venv setup
@@ -53,7 +56,7 @@ export EFDI_CERT_DIR="${BUNDLE_DIR:-$HOME/efdi-certs}"
 if [[ ! -x "$VENV/bin/python3" ]]; then
     echo "Creating venv at $VENV …"
     python3 -m venv "$VENV"
-    "$VENV/bin/pip" install --quiet eclipse-zenoh==1.9.0
+    "$VENV/bin/pip" install --quiet -r "$BRIDGE_DIR/requirements.txt"
     echo "Venv ready."
 fi
 PYTHON="$VENV/bin/python3"
@@ -61,14 +64,27 @@ PYTHON="$VENV/bin/python3"
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+is_bridge_pid() {
+    local pid="$1" expected_script="$2" arg
+    [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null && [[ -r "/proc/$pid/cmdline" ]] || return 1
+    while IFS= read -r -d '' arg; do
+        [[ "$arg" == "$BRIDGE_DIR/$expected_script" ]] && return 0
+    done < "/proc/$pid/cmdline"
+    return 1
+}
+
 start() {
     local name="$1"; shift
     local script="$1"; shift
     local pid_file="$PID_DIR/$name.pid"
 
-    if [[ -f "$pid_file" ]] && kill -0 "$(cat "$pid_file")" 2>/dev/null; then
-        echo "  [skip] $name already running (pid $(cat "$pid_file"))"
-        return
+    if [[ -f "$pid_file" ]]; then
+        IFS= read -r pid < "$pid_file"
+        if is_bridge_pid "$pid" "$script"; then
+            echo "  [skip] $name already running (pid $pid)"
+            return
+        fi
+        rm -f "$pid_file"
     fi
 
     "$PYTHON" "$BRIDGE_DIR/$script" "$@" \
@@ -114,6 +130,7 @@ start_bridges() {
     echo "=== Source bridges ==="
 
     start airplaneslive bridges/airplaneslive_adsb_bridge.py
+    start dronuradaras bridges/dronuradaras_bridge.py
 
     if skip_if_no_key AISSTREAM_KEY; then
         echo "  [skip] aisstream — AISSTREAM_KEY not set"
@@ -132,25 +149,14 @@ start_bridges() {
     start opensky bridges/opensky_states_bridge.py
     start openmeteo bridges/openmeteo_forecast_bridge.py
     start meteolt bridges/meteolt_forecast_bridge.py
-    start yrno bridges/yrno_forecast_bridge.py
-    start osm bridges/osm_overpass_bridge.py
 
-    if skip_if_no_key N2YO_KEY; then
-        echo "  [skip] n2yo — N2YO_KEY not set"
+    if [[ -z "${COPERNICUSMARINE_SERVICE_USERNAME:-}" || \
+          -z "${COPERNICUSMARINE_SERVICE_PASSWORD:-}" ]]; then
+        echo "  [skip] cmems — Copernicus Marine credentials not set"
+    elif ! "$PYTHON" -c 'import copernicusmarine' >/dev/null 2>&1; then
+        echo "  [skip] cmems — optional package missing; run: $VENV/bin/pip install copernicusmarine"
     else
-        start n2yo bridges/n2yo_satpos_bridge.py --key "$N2YO_KEY"
-    fi
-
-    if skip_if_no_key PURPLEAIR_KEY; then
-        echo "  [skip] purpleair — PURPLEAIR_KEY not set"
-    else
-        start purpleair bridges/purpleair_sensor_bridge.py --key "$PURPLEAIR_KEY"
-    fi
-
-    if skip_if_no_key WINDY_KEY; then
-        echo "  [skip] windy — WINDY_KEY not set"
-    else
-        start windy bridges/windy_forecast_bridge.py --key "$WINDY_KEY"
+        start cmems bridges/cmems_marine_bridge.py
     fi
 
     if skip_if_no_key HERE_KEY; then
@@ -223,6 +229,14 @@ start_layers() {
         echo "  [skip] sitaware — set SITAWARE_URL in .env to enable"
     fi
 
+    # SitaWare Edge NVG is a distinct outbound adapter with separate product,
+    # credentials, direction, and lifecycle from the HQ inbound REST poller.
+    if [[ "${SITAWARE_NVG_URL:-}" && "${SITAWARE_NVG_USER:-}" ]]; then
+        start sitaware-nvg layers/nato_nvg_layer.py
+    else
+        echo "  [skip] sitaware-nvg — set SITAWARE_NVG_URL and SITAWARE_NVG_USER to enable"
+    fi
+
     # CoT receiver — inbound CoT from external source (e.g. Giraffe radar)
     # Set COT_RX_PORT to open a listener (they connect to us)
     # Set COT_RX_HOST to connect outbound (we connect to them, format IP:PORT)
@@ -248,14 +262,39 @@ start_layers() {
         echo "  [skip] nffi — set NFFI_HOST in .env to enable"
     fi
 
-    # Link 16 JREAP-C — inbound UDP/TCP listener
-    # Set LINK16_PORT to activate. Set LINK16_TCP=1 for TCP mode.
+    # MAVLink and VMF tactical sensor inputs.
+    if [[ "${MAVLINK_PORT:-}" ]]; then
+        mav_args=()
+        [[ "${MAVLINK_TCP:-}" == "1" ]] && mav_args+=(--tcp)
+        start mavlink bridges/mavlink_bridge.py --port "$MAVLINK_PORT" "${mav_args[@]}"
+    else
+        echo "  [skip] mavlink — set MAVLINK_PORT in .env to enable"
+    fi
+
+    if [[ "${VMF_PORT:-}" ]]; then
+        vmf_args=()
+        [[ "${VMF_TCP:-}" == "1" ]] && vmf_args+=(--tcp)
+        start vmf bridges/vmf_bridge.py --port "$VMF_PORT" "${vmf_args[@]}"
+    else
+        echo "  [skip] vmf — set VMF_PORT in .env to enable"
+    fi
+
+    # Link 16 JREAP-C — inbound UDP listener. TCP is intentionally unavailable
+    # until the attached gateway's stream framing ICD is known.
     if [[ "${LINK16_PORT:-}" ]]; then
-        tcp16=""
-        [[ "${LINK16_TCP:-}" == "1" ]] && tcp16="--tcp"
-        start link16 bridges/link16_bridge.py --port "$LINK16_PORT" ${tcp16:+"$tcp16"}
+        start link16 bridges/link16_bridge.py --port "$LINK16_PORT"
     else
         echo "  [skip] link16 — set LINK16_PORT in .env to enable"
+    fi
+
+    # Output/correlation layers that consume the combined native bridge feed.
+    start track-fusion layers/track_fusion_layer.py
+
+    if [[ "${STANAG4586_HOST:-}" ]]; then
+        start stanag4586 layers/stanag4586_layer.py \
+            --host "$STANAG4586_HOST" --port "${STANAG4586_PORT:-4586}"
+    else
+        echo "  [skip] stanag4586 — set STANAG4586_HOST in .env to enable"
     fi
 }
 
@@ -290,9 +329,7 @@ start_giraffe_bridges() {
     fi
 
     if [[ "${LINK16_PORT:-}" ]]; then
-        tcp16=""
-        [[ "${LINK16_TCP:-}" == "1" ]] && tcp16="--tcp"
-        start link16 bridges/link16_bridge.py --port "$LINK16_PORT" ${tcp16:+"$tcp16"}
+        start link16 bridges/link16_bridge.py --port "$LINK16_PORT"
     else
         echo "  [skip] link16 — set LINK16_PORT in .env to enable"
     fi

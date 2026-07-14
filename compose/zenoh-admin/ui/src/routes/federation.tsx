@@ -7,6 +7,8 @@ import { useAuth } from '@/store/auth'
 import { notify } from '@/lib/notify'
 import { Trash2 } from 'lucide-react'
 import { HudCorners } from '@/components/HudCorners'
+import { TopologyMap } from '@/components/TopologyMap'
+import { fetchTopology, type TopologyNode } from '@/lib/topology'
 
 export const Route = createFileRoute('/federation')({
   beforeLoad: () => {
@@ -52,11 +54,15 @@ function FederationPage() {
   const [name, setName] = useState('')
   const [namespace, setNamespace] = useState('')
   const [creating, setCreating] = useState(false)
+  const [topology, setTopology] = useState<TopologyNode[]>([])
+  const [selectedNamespace, setSelectedNamespace] = useState<string | null>(null)
 
   async function load() {
     try {
       const data = await apiJson<FederatedChild[]>('/api/federation')
       setChildren(data)
+      const topologyData = await fetchTopology()
+      setTopology(topologyData.nodes)
     } catch (e) {
       notify.error(errorMessage(e))
     }
@@ -110,10 +116,71 @@ function FederationPage() {
     }
   }
 
+  async function handlePush(childId: string, childName: string) {
+    try {
+      const config = await apiJson<{ fields: Record<string, unknown> }>('/api/config')
+      const res = await apiFetch(`/api/federation/${childId}/push-config`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config.fields),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }))
+        throw new Error(err.detail ?? res.statusText)
+      }
+      notify.success(`Config pushed to ${childName}`)
+      await load()
+    } catch (e) {
+      notify.error(errorMessage(e))
+    }
+  }
+
   return (
     <Layout>
       <div className="p-6 max-w-2xl">
         <PageHeader title="Federation" count={children?.length} countLabel="children" />
+
+        <div className="hud-frame relative hud-enter mb-6">
+          <HudCorners />
+          <div className="rounded-md border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#111113] p-4">
+            <h2 className="hud-label text-sm font-semibold text-zinc-600 dark:text-zinc-400 mb-3">Topology</h2>
+            <TopologyMap nodes={topology} selected={selectedNamespace} onSelect={setSelectedNamespace} />
+          </div>
+        </div>
+
+        {selectedNamespace && (() => {
+          const node = topology.find(item => item.namespace === selectedNamespace)
+          const child = children?.find(item => item.namespace === selectedNamespace)
+          if (!node) return null
+          return (
+            <div className="hud-frame relative mb-6 rounded-md border border-accent-ring/40 bg-white dark:bg-[#111113] p-4">
+              <HudCorners />
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-sm font-mono text-zinc-800 dark:text-zinc-200">{node.namespace}</p>
+                <button onClick={() => setSelectedNamespace(null)} className="text-xs text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200">close</button>
+              </div>
+              <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs text-zinc-600 dark:text-zinc-400">
+                <dt>Role</dt><dd className="text-zinc-800 dark:text-zinc-200">{node.role}</dd>
+                <dt>Router ZID</dt><dd className="font-mono truncate" title={node.router_zid ?? ''}>{node.router_zid ?? '—'}</dd>
+                <dt>Parent</dt><dd className="font-mono">{node.parent_namespace ?? '— (root)'}</dd>
+                <dt>Liveness</dt>
+                <dd className={node.online ? (node.healthy ? 'text-green-600 dark:text-green-400' : 'text-amber-600 dark:text-amber-400') : 'text-zinc-500'}>
+                  {node.online ? (node.healthy ? 'online' : 'degraded') : `offline (${node.last_seen_seconds}s ago)`}
+                </dd>
+                <dt>Config status</dt>
+                <dd>{node.config_status ? `${node.config_status} (v${node.config_status_version})` : '—'}</dd>
+              </dl>
+              {child && (
+                <button
+                  onClick={() => handlePush(child.id, child.name)}
+                  className="mt-3 px-3 py-1.5 bg-accent-fill hover:bg-accent-fill-hover text-accent-text text-xs rounded-md transition-colors"
+                >
+                  Push current HQ config to this node
+                </button>
+              )}
+            </div>
+          )
+        })()}
 
         <div className="hud-frame relative hud-enter mb-6">
           <HudCorners />

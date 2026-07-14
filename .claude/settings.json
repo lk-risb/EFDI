@@ -4,6 +4,7 @@
     "context7@claude-plugins-official": true,
     "claude-obsidian@agricidaniel-claude-obsidian": true,
     "compound-engineering@compound-engineering-plugin": true,
-    "playwright@claude-plugins-official": true
+    "playwright@claude-plugins-official": true,
+    "github@claude-plugins-official": true
   }
 }

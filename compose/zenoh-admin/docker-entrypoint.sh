@@ -9,5 +9,6 @@ set -e
 for d in /data /zenoh-config; do
   [ -d "$d" ] && chown -R zenohadmin:zenohadmin "$d"
 done
+[ -f /namespace-prefix ] && chown zenohadmin:zenohadmin /namespace-prefix
 
 exec su -s /bin/sh zenohadmin -c "$*"

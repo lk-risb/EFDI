@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useAuth } from '@/store/auth'
 import { errorMessage } from '@/lib/api'
 import { useBranding } from '@/store/branding'
@@ -18,6 +18,14 @@ function LoginPage() {
   const navigate = useNavigate()
   const orgName = useBranding((s) => s.orgName)
   const logoUrl = useBranding((s) => s.logoUrl)
+  const [oidc, setOidc] = useState<{ enabled: boolean; provider_name: string } | null>(null)
+
+  useEffect(() => {
+    fetch('/auth/oidc/config', { credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then(setOidc)
+      .catch(() => {})
+  }, [])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -82,6 +90,21 @@ function LoginPage() {
             {loading ? 'Signing in…' : 'Sign in'}
           </button>
         </form>
+        {oidc?.enabled && (
+          <>
+            <div className="flex items-center gap-3">
+              <div className="flex-1 h-px bg-zinc-200 dark:bg-white/10" />
+              <span className="hud-label text-[10px] text-zinc-400 dark:text-zinc-600">or</span>
+              <div className="flex-1 h-px bg-zinc-200 dark:bg-white/10" />
+            </div>
+            <a
+              href="/auth/oidc/login"
+              className="block w-full py-2.5 rounded-md border border-zinc-300 dark:border-white/10 bg-zinc-100 dark:bg-[#141416] hover:bg-zinc-200 dark:hover:bg-[#232326] text-zinc-900 dark:text-white text-sm font-semibold text-center transition-colors"
+            >
+              Sign in with {oidc.provider_name}
+            </a>
+          </>
+        )}
       </div>
     </div>
   )
