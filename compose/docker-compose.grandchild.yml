@@ -33,6 +33,7 @@ services:
     container_name: efdi-gc-zenoh-admin-db
     network_mode: host
     restart: unless-stopped
+    command: ["postgres", "-c", "listen_addresses=127.0.0.1"]
     environment:
       - POSTGRES_USER=${ZENOH_ADMIN_DB_USER_CHILD:?set ZENOH_ADMIN_DB_USER_CHILD}
       - POSTGRES_PASSWORD=${ZENOH_ADMIN_DB_PASSWORD_CHILD:?set ZENOH_ADMIN_DB_PASSWORD_CHILD}
@@ -88,6 +89,7 @@ services:
       - ${POD_STATE_DIR}/zenoh:/zenoh-config
       - ../host/zenoh-router.json5.tmpl:/zenoh-config-template/zenoh-router.json5.tmpl:ro
       - ${POD_STATE_DIR}/zenoh-admin-data:/data
+      - ${POD_STATE_DIR}/namespace-prefix:/namespace-prefix:rw
     healthcheck:
       disable: true
 

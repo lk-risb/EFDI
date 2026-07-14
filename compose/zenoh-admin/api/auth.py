@@ -26,9 +26,29 @@ LOCKOUT_MINUTES = 15
 _DUMMY_HASH = "$2b$12$C6UzMDM.H6dfI/f/IKcEeO7oCe1cJXTh8g3wJHKfB8YkKuNAZbEUC"
 
 
+def create_refresh_token(user_id: str) -> tuple[RefreshToken, str]:
+    """Create a stored refresh-token row and return it with its raw cookie value."""
+    raw_refresh = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(raw_refresh.encode()).hexdigest()
+    expires = datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+    return RefreshToken(user_id=user_id, token_hash=token_hash, expires_at=expires), raw_refresh
+
+
+def set_refresh_cookie(response: Response, raw_refresh: str) -> None:
+    response.set_cookie(
+        "refresh_token",
+        raw_refresh,
+        httponly=True,
+        samesite="lax",
+        secure=True,
+        path="/",
+        max_age=60 * 60 * 24 * REFRESH_TOKEN_EXPIRE_DAYS,
+    )
+
+
 @router.post("/login", response_model=TokenResponse)
 async def login(body: LoginRequest, response: Response, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(AdminUser).where(AdminUser.username == body.username, AdminUser.is_active == True))
+    result = await db.execute(select(AdminUser).where(AdminUser.username == body.username, AdminUser.is_active.is_(True)))
     user = result.scalar_one_or_none()
 
     now = datetime.now(timezone.utc)
@@ -52,38 +72,44 @@ async def login(body: LoginRequest, response: Response, db: AsyncSession = Depen
 
     access_token = create_access_token({"sub": user.id, "role": user.role, "username": user.username})
 
-    raw_refresh = secrets.token_urlsafe(32)
-    token_hash = hashlib.sha256(raw_refresh.encode()).hexdigest()
-    expires = datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
-    db.add(RefreshToken(user_id=user.id, token_hash=token_hash, expires_at=expires))
+    refresh_row, raw_refresh = create_refresh_token(user.id)
+    db.add(refresh_row)
     await db.commit()
 
-    response.set_cookie("refresh_token", raw_refresh, httponly=True, samesite="lax", secure=True, max_age=60 * 60 * 24 * REFRESH_TOKEN_EXPIRE_DAYS)
+    set_refresh_cookie(response, raw_refresh)
     await write_audit(db, user.id, "login")
     return TokenResponse(access_token=access_token)
 
 
 @router.post("/refresh", response_model=TokenResponse)
-async def refresh(refresh_token: str = Cookie(None), db: AsyncSession = Depends(get_db)):
+async def refresh(response: Response, refresh_token: str = Cookie(None), db: AsyncSession = Depends(get_db)):
     if not refresh_token:
         raise HTTPException(status_code=401, detail="No refresh token")
     token_hash = hashlib.sha256(refresh_token.encode()).hexdigest()
     now = datetime.now(timezone.utc)
     result = await db.execute(
-        select(RefreshToken).where(
-            RefreshToken.token_hash == token_hash,
-            RefreshToken.revoked == False,
-            RefreshToken.expires_at > now,
-        )
+        select(RefreshToken)
+        .where(RefreshToken.token_hash == token_hash)
+        .with_for_update()
     )
     token = result.scalar_one_or_none()
-    if not token:
+    if not token or token.revoked or token.expires_at <= now:
         raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
 
-    user_result = await db.execute(select(AdminUser).where(AdminUser.id == token.user_id, AdminUser.is_active == True))
+    user_result = await db.execute(select(AdminUser).where(AdminUser.id == token.user_id, AdminUser.is_active.is_(True)))
     user = user_result.scalar_one_or_none()
     if not user:
+        token.revoked = True
+        await db.commit()
         raise HTTPException(status_code=401, detail="User inactive")
+
+    # Refresh cookies are single-use. The row lock makes concurrent refreshes
+    # deterministic: the first rotates successfully and every reuse is rejected.
+    token.revoked = True
+    refresh_row, raw_refresh = create_refresh_token(user.id)
+    db.add(refresh_row)
+    await db.commit()
+    set_refresh_cookie(response, raw_refresh)
 
     access_token = create_access_token({"sub": user.id, "role": user.role, "username": user.username})
     return TokenResponse(access_token=access_token)

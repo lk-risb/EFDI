@@ -1,10 +1,9 @@
 import re
-from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, delete
+from sqlalchemy import select, delete, update
 
 from .db import get_db
 from .models import AdminUser, RefreshToken
@@ -46,6 +45,11 @@ def _check_password(password: str):
         raise HTTPException(status_code=400, detail=f"Password must be at least {MIN_PASSWORD_LEN} characters")
 
 
+def _check_username(username: str):
+    if not (1 <= len(username) <= 64) or not _USERNAME_RE.fullmatch(username):
+        raise HTTPException(status_code=400, detail="Username must be 1-64 characters, letters/digits/./_/- only")
+
+
 @router.get("")
 async def list_users(db: AsyncSession = Depends(get_db), actor=Depends(_superadmin)):
     result = await db.execute(select(AdminUser))
@@ -60,6 +64,7 @@ async def list_users(db: AsyncSession = Depends(get_db), actor=Depends(_superadm
 async def create_user(body: CreateUserRequest, db: AsyncSession = Depends(get_db), actor=Depends(_superadmin)):
     if body.role not in VALID_ROLES:
         raise HTTPException(status_code=400, detail=f"role must be one of {VALID_ROLES}")
+    _check_username(body.username)
     existing = await db.execute(select(AdminUser).where(AdminUser.username == body.username))
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=409, detail="Username already exists")
@@ -71,7 +76,11 @@ async def create_user(body: CreateUserRequest, db: AsyncSession = Depends(get_db
         created_by=actor.username,
     )
     db.add(user)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        raise HTTPException(status_code=409, detail="Username already exists") from exc
     await write_audit(db, actor.id, "create_admin_user", body.username)
     return {"id": user.id, "username": user.username, "role": user.role}
 
@@ -91,6 +100,11 @@ async def patch_user(user_id: str, body: PatchUserRequest, db: AsyncSession = De
     if body.password:
         _check_password(body.password)
         user.password_hash = pwd_ctx.hash(body.password)
+        await db.execute(
+            update(RefreshToken)
+            .where(RefreshToken.user_id == user.id)
+            .values(revoked=True)
+        )
     if body.is_active is not None:
         user.is_active = body.is_active
     await db.commit()
@@ -108,7 +122,14 @@ async def delete_user(user_id: str, db: AsyncSession = Depends(get_db), actor=De
         raise HTTPException(status_code=400, detail="Cannot delete yourself")
     await db.execute(delete(RefreshToken).where(RefreshToken.user_id == user.id))
     await db.delete(user)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="User owns federated-child records; remove or reassign them before deleting the user",
+        ) from exc
     await write_audit(db, actor.id, "delete_admin_user", user_id)
     return {"status": "deleted"}
 
@@ -123,6 +144,11 @@ async def change_own_password(
         raise HTTPException(status_code=400, detail="Current password is incorrect")
     _check_password(body.new_password)
     actor.password_hash = pwd_ctx.hash(body.new_password)
+    await db.execute(
+        update(RefreshToken)
+        .where(RefreshToken.user_id == actor.id)
+        .values(revoked=True)
+    )
     await db.commit()
     await write_audit(db, actor.id, "change_own_password", actor.username)
     return {"status": "ok"}
@@ -136,8 +162,7 @@ async def change_own_username(
 ):
     if not pwd_ctx.verify(body.current_password, actor.password_hash):
         raise HTTPException(status_code=400, detail="Current password is incorrect")
-    if not (1 <= len(body.new_username) <= 64) or not _USERNAME_RE.match(body.new_username):
-        raise HTTPException(status_code=400, detail="Username must be 1-64 characters, letters/digits/./_/- only")
+    _check_username(body.new_username)
 
     old_username = actor.username
     actor.username = body.new_username

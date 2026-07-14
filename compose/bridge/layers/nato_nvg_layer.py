@@ -29,19 +29,21 @@ Run:
 import argparse
 import base64
 import json
+import math
 import os
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 
 import zenoh
+from namespace_prefix import prefix
 
 ROUTER = "tls/zenoh.efdi.netbird.efdi-backbone.net:7447"
 ORG    = os.environ.get("PARTNER_NAMESPACE", "")
-from namespace_prefix import prefix
 TOPIC_ROOT = prefix() + "/" + ORG   # org prefix (configurable) precedes the pod namespace
 HERE   = os.path.dirname(os.path.abspath(__file__))
 _CERT_DIR = os.environ.get("EFDI_CERT_DIR", HERE)
@@ -55,18 +57,29 @@ STALE_S     = 120   # delete tracks older than this
 # APP-6(B) SIDC codes — keyed by new schema wildcard patterns.
 # ** matches zero-or-more Zenoh path segments.
 _TOPIC_SIDC = {
-    "air/**/civ/aircraft/**":        "SFAPCF----E----",  # Neutral Air Fixed Wing (civil ADS-B)
+    "air/**/civ/aircraft/**":        "SNAPCF----E----",  # Neutral Air Fixed Wing (civil ADS-B)
     "air/**/mil/aircraft/**":        "SNAPCF----E----",  # Neutral Air Fixed Wing (military)
-    "air/**/unknown/**":             "SUAPCF----E----",  # Unknown Air (radar / SAPIENT, no ID)
-    # Fused tracks (radar + open-source identity merged by track_fusion_layer.py)
-    "air/fused/civ/aircraft/**":     "SNAPCF----E----",  # Identified cooperative contact
-    "air/fused/unknown/aircraft/**": "SUAPCF----E----",  # PSR-only — no transponder match
+    "air/**/friendly/aircraft/**":   "SFAPCF----E----",
+    "air/**/hostile/aircraft/**":    "SHAPCF----E----",
+    "air/**/neutral/aircraft/**":    "SNAPCF----E----",
+    "air/**/unknown/aircraft/**":    "SUAPCF----E----",
     "land/**/civ/vehicle/**":        "SFGPUCV---E----",  # Friendly Ground Vehicle
     "land/**/neutral/station/**":    "SFGP------E----",  # Neutral Ground Installation
     "land/**/friendly/unit/**":      "SFGPU-----E----",  # Friendly Ground Unit (NFFI)
+    "land/**/hostile/unit/**":       "SHGPU-----E----",
+    "land/**/neutral/unit/**":       "SNGPU-----E----",
+    "land/**/unknown/unit/**":       "SUGPU-----E----",
     "sea/**/civ/vessel/**":          "SFSPXF----E----",  # Friendly Sea Surface
     "sea/**/mil/vessel/**":          "SNSPXF----E----",  # Neutral Sea Surface (military)
+    "sea/**/friendly/vessel/**":     "SFSPXF----E----",
+    "sea/**/hostile/vessel/**":      "SHSPXF----E----",
+    "sea/**/neutral/vessel/**":      "SNSPXF----E----",
+    "sea/**/unknown/vessel/**":      "SUSPXF----E----",
     "space/**/civ/satellite/**":     "SFPAP-----E----",  # Friendly Space (satellite)
+    "space/**/friendly/satellite/**":"SFPAP-----E----",
+    "space/**/hostile/satellite/**": "SHPAP-----E----",
+    "space/**/neutral/satellite/**": "SNPAP-----E----",
+    "space/**/unknown/satellite/**": "SUPAP-----E----",
 }
 
 
@@ -101,10 +114,11 @@ def _uid(track: dict) -> str:
     # Stable, source-agnostic identifier — same as cot_layer.py's _uid(): the same
     # aircraft/vessel reported by multiple bridges (or multiple pods exchanging
     # data) must merge to one SitaWare track, not one per source.
-    for key, prefix in (("icao24", "ICAO"), ("mmsi", "MMSI"), ("sensor_id", "SENS")):
+    for key, id_prefix in (("icao24", "ICAO"), ("mmsi", "MMSI"),
+                           ("sensor_id", "SENS"), ("uid", "UID")):
         v = track.get(key)
         if v:
-            return "EFDI-{}-{}".format(prefix, str(v).upper())
+            return "EFDI-{}-{}".format(id_prefix, str(v).upper())
     src = track.get("_src", "efdi")
     cs = (track.get("callsign") or "").strip()
     if cs:
@@ -129,8 +143,12 @@ def _hae_m(track: dict) -> float | None:
         ("alt_m",       1.0),
     ):
         v = track.get(key)
-        if v is not None and float(v) != 0:
-            return round(float(v) * scale, 1)
+        try:
+            number = float(v)
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(number) and number != 0:
+            return round(number * scale, 1)
     return None
 
 
@@ -141,9 +159,19 @@ def track_to_nvg_item(track: dict, sidc: str) -> tuple[str, str] | None:
     if lat is None or lon is None:
         return None
 
+    try:
+        lat = float(lat)
+        lon = float(lon)
+        ts = float(track.get("_ts", time.time()))
+    except (TypeError, ValueError):
+        return None
+    if not (math.isfinite(lat) and math.isfinite(lon) and math.isfinite(ts)):
+        return None
+    if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+        return None
+
     uid   = _uid(track)
     label = _callsign(track, uid)
-    ts    = float(track.get("_ts", time.time()))
 
     ET.register_namespace("", NVG_NS)
     root = ET.Element("{%s}nvg" % NVG_NS, {"version": NVG_VERSION})
@@ -153,7 +181,7 @@ def track_to_nvg_item(track: dict, sidc: str) -> tuple[str, str] | None:
         "sidc":   sidc,
         "label":  label,
         # NVG points: "lon,lat" (longitude first — GeoJSON convention)
-        "points": "{},{}".format(round(float(lon), 6), round(float(lat), 6)),
+        "points": "{},{}".format(round(lon, 6), round(lat, 6)),
         "time":   _ts_str(ts),
     }
     alt = _hae_m(track)
@@ -201,7 +229,8 @@ class EdgeClient:
         self._auth   = "Basic " + base64.b64encode("{}:{}".format(user, password).encode()).decode()
 
     def _req(self, method: str, path: str, body: str | None = None) -> int:
-        url = "{}/SWEdge/nvg/v2/sources/{}/items{}".format(self.base, self.source, path)
+        source = urllib.parse.quote(self.source, safe="")
+        url = "{}/SWEdge/nvg/v2/sources/{}/items{}".format(self.base, source, path)
         data = body.encode("utf-8") if body else None
         req = urllib.request.Request(url, data=data, method=method, headers={
             "Authorization":  self._auth,
@@ -219,11 +248,11 @@ class EdgeClient:
             return 0
 
     def put_item(self, item_id: str, nvg_xml: str) -> bool:
-        status = self._req("PUT", "/{}".format(item_id), nvg_xml)
+        status = self._req("PUT", "/{}".format(urllib.parse.quote(item_id, safe="")), nvg_xml)
         return status in (200, 201, 204)
 
     def delete_item(self, item_id: str) -> bool:
-        status = self._req("DELETE", "/{}".format(item_id))
+        status = self._req("DELETE", "/{}".format(urllib.parse.quote(item_id, safe="")))
         return status in (200, 204, 404)
 
 
@@ -313,6 +342,9 @@ def run(args):
     cache  = TrackCache(client, stale_s=STALE_S, refresh_s=REFRESH_S, verbose=args.verbose)
 
     print("SitaWare Edge: {}  source: {}".format(args.url, args.source), flush=True)
+    if args.url.lower().startswith("http://"):
+        print("WARNING: SitaWare Edge Basic Auth is being sent over plain HTTP; "
+              "use HTTPS or an authenticated encrypted tunnel.", flush=True)
 
     session = zenoh.open(make_config())
     subs = []

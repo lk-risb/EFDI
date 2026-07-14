@@ -7,6 +7,7 @@ import zenoh
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, field_validator
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .config import ConfigFields, _render_config
@@ -20,6 +21,18 @@ router = APIRouter(prefix="/api/federation", tags=["federation"])
 _SAFE_NAMESPACE_RE = re.compile(r"^[A-Za-z0-9._/-]+$")
 _OWN_NAMESPACE = os.environ.get("PARTNER_NAMESPACE", "")
 _OWN_CERT_DIR = os.environ.get("EFDI_CERT_DIR", "")
+_PREFIX_FILE = os.environ.get("NAMESPACE_PREFIX_FILE", "/namespace-prefix")
+
+
+def _prefix() -> str:
+    try:
+        with open(_PREFIX_FILE) as f:
+            v = f.read().strip()
+        if v:
+            return v
+    except OSError:
+        pass
+    return os.environ.get("NAMESPACE_PREFIX", "LTU/CISB")
 
 
 class FederatedChildIn(BaseModel):
@@ -111,11 +124,22 @@ async def create_child(
 ):
     child = FederatedChild(name=child_in.name, namespace=child_in.namespace, created_by=actor.id)
     db.add(child)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        # namespace is UNIQUE — a duplicate would otherwise surface as a raw
+        # 500, and the operator sees a generic failure with no clue the row
+        # already exists (a #76 "child never appears" failure mode). Give a
+        # clear 409 instead.
+        await db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail=f"A federated child with namespace '{child_in.namespace}' already exists",
+        )
     await db.refresh(child)
 
     # No ACL refresh needed — pod-federation-config is a mesh-wide
-    # LTU/CISB/**/@config/** wildcard (see host/zenoh-router.json5.tmpl),
+    # {root}/**/@config/** wildcard (see host/zenoh-router.json5.tmpl),
     # so every namespace is already transport-reachable. This row is pure
     # bookkeeping for the UI dropdown and for push-config's topic lookup.
     await write_audit(db, actor.id, "federation_child_created",
@@ -156,7 +180,9 @@ async def push_config(
 
     # version is assigned before the try block so it's always available for
     # the failure-path audit entry below, even if rendering itself fails.
-    version = int(time.time())
+    # Milliseconds avoid same-second collisions while remaining exactly
+    # representable by JavaScript and safely inside PostgreSQL BIGINT.
+    version = int(time.time() * 1000)
     try:
         rendered = _render_config(fields)
         payload = {"config": rendered, "version": version, "signed_at": time.time()}
@@ -170,7 +196,7 @@ async def push_config(
         signature = sign_payload(payload, key_pem)
         envelope = {"payload": payload, "signature": signature}
 
-        topic = f"LTU/CISB/{child.namespace}/@config/v1"
+        topic = f"{_prefix()}/{child.namespace}/@config/v1"
         session = _open_publish_session()
         try:
             session.put(topic, json.dumps(envelope).encode())

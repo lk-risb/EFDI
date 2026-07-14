@@ -155,7 +155,7 @@ SITAWARE_NVG_SOURCE=efdi-live
 
 # ── Link-16 JREAP-C ─────────────────────────────────────────────────────────
 LINK16_PORT=                   # Palikite tuščią, jei Link-16 šaltinio nėra
-LINK16_TCP=                    # 1 = TCP režimas, tuščia = UDP
+# Link-16 šiuo metu priima tik JREAP-C UDP; TCP reikia šliuzo kadravimo ICD.
 
 # ── MAVLink ─────────────────────────────────────────────────────────────────
 MAVLINK_PORT=
@@ -264,6 +264,8 @@ Bridge'as nuskaito MIL-STD-2525B SIDC kodus iš SitaWare ir nukreipia kiekvieną
 | Priešiškas | Oras (A) | `…/air/sitaware/rest/hostile/aircraft/…` | `a-h-A-M-F` |
 | Draugiškas | Jūra (S) | `…/sea/sitaware/rest/friendly/vessel/…` | `a-f-S-X-L` |
 | Priešiškas | Jūra (S) | `…/sea/sitaware/rest/hostile/vessel/…` | `a-h-S-X-L` |
+| Draugiškas / Priešiškas / Neutralus / Nežinomas | Kosmosas (P) | `…/space/sitaware/rest/<priklausomybė>/satellite/…` | atitinkamas `a-<priklausomybė>-P` |
+| Bet koks | Specialiųjų operacijų pajėgos (F) | `…/land/sitaware/rest/<priklausomybė>/unit/…` | atitinkamas sausumos vieneto tipas |
 
 ### NATO NFFI draugiškų pajėgų srautas (gaunama kryptis)
 
@@ -319,12 +321,14 @@ SITAWARE_NVG_SOURCE=efdi-live    # NVG šaltinio pavadinimas, sukuriamas automat
 | `dronuradaras` | `bridges/dronuradaras_bridge.py` | `…/land/dronuradaras/acoustic/neutral/sensor/status/v1` | Įrenginių apklausa 60 s / aptikimų apklausa 10 s |
 | `sitaware` | `bridges/sitaware_bridge.py` | `…/land/sitaware/rest/friendly/unit/tracks/v1` | Konfigūruojama REST apklausa |
 | `nffi` | `layers/nato_nffi_layer.py` | `…/land/nato/nffi/friendly/unit/tracks/v1` | Srautinis TCP (NFFI XML) |
-| `link16` | `bridges/link16_bridge.py` | `…/air/link16/jreap/*/aircraft/tracks/v1` | Srautinis UDP/TCP |
+| `link16` | `bridges/link16_bridge.py` | `…/air/link16/jreap/*/aircraft/tracks/v1` | Srautinis UDP |
 | `mavlink` | `bridges/mavlink_bridge.py` | `…/air/mavlink/mav2/*/uav/tracks/v1` | Srautinis UDP/TCP |
 | `cot-udp` | `layers/cot_layer.py` | Prenumeratorius — visos temos | Įvykio valdomas |
 | `cot-tcp` | `layers/cot_layer.py` | Prenumeratorius — visos temos | Įvykio valdomas |
 | `sitaware-nvg` | `layers/nato_nvg_layer.py` | Prenumeratorius — visos takelių temos | Įvykio valdomas, 10 s atnaujinimas |
 | `track-fusion` | `layers/track_fusion_layer.py` | CAT-48 + CAT-21 prenumeratorius | Įvykio valdomas |
+
+> **ASTERIX leidimai:** CAT-48 atitinka EUROCONTROL 1.32 leidimą, o CAT-34 — 1.29 leidimą. CAT-20, CAT-21 ir CAT-62 šiuo metu naudoja tik senus suderinamumo UAP ir įjungti parodo įspėjimą; nejunkite modernių CAT-20 1.9, CAT-21 2.2+ ar CAT-62 1.21 srautų, kol neįgyvendintas tikslus dekoderio profilis. Link-16 priima tik UDP, nes šliuzo TCP kadravimas dar neaprašytas.
 
 ### Zenoh temų schema
 
@@ -651,7 +655,6 @@ Tai pagauna sintaksės klaidas, TypeScript klaidas ir Dockerfile lūžimus prie�
 | 2026-06-16 | `airplanes.live` bridge: regioniniai ADS-B ir pasauliniai kariniai orlaiviai |
 | 2026-06-16 | ICAO NOTAM bridge: aktyvių NOTAM priėmimas per ICAO Dataservices API |
 | 2026-06-16 | FlightRadar24 bridge: FR24 komercinės transliacijos integracija |
-| 2026-06-16 | Windy bridge: taškų orų prognozių API integracija |
 | 2026-06-16 | Protocol Buffer aprašai naujiems takelio tipams (`aircraft_track`, `ais_track`, `aprs_track`, `cat62_track`) |
 | 2026-06-17/18 | Kokybės gerinimai: bridge'ų stabilumas, sluoksnių dublikatų filtravimas, takelio suliejimo derinimas |
 | 2026-06-18 | ASTERIX pilno dekodavimo projektavimo specifikacijos dokumentas |

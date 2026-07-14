@@ -1,4 +1,4 @@
-import { createFileRoute, redirect } from '@tanstack/react-router'
+import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
 import { Layout } from '@/components/Layout'
 import { PageHeader } from '@/components/PageHeader'
@@ -8,6 +8,8 @@ import { useAuth } from '@/store/auth'
 import { CheckCircle, XCircle, ChevronRight, Radio, Cpu, MemoryStick, HardDrive, Clock, Activity, Network, type LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Skeleton } from '@/components/Skeleton'
+import { TopologyMap } from '@/components/TopologyMap'
+import { fetchTopology, type TopologyNode } from '@/lib/topology'
 
 export const Route = createFileRoute('/')({
   beforeLoad: () => {
@@ -238,9 +240,11 @@ function ServiceCard({ service }: { service: ServiceState }) {
 }
 
 function DashboardPage() {
+  const navigate = useNavigate()
   const [status, setStatus] = useState<StatusData | null>(null)
   const [services, setServices] = useState<ServiceState[]>([])
   const [system, setSystem] = useState<SystemStats | null>(null)
+  const [topology, setTopology] = useState<TopologyNode[]>([])
 
   async function load() {
     try {
@@ -251,6 +255,10 @@ function DashboardPage() {
       const health = await apiJson<{ services: ServiceState[]; system: SystemStats }>('/api/health')
       setServices(health.services)
       setSystem(health.system)
+    } catch {}
+    try {
+      const data = await fetchTopology()
+      setTopology(data.nodes)
     } catch {}
   }
 
@@ -300,6 +308,22 @@ function DashboardPage() {
             </div>
           </>
         )}
+
+        <div className="hud-frame relative hud-enter hud-enter-delay-1 mb-6">
+          <HudCorners />
+          <div className="rounded-md border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#111113] p-5">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="hud-label text-sm font-semibold text-zinc-600 dark:text-zinc-400">Federation topology</h2>
+              <button
+                onClick={() => navigate({ to: '/topology' })}
+                className="text-xs text-teal-600 dark:text-teal-400 hover:underline"
+              >
+                Open topology →
+              </button>
+            </div>
+            <TopologyMap nodes={topology} compact onSelect={() => navigate({ to: '/topology' })} />
+          </div>
+        </div>
 
         {status && (
           <>

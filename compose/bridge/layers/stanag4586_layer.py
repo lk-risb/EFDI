@@ -34,7 +34,6 @@ Run:
 
 import argparse
 import json
-import math
 import os
 import socket
 import struct
@@ -42,10 +41,10 @@ import threading
 import time
 
 import zenoh
+from namespace_prefix import prefix
 
 ROUTER    = "tls/zenoh.efdi.netbird.efdi-backbone.net:7447"
 ORG       = os.environ.get("PARTNER_NAMESPACE", "")
-from namespace_prefix import prefix
 TOPIC_ROOT = prefix() + "/" + ORG   # org prefix (configurable) precedes the pod namespace
 HERE      = os.path.dirname(os.path.abspath(__file__))
 _CERT_DIR = os.environ.get("EFDI_CERT_DIR", HERE)
@@ -107,6 +106,8 @@ def _recv_message(sock: socket.socket) -> tuple[int, int, bytes]:
     """Read one STANAG 4586 message. Returns (msg_type, instance, body)."""
     hdr = _recv_exact(sock, HEADER_SIZE)
     msg_type, total_size, instance = struct.unpack("<HHH", hdr)
+    if total_size < HEADER_SIZE:
+        raise ValueError(f"invalid STANAG 4586 message size: {total_size}")
     body_size = total_size - HEADER_SIZE
     body = _recv_exact(sock, body_size) if body_size > 0 else b""
     return msg_type, instance, body

@@ -24,10 +24,9 @@ if [[ -f "$ENV_FILE" ]]; then
 fi
 
 export ZENOH_LOCAL_ENDPOINT="${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}"
-# Exported (not just used to derive EFDI_CERT_DIR) because docker-compose.yml
-# needs the real BUNDLE_DIR value itself to interpolate ${BUNDLE_DIR} volume
-# mounts for its dockerized bridges (e.g. openmeteo-bridge). Defaults inside
-# the repo, under compose/certs/ — gitignored, admins drop the router's
+# Exported (not just used to derive EFDI_CERT_DIR) so native Python bridges and
+# the containerized admin can share the same certificate location. Defaults
+# inside the repo, under compose/certs/ — gitignored, admins drop the router's
 # certificates here rather than scattering them somewhere in $HOME.
 export BUNDLE_DIR="${BUNDLE_DIR:-$SCRIPT_DIR/compose/certs}"
 export EFDI_CERT_DIR="$BUNDLE_DIR"
@@ -40,9 +39,9 @@ export EFDI_CERT_DIR="$BUNDLE_DIR"
 # environment to interpolate ${POD_STATE_DIR} in volume paths — it has no
 # access to this script's own defaulting logic.
 export POD_STATE_DIR="${POD_STATE_DIR:-$SCRIPT_DIR/compose/state}"
-# Host-launched bridges read the same prefix state file the admin writes + the
-# containerized bridges mount at /namespace-prefix (see namespace_prefix.py).
+# Host-launched bridges read the same prefix state file the admin writes.
 export NAMESPACE_PREFIX_FILE="${POD_STATE_DIR}/namespace-prefix"
+export PYTHONPATH="$BRIDGE_DIR${PYTHONPATH:+:$PYTHONPATH}"
 LOG_DIR="$POD_STATE_DIR/logs"
 PID_DIR="$POD_STATE_DIR/.pids"
 mkdir -p "$LOG_DIR" "$PID_DIR"
@@ -51,7 +50,7 @@ mkdir -p "$LOG_DIR" "$PID_DIR"
 if [[ ! -x "$VENV/bin/python3" ]]; then
     echo "Creating venv at $VENV…"
     python3 -m venv "$VENV"
-    "$VENV/bin/pip" install --quiet eclipse-zenoh==1.9.0
+    "$VENV/bin/pip" install --quiet -r "$BRIDGE_DIR/requirements.txt"
     echo "Venv ready."
 fi
 PYTHON="$VENV/bin/python3"
@@ -151,9 +150,24 @@ svc_hint() {
     esac
 }
 
+is_bridge_pid() {
+    local pid="$1" expected_script="${2:-}" arg
+    [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null && [[ -r "/proc/$pid/cmdline" ]] || return 1
+    while IFS= read -r -d '' arg; do
+        if [[ -n "$expected_script" ]]; then
+            [[ "$arg" == "$BRIDGE_DIR/$expected_script" ]] && return 0
+        elif [[ "$arg" == "$BRIDGE_DIR/"* ]]; then
+            return 0
+        fi
+    done < "/proc/$pid/cmdline"
+    return 1
+}
+
 is_running() {
-    local f="$PID_DIR/$1.pid"
-    [[ -f "$f" ]] && kill -0 "$(cat "$f")" 2>/dev/null
+    local f="$PID_DIR/$1.pid" pid
+    [[ -f "$f" ]] || return 1
+    IFS= read -r pid < "$f"
+    is_bridge_pid "$pid" "${2:-}"
 }
 
 # Prompt for a single server address (blank to skip). One flat network routed
@@ -184,10 +198,11 @@ _start() {   # _start <name> <rel-script-path> [args…]
     local name="$1"; shift
     local script="$1"; shift
     local pid_file="$PID_DIR/$name.pid"
-    if is_running "$name"; then
+    if is_running "$name" "$script"; then
         printf "  ${DIM}[skip]${R}  %-16s already running (pid %s)\n" "$name" "$(cat "$pid_file")"
         return
     fi
+    rm -f "$pid_file"
     "$PYTHON" "$BRIDGE_DIR/$script" "$@" >> "$LOG_DIR/$name.log" 2>&1 &
     echo $! > "$pid_file"
     printf "  ${GREEN}[start]${R} %-16s pid %s\n" "$name" "$!"
@@ -234,8 +249,7 @@ launch() {
             ;;
 
         link16)
-            local t16=(); [[ "${LINK16_TCP:-}" == "1" ]] && t16=(--tcp)
-            _start link16 bridges/link16_bridge.py --port "$LINK16_PORT" "${t16[@]}"
+            _start link16 bridges/link16_bridge.py --port "$LINK16_PORT"
             ;;
 
         mavlink)

@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import String, Boolean, DateTime, ForeignKey, Text
+from sqlalchemy import String, Boolean, DateTime, ForeignKey, Text, BigInteger
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
 from .db import Base
@@ -22,6 +22,10 @@ class AdminUser(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     failed_logins: Mapped[int] = mapped_column(default=0)
     locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # OIDC SSO linkage — null for local password accounts. auth_provider is
+    # "local" or "oidc"; oidc_subject is the IdP's stable 'sub' claim.
+    auth_provider: Mapped[str] = mapped_column(String(16), default="local", nullable=False)
+    oidc_subject: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True, index=True)
 
     tokens: Mapped[list["RefreshToken"]] = relationship(back_populates="user")
 
@@ -30,7 +34,7 @@ class RefreshToken(Base):
     __tablename__ = "refresh_tokens"
 
     id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=_uuid)
-    user_id: Mapped[str] = mapped_column(ForeignKey("admin_users.id"), nullable=False)
+    user_id: Mapped[str] = mapped_column(ForeignKey("admin_users.id"), nullable=False, index=True)
     token_hash: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     revoked: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -66,12 +70,12 @@ class FederatedChild(Base):
     id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=_uuid)
     name: Mapped[str] = mapped_column(String(64), nullable=False)
     namespace: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
-    created_by: Mapped[str] = mapped_column(ForeignKey("admin_users.id"), nullable=False)
+    created_by: Mapped[str] = mapped_column(ForeignKey("admin_users.id"), nullable=False, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     # Populated by federation_status.py's subscriber (Task 7) as status reports
     # arrive on this child's @config/status/v1 topic — None until the first
     # push+status round-trip completes.
     last_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
-    last_status_version: Mapped[int | None] = mapped_column(nullable=True)
+    last_status_version: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     last_status_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_status_error: Mapped[str | None] = mapped_column(String(512), nullable=True)

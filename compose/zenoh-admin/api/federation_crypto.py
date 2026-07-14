@@ -14,6 +14,8 @@ class FederationVerifyError(Exception):
 
 def canonicalize(payload: dict) -> bytes:
     """Deterministic encoding so signer and verifier hash the exact same bytes."""
+    if not isinstance(payload, dict):
+        raise FederationVerifyError("payload must be an object")
     return json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
 
 
@@ -53,6 +55,8 @@ def verify_envelope(envelope: dict, trusted_cert_pem: bytes, expected_cn: str) -
         )
 
     public_key = cert.public_key()
+    if not isinstance(public_key, ec.EllipticCurvePublicKey):
+        raise FederationVerifyError("trusted parent certificate does not contain an EC public key")
     try:
         public_key.verify(signature, canonicalize(payload), ec.ECDSA(hashes.SHA256()))
     except InvalidSignature:
