@@ -44,6 +44,7 @@ export NAMESPACE_PREFIX_FILE="${POD_STATE_DIR}/namespace-prefix"
 export PYTHONPATH="$BRIDGE_DIR${PYTHONPATH:+:$PYTHONPATH}"
 LOG_DIR="$POD_STATE_DIR/logs"
 PID_DIR="$POD_STATE_DIR/.pids"
+LAUNCHER_STATE_FILE="$POD_STATE_DIR/launcher-state.env"
 mkdir -p "$LOG_DIR" "$PID_DIR"
 
 # ── Ensure venv ────────────────────────────────────────────────────────────
@@ -67,8 +68,61 @@ fi
 SERVICES=(
     zenoh
     asterix link16 mavlink vmf sitaware nffi dronuradaras
-    cot-udp cot-udp-tak cot-tcp sitaware-nvg track-fusion
+    cot-udp cot-udp-tak cot-tcp sitaware-nvg sitaware-hq-nvg track-fusion
 )
+
+# Restore only non-secret launcher choices. Explicit compose/.env values win;
+# remembered addresses are fallbacks for values that were left blank there.
+# The file is parsed as data, never sourced, so punctuation in a URL cannot be
+# evaluated as shell syntax.
+REMEMBERED_SERVICES=""
+load_launcher_state() {
+    [[ -f "$LAUNCHER_STATE_FILE" ]] || return
+    local line key val
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        line="${line%%$'\r'}"
+        [[ -z "$line" || "$line" == \#* || "$line" != *=* ]] && continue
+        key="${line%%=*}"
+        val="${line#*=}"
+        case "$key" in
+            SELECTED_SERVICES)
+                REMEMBERED_SERVICES="$val"
+                ;;
+            TAK_HOST|TAK_HOST_FALLBACK|TAK_UDP_HOST|TAK_UDP_HOST_FALLBACK|\
+            SITAWARE_URL|SITAWARE_URL_FALLBACK|SITAWARE_NVG_URL)
+                if [[ -z "${!key:-}" ]]; then
+                    printf -v "$key" '%s' "$val"
+                    # shellcheck disable=SC2163  # $key names the variable to export.
+                    export "$key"
+                fi
+                ;;
+        esac
+    done < "$LAUNCHER_STATE_FILE"
+}
+
+save_launcher_state() {
+    local tmp="${LAUNCHER_STATE_FILE}.tmp.$$" selected="" svc key
+    for svc in "${SERVICES[@]}"; do
+        [[ "${sel[$svc]:-0}" == "1" ]] || continue
+        selected+="${selected:+,}$svc"
+    done
+
+    umask 077
+    {
+        printf '# EFDI launcher memory: selections and endpoint addresses only.\n'
+        printf 'SELECTED_SERVICES=%s\n' "$selected"
+        for key in TAK_HOST TAK_HOST_FALLBACK TAK_UDP_HOST TAK_UDP_HOST_FALLBACK \
+                   SITAWARE_URL SITAWARE_URL_FALLBACK SITAWARE_NVG_URL; do
+            # A URL with user-info may contain credentials. Use it for this run,
+            # but never copy it into persistent launcher memory.
+            [[ -n "${!key:-}" && "${!key}" != *://*@* ]] && \
+                printf '%s=%s\n' "$key" "${!key}"
+        done
+    } > "$tmp"
+    mv -f "$tmp" "$LAUNCHER_STATE_FILE"
+}
+
+load_launcher_state
 
 declare -A SVC_CAT=(
     [zenoh]="Infrastructure"
@@ -78,6 +132,7 @@ declare -A SVC_CAT=(
     [dronuradaras]="Sensor bridges"
     [cot-udp]="Output layers"   [cot-udp-tak]="Output layers"
     [cot-tcp]="Output layers"   [sitaware-nvg]="Output layers"
+    [sitaware-hq-nvg]="Output layers"
     [track-fusion]="Output layers"
 )
 
@@ -91,9 +146,10 @@ declare -A SVC_DESC=(
     [nffi]="NATO NFFI friendly force XML feed (inbound)"
     [dronuradaras]="dronuradaras.lt drone detection network"
     [cot-udp]="CoT → ATAK UDP multicast 239.2.3.1:6969 (same LAN only)"
-    [cot-udp-tak]="CoT → UDP unicast direct to TAK Server (crosses NetBird/VPN)"
+    [cot-udp-tak]="CoT → WinTAK/ATAK UDP unicast (crosses LAN/VPN)"
     [cot-tcp]="CoT → TAK Server TCP"
     [sitaware-nvg]="EFDI tracks → SitaWare Edge (outbound NVG)"
+    [sitaware-hq-nvg]="EFDI tracks → SitaWare HQ pull feed (outbound NVG)"
     [track-fusion]="Radar/ADS-B track correlation"
 )
 
@@ -110,6 +166,7 @@ svc_ready() {
         nffi)         [[ "${NFFI_HOST:-}" ]] ;;
         dronuradaras) return 0 ;;
         sitaware-nvg) return 0 ;;  # always ready; prompts for address+login at launch if unset
+        sitaware-hq-nvg) [[ "${SITAWARE_HQ_NVG_ENABLE:-}" == "1" ]] ;;
         *)        return 0 ;;
     esac
 }
@@ -127,6 +184,12 @@ svc_hint() {
                 echo "${SITAWARE_NVG_URL}"
             else
                 echo "will prompt for address+login"
+            fi ;;
+        sitaware-hq-nvg)
+            if [[ "${SITAWARE_HQ_NVG_ENABLE:-}" == "1" ]]; then
+                echo "${SITAWARE_HQ_NVG_BIND:-127.0.0.1}:${SITAWARE_HQ_NVG_PORT:-8088}${SITAWARE_HQ_NVG_PATH:-/nvg}"
+            else
+                echo "SITAWARE_HQ_NVG_ENABLE=0"
             fi ;;
         sitaware)
             if [[ "${SITAWARE_URL:-}" ]]; then
@@ -300,11 +363,12 @@ launch() {
             local tak_udp_host2="${TAK_UDP_HOST_FALLBACK:-}"
             local tak_udp_port="${TAK_UDP_PORT:-8087}"
             if [[ -z "$tak_udp_host" && -z "$tak_udp_host2" ]]; then
-                _prompt_address "TAK Server" tak_udp_host
+                _prompt_address "WinTAK/ATAK client" tak_udp_host
                 if [[ -z "$tak_udp_host" ]]; then
                     printf "  ${YELLOW}[skip]${R}  cot-udp-tak     no address entered\n"
                     return
                 fi
+                export TAK_UDP_HOST="$tak_udp_host"
             fi
             local udp_hosts=(); [[ -n "$tak_udp_host"  ]] && udp_hosts+=(--host "$tak_udp_host")
             [[ -n "$tak_udp_host2" ]] && udp_hosts+=(--host "$tak_udp_host2")
@@ -320,10 +384,15 @@ launch() {
                     printf "  ${YELLOW}[skip]${R}  cot-tcp         no address entered\n"
                     return
                 fi
+                export TAK_HOST="$tak_host"
             fi
             local tcp_hosts=(); [[ -n "$tak_host"  ]] && tcp_hosts+=(--host "$tak_host")
             [[ -n "$tak_host2" ]] && tcp_hosts+=(--host "$tak_host2")
-            _start cot-tcp layers/cot_layer.py "${tcp_hosts[@]}" --port "${TAK_PORT:-8087}"
+            local tcp_args=("${tcp_hosts[@]}" --port "${TAK_PORT:-8087}")
+            if [[ "${TAK_TLS:-}" == "1" ]]; then
+                tcp_args+=(--tls --cert "${TAK_CERT:-}" --key "${TAK_KEY:-}" --ca "${TAK_CA:-}")
+            fi
+            _start cot-tcp layers/cot_layer.py "${tcp_args[@]}"
             ;;
 
         sitaware-nvg)
@@ -345,6 +414,17 @@ launch() {
             _start sitaware-nvg layers/nato_nvg_layer.py
             ;;
 
+        sitaware-hq-nvg)
+            if [[ -z "${SITAWARE_HQ_NVG_USER:-}" && \
+                  "${SITAWARE_HQ_NVG_ALLOW_ANONYMOUS:-}" != "1" ]]; then
+                local hq_nvg_user hq_nvg_pass
+                _prompt_credentials "SitaWare HQ NVG feed" hq_nvg_user hq_nvg_pass
+                export SITAWARE_HQ_NVG_USER="$hq_nvg_user"
+                export SITAWARE_HQ_NVG_PASS="$hq_nvg_pass"
+            fi
+            _start sitaware-hq-nvg layers/sitaware_hq_nvg_feed.py
+            ;;
+
         track-fusion)
             _start track-fusion layers/track_fusion_layer.py
             ;;
@@ -355,10 +435,26 @@ launch() {
 # ── Interactive menu ───────────────────────────────────────────────────────
 declare -A sel
 
-# Default: zenoh + asterix (if ready) + cot-udp
+# Restore the last valid selection. On first use, default to zenoh + the main
+# output layers, plus ASTERIX when its input is configured.
 for svc in "${SERVICES[@]}"; do sel[$svc]=0; done
-for svc in zenoh cot-udp cot-tcp track-fusion; do sel[$svc]=1; done
-svc_ready asterix && sel[asterix]=1 || true
+restored=0
+if [[ -n "$REMEMBERED_SERVICES" ]]; then
+    IFS=',' read -r -a remembered_services <<< "$REMEMBERED_SERVICES"
+    for remembered in "${remembered_services[@]}"; do
+        for svc in "${SERVICES[@]}"; do
+            if [[ "$remembered" == "$svc" ]]; then
+                sel[$svc]=1
+                restored=1
+                break
+            fi
+        done
+    done
+fi
+if (( restored == 0 )); then
+    for svc in zenoh cot-udp cot-tcp track-fusion; do sel[$svc]=1; done
+    svc_ready asterix && sel[asterix]=1 || true
+fi
 
 draw_menu() {
     clear
@@ -448,5 +544,7 @@ for svc in "${SERVICES[@]}"; do
     [[ "${sel[$svc]}" == "1" ]] || continue
     launch "$svc"
 done
+
+save_launcher_state
 
 printf "\n${BOLD}Done.${R}  Logs → ${LOG_DIR}/   Stop → ./stop.sh\n"

@@ -4,9 +4,9 @@
 Polls the airplanes.live v2 API for live aircraft positions in the Baltic
 region and worldwide military traffic. No API key required.
 
-Advantages over OpenSky: includes registration and aircraft type; no rate
-limits. Run alongside opensky_bridge.py — different receiver networks give
-better combined coverage.
+Advantages over OpenSky: includes registration, aircraft type, detailed
+kinematics, autopilot selections, and ADS-B quality values. Run alongside
+opensky_bridge.py — different receiver networks give better combined coverage.
 
 Zenoh topics:
   <ORG>/air/airplaneslive/tracks/v1  — regional ADS-B
@@ -21,6 +21,7 @@ Run:
 
 import argparse
 import json
+import math
 import os
 import time
 import urllib.error
@@ -38,8 +39,10 @@ _CERT_DIR = os.environ.get("EFDI_CERT_DIR", HERE)
 _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", ROUTER)
 
 BASE_URL      = "https://api.airplanes.live/v2"
-POLL_INTERVAL = 5    # seconds — no documented rate limit
+POLL_INTERVAL = 5    # seconds between complete regional polling cycles
 MIL_INTERVAL  = 5    # military endpoint — same rate as civil
+MIN_REQUEST_GAP_S = 1.05  # documented public API limit is one request/second
+_last_request_at = 0.0
 
 # API hard-limits radius to 250 nm per query. Poll multiple centers to cover
 # the full operational area (20°N–73°N, 4°E–65°E).
@@ -68,6 +71,11 @@ def make_config() -> "zenoh.Config":
 
 
 def fetch(url: str) -> list:
+    global _last_request_at
+    wait_s = MIN_REQUEST_GAP_S - (time.monotonic() - _last_request_at)
+    if wait_s > 0:
+        time.sleep(wait_s)
+    _last_request_at = time.monotonic()
     req = urllib.request.Request(url, headers={
         "User-Agent": "efdi-airplaneslive-bridge/1.0",
         "Accept":     "application/json",
@@ -81,11 +89,30 @@ def fetch(url: str) -> list:
         return []
 
 
-def _int(v, default: int = 0) -> int:
+def _number(value, cast=float):
+    if value is None or isinstance(value, bool):
+        return None
     try:
-        return int(v)
-    except (TypeError, ValueError):
-        return default
+        number = cast(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if isinstance(number, float) and not math.isfinite(number):
+        return None
+    return number
+
+
+def _copy_number(track: dict, ac: dict, target: str, source: str, cast=float) -> None:
+    value = _number(ac.get(source), cast)
+    if value is not None:
+        track[target] = value
+
+
+def _copy_text(track: dict, ac: dict, target: str, source: str) -> None:
+    value = ac.get(source)
+    if value is not None:
+        text = str(value).strip()
+        if text:
+            track[target] = text
 
 
 def normalize(ac: dict, is_military: bool) -> dict | None:
@@ -93,7 +120,7 @@ def normalize(ac: dict, is_military: bool) -> dict | None:
     lon = ac.get("lon")
     if lat is None or lon is None:
         return None
-    track = {
+    track: dict = {
         "_ts":            time.time(),
         "_src":           "airplaneslive",
         "icao24":         ac.get("hex", "").lower(),
@@ -102,13 +129,82 @@ def normalize(ac: dict, is_military: bool) -> dict | None:
         "aircraft_type":  (ac.get("t") or "").strip(),
         "lat_deg":        lat,
         "lon_deg":        lon,
-        "alt_baro_ft":    _int(ac.get("alt_baro")),
-        "alt_geom_ft":    _int(ac.get("alt_geom")),
-        "ground_speed_kts": float(ac.get("gs") or 0),
-        "track_deg":      float(ac.get("track") or 0),
         "squawk":         (ac.get("squawk") or ""),
         "is_military":    is_military,
     }
+
+    # Preserve every stable, documented ADS-B field that is useful to an
+    # operator. Missing values stay absent; zero is a valid measurement and is
+    # no longer overloaded to mean "unknown".
+    _copy_text(track, ac, "aircraft_description", "desc")
+    _copy_text(track, ac, "pos_source", "type")
+    alt_baro = ac.get("alt_baro")
+    if isinstance(alt_baro, str) and alt_baro.strip().lower() == "ground":
+        track["on_ground"] = True
+    else:
+        barometric_altitude = _number(alt_baro, int)
+        if barometric_altitude is not None:
+            track["alt_baro_ft"] = barometric_altitude
+            track["on_ground"] = False
+    _copy_number(track, ac, "alt_geom_ft", "alt_geom", int)
+    for target, source, cast in (
+        ("ground_speed_kts", "gs", float),
+        ("ias_kt", "ias", float),
+        ("tas_kt", "tas", float),
+        ("mach", "mach", float),
+        ("track_deg", "track", float),
+        ("track_angle_rate_degs", "track_rate", float),
+        ("roll_deg", "roll", float),
+        ("mag_hdg_deg", "mag_heading", float),
+        ("true_heading_deg", "true_heading", float),
+        ("baro_vr_fpm", "baro_rate", int),
+        ("geo_vr_fpm", "geom_rate", int),
+        ("baro_setting_mb", "nav_qnh", float),
+        ("selected_alt_ft", "nav_altitude_mcp", int),
+        ("fms_selected_alt_ft", "nav_altitude_fms", int),
+        ("selected_heading_deg", "nav_heading", float),
+        ("wind_dir_deg", "wd", float),
+        ("wind_speed_kt", "ws", float),
+        ("temp_c", "oat", float),
+        ("total_air_temp_c", "tat", float),
+        ("nic", "nic", int),
+        ("radius_containment_m", "rc", int),
+        ("position_age_s", "seen_pos", float),
+        ("adsb_version", "version", int),
+        ("nic_baro", "nic_baro", int),
+        ("nac_p", "nac_p", int),
+        ("nac_v", "nac_v", int),
+        ("sil", "sil", int),
+        ("gva", "gva", int),
+        ("sda", "sda", int),
+        ("message_count", "messages", int),
+        ("message_age_s", "seen", float),
+        ("rssi_db", "rssi", float),
+    ):
+        _copy_number(track, ac, target, source, cast)
+
+    if "selected_alt_ft" in track:
+        track["selected_alt_source"] = "MCP/FCU"
+    _copy_text(track, ac, "sil_type", "sil_type")
+    _copy_text(track, ac, "emergency_str", "emergency")
+    if track.get("emergency_str") == "none":
+        track.pop("emergency_str")
+    _copy_text(track, ac, "emitter_category_str", "category")
+    nav_modes = ac.get("nav_modes")
+    if isinstance(nav_modes, list):
+        modes = [str(mode).strip() for mode in nav_modes if str(mode).strip()]
+        if modes:
+            track["nav_modes"] = ", ".join(modes)
+    if "spi" in ac:
+        track["spi"] = bool(ac["spi"])
+    if "alert" in ac:
+        track["alert"] = bool(ac["alert"])
+    flags = _number(ac.get("dbFlags"), int)
+    if flags is not None:
+        track["database_flags"] = flags
+        track["is_interesting"] = bool(flags & 2)
+        track["is_pia"] = bool(flags & 4)
+        track["is_ladd"] = bool(flags & 8)
     # Route: departure → destination (IATA codes)
     dep = (ac.get("dep_iata") or ac.get("origin") or "").strip().upper()
     arr = (ac.get("arr_iata") or ac.get("destination") or "").strip().upper()
@@ -118,13 +214,6 @@ def normalize(ac: dict, is_military: bool) -> dict | None:
         track["route"] = dep + " →"
     elif arr:
         track["route"] = "→ " + arr
-    # RSSI — signal strength from the best receiving station, in dBFS
-    rssi = ac.get("rssi")
-    if rssi is not None:
-        try:
-            track["rssi_db"] = round(float(rssi), 1)
-        except (TypeError, ValueError):
-            pass
     return track
 
 

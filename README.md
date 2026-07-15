@@ -44,13 +44,20 @@ This repository is the EFDI-partner collaboration surface. It carries **no partn
 ```
 [Giraffe AMB]    ──ASTERIX UDP──► asterix_bridge     ─┐
 [dronuradaras.lt]──REST/HTTPS──► dronuradaras_bridge  ─┤
-[SitaWare HQ]    ──REST/HTTPS──► sitaware_bridge      ─┤──► Zenoh router (local) ──► cot_layer ──► ATAK
+[SitaWare HQ]    ──documented REST API──► sitaware_bridge ─┤──► Zenoh router (local) ──► cot_layer ──► ATAK
 [NFFI source]    ──TCP/XML─────► nato_nffi_layer      ─┤                                      ├──► TAK Server
-[Link-16]        ──UDP────────► link16_bridge         ─┤                                      └──► nato_nvg_layer ──► SitaWare Edge
+[Link-16]        ──UDP────────► link16_bridge         ─┤                                      ├──► nato_nvg_layer ──► SitaWare Edge
 [MAVLink]        ──UDP/TCP────► mavlink_bridge        ─┘              └──► track_fusion_layer
+                                                                      └──► sitaware_hq_nvg_feed ◄── SitaWare HQ polls
 ```
 
 Each bridge publishes tracks to a Zenoh router under a structured topic hierarchy (`{namespace}/{domain}/{source}/{protocol}/{affiliation}/{type}/v1`). Output layers subscribe to wildcard patterns, convert to CoT XML, and deliver downstream.
+
+The live `/v1` data-plane payload is currently JSON. The files under `proto/`
+describe intended typed contracts but do not by themselves make a topic
+Protobuf. Binary migration must use generated language bindings and a new `/v2`
+topic during a dual-publish transition so existing CoT, TAK, NVG, and fusion
+consumers continue to decode `/v1` safely.
 
 ---
 
@@ -64,6 +71,7 @@ Each bridge publishes tracks to a Zenoh router under a structured topic hierarch
 | `sitaware_bridge` | SitaWare HQ friendly-force REST polling (inbound) |
 | `nato_nffi_layer` | NATO NFFI (STANAG 4677) friendly-force XML feed (inbound) |
 | `nato_nvg_layer` | EFDI tracks → SitaWare Edge NVG v2 push (outbound) |
+| `sitaware_hq_nvg_feed` | Pull-based NVG 2.0.2 snapshot for SitaWare HQ Import Subscriptions (outbound) |
 | `link16_bridge` | JREAP-C UDP; TCP requires a verified gateway framing ICD |
 | `mavlink_bridge` | MAVLink 2 UDP/TCP |
 | `cot_layer` | CoT XML output — UDP multicast + TAK Server TCP |
@@ -78,19 +86,22 @@ Client onboarding is certificate-based: each pod gets a signed mTLS bundle issue
 
 ### SitaWare integration (bidirectional)
 
-Three independent paths, each optional and separately configured — enable whichever your deployment actually has. HQ and Edge are typically separate SitaWare products/hosts with separate credentials, which is why they use disjoint env-var prefixes (`SITAWARE_*` vs `SITAWARE_NVG_*`) rather than sharing one.
+Four independent paths are available; enable only interfaces documented and licensed in the target deployment. HQ and Edge are separate products/interfaces, so the adapters use disjoint environment-variable prefixes rather than sharing endpoints or credentials.
 
 | Direction | Bridge/layer | Path |
 |---|---|---|
 | Inbound | `sitaware_bridge.py` | SitaWare **HQ** REST API → EFDI (poll-based) |
 | Inbound | `nato_nffi_layer.py` | NATO NFFI (STANAG 4677) XML feed → EFDI (streaming TCP) |
 | Outbound | `nato_nvg_layer.py` | EFDI tracks → SitaWare **Edge** NVG v2 REST API (push) |
+| Outbound | `sitaware_hq_nvg_feed.py` | EFDI tracks → pull-based NVG 2.0.2 feed for SitaWare **HQ** |
 
-**`sitaware_bridge.py` (inbound, HQ)** — polls `SITAWARE_API_PATH` (default `/rest/v2/units`) on a `SITAWARE_POLL_S`-second interval (default 10s) over HTTP basic auth. Supports a primary + fallback base URL (`SITAWARE_URL` / `SITAWARE_URL_FALLBACK`) — useful when the same SitaWare host is reachable both on the LAN and over a mesh VPN like NetBird — and retries whichever URL last succeeded first. `SITAWARE_TLS_VERIFY=0` skips certificate validation for self-signed HQ deployments. Each unit's SIDC (NATO APP-6 symbol code) is mapped to a Zenoh topic and tagged with `SITAWARE_SOURCE` so downstream consumers can tell SitaWare-origin tracks apart from radar/ADS-B ones.
+**`sitaware_bridge.py` (inbound, HQ)** — polls an explicitly configured `SITAWARE_API_PATH` on a `SITAWARE_POLL_S`-second interval. There is no universal `/rest/v2/units` resource: HQ 6.22 may map a MIP4 servlet at `/rest/v2/*` while returning 404 for that guessed resource. Enable this adapter only after confirming the deployment's resource path, schema, and authentication method in its API/ICD. Primary and fallback base URLs remain supported for deployments that do expose a compatible JSON unit resource.
 
-**`nato_nffi_layer.py` (inbound, NFFI)** — a raw TCP listener for STANAG 4677 friendly-force XML, independent of SitaWare's own REST API. Supports both message-framing conventions NFFI feeds use in practice: 4-byte big-endian length-prefixed (`--framing length`, the default) or newline-delimited XML documents (`--framing newline`) — set via `NFFI_FRAMING` in `compose/.env`.
+**`nato_nffi_layer.py` (inbound, NFFI)** — a TCP client that connects to an external STANAG 4677 friendly-force server and publishes received XML records into EFDI. It supports 4-byte big-endian length-prefixed (`--framing length`, default) or newline-delimited XML documents (`--framing newline`); the source operator must confirm the endpoint, protocol profile, and framing.
 
 **`nato_nvg_layer.py` (outbound, Edge)** — pushes every EFDI track update as a NATO Vector Graphics (NVG) 2.0 item via `PUT` to the SitaWare Edge REST API, so any SitaWare Frontline client connected to that Edge server sees EFDI tracks live. Each item carries position, speed, course, and a SIDC-derived symbol; deleted/stale tracks are removed with a corresponding NVG delete call rather than left stale on the Edge map.
+
+**`sitaware_hq_nvg_feed.py` (outbound, HQ)** — maintains a bounded snapshot of live EFDI tracks and serves one NVG 2.0.2 document for HQ's **NVG Import Subscription** manager to poll. The endpoint supports GET/HEAD only, requires dedicated HTTP Basic credentials unless anonymous access is explicitly enabled, expires stale tracks, includes an NVG `TimeSpan` so HQ also hides expired objects if the feed goes offline, and attaches standard symbol modifiers plus bounded `ExtendedData`. Its Attributes view reuses the same domain-aware stat-card formatter as CoT/TAK, with clean Identity, IFF, Kinematics, Radar, Flight Plan, Status, Altitude, Guidance, and ADS-B Quality sections instead of raw Python keys. Aircraft include distinct barometric/geometric altitude readings, primary altitude in metres/feet/flight level, climb/descent rate, selected/target altitude, speed/heading, identity, route, emergency/autopilot state, ADS-B quality, and other safe scalar source fields available in the track. Weather stations use a meteorological 2525B SIDC distinct from the neutral equipment-sensor SIDC used by dronuradaras.lt. XML-illegal upstream characters are removed and a malformed cached record cannot break the complete feed. The endpoint refuses non-loopback cleartext HTTP unless the lab-only override is set. Prefer HTTPS with a certificate trusted by the HQ Windows host. This native Python service is enabled with `SITAWARE_HQ_NVG_ENABLE=1`; it does not add a bridge container.
 
 ---
 
@@ -108,9 +119,11 @@ Every pod dials a single fabric endpoint over mutual TLS — the pod writes only
 | TCP 7447 TLS | outbound | Remote/fabric Zenoh router (mTLS) |
 | UDP `<CAT48_PORT>` (default 30048) | inbound | Giraffe AMB ASTERIX stream |
 | UDP multicast `239.2.3.1:6969` | outbound | CoT delivery to ATAK |
+| UDP `<TAK_UDP_PORT>` (default 8087) | outbound | Optional direct CoT unicast to WinTAK/ATAK |
 | HTTP 8890 | inbound | zenoh-admin panel (web UI) |
 | TCP `<NFFI_PORT>` (default 7010) | inbound | NATO NFFI friendly-force feed |
-| HTTPS | outbound | SitaWare HQ/Edge, dronuradaras.lt REST APIs |
+| TCP `<SITAWARE_HQ_NVG_PORT>` (default 8088) | inbound | SitaWare HQ polls the EFDI NVG feed |
+| HTTPS | outbound | SitaWare HQ/Edge and dronuradaras.lt APIs |
 
 See [INSTALL.md](INSTALL.md) for the full network prerequisites table.
 
@@ -126,6 +139,7 @@ See [INSTALL.md](INSTALL.md) for the full network prerequisites table.
 | SitaWare HQ bridge | ✅ | Friendly-force REST polling (inbound) |
 | NATO NFFI layer | ✅ | STANAG 4677 friendly-force XML feed (inbound) |
 | SitaWare Edge (NVG) layer | ✅ | EFDI tracks → SitaWare Edge push (outbound) |
+| SitaWare HQ NVG feed | ✅ | EFDI tracks → HQ NVG Import Subscription (outbound pull feed) |
 | Link-16 bridge | ✅ | JREAP-C UDP |
 | MAVLink bridge | ✅ | MAVLink 2 UDP/TCP |
 | CoT output layer | ✅ | UDP multicast + TAK Server TCP |

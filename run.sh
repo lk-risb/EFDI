@@ -182,6 +182,20 @@ start_layers() {
     # CoT → ATAK UDP multicast (no TAK Server needed)
     start cot-udp layers/cot_layer.py --udp --host 239.2.3.1 --port 6969
 
+    # Optional direct UDP-unicast CoT output for a WinTAK/ATAK client whose
+    # matching UDP input is reachable on the LAN/VPN. Keep this separate from
+    # TAK_HOST/TAK_PORT, which describe a TAK Server TCP stream.
+    if [[ "${TAK_UDP_HOST:-}" || "${TAK_UDP_HOST_FALLBACK:-}" ]]; then
+        _tak_udp_hosts=()
+        [[ "${TAK_UDP_HOST:-}" ]] && _tak_udp_hosts+=(--host "$TAK_UDP_HOST")
+        [[ "${TAK_UDP_HOST_FALLBACK:-}" ]] && \
+            _tak_udp_hosts+=(--host "$TAK_UDP_HOST_FALLBACK")
+        start cot-udp-tak layers/cot_layer.py --udp "${_tak_udp_hosts[@]}" \
+            --port "${TAK_UDP_PORT:-8087}"
+    else
+        echo "  [skip] cot-udp-tak — set TAK_UDP_HOST to enable direct client output"
+    fi
+
     # CoT → TAK Server TCP (Option A: plaintext :8087, Option B: mTLS :8089)
     if [[ "${TAK_HOST:-127.0.0.1}" != "127.0.0.1" ]] || \
        nc -z "${TAK_HOST:-127.0.0.1}" "${TAK_PORT:-8087}" 2>/dev/null; then
@@ -235,6 +249,14 @@ start_layers() {
         start sitaware-nvg layers/nato_nvg_layer.py
     else
         echo "  [skip] sitaware-nvg — set SITAWARE_NVG_URL and SITAWARE_NVG_USER to enable"
+    fi
+
+    # SitaWare HQ NVG Import Subscription pulls a complete NVG snapshot from
+    # this native HTTP(S) feed. This is separate from the Edge REST adapter.
+    if [[ "${SITAWARE_HQ_NVG_ENABLE:-}" == "1" ]]; then
+        start sitaware-hq-nvg layers/sitaware_hq_nvg_feed.py
+    else
+        echo "  [skip] sitaware-hq-nvg — set SITAWARE_HQ_NVG_ENABLE=1 to enable"
     fi
 
     # CoT receiver — inbound CoT from external source (e.g. Giraffe radar)

@@ -89,7 +89,7 @@ class ConfigFields(BaseModel):
     @field_validator("fabric_endpoint")
     @classmethod
     def _check_safe_endpoint(cls, v: str) -> str:
-        if not _SAFE_ENDPOINT_RE.match(v):
+        if v and not _SAFE_ENDPOINT_RE.match(v):
             raise ValueError("only letters, digits, '.', '_', '/', ':', '-' are allowed")
         return v
 
@@ -114,7 +114,10 @@ def _extract_fields(raw: str) -> ConfigFields:
         if m:
             local_tcp_port = int(m.group(1))
 
-    fabric_endpoint = data["connect"]["endpoints"][0]
+    connect_endpoints = data["connect"]["endpoints"]
+    if not isinstance(connect_endpoints, list):
+        raise ValueError("connect.endpoints must be a list")
+    fabric_endpoint = connect_endpoints[0] if connect_endpoints else ""
 
     namespace_prefix = _read_prefix_file()
     storage_key_expr = data["plugins"]["storage_manager"]["storages"]["efdi_live"]["key_expr"]
@@ -152,7 +155,9 @@ def _render_config(fields: ConfigFields) -> str:
     subs = {
         "ZENOH_LISTEN_PORT": str(fields.mtls_port),
         "ZENOH_LOCAL_TCP_PORT": str(fields.local_tcp_port),
-        "ZENOH_FABRIC_ENDPOINT": fields.fabric_endpoint,
+        "ZENOH_CONNECT_ENDPOINTS": json5.dumps(
+            [fields.fabric_endpoint] if fields.fabric_endpoint else []
+        ),
         "PARTNER_NAMESPACE": fields.partner_namespace,
         "INBOUND_NAMESPACE": fields.inbound_namespace,
         "NAMESPACE_PREFIX": fields.namespace_prefix,

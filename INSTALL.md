@@ -2,7 +2,7 @@
 
 > **Platform:** Linux · **Zenoh:** 1.9.0 · **Python:** 3.10+
 
-This guide covers deploying the sensor bridge stack on a Linux host. The stack ingests ASTERIX CAT-48/34 (Giraffe AMB radar), dronuradaras.lt acoustic detection network, Link-16, MAVLink, and SitaWare, routing all tracks through a local Zenoh fabric to ATAK via CoT UDP multicast or TAK Server TCP.
+This guide covers deploying the sensor bridge stack on a Linux host. The stack ingests ASTERIX CAT-48/34 (Giraffe AMB radar), dronuradaras.lt acoustic detections, Link-16, MAVLink, and SitaWare, routing all markers through a local Zenoh fabric to TAK and SitaWare clients.
 
 ---
 
@@ -23,10 +23,11 @@ This guide covers deploying the sensor bridge stack on a Linux host. The stack i
 | --- | --- | --- |
 | UDP `<CAT48_PORT>` (default 30048) | inbound | Giraffe AMB ASTERIX stream |
 | UDP multicast `239.2.3.1:6969` | outbound | CoT delivery to ATAK |
+| UDP `<TAK_UDP_PORT>` (default 8087) | outbound | Optional direct CoT unicast to WinTAK/ATAK |
 | TCP 7448 | localhost | Local Zenoh router |
 | TCP 7447 TLS | outbound | Remote Zenoh router (requires NetBird) |
 | HTTPS 8890 | inbound | Zenoh admin GUI (Caddy-terminated, internal CA — see §10) |
-| HTTPS | outbound | dronuradaras.lt REST API |
+| HTTPS | outbound | dronuradaras.lt APIs |
 
 ATAK devices must be on the same L2 segment as the server for multicast delivery. Cross-VLAN or cross-subnet deployments require a TAK Server (`cot-tcp` service).
 
@@ -139,6 +140,7 @@ TAK_PORT=8087
 SITAWARE_URL=https://sitaware.example.com
 SITAWARE_USER=
 SITAWARE_PASS=
+SITAWARE_API_PATH=              # required, deployment-specific REST resource
 
 # ── NATO NFFI (STANAG 4677) friendly-force feed (inbound XML) ───────────────
 NFFI_HOST=
@@ -150,6 +152,16 @@ SITAWARE_NVG_URL=
 SITAWARE_NVG_USER=
 SITAWARE_NVG_PASS=
 SITAWARE_NVG_SOURCE=efdi-live
+
+# ── SitaWare HQ (outbound NVG feed polled by an HQ Import Subscription) ─────
+SITAWARE_HQ_NVG_ENABLE=0
+SITAWARE_HQ_NVG_BIND=127.0.0.1  # set to the EFDI LAN IP or 0.0.0.0 for HQ
+SITAWARE_HQ_NVG_PORT=8088
+SITAWARE_HQ_NVG_PATH=/nvg
+SITAWARE_HQ_NVG_USER=
+SITAWARE_HQ_NVG_PASS=
+SITAWARE_HQ_NVG_TLS_CERT=
+SITAWARE_HQ_NVG_TLS_KEY=
 
 # ── Link-16 JREAP-C ─────────────────────────────────────────────────────────
 LINK16_PORT=                   # Leave empty if no Link-16 source
@@ -185,23 +197,24 @@ The interactive launcher displays all services with their readiness state. Toggl
   [ 3] [ ] link16         Link-16 JREAP-C datalink               LINK16_PORT not set
   [ 4] [ ] mavlink        MAVLink UAV telemetry                   MAVLINK_PORT not set
   [ 5] [ ] vmf            VMF MIL-STD-47001C messages            VMF_PORT not set
-  [ 6] [ ] sitaware       SitaWare HQ friendly force tracking (inbound REST)  will prompt for address+login
+  [ 6] [ ] sitaware       SitaWare HQ documented JSON resource (inbound)      will prompt for address+login
   [ 7] [ ] nffi           NATO NFFI friendly force XML feed (inbound)         NFFI_HOST not set
   [ 8] [ ] dronuradaras   dronuradaras.lt drone detection        ready
-
   Output layers
   ──────────────────────────────────────────────────────────
   [ 9] [✓] cot-udp        CoT → ATAK UDP multicast 239.2.3.1:6969
-  [10] [✓] cot-tcp        CoT → TAK Server TCP
-  [11] [ ] sitaware-nvg   EFDI tracks → SitaWare Edge (outbound NVG)          will prompt for address+login
-  [12] [✓] track-fusion   Radar/ADS-B track correlation
+  [10] [ ] cot-udp-tak    CoT → WinTAK/ATAK UDP unicast
+  [11] [✓] cot-tcp        CoT → TAK Server TCP
+  [12] [ ] sitaware-nvg   EFDI tracks → SitaWare Edge (outbound NVG)          will prompt for address+login
+  [13] [ ] sitaware-hq-nvg EFDI tracks → SitaWare HQ pull feed                SITAWARE_HQ_NVG_ENABLE=0
+  [14] [✓] track-fusion   Radar/ADS-B track correlation
 ```
 
 **Launcher controls:**
 
 | Input | Action |
 | --- | --- |
-| `1`–`12` | Toggle individual service (space-separated for multiple) |
+| `1`–`15` | Toggle individual service (space-separated for multiple) |
 | `a` | Select all ready services |
 | `n` | Deselect all |
 | Enter | Launch selected services |
@@ -214,12 +227,14 @@ The interactive launcher displays all services with their readiness state. Toggl
 | Giraffe radar + ATAK multicast | `1 2 9` |
 | Giraffe + drone detection + ATAK | `1 2 8 9` |
 | Giraffe + SitaWare + ATAK multicast | `1 2 6 9` |
-| Giraffe + SitaWare + drone detection + ATAK | `1 2 6 8 9` |
-| EFDI tracks pushed out to SitaWare Edge | `1 2 11` |
+| EFDI tracks pushed out to SitaWare Edge | `1 2 12` |
+| EFDI tracks polled by SitaWare HQ | `1 2 13` |
 | All sensors + TAK Server | `a`, then deselect `9` (cot-udp) |
-| Radar only, no ATAK (debug) | `1 2 12` |
+| Radar only, no TAK output (debug) | `1 2 14` |
 
 Processes are tracked via PID files in `$POD_STATE_DIR/.pids/` and log to `$POD_STATE_DIR/logs/<service>.log`.
+
+After a successful launch, `start.sh` remembers the selected services and the last TAK/SitaWare endpoint addresses in `$POD_STATE_DIR/launcher-state.env` (mode 600). It never stores passwords, API keys, or certificate material there. Explicit values in `compose/.env` take precedence over remembered addresses.
 
 ---
 
@@ -235,9 +250,13 @@ Processes are tracked via PID files in `$POD_STATE_DIR/.pids/` and log to `$POD_
 
 Set `TAK_HOST` and `TAK_PORT` in `.env`, then select `cot-tcp` instead of `cot-udp` in the launcher.
 
-### SitaWare HQ friendly-force tracking (inbound)
+### Direct WinTAK/ATAK UDP (no TAK Server)
 
-SitaWare publishes all unit positions to ATAK automatically once the `sitaware` service is running. No ATAK-side configuration is required beyond normal CoT reception.
+Set `TAK_UDP_HOST=<client-ip>` and `TAK_UDP_PORT=<port>` in `compose/.env`, select `cot-udp-tak`, and configure a matching UDP input on the client. Allow that inbound UDP port through the client firewall. This sends CoT directly to one client and does not use TAK Server certificates.
+
+### SitaWare HQ REST tracking (optional inbound adapter)
+
+Use `sitaware` only when the target deployment documents a compatible JSON unit resource and authentication method. A `/rest/v2/*` servlet mapping does not imply that `/rest/v2/units` exists; that guessed resource returns 404 on the verified HQ 6.22 installation.
 
 Leave `SITAWARE_URL`/`SITAWARE_USER`/`SITAWARE_PASS` unset in `.env` and the launcher prompts for the server address and login (username, then hidden password input) each time you select `sitaware` — or pre-fill them in `.env` to skip the prompt. (A second address can still be set via `SITAWARE_URL_FALLBACK` directly in `.env` for a genuine LAN-vs-mesh split — the interactive prompt only asks for one.)
 
@@ -248,6 +267,7 @@ SITAWARE_URL=https://<sitaware-host>
 SITAWARE_URL_FALLBACK=https://<netbird-mesh-ip>   # optional second path
 SITAWARE_USER=<username>
 SITAWARE_PASS=<password>
+SITAWARE_API_PATH=/<documented-resource-path>
 SITAWARE_POLL_S=10   # optional — poll interval in seconds (default 10)
 ```
 
@@ -292,6 +312,60 @@ SITAWARE_NVG_PASS=<password>
 SITAWARE_NVG_SOURCE=efdi-live    # NVG source name, created automatically on first push
 ```
 
+### SitaWare Headquarters (outbound NVG pull feed)
+
+`sitaware-hq-nvg` is the native Python output for an HQ-only deployment. It subscribes to EFDI tracks, keeps a bounded live snapshot, and exposes NVG 2.0.2 over a read-only HTTP(S) endpoint. SitaWare Headquarters polls it through **SitaWare Communication → NVG → NVG Import Subscriptions**. This is separate from the Edge REST adapter above.
+
+Create an HQ layer first:
+
+```text
+Suggested Layer Key: blank
+Name:                EFDI Live Tracks
+Path:                /efdi-live
+Type:                NVG
+Persist tracks:      off
+```
+
+Configure the feed in `compose/.env`:
+
+```bash
+SITAWARE_HQ_NVG_ENABLE=1
+SITAWARE_HQ_NVG_BIND=0.0.0.0
+SITAWARE_HQ_NVG_PORT=8088
+SITAWARE_HQ_NVG_PATH=/nvg
+SITAWARE_HQ_NVG_USER=<dedicated-feed-user>
+SITAWARE_HQ_NVG_PASS=<dedicated-random-password>
+SITAWARE_HQ_NVG_TLS_CERT=/path/to/server-cert.pem
+SITAWARE_HQ_NVG_TLS_KEY=/path/to/server-key.pem
+SITAWARE_HQ_NVG_STALE_S=120
+SITAWARE_HQ_NVG_MAX_TRACKS=10000
+```
+
+Start `sitaware-hq-nvg` from `./start.sh`, or use `./run.sh all`. Test from the HQ Windows host without printing operational data:
+
+```powershell
+curl.exe -k -u "<feed-user>:<feed-password>" -sS -o NUL `
+  -w "HTTP %{http_code} %{content_type}`n" `
+  https://<efdi-linux-ip>:8088/nvg
+```
+
+Use `-k` only for the initial connectivity check. Install the feed certificate's issuing CA in the HQ Windows trust store before normal operation.
+
+Create the HQ import subscription:
+
+```text
+Subscription Name:         EFDI Live Tracks
+Remote Endpoint:           https://<efdi-linux-ip>:8088/nvg
+Target Layer:              efdi-live / EFDI Live Tracks
+Request NVG periodically:  yes
+Polling Interval:          10 seconds
+Reconnect Delay:           90 seconds
+Authentication:            enabled, using the dedicated feed credentials
+Pause Subscription:        no
+```
+
+The endpoint accepts GET/HEAD only. It requires Basic authentication by default, bounds the cache, removes tracks not refreshed within `SITAWARE_HQ_NVG_STALE_S`, and gives each NVG object a matching `TimeSpan` expiry so HQ hides stale objects even when the feed goes offline. When present in the source, standard NVG modifiers and bounded `ExtendedData` carry callsign, registration/ICAO, aircraft or vessel type, squawk, route, source, APRS path/comment, vessel IDs, sensor identity, and other safe scalar fields. The Attributes view reuses the CoT/TAK domain formatter, presenting clean sections rather than raw Python field names. Aircraft expose separate barometric and geometric altitude, primary altitude in metres/feet/flight level, climb/descent rate, selected/target altitude, speed/heading, emergency/autopilot state, and ADS-B quality. Fixed APRS points and dronuradaras.lt detections use the HQ-supported neutral equipment-sensor symbol; weather stations use a distinct neutral meteorological-unit symbol. It refuses cleartext HTTP on a non-loopback address unless `SITAWARE_HQ_NVG_ALLOW_INSECURE_HTTP=1` is explicitly set for an isolated lab. Do not use a Keycloak account or password for this feed.
+
 ### Icon reference
 
 | ATAK appearance | CoT type | Source |
@@ -324,6 +398,7 @@ SITAWARE_NVG_SOURCE=efdi-live    # NVG source name, created automatically on fir
 | `cot-udp` | `layers/cot_layer.py` | Subscriber — all topics | Event-driven |
 | `cot-tcp` | `layers/cot_layer.py` | Subscriber — all topics | Event-driven |
 | `sitaware-nvg` | `layers/nato_nvg_layer.py` | Subscriber — all track topics | Event-driven, 10 s refresh |
+| `sitaware-hq-nvg` | `layers/sitaware_hq_nvg_feed.py` | Subscriber — all track topics | Pull-based NVG snapshot |
 | `track-fusion` | `layers/track_fusion_layer.py` | CAT-48 + CAT-21 subscriber | Event-driven |
 
 > **ASTERIX editions:** CAT-48 follows EUROCONTROL Edition 1.32 and CAT-34 follows Edition 1.29. CAT-20, CAT-21, and CAT-62 currently use legacy compatibility UAPs and print a warning when enabled; do not connect modern CAT-20 1.9, CAT-21 2.2+, or CAT-62 1.21 feeds until their exact decoder profiles are implemented. Link-16 accepts UDP only because the gateway's TCP framing is not yet documented.
@@ -450,6 +525,17 @@ SitaWare units without a valid 15-character SIDC are routed to `…/land/sitawar
 ```bash
 grep "sidc=" $POD_STATE_DIR/logs/sitaware.log | head -10
 ```
+
+### EFDI tracks not appearing in SitaWare HQ
+
+```bash
+tail -f $POD_STATE_DIR/logs/sitaware-hq-nvg.log
+curl -u "$SITAWARE_HQ_NVG_USER:$SITAWARE_HQ_NVG_PASS" \
+  -o /dev/null -w '%{http_code} %{content_type}\n' \
+  "http://127.0.0.1:${SITAWARE_HQ_NVG_PORT:-8088}${SITAWARE_HQ_NVG_PATH:-/nvg}"
+```
+
+Expected status is `200 application/xml`. In the HQ NVG manager, verify the subscription is unpaused, connected, polling the EFDI host address (not the HQ address), and targets `efdi-live / EFDI Live Tracks`. If TLS is configured, omit `-k` after the issuing CA is trusted. A local `200` plus an HQ connection failure indicates routing, Windows firewall, Linux firewall, or certificate trust—not an NVG conversion failure.
 
 ### Duplicate process instances
 

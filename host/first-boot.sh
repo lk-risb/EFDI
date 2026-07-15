@@ -55,14 +55,19 @@ install -m 644 "$CA_PATH"   "${ZENOH_TLS_DIR}/ca-roots.pem"
 
 # --- [2/4] Render the pod Zenoh router config ----------------------------------------------------
 echo "==> [2/4] rendering Zenoh router config"
-[ -n "${ZENOH_FABRIC_ENDPOINT}" ] || { echo "ZENOH_FABRIC_ENDPOINT unset in compose/.env — cannot render"; exit 1; }
-export ZENOH_LISTEN_PORT ZENOH_LOCAL_TCP_PORT ZENOH_FABRIC_ENDPOINT PARTNER_NAMESPACE INBOUND_NAMESPACE NAMESPACE_PREFIX NAMESPACE_ROOT
+ZENOH_CONNECT_ENDPOINTS="[]"
+if [ -n "${ZENOH_FABRIC_ENDPOINT}" ]; then
+  # shellcheck disable=SC2089  # JSON quotes are data consumed by envsubst.
+  printf -v ZENOH_CONNECT_ENDPOINTS '["%s"]' "${ZENOH_FABRIC_ENDPOINT}"
+fi
+# shellcheck disable=SC2090  # Preserve the JSON string for envsubst below.
+export ZENOH_LISTEN_PORT ZENOH_LOCAL_TCP_PORT ZENOH_CONNECT_ENDPOINTS PARTNER_NAMESPACE INBOUND_NAMESPACE NAMESPACE_PREFIX NAMESPACE_ROOT
 export ZENOH_VERIFY_NAME_ON_CONNECT ZENOH_PLUGINS_LOADING_ENABLED
 export POD_CERT_PEM="/etc/zenoh/tls/pod-cert.pem"   # in-container paths (compose mounts ZENOH_TLS_DIR ro)
 export POD_KEY_PEM="/etc/zenoh/tls/pod-key.pem"
 export CA_ROOTS_PEM="/etc/zenoh/tls/ca-roots.pem"
 envsubst \
-  '${ZENOH_LISTEN_PORT} ${ZENOH_LOCAL_TCP_PORT} ${ZENOH_FABRIC_ENDPOINT} ${PARTNER_NAMESPACE} ${INBOUND_NAMESPACE} ${NAMESPACE_PREFIX} ${NAMESPACE_ROOT} ${ZENOH_VERIFY_NAME_ON_CONNECT} ${ZENOH_PLUGINS_LOADING_ENABLED} ${POD_CERT_PEM} ${POD_KEY_PEM} ${CA_ROOTS_PEM}' \
+  '${ZENOH_LISTEN_PORT} ${ZENOH_LOCAL_TCP_PORT} ${ZENOH_CONNECT_ENDPOINTS} ${PARTNER_NAMESPACE} ${INBOUND_NAMESPACE} ${NAMESPACE_PREFIX} ${NAMESPACE_ROOT} ${ZENOH_VERIFY_NAME_ON_CONNECT} ${ZENOH_PLUGINS_LOADING_ENABLED} ${POD_CERT_PEM} ${POD_KEY_PEM} ${CA_ROOTS_PEM}' \
   < "${POD_DIR}/host/zenoh-router.json5.tmpl" \
   > "${POD_STATE_DIR}/zenoh/config.json5"
 echo "    wrote ${POD_STATE_DIR}/zenoh/config.json5"

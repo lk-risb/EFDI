@@ -4,7 +4,7 @@
 >
 > Techniniai terminai, komandų ir failų pavadinimai pateikiami anglų kalba.
 
-Šis vadovas aprašo sensorių bridge'ų steko diegimą Linux serveryje. Stekas priima ASTERIX CAT-48/34 (Giraffe AMB radaras), dronuradaras.lt akustinius jutiklius, Link-16, MAVLink ir SitaWare duomenis, juos nukreipia per vietinę Zenoh magistralę ir pristatyta į ATAK kaip CoT pranešimai — UDP multicast arba TCP per TAK serverį.
+Šis vadovas aprašo sensorių bridge'ų steko diegimą Linux serveryje. Stekas priima ASTERIX CAT-48/34, dronuradaras.lt aptikimus, Link-16, MAVLink ir SitaWare duomenis, tada per vietinę Zenoh magistralę pateikia juos TAK ir SitaWare klientams.
 
 ---
 
@@ -25,10 +25,11 @@
 | --- | --- | --- |
 | UDP `<CAT48_PORT>` (numatytasis 30048) | į serverį | Giraffe AMB ASTERIX srautas |
 | UDP multicast `239.2.3.1:6969` | iš serverio | CoT pristatymas į ATAK |
+| UDP `<TAK_UDP_PORT>` (numatytasis 8087) | iš serverio | Pasirinktinis tiesioginis CoT į WinTAK/ATAK |
 | TCP 7448 | localhost | Vietinis Zenoh router |
 | TCP 7447 TLS | iš serverio | Nuotolinis Zenoh router (reikia NetBird) |
 | HTTPS 8890 | į serverį | Zenoh administravimo GUI (Caddy TLS, vidinis CA — žr. §10) |
-| HTTPS | iš serverio | dronuradaras.lt REST API |
+| HTTPS | iš serverio | dronuradaras.lt API |
 
 ATAK įrenginiai turi būti tame pačiame L2 tinklo segmente kaip serveris (multicast neperžengia VLAN ribų be maršrutizatoriaus konfigūracijos). Tarpvietiniam diegimui naudokite TAK serverį ir `cot-tcp` paslaugą.
 
@@ -141,6 +142,7 @@ TAK_PORT=8087
 SITAWARE_URL=https://sitaware.example.com
 SITAWARE_USER=
 SITAWARE_PASS=
+SITAWARE_API_PATH=              # privalomas konkretus diegimo REST resursas
 
 # ── NATO NFFI (STANAG 4677) draugiškų pajėgų srautas (gaunamas XML) ─────────
 NFFI_HOST=
@@ -152,6 +154,16 @@ SITAWARE_NVG_URL=
 SITAWARE_NVG_USER=
 SITAWARE_NVG_PASS=
 SITAWARE_NVG_SOURCE=efdi-live
+
+# ── SitaWare HQ (siunčiamas NVG srautas, kurį periodiškai ima HQ) ───────────
+SITAWARE_HQ_NVG_ENABLE=0
+SITAWARE_HQ_NVG_BIND=127.0.0.1  # HQ pasiekiamas EFDI LAN IP arba 0.0.0.0
+SITAWARE_HQ_NVG_PORT=8088
+SITAWARE_HQ_NVG_PATH=/nvg
+SITAWARE_HQ_NVG_USER=
+SITAWARE_HQ_NVG_PASS=
+SITAWARE_HQ_NVG_TLS_CERT=
+SITAWARE_HQ_NVG_TLS_KEY=
 
 # ── Link-16 JREAP-C ─────────────────────────────────────────────────────────
 LINK16_PORT=                   # Palikite tuščią, jei Link-16 šaltinio nėra
@@ -187,23 +199,24 @@ Interaktyvus paleidiklis rodo visas paslaugas su jų parengties būsena. Įjunki
   [ 3] [ ] link16         Link-16 JREAP-C datalink               LINK16_PORT not set
   [ 4] [ ] mavlink        MAVLink UAV telemetry                   MAVLINK_PORT not set
   [ 5] [ ] vmf            VMF MIL-STD-47001C messages            VMF_PORT not set
-  [ 6] [ ] sitaware       SitaWare HQ friendly force tracking (inbound REST)  will prompt for address+login
+  [ 6] [ ] sitaware       SitaWare HQ dokumentuotas JSON resursas (gaunamas)  will prompt for address+login
   [ 7] [ ] nffi           NATO NFFI friendly force XML feed (inbound)         NFFI_HOST not set
   [ 8] [ ] dronuradaras   dronuradaras.lt drone detection        ready
-
   Output layers
   ──────────────────────────────────────────────────────────
   [ 9] [✓] cot-udp        CoT → ATAK UDP multicast 239.2.3.1:6969
-  [10] [✓] cot-tcp        CoT → TAK Server TCP
-  [11] [ ] sitaware-nvg   EFDI tracks → SitaWare Edge (outbound NVG)          will prompt for address+login
-  [12] [✓] track-fusion   Radar/ADS-B track correlation
+  [10] [ ] cot-udp-tak    CoT → WinTAK/ATAK UDP unicast
+  [11] [✓] cot-tcp        CoT → TAK Server TCP
+  [13] [ ] sitaware-nvg   EFDI tracks → SitaWare Edge (outbound NVG)          will prompt for address+login
+  [14] [ ] sitaware-hq-nvg EFDI tracks → SitaWare HQ pull feed                SITAWARE_HQ_NVG_ENABLE=0
+  [15] [✓] track-fusion   Radar/ADS-B track correlation
 ```
 
 **Paleidiklio valdymas:**
 
 | Įvestis | Veiksmas |
 | --- | --- |
-| `1`–`12` | Įjungti / išjungti paslaugą (keli skaičiai atskiriami tarpu) |
+| `1`–`15` | Įjungti / išjungti paslaugą (keli skaičiai atskiriami tarpu) |
 | `a` | Pasirinkti visas paruoštas paslaugas |
 | `n` | Atžymėti visas |
 | Enter | Paleisti pažymėtas paslaugas |
@@ -216,12 +229,14 @@ Interaktyvus paleidiklis rodo visas paslaugas su jų parengties būsena. Įjunki
 | Giraffe radaras + ATAK multicast | `1 2 9` |
 | Giraffe + drono aptikimai + ATAK | `1 2 8 9` |
 | Giraffe + SitaWare + ATAK multicast | `1 2 6 9` |
-| Giraffe + SitaWare + drono aptikimai + ATAK | `1 2 6 8 9` |
-| EFDI takeliai siunčiami į SitaWare Edge | `1 2 11` |
+| EFDI takeliai siunčiami į SitaWare Edge | `1 2 12` |
+| SitaWare HQ periodiškai ima EFDI takelius | `1 2 13` |
 | Visi jutikliai + TAK serveris | `a`, tada atžymėkite `9` (cot-udp) |
-| Tik radaras be ATAK (derinimui) | `1 2 12` |
+| Tik radaras be TAK išvesties (derinimui) | `1 2 14` |
 
 Procesų PID failai saugomi `$POD_STATE_DIR/.pids/`, žurnalai rašomi į `$POD_STATE_DIR/logs/<paslauga>.log`.
+
+Po sėkmingo paleidimo `start.sh` išsaugo pasirinktų paslaugų sąrašą ir paskutinius TAK/SitaWare adresus faile `$POD_STATE_DIR/launcher-state.env` (teisės 600). Slaptažodžiai, API raktai ir sertifikatai ten nesaugomi. Aiškiai `compose/.env` nustatyti adresai turi pirmenybę.
 
 ---
 
@@ -237,9 +252,13 @@ Procesų PID failai saugomi `$POD_STATE_DIR/.pids/`, žurnalai rašomi į `$POD_
 
 Nustatykite `TAK_HOST` ir `TAK_PORT` faile `.env`, tada paleidiklyje pasirinkite `cot-tcp` vietoj `cot-udp`.
 
-### SitaWare HQ draugiškų pajėgų sekimas (gaunama kryptis)
+### Tiesioginis WinTAK/ATAK UDP (be TAK serverio)
 
-SitaWare vieneto pozicijos automatiškai publikuojamos į ATAK kai veikia `sitaware` paslauga. Jokios papildomos ATAK konfigūracijos nereikia.
+Faile `compose/.env` nustatykite `TAK_UDP_HOST=<kliento-ip>` ir `TAK_UDP_PORT=<prievadas>`, pasirinkite `cot-udp-tak`, o kliente sukurkite atitinkamą UDP įvestį. Kliento ugniasienėje leiskite šį gaunamą UDP prievadą. Šiam būdui TAK serverio sertifikatų nereikia.
+
+### SitaWare HQ REST sekimas (pasirinktinis gaunamas adapteris)
+
+`sitaware` naudokite tik tada, kai konkretaus diegimo dokumentacijoje nurodytas suderinamas JSON vienetų resursas ir autentifikavimo būdas. `/rest/v2/*` servlet'o maršrutas nereiškia, kad egzistuoja `/rest/v2/units`; patikrintame HQ 6.22 šis spėjamas resursas grąžina 404.
 
 Palikite `SITAWARE_URL`/`SITAWARE_USER`/`SITAWARE_PASS` tuščius faile `.env` ir paleidiklis paklaus serverio adreso bei prisijungimo (vartotojo vardas, tada paslėptas slaptažodžio laukas) kaskart pasirinkus `sitaware` — arba užpildykite juos `.env` iš anksto, kad praleistumėte klausimą. (Antrą adresą vis tiek galima nustatyti per `SITAWARE_URL_FALLBACK` tiesiogiai `.env` faile, jei tikrai yra atskiras LAN/mesh kelias — interaktyvus klausimas paklaus tik vieno adreso.)
 
@@ -250,6 +269,7 @@ SITAWARE_URL=https://<sitaware-serveris>
 SITAWARE_URL_FALLBACK=https://<netbird-mesh-ip>   # neprivaloma — antras kelias
 SITAWARE_USER=<vartotojo vardas>
 SITAWARE_PASS=<slaptažodis>
+SITAWARE_API_PATH=/<dokumentuotas-resurso-kelias>
 SITAWARE_POLL_S=10   # neprivaloma — apklausos intervalas sekundėmis (numatytasis 10)
 ```
 
@@ -294,6 +314,60 @@ SITAWARE_NVG_PASS=<slaptažodis>
 SITAWARE_NVG_SOURCE=efdi-live    # NVG šaltinio pavadinimas, sukuriamas automatiškai pirmo siuntimo metu
 ```
 
+### SitaWare Headquarters (siunčiamas NVG srautas, kurį ima HQ)
+
+`sitaware-hq-nvg` yra natyvus Python išvesties procesas, skirtas HQ diegimui. Jis prenumeruoja EFDI takelius, laiko riboto dydžio gyvą momentinę būseną ir pateikia NVG 2.0.2 per tik skaitymui skirtą HTTP(S) adresą. SitaWare Headquarters jį periodiškai ima per **SitaWare Communication → NVG → NVG Import Subscriptions**. Tai nėra aukščiau aprašytas Edge REST adapteris.
+
+Pirmiausia HQ sukurkite sluoksnį:
+
+```text
+Suggested Layer Key: tuščia
+Name:                EFDI Live Tracks
+Path:                /efdi-live
+Type:                NVG
+Persist tracks:      išjungta
+```
+
+`compose/.env` nustatymai:
+
+```bash
+SITAWARE_HQ_NVG_ENABLE=1
+SITAWARE_HQ_NVG_BIND=0.0.0.0
+SITAWARE_HQ_NVG_PORT=8088
+SITAWARE_HQ_NVG_PATH=/nvg
+SITAWARE_HQ_NVG_USER=<atskiras-srauto-vartotojas>
+SITAWARE_HQ_NVG_PASS=<atsitiktinis-stiprus-slaptažodis>
+SITAWARE_HQ_NVG_TLS_CERT=/kelias/iki/serverio-cert.pem
+SITAWARE_HQ_NVG_TLS_KEY=/kelias/iki/serverio-key.pem
+SITAWARE_HQ_NVG_STALE_S=120
+SITAWARE_HQ_NVG_MAX_TRACKS=10000
+```
+
+Paleiskite `sitaware-hq-nvg` per `./start.sh` arba `./run.sh all`. HQ Windows serveryje pirmą ryšį patikrinkite nespausdindami operacinių duomenų:
+
+```powershell
+curl.exe -k -u "<srauto-vartotojas>:<srauto-slaptažodis>" -sS -o NUL `
+  -w "HTTP %{http_code} %{content_type}`n" `
+  https://<efdi-linux-ip>:8088/nvg
+```
+
+`-k` naudokite tik pirminiam ryšio patikrinimui. Normaliam darbui į HQ Windows patikimų šakninių sertifikatų saugyklą įdiekite srautą išdavusią CA.
+
+HQ importo prenumeratos reikšmės:
+
+```text
+Subscription Name:         EFDI Live Tracks
+Remote Endpoint:           https://<efdi-linux-ip>:8088/nvg
+Target Layer:              efdi-live / EFDI Live Tracks
+Request NVG periodically:  taip
+Polling Interval:          10 sekundžių
+Reconnect Delay:           90 sekundžių
+Authentication:            įjungta, atskiri srauto prisijungimo duomenys
+Pause Subscription:        ne
+```
+
+Adresas priima tik GET/HEAD, pagal nutylėjimą reikalauja Basic autentifikavimo, riboja talpyklos dydį, pašalina ilgiau nei `SITAWARE_HQ_NVG_STALE_S` neatnaujintus takelius ir kiekvienam NVG objektui prideda tokios pačios trukmės `TimeSpan`, kad HQ paslėptų pasenusius objektus net nutrūkus srautui. Kai šaltinyje yra duomenų, standartiniai NVG modifikatoriai ir ribotas `ExtendedData` taip pat perduoda šaukinį, registraciją/ICAO, orlaivio ar laivo tipą, squawk, maršrutą, šaltinį, APRS kelią/komentarą, laivo ID bei sensoriaus tapatybę. Attributes kortelė naudoja tą patį domeno formatavimą kaip CoT/TAK, todėl rodomi tvarkingi skyriai, o ne neapdoroti Python laukų pavadinimai. Orlaiviams atskirai pateikiamas barometrinis ir geometrinis aukštis, pagrindinis aukštis metrais/pėdomis/skrydžio lygiu, kilimo ar leidimosi greitis, pasirinktas/tikslinis aukštis, greitis, kryptis, avarinė/autopiloto būsena ir ADS-B kokybės laukai. Stacionarūs APRS taškai ir dronuradaras.lt aptikimai naudoja HQ palaikomą neutralaus įrangos sensoriaus simbolį, o orų stotys — atskirą neutralų meteorologinio vieneto simbolį. Ne lokaliame adrese procesas atsisako startuoti per paprastą HTTP, nebent izoliuotai laboratorijai aiškiai nustatyta `SITAWARE_HQ_NVG_ALLOW_INSECURE_HTTP=1`. Nenaudokite Keycloak paskyros ar slaptažodžio šiam srautui.
+
 ### Piktogramų žinynas
 
 | ATAK piktograma | CoT tipas | Šaltinis |
@@ -326,6 +400,7 @@ SITAWARE_NVG_SOURCE=efdi-live    # NVG šaltinio pavadinimas, sukuriamas automat
 | `cot-udp` | `layers/cot_layer.py` | Prenumeratorius — visos temos | Įvykio valdomas |
 | `cot-tcp` | `layers/cot_layer.py` | Prenumeratorius — visos temos | Įvykio valdomas |
 | `sitaware-nvg` | `layers/nato_nvg_layer.py` | Prenumeratorius — visos takelių temos | Įvykio valdomas, 10 s atnaujinimas |
+| `sitaware-hq-nvg` | `layers/sitaware_hq_nvg_feed.py` | Prenumeratorius — visos takelių temos | HQ periodiškai ima NVG būseną |
 | `track-fusion` | `layers/track_fusion_layer.py` | CAT-48 + CAT-21 prenumeratorius | Įvykio valdomas |
 
 > **ASTERIX leidimai:** CAT-48 atitinka EUROCONTROL 1.32 leidimą, o CAT-34 — 1.29 leidimą. CAT-20, CAT-21 ir CAT-62 šiuo metu naudoja tik senus suderinamumo UAP ir įjungti parodo įspėjimą; nejunkite modernių CAT-20 1.9, CAT-21 2.2+ ar CAT-62 1.21 srautų, kol neįgyvendintas tikslus dekoderio profilis. Link-16 priima tik UDP, nes šliuzo TCP kadravimas dar neaprašytas.
@@ -452,6 +527,17 @@ SitaWare vienetai be galiojančio 15 simbolių SIDC kodo nukreipiami į `…/lan
 ```bash
 grep "sidc=" $POD_STATE_DIR/logs/sitaware.log | head -10
 ```
+
+### EFDI takeliai nerodomi SitaWare HQ
+
+```bash
+tail -f $POD_STATE_DIR/logs/sitaware-hq-nvg.log
+curl -u "$SITAWARE_HQ_NVG_USER:$SITAWARE_HQ_NVG_PASS" \
+  -o /dev/null -w '%{http_code} %{content_type}\n' \
+  "http://127.0.0.1:${SITAWARE_HQ_NVG_PORT:-8088}${SITAWARE_HQ_NVG_PATH:-/nvg}"
+```
+
+Laukiamas atsakymas — `200 application/xml`. HQ NVG valdyme patikrinkite, kad prenumerata nesustabdyta, prisijungusi, kreipiasi į EFDI hosto adresą (ne HQ adresą) ir naudoja `efdi-live / EFDI Live Tracks` sluoksnį. Jei vietinis testas grąžina `200`, o HQ neprisijungia, tikrinkite maršrutizavimą, Windows/Linux ugniasienes ir sertifikato patikimumą, o ne NVG konvertavimą.
 
 ### Keli to paties proceso egzemplioriai
 

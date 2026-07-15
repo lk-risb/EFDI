@@ -28,7 +28,7 @@ Configuration (compose/.env):
     SITAWARE_USER=admin                    # basic-auth username
     SITAWARE_PASS=secret                   # basic-auth password
     SITAWARE_SOURCE=efdi-live              # source tag written into _src field
-    SITAWARE_API_PATH=/rest/v2/units       # endpoint path (default shown)
+    SITAWARE_API_PATH=/deployment/path     # required deployment-specific resource path
     SITAWARE_POLL_S=10                     # poll interval in seconds (default 10)
     SITAWARE_TLS_VERIFY=1                  # set 0 to skip certificate check (self-signed)
 
@@ -40,14 +40,17 @@ Run:
     venv/bin/python3 sitaware_bridge.py
     venv/bin/python3 sitaware_bridge.py --verbose
 
-The bridge handles the most common SitaWare REST response shapes:
+The bridge handles several common REST response shapes once the deployment's
+documented resource path and authentication method have been confirmed:
     { "units": [...] }        # HQ 2.x array wrapper
     { "data": [...] }         # alternative wrapper
     [...]                     # bare array
     { "unit": {...} }         # single-unit response
 
-Each unit element is normalised — the bridge tries multiple field name variants
-so it works across SitaWare HQ 2.x and 3.x without code changes.
+Each unit element is normalised using multiple common field name variants.
+SitaWare HQ 6.22 maps a MIP4 servlet at /rest/v2/*, but that mapping alone does
+not define a universal /rest/v2/units resource.  Do not infer an endpoint from
+the servlet mapping; obtain the resource path from the deployment's API/ICD.
 """
 
 import argparse
@@ -78,7 +81,7 @@ _active_url_idx = 0                # index into _BASE_URLS of the last-known-goo
 _USER        = os.environ.get("SITAWARE_USER",     "")
 _PASS        = os.environ.get("SITAWARE_PASS",     "")
 _SOURCE      = os.environ.get("SITAWARE_SOURCE",   "sitaware")
-_API_PATH    = os.environ.get("SITAWARE_API_PATH", "/rest/v2/units")
+_API_PATH    = os.environ.get("SITAWARE_API_PATH", "").strip()
 _POLL_S      = float(os.environ.get("SITAWARE_POLL_S", "10"))
 _TLS_VERIFY  = os.environ.get("SITAWARE_TLS_VERIFY", "1") not in ("0", "false", "no")
 
@@ -268,7 +271,8 @@ def normalise_unit(raw: dict) -> dict | None:
         return None
 
     try:
-        lat = float(lat); lon = float(lon)
+        lat = float(lat)
+        lon = float(lon)
     except (TypeError, ValueError):
         return None
     if not (math.isfinite(lat) and math.isfinite(lon)) or not (-90 <= lat <= 90 and -180 <= lon <= 180):
@@ -356,6 +360,14 @@ def run(args):
     api_path = _API_PATH
     if args.discover:
         api_path = _discover_api_path()
+    elif not api_path:
+        print(
+            "ERROR: SITAWARE_API_PATH is not set. Configure the documented "
+            "deployment-specific resource path or run with --discover for an "
+            "explicit best-effort probe.",
+            flush=True,
+        )
+        return
 
     session = zenoh.open(make_config())
     print("SitaWare bridge started", flush=True)
