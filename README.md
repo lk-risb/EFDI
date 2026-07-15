@@ -44,6 +44,7 @@ This repository is the EFDI-partner collaboration surface. It carries **no partn
 ```
 [Giraffe AMB]    ──ASTERIX UDP──► asterix_bridge     ─┐
 [dronuradaras.lt]──REST/HTTPS──► dronuradaras_bridge  ─┤
+[AISstream]      ──WSS/AIS─────► aisstream_ws_bridge ─┤
 [SitaWare HQ]    ──documented REST API──► sitaware_bridge ─┤──► Zenoh router (local) ──► cot_layer ──► ATAK
 [NFFI source]    ──TCP/XML─────► nato_nffi_layer      ─┤                                      ├──► TAK Server
 [Link-16]        ──UDP────────► link16_bridge         ─┤                                      ├──► nato_nvg_layer ──► SitaWare Edge
@@ -67,11 +68,13 @@ consumers continue to decode `/v1` safely.
 |---|---|
 | `zenoh-router` | Local pub/sub fabric — mTLS to the fabric, plaintext TCP for local bridges/GUI |
 | `asterix_bridge` | ASTERIX CAT-48 (tracks) + CAT-34 (radar status), Giraffe AMB |
-| `dronuradaras_bridge` | REST polling, acoustic sensors + drone detection events |
+| `dronuradaras_bridge` | REST polling, currently-online acoustic sensors + drone detection events; offline markers are actively evicted |
+| `aisstream_ws_bridge` | Authenticated WSS stream, AIS vessel positions and static data |
 | `sitaware_bridge` | SitaWare HQ friendly-force REST polling (inbound) |
 | `nato_nffi_layer` | NATO NFFI (STANAG 4677) friendly-force XML feed (inbound) |
 | `nato_nvg_layer` | EFDI tracks → SitaWare Edge NVG v2 push (outbound) |
 | `sitaware_hq_nvg_feed` | Pull-based NVG 2.0.2 snapshot for SitaWare HQ Import Subscriptions (outbound) |
+| `cot_receiver_bridge` | Inbound plain CoT or TAK Server mTLS stream; can import loop-protected TAK ground-user SA positions |
 | `link16_bridge` | JREAP-C UDP; TCP requires a verified gateway framing ICD |
 | `mavlink_bridge` | MAVLink 2 UDP/TCP |
 | `cot_layer` | CoT XML output — UDP multicast + TAK Server TCP |
@@ -86,12 +89,13 @@ Client onboarding is certificate-based: each pod gets a signed mTLS bundle issue
 
 ### SitaWare integration (bidirectional)
 
-Four independent paths are available; enable only interfaces documented and licensed in the target deployment. HQ and Edge are separate products/interfaces, so the adapters use disjoint environment-variable prefixes rather than sharing endpoints or credentials.
+Five independent paths are available; enable only interfaces documented and licensed in the target deployment. HQ, Frontline, and Edge expose different deployment-dependent interfaces, so the adapters use disjoint environment-variable prefixes rather than sharing endpoints or credentials.
 
 | Direction | Bridge/layer | Path |
 |---|---|---|
 | Inbound | `sitaware_bridge.py` | SitaWare **HQ** REST API → EFDI (poll-based) |
 | Inbound | `nato_nffi_layer.py` | NATO NFFI (STANAG 4677) XML feed → EFDI (streaming TCP) |
+| Inbound | `cot_receiver_bridge.py` (`sitaware-cot-rx`) | Licensed SitaWare Edge/Frontline CoT Gateway → EFDI → TAK |
 | Outbound | `nato_nvg_layer.py` | EFDI tracks → SitaWare **Edge** NVG v2 REST API (push) |
 | Outbound | `sitaware_hq_nvg_feed.py` | EFDI tracks → pull-based NVG 2.0.2 feed for SitaWare **HQ** |
 
@@ -99,9 +103,13 @@ Four independent paths are available; enable only interfaces documented and lice
 
 **`nato_nffi_layer.py` (inbound, NFFI)** — a TCP client that connects to an external STANAG 4677 friendly-force server and publishes received XML records into EFDI. It supports 4-byte big-endian length-prefixed (`--framing length`, default) or newline-delimited XML documents (`--framing newline`); the source operator must confirm the endpoint, protocol profile, and framing.
 
+**`sitaware-cot-rx` (inbound, Edge/Frontline)** — runs a second native `cot_receiver_bridge.py` instance for the SitaWare CoT Gateway, independently of the TAK Server receiver. Configure either `SITAWARE_COT_RX_PORT` for a SitaWare-initiated TCP connection or `SITAWARE_COT_RX_HOST` for an EFDI-initiated connection. Safe source CoT types are preserved end-to-end, so a Frontline tank/armoured-vehicle type reaches ATAK/WinTAK as that same military symbol rather than a generic point. Configure the SitaWare gateway to export the desired own-force/vehicle layers and exclude the EFDI Live Tracks source to prevent an NVG→SitaWare→CoT echo loop. If the deployment exposes NFFI instead of a licensed CoT Gateway, use the existing NFFI adapter for friendly-force positions.
+
 **`nato_nvg_layer.py` (outbound, Edge)** — pushes every EFDI track update as a NATO Vector Graphics (NVG) 2.0 item via `PUT` to the SitaWare Edge REST API, so any SitaWare Frontline client connected to that Edge server sees EFDI tracks live. Each item carries position, speed, course, and a SIDC-derived symbol; deleted/stale tracks are removed with a corresponding NVG delete call rather than left stale on the Edge map.
 
-**`sitaware_hq_nvg_feed.py` (outbound, HQ)** — maintains a bounded snapshot of live EFDI tracks and serves one NVG 2.0.2 document for HQ's **NVG Import Subscription** manager to poll. The endpoint supports GET/HEAD only, requires dedicated HTTP Basic credentials unless anonymous access is explicitly enabled, expires stale tracks, includes an NVG `TimeSpan` so HQ also hides expired objects if the feed goes offline, and attaches standard symbol modifiers plus bounded `ExtendedData`. Its Attributes view reuses the same domain-aware stat-card formatter as CoT/TAK, with clean Identity, IFF, Kinematics, Radar, Flight Plan, Status, Altitude, Guidance, and ADS-B Quality sections instead of raw Python keys. Aircraft include distinct barometric/geometric altitude readings, primary altitude in metres/feet/flight level, climb/descent rate, selected/target altitude, speed/heading, identity, route, emergency/autopilot state, ADS-B quality, and other safe scalar source fields available in the track. Weather stations use a meteorological 2525B SIDC distinct from the neutral equipment-sensor SIDC used by dronuradaras.lt. XML-illegal upstream characters are removed and a malformed cached record cannot break the complete feed. The endpoint refuses non-loopback cleartext HTTP unless the lab-only override is set. Prefer HTTPS with a certificate trusted by the HQ Windows host. This native Python service is enabled with `SITAWARE_HQ_NVG_ENABLE=1`; it does not add a bridge container.
+**`sitaware_hq_nvg_feed.py` (outbound, HQ)** — maintains a bounded snapshot of live EFDI tracks and serves one NVG 2.0.2 document for HQ's **NVG Import Subscription** manager to poll. The endpoint supports GET/HEAD only, requires dedicated HTTP Basic credentials unless anonymous access is explicitly enabled, expires stale tracks, includes an NVG `TimeSpan` so HQ also hides expired objects if the feed goes offline, and attaches standard symbol modifiers plus bounded `ExtendedData`. Its Attributes view reuses the same domain-aware stat-card formatter as CoT/TAK, with clean Identity, IFF, Kinematics, Radar, Flight Plan, Status, Altitude, Guidance, and ADS-B Quality sections instead of raw Python keys. Aircraft include distinct barometric/geometric altitude readings, primary altitude in metres/feet/flight level, climb/descent rate, selected/target altitude, speed/heading, identity, route, emergency/autopilot state, ADS-B quality, and other safe scalar source fields available in the track. SitaWare uses the same RU/BY ICAO and MMSI hostile-affiliation classifiers as CoT rather than assigning every ADS-B/AIS topic one static affiliation. Because HQ 6.22 renders the standards-native METOC scheme as Unknown, weather stations use its supported neutral emplaced-sensor SIDC, distinct from the generic neutral sensor used by dronuradaras.lt. The dronuradaras bridge publishes only devices whose latest API status is `is_online=true`; an offline transition immediately removes that device from this snapshot and from the CoT/Edge caches. XML-illegal upstream characters are removed and a malformed cached record cannot break the complete feed. The endpoint refuses non-loopback cleartext HTTP unless the lab-only override is set. Prefer HTTPS with a certificate trusted by the HQ Windows host. This native Python service is enabled with `SITAWARE_HQ_NVG_ENABLE=1`; it does not add a bridge container.
+
+ADS-B emitter categories `C1` and `C2` are surface emergency/service vehicles, not aircraft. CoT and both SitaWare NVG paths classify them as neutral ground vehicles (`a-n-G-E-V` / `SNGPEV----*****`). The ordinary `on_ground` flag alone is not used for this decision because taxiing aircraft must remain aircraft.
 
 ---
 
@@ -188,6 +196,13 @@ See **[INSTALL.md](INSTALL.md)** for the full English deployment guide, or **[DI
 ./dev.sh down             # tear down the dev preview stack
 docker compose logs -f zenoh-router   # follow the router's logs
 ```
+
+`start.sh` lists all 28 retained infrastructure, bridge, protocol-adapter, and
+output services. It restores the
+previous selection, merges in processes already running from `run.sh`, displays
+the complete result, and auto-starts it after a five-second window. Press `c`
+during that window to change the selection. Endpoint addresses are remembered
+in the mode-600 runtime state file; passwords and API keys are never saved.
 
 ---
 

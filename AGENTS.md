@@ -44,9 +44,30 @@ Read `CLAUDE.md` first; its project constraints apply to every agent and tool.
   dual-publishing a new `/v2` Protobuf topic before changing consumers; do not
   silently replace the bytes carried by `/v1`.
 - SitaWare NVG Attributes reuse CoT's domain-aware TAK stat-card formatter.
-  Weather is `a-n-G-I-R` in CoT and `SNGPUUMMO-*****` in NVG; dronuradaras.lt
+  Weather is `a-n-G-I-R` in CoT and `SNGPESE---*****` in NVG; dronuradaras.lt
   sensors are `a-*-G-E-S` in CoT and `SNGPES----*****` in NVG. Keep these
   categories visually and semantically distinct.
+- Publish dronuradaras.lt devices only when the latest successful public API
+  poll reports `is_online=true`. Preserve the offline tombstone path: it evicts
+  old markers from CoT, SitaWare Edge, and the SitaWare HQ NVG snapshot.
+- CoT and SitaWare NVG share the same RU/BY ICAO/MMSI affiliation classifiers;
+  do not regress ADS-B/AIS topics to one static affiliation. Full vessel traffic
+  requires the native `aisstream` bridge and a runtime-only `AISSTREAM_KEY`.
+  `start.sh` prompts for that key without saving it or placing it in argv.
+- ADS-B emitter categories `C1`/`C2` are airport surface emergency/service
+  vehicles. Keep them as `a-n-G-E-V` in CoT and `SNGPEV----*****` in NVG;
+  never use `on_ground` alone because it also describes taxiing aircraft.
+- `start.sh` exposes all 28 retained native/infrastructure services, merges its
+  saved selection with currently running PID-managed processes, and auto-starts
+  that restored set after a five-second change window. It remembers only
+  selections and non-secret endpoints. The Zenoh Config route uses TAK's
+  PageHeader/HUD card design while preserving EFDI transport, namespace,
+  federation-target, and policy fields.
+- TAK Server user SA enters through the mTLS `cot-rx` instance using a
+  TAK-issued certificate, not the Zenoh certificate. `sitaware-cot-rx` is a
+  separate native instance for the licensed Edge/Frontline CoT Gateway. Preserve
+  original safe CoT types and both loop barriers: reject `EFDI-*` ingress UIDs
+  and never send `_ingress=tak_server` back through TAK TCP.
 
 ## Installed agent skills
 

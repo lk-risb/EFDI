@@ -231,6 +231,12 @@ _TOPIC_COT = {
 _ATC_EXACT  = frozenset(["TWR", "GND", "ATIS", "APP", "DEP", "APCH", "CTR", "OPS",
                           "RAMP", "CARGO", "FUEL", "FIRE", "MAINT", "VAGON"])
 _ATC_SUFFIX = ("TWR", "GND", "ATIS", "APP", "CTR")
+_ADS_B_SURFACE_VEHICLE_CATEGORIES = frozenset({"C1", "C2"})
+
+
+def _is_adsb_surface_vehicle(track: dict) -> bool:
+    category = track.get("emitter_category_str") or track.get("category") or ""
+    return str(category).strip().upper() in _ADS_B_SURFACE_VEHICLE_CATEGORIES
 
 def _is_ground_station(track: dict) -> bool:
     cs = (track.get("callsign") or "").strip().upper()
@@ -1206,15 +1212,37 @@ def _build_remarks(track: dict, cot_type: str) -> str:
             ident_l = []; kinem_l = []
             if time_str: ident_l.append("TIME: {}".format(time_str))
             _r("CALL", (track.get("callsign") or "").strip().upper() or None, ident_l)
+            if track.get("tak_user"):
+                _r("TEAM", track.get("team"), ident_l)
+                _r("ROLE", track.get("role"), ident_l)
+                _r("PLATFORM", track.get("tak_platform"), ident_l)
+                _r("DEVICE", track.get("tak_device"), ident_l)
+                _r("APP VERSION", track.get("tak_version"), ident_l)
+                _r("OS", track.get("tak_os"), ident_l)
             if lat is not None: ident_l.append("LAT: {:.5f}°".format(round(lat, 5)))
             if lon is not None: ident_l.append("LON: {:.5f}°".format(round(lon, 5)))
             if lat is not None and lon is not None:
                 ident_l.extend(_mgrs_lines(lat, lon))
+            if track.get("alt_m") is not None:
+                altitude_m = float(track["alt_m"])
+                kinem_l.append("ALT: {} ft / {} m".format(
+                    round(altitude_m / 0.3048), round(altitude_m)
+                ))
             spd = _speed_ms(track)
             if spd:
                 kinem_l.append("HDG: {}°".format(int(_course(track))))
                 kinem_l.append("SPD: {} kt / {} km/h".format(
                     round(spd / 0.514444, 1), round(spd * 3.6, 1)))
+            _r("POSITION SOURCE", track.get("position_source"), kinem_l)
+            _r("ALTITUDE SOURCE", track.get("altitude_source"), kinem_l)
+            if track.get("ce_m") is not None:
+                kinem_l.append("POSITION ACCURACY: {} m CE".format(track["ce_m"]))
+            if track.get("le_m") is not None:
+                kinem_l.append("VERTICAL ACCURACY: {} m LE".format(track["le_m"]))
+            if track.get("battery_pct") is not None:
+                kinem_l.append("BATTERY: {}%".format(track["battery_pct"]))
+            if track.get("remarks"):
+                kinem_l.append("REMARKS: {}".format(track["remarks"]))
             kinem_l.append("SRC: {}".format(src))
             _sec("IDENTITY",   ident_l)
             _sec("KINEMATICS", kinem_l)
@@ -1407,6 +1435,7 @@ class TcpSender:
         self._certfile = certfile
         self._keyfile  = keyfile
         self._cafile   = cafile
+        self.drop_tak_ingress = True
         self._sock: socket.socket | None = None
         self._lock = threading.Lock()
         self._connect()
@@ -1511,11 +1540,31 @@ def make_handler(cot_type_or_fn, sender, verbose: bool, stale_s: float = COT_STA
         # fusion bridge publishes when no radar is covering that aircraft.
         src = track.get("_src", "")
         key = str(sample.key_expr)
+        # TAK Server connections are bidirectional. Never send a TAK-ingress
+        # track straight back into the server TCP connection; UDP consumers
+        # and SitaWare still receive it normally.
+        if track.get("_ingress") == "tak_server" and getattr(
+            sender, "drop_tak_ingress", False
+        ):
+            return
+        if src == "dronuradaras.lt" and track.get("_delete"):
+            uid = _uid(track)
+            xml = track_to_cot(track, "a-n-G-E-S", stale_s=1.0)
+            if xml is not None:
+                sender.send(xml)
+            with _dr_lock:
+                _dr_store.pop(uid, None)
+            if verbose:
+                print("CoT expired offline sensor {}".format(uid), flush=True)
+            return
         if "/fused/" not in key and (src in _ADS_B_RELAY_SOURCES or src in _RAW_SENSOR_SOURCES):
             return
         # ATC towers / ground vehicles show up in ADS-B with "TWR", "GND" etc.
         # Reclassify as neutral ground radar/radio station instead of aircraft.
-        if _is_ground_station(track):
+        if _is_adsb_surface_vehicle(track):
+            cot_type = "a-n-G-E-V"
+            stale_s_used = LAND_STALE_S
+        elif _is_ground_station(track):
             cot_type     = "a-n-G-E-S-R"
             stale_s_used = LAND_STALE_S
         else:
@@ -1524,7 +1573,9 @@ def make_handler(cot_type_or_fn, sender, verbose: bool, stale_s: float = COT_STA
             # A CoT receiver is a protocol gateway, not a classifier: retain a
             # syntactically safe source type so round-trips do not silently turn
             # friendly/hostile/ground/sea events into a generic air symbol.
-            original_type = track.get("cot_type") if src == "cot_rx" else None
+            original_type = track.get("cot_type") if src in {
+                "cot_rx", "sitaware_cot_rx"
+            } else None
             if (isinstance(original_type, str) and 1 <= len(original_type) <= 128 and
                     re.fullmatch(r"[A-Za-z0-9_.-]+", original_type)):
                 cot_type = original_type

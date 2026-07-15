@@ -67,7 +67,9 @@ fi
 # ── Service registry ───────────────────────────────────────────────────────
 SERVICES=(
     zenoh
-    asterix link16 mavlink vmf sitaware nffi dronuradaras
+    airplaneslive aisstream aprs fr24 opensky openmeteo meteolt cmems
+    here-traffic notam dronuradaras asterix link16 mavlink vmf sitaware nffi
+    cot-rx sitaware-cot-rx sapient stanag4586
     cot-udp cot-udp-tak cot-tcp sitaware-nvg sitaware-hq-nvg track-fusion
 )
 
@@ -89,7 +91,9 @@ load_launcher_state() {
                 REMEMBERED_SERVICES="$val"
                 ;;
             TAK_HOST|TAK_HOST_FALLBACK|TAK_UDP_HOST|TAK_UDP_HOST_FALLBACK|\
-            SITAWARE_URL|SITAWARE_URL_FALLBACK|SITAWARE_NVG_URL)
+            SITAWARE_URL|SITAWARE_URL_FALLBACK|SITAWARE_NVG_URL|COT_RX_HOST|\
+            SITAWARE_COT_RX_HOST|\
+            SAPIENT_HOST|STANAG4586_HOST)
                 if [[ -z "${!key:-}" ]]; then
                     printf -v "$key" '%s' "$val"
                     # shellcheck disable=SC2163  # $key names the variable to export.
@@ -112,7 +116,9 @@ save_launcher_state() {
         printf '# EFDI launcher memory: selections and endpoint addresses only.\n'
         printf 'SELECTED_SERVICES=%s\n' "$selected"
         for key in TAK_HOST TAK_HOST_FALLBACK TAK_UDP_HOST TAK_UDP_HOST_FALLBACK \
-                   SITAWARE_URL SITAWARE_URL_FALLBACK SITAWARE_NVG_URL; do
+                   SITAWARE_URL SITAWARE_URL_FALLBACK SITAWARE_NVG_URL \
+                   COT_RX_HOST SITAWARE_COT_RX_HOST \
+                   SAPIENT_HOST STANAG4586_HOST; do
             # A URL with user-info may contain credentials. Use it for this run,
             # but never copy it into persistent launcher memory.
             [[ -n "${!key:-}" && "${!key}" != *://*@* ]] && \
@@ -126,10 +132,18 @@ load_launcher_state
 
 declare -A SVC_CAT=(
     [zenoh]="Infrastructure"
+    [airplaneslive]="Open-data bridges" [aisstream]="Open-data bridges"
+    [aprs]="Open-data bridges" [fr24]="Open-data bridges"
+    [opensky]="Open-data bridges" [openmeteo]="Open-data bridges"
+    [meteolt]="Open-data bridges" [cmems]="Open-data bridges"
+    [here-traffic]="Open-data bridges" [notam]="Open-data bridges"
     [asterix]="Sensor bridges"  [link16]="Sensor bridges"
     [mavlink]="Sensor bridges"  [vmf]="Sensor bridges"
     [sitaware]="Sensor bridges" [nffi]="Sensor bridges"
     [dronuradaras]="Sensor bridges"
+    [cot-rx]="Protocol adapters" [sitaware-cot-rx]="Protocol adapters"
+    [sapient]="Protocol adapters"
+    [stanag4586]="Protocol adapters"
     [cot-udp]="Output layers"   [cot-udp-tak]="Output layers"
     [cot-tcp]="Output layers"   [sitaware-nvg]="Output layers"
     [sitaware-hq-nvg]="Output layers"
@@ -138,6 +152,16 @@ declare -A SVC_CAT=(
 
 declare -A SVC_DESC=(
     [zenoh]="Zenoh message router (Docker)"
+    [airplaneslive]="Airplanes.live ADS-B aircraft"
+    [aisstream]="AISstream live vessel positions"
+    [aprs]="APRS-IS stations, vehicles, and vessels"
+    [fr24]="FlightRadar24 aircraft (API key)"
+    [opensky]="OpenSky ADS-B aircraft"
+    [openmeteo]="Open-Meteo weather stations"
+    [meteolt]="meteo.lt weather stations"
+    [cmems]="Copernicus Marine conditions"
+    [here-traffic]="HERE road traffic flow"
+    [notam]="ICAO active NOTAMs"
     [asterix]="ASTERIX CAT-48/34 radar tracks"
     [link16]="Link-16 JREAP-C datalink"
     [mavlink]="MAVLink UAV telemetry"
@@ -145,6 +169,10 @@ declare -A SVC_DESC=(
     [sitaware]="SitaWare HQ friendly force tracking (inbound REST)"
     [nffi]="NATO NFFI friendly force XML feed (inbound)"
     [dronuradaras]="dronuradaras.lt drone detection network"
+    [cot-rx]="Inbound CoT / TAK Server user positions"
+    [sitaware-cot-rx]="SitaWare Edge/Frontline CoT → TAK"
+    [sapient]="SAPIENT sensor feed"
+    [stanag4586]="STANAG 4586 UAV feed"
     [cot-udp]="CoT → ATAK UDP multicast 239.2.3.1:6969 (same LAN only)"
     [cot-udp-tak]="CoT → WinTAK/ATAK UDP unicast (crosses LAN/VPN)"
     [cot-tcp]="CoT → TAK Server TCP"
@@ -156,15 +184,22 @@ declare -A SVC_DESC=(
 # ── Ready check — 0=can start, 1=missing config ───────────────────────────
 svc_ready() {
     case "$1" in
-        zenoh|cot-udp|cot-udp-tak|cot-tcp|track-fusion)
+        zenoh|airplaneslive|aisstream|aprs|fr24|opensky|openmeteo|meteolt|\
+        here-traffic|notam|dronuradaras|cot-udp|cot-udp-tak|cot-tcp|track-fusion)
             return 0 ;;
+        cmems)
+            "$PYTHON" -c 'import copernicusmarine' >/dev/null 2>&1 ;;
         asterix)  [[ "${CAT48_PORT:-}${CAT21_PORT:-}${CAT20_PORT:-}" ]] ;;
         link16)   [[ "${LINK16_PORT:-}" ]] ;;
         mavlink)  [[ "${MAVLINK_PORT:-}" ]] ;;
         vmf)          [[ "${VMF_PORT:-}" ]] ;;
         sitaware)     return 0 ;;  # always ready; prompts for server IP at launch if unset
         nffi)         [[ "${NFFI_HOST:-}" ]] ;;
-        dronuradaras) return 0 ;;
+        cot-rx)       [[ "${COT_RX_PORT:-}${COT_RX_HOST:-}" ]] ;;
+        sitaware-cot-rx)
+            [[ "${SITAWARE_COT_RX_HOST:-}" || ( "${SITAWARE_COT_RX_PORT:-}" && \
+                "${SITAWARE_COT_RX_ALLOW_PEER:-}" ) ]] ;;
+        sapient|stanag4586) return 0 ;;
         sitaware-nvg) return 0 ;;  # always ready; prompts for address+login at launch if unset
         sitaware-hq-nvg) [[ "${SITAWARE_HQ_NVG_ENABLE:-}" == "1" ]] ;;
         *)        return 0 ;;
@@ -179,6 +214,33 @@ svc_hint() {
         mavlink)  echo "MAVLINK_PORT not set" ;;
         vmf)      echo "VMF_PORT not set" ;;
         nffi)     echo "NFFI_HOST not set" ;;
+        cot-rx)
+            if [[ "${COT_RX_TLS:-}" == "1" ]]; then
+                echo "TAK mTLS ${COT_RX_HOST:-host not set}"
+            else
+                echo "COT_RX_PORT/HOST not set"
+            fi ;;
+        sitaware-cot-rx) echo "set HOST, or PORT + ALLOW_PEER" ;;
+        sapient)
+            [[ "${SAPIENT_HOST:-}" ]] && echo "${SAPIENT_HOST}:${SAPIENT_PORT:-7001}" || echo "will prompt for address" ;;
+        stanag4586)
+            [[ "${STANAG4586_HOST:-}" ]] && echo "${STANAG4586_HOST}:${STANAG4586_PORT:-4586}" || echo "will prompt for address" ;;
+        aisstream)
+            [[ "${AISSTREAM_KEY:-}" ]] && echo "API key configured" || echo "will prompt for API key" ;;
+        fr24)
+            [[ "${FR24_KEY:-}" ]] && echo "API key configured" || echo "will prompt for API key" ;;
+        cmems)
+            if ! "$PYTHON" -c 'import copernicusmarine' >/dev/null 2>&1; then
+                echo "optional package missing"
+            elif [[ -z "${COPERNICUSMARINE_SERVICE_USERNAME:-}" ]]; then
+                echo "will prompt for login"
+            else
+                echo "credentials configured"
+            fi ;;
+        here-traffic)
+            [[ "${HERE_KEY:-}" ]] && echo "API key configured" || echo "will prompt for API key" ;;
+        notam)
+            [[ "${ICAO_NOTAM_KEY:-}" ]] && echo "API key configured" || echo "will prompt for API key" ;;
         sitaware-nvg)
             if [[ "${SITAWARE_NVG_URL:-}" ]]; then
                 echo "${SITAWARE_NVG_URL}"
@@ -256,6 +318,13 @@ _prompt_credentials() {
     printf -v "$pass_var" '%s' "$pass_in"
 }
 
+_prompt_secret() {
+    local label="$1" value_var="$2" value
+    read -rsp "$(printf "  ${BOLD}%s${R} (blank to skip): " "$label")" value
+    echo
+    printf -v "$value_var" '%s' "$value"
+}
+
 # ── Launch helpers ─────────────────────────────────────────────────────────
 _start() {   # _start <name> <rel-script-path> [args…]
     local name="$1"; shift
@@ -293,6 +362,96 @@ launch() {
                 done
                 echo " (timeout — continuing)"
             fi
+            ;;
+
+        airplaneslive)
+            _start airplaneslive bridges/airplaneslive_adsb_bridge.py
+            ;;
+
+        aisstream)
+            if [[ -z "${AISSTREAM_KEY:-}" ]]; then
+                local ais_key
+                _prompt_secret "AISstream API key" ais_key
+                if [[ -z "$ais_key" ]]; then
+                    printf "  ${YELLOW}[skip]${R}  aisstream        no API key entered\n"
+                    return
+                fi
+                export AISSTREAM_KEY="$ais_key"
+            fi
+            _start aisstream bridges/aisstream_ws_bridge.py
+            ;;
+
+        aprs)
+            _start aprs bridges/aprsis_bridge.py
+            ;;
+
+        fr24)
+            if [[ -z "${FR24_KEY:-}" ]]; then
+                local fr24_key
+                _prompt_secret "FlightRadar24 API key" fr24_key
+                if [[ -z "$fr24_key" ]]; then
+                    printf "  ${YELLOW}[skip]${R}  fr24            no API key entered\n"
+                    return
+                fi
+                export FR24_KEY="$fr24_key"
+            fi
+            _start fr24 bridges/fr24_live_bridge.py
+            ;;
+
+        opensky)
+            _start opensky bridges/opensky_states_bridge.py
+            ;;
+
+        openmeteo)
+            _start openmeteo bridges/openmeteo_forecast_bridge.py
+            ;;
+
+        meteolt)
+            _start meteolt bridges/meteolt_forecast_bridge.py
+            ;;
+
+        cmems)
+            if ! "$PYTHON" -c 'import copernicusmarine' >/dev/null 2>&1; then
+                printf "  ${YELLOW}[skip]${R}  cmems             optional copernicusmarine package missing\n"
+                return
+            fi
+            if [[ -z "${COPERNICUSMARINE_SERVICE_USERNAME:-}" ]]; then
+                local cmems_user cmems_pass
+                _prompt_credentials "Copernicus Marine" cmems_user cmems_pass
+                if [[ -z "$cmems_user" || -z "$cmems_pass" ]]; then
+                    printf "  ${YELLOW}[skip]${R}  cmems             credentials not entered\n"
+                    return
+                fi
+                export COPERNICUSMARINE_SERVICE_USERNAME="$cmems_user"
+                export COPERNICUSMARINE_SERVICE_PASSWORD="$cmems_pass"
+            fi
+            _start cmems bridges/cmems_marine_bridge.py
+            ;;
+
+        here-traffic)
+            if [[ -z "${HERE_KEY:-}" ]]; then
+                local here_key
+                _prompt_secret "HERE API key" here_key
+                if [[ -z "$here_key" ]]; then
+                    printf "  ${YELLOW}[skip]${R}  here-traffic      no API key entered\n"
+                    return
+                fi
+                export HERE_KEY="$here_key"
+            fi
+            _start here-traffic bridges/here_traffic_bridge.py
+            ;;
+
+        notam)
+            if [[ -z "${ICAO_NOTAM_KEY:-}" ]]; then
+                local notam_key
+                _prompt_secret "ICAO NOTAM API key" notam_key
+                if [[ -z "$notam_key" ]]; then
+                    printf "  ${YELLOW}[skip]${R}  notam             no API key entered\n"
+                    return
+                fi
+                export ICAO_NOTAM_KEY="$notam_key"
+            fi
+            _start notam bridges/icao_notam_bridge.py
             ;;
 
         asterix)
@@ -348,6 +507,59 @@ launch() {
         nffi)
             local tnffi=(); [[ "${NFFI_FRAMING:-}" == "newline" ]] && tnffi=(--framing newline)
             _start nffi layers/nato_nffi_layer.py "${tnffi[@]}"
+            ;;
+
+        cot-rx)
+            if [[ "${COT_RX_PORT:-}" ]]; then
+                _start cot-rx layers/cot_receiver_bridge.py --listen "$COT_RX_PORT"
+            elif [[ "${COT_RX_HOST:-}" ]]; then
+                _start cot-rx layers/cot_receiver_bridge.py --connect "$COT_RX_HOST"
+            else
+                printf "  ${YELLOW}[skip]${R}  cot-rx            set COT_RX_PORT or COT_RX_HOST\n"
+            fi
+            ;;
+
+        sitaware-cot-rx)
+            if [[ "${SITAWARE_COT_RX_PORT:-}" ]]; then
+                _start sitaware-cot-rx layers/cot_receiver_bridge.py \
+                    --listen "$SITAWARE_COT_RX_PORT" \
+                    --bind "${SITAWARE_COT_RX_BIND:-}" \
+                    --allow-peer "${SITAWARE_COT_RX_ALLOW_PEER:-}" \
+                    --source sitaware_cot_rx --no-tls --no-tak-users-only
+            elif [[ "${SITAWARE_COT_RX_HOST:-}" ]]; then
+                _start sitaware-cot-rx layers/cot_receiver_bridge.py \
+                    --connect "$SITAWARE_COT_RX_HOST" --source sitaware_cot_rx \
+                    --no-tls --no-tak-users-only
+            else
+                printf "  ${YELLOW}[skip]${R}  sitaware-cot-rx   set SITAWARE_COT_RX_PORT or SITAWARE_COT_RX_HOST\n"
+            fi
+            ;;
+
+        sapient)
+            if [[ -z "${SAPIENT_HOST:-}" ]]; then
+                local sapient_host
+                _prompt_address "SAPIENT source" sapient_host
+                if [[ -z "$sapient_host" ]]; then
+                    printf "  ${YELLOW}[skip]${R}  sapient           no address entered\n"
+                    return
+                fi
+                export SAPIENT_HOST="$sapient_host"
+            fi
+            _start sapient layers/sapient_layer.py --host "$SAPIENT_HOST" --port "${SAPIENT_PORT:-7001}"
+            ;;
+
+        stanag4586)
+            if [[ -z "${STANAG4586_HOST:-}" ]]; then
+                local stanag_host
+                _prompt_address "STANAG 4586 source" stanag_host
+                if [[ -z "$stanag_host" ]]; then
+                    printf "  ${YELLOW}[skip]${R}  stanag4586        no address entered\n"
+                    return
+                fi
+                export STANAG4586_HOST="$stanag_host"
+            fi
+            _start stanag4586 layers/stanag4586_layer.py \
+                --host "$STANAG4586_HOST" --port "${STANAG4586_PORT:-4586}"
             ;;
 
         dronuradaras)
@@ -451,6 +663,17 @@ if [[ -n "$REMEMBERED_SERVICES" ]]; then
         done
     done
 fi
+# A previous `run.sh all` or manual native-process start may have launched
+# services that are not yet present in launcher memory. Show those processes as
+# selected too, then persist the merged set after this run. This keeps the menu
+# faithful to the actual PID-managed runtime instead of merely labeling an
+# unchecked item as RUNNING.
+for svc in "${SERVICES[@]}"; do
+    if is_running "$svc"; then
+        sel[$svc]=1
+        restored=1
+    fi
+done
 if (( restored == 0 )); then
     for svc in zenoh cot-udp cot-tcp track-fusion; do sel[$svc]=1; done
     svc_ready asterix && sel[asterix]=1 || true
@@ -497,7 +720,25 @@ draw_menu() {
     printf "  ${DIM}Press Enter with no input to start the selected services.${R}\n\n"
 }
 
-while true; do
+change_selection=1
+if (( restored == 1 )) && [[ -t 0 ]]; then
+    draw_menu
+    printf "  ${GREEN}Saved selection restored.${R} Auto-starting in 5 seconds.\n"
+    printf "  Press ${BOLD}c${R} to change settings, ${BOLD}q${R} to quit, or Enter to start now: "
+    saved_action=""
+    if read -r -t 5 saved_action; then
+        case "$saved_action" in
+            c|C) change_selection=1 ;;
+            q|Q) exit 0 ;;
+            *)   change_selection=0 ;;
+        esac
+    else
+        echo
+        change_selection=0
+    fi
+fi
+
+while (( change_selection == 1 )); do
     draw_menu
     printf "${BOLD}> ${R}"
     read -r input || { echo; exit 0; }

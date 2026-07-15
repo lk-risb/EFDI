@@ -191,30 +191,50 @@ The interactive launcher displays all services with their readiness state. Toggl
   ──────────────────────────────────────────────────────────
   [ 1] [✓] zenoh          Zenoh message router (Docker)          ready
 
+  Open-data bridges
+  ──────────────────────────────────────────────────────────
+  [ 2] [✓] airplaneslive  Airplanes.live ADS-B aircraft          ready
+  [ 3] [ ] aisstream      AISstream live vessel positions        will prompt for API key
+  [ 4] [✓] aprs           APRS-IS stations, vehicles, vessels    ready
+  [ 5] [ ] fr24           FlightRadar24 aircraft                 will prompt for API key
+  [ 6] [✓] opensky        OpenSky ADS-B aircraft                 ready
+  [ 7] [✓] openmeteo      Open-Meteo weather stations            ready
+  [ 8] [✓] meteolt        meteo.lt weather stations              ready
+  [ 9] [ ] cmems          Copernicus Marine conditions           optional package/credentials required
+  [10] [ ] here-traffic   HERE road traffic flow                 will prompt for API key
+  [11] [ ] notam          ICAO active NOTAMs                     will prompt for API key
+
   Sensor bridges
   ──────────────────────────────────────────────────────────
-  [ 2] [✓] asterix        ASTERIX CAT-48/34 radar tracks         ready
-  [ 3] [ ] link16         Link-16 JREAP-C datalink               LINK16_PORT not set
-  [ 4] [ ] mavlink        MAVLink UAV telemetry                   MAVLINK_PORT not set
-  [ 5] [ ] vmf            VMF MIL-STD-47001C messages            VMF_PORT not set
-  [ 6] [ ] sitaware       SitaWare HQ documented JSON resource (inbound)      will prompt for address+login
-  [ 7] [ ] nffi           NATO NFFI friendly force XML feed (inbound)         NFFI_HOST not set
-  [ 8] [ ] dronuradaras   dronuradaras.lt drone detection        ready
+  [12] [✓] dronuradaras   dronuradaras.lt drone detection        ready
+  [13] [✓] asterix        ASTERIX CAT-48/34 radar tracks         ready
+  [14] [ ] link16         Link-16 JREAP-C datalink               LINK16_PORT not set
+  [15] [ ] mavlink        MAVLink UAV telemetry                  MAVLINK_PORT not set
+  [16] [ ] vmf            VMF MIL-STD-47001C messages            VMF_PORT not set
+  [17] [ ] sitaware       SitaWare HQ documented JSON resource (inbound)      will prompt for address+login
+  [18] [ ] nffi           NATO NFFI friendly force XML feed (inbound)         NFFI_HOST not set
+
+  Protocol adapters
+  ──────────────────────────────────────────────────────────
+  [19] [ ] cot-rx         Inbound Cursor-on-Target stream        COT_RX_PORT/HOST not set
+  [20] [ ] sapient        SAPIENT sensor feed                    will prompt for address
+  [21] [ ] stanag4586     STANAG 4586 UAV feed                   will prompt for address
+
   Output layers
   ──────────────────────────────────────────────────────────
-  [ 9] [✓] cot-udp        CoT → ATAK UDP multicast 239.2.3.1:6969
-  [10] [ ] cot-udp-tak    CoT → WinTAK/ATAK UDP unicast
-  [11] [✓] cot-tcp        CoT → TAK Server TCP
-  [12] [ ] sitaware-nvg   EFDI tracks → SitaWare Edge (outbound NVG)          will prompt for address+login
-  [13] [ ] sitaware-hq-nvg EFDI tracks → SitaWare HQ pull feed                SITAWARE_HQ_NVG_ENABLE=0
-  [14] [✓] track-fusion   Radar/ADS-B track correlation
+  [22] [✓] cot-udp        CoT → ATAK UDP multicast 239.2.3.1:6969
+  [23] [ ] cot-udp-tak    CoT → WinTAK/ATAK UDP unicast
+  [24] [✓] cot-tcp        CoT → TAK Server TCP
+  [25] [ ] sitaware-nvg   EFDI tracks → SitaWare Edge (outbound NVG)          will prompt for address+login
+  [26] [ ] sitaware-hq-nvg EFDI tracks → SitaWare HQ pull feed                SITAWARE_HQ_NVG_ENABLE=0
+  [27] [✓] track-fusion   Radar/ADS-B track correlation
 ```
 
 **Launcher controls:**
 
 | Input | Action |
 | --- | --- |
-| `1`–`15` | Toggle individual service (space-separated for multiple) |
+| `1`–`27` | Toggle individual service (space-separated for multiple) |
 | `a` | Select all ready services |
 | `n` | Deselect all |
 | Enter | Launch selected services |
@@ -224,17 +244,23 @@ The interactive launcher displays all services with their readiness state. Toggl
 
 | Scenario | Selection |
 | --- | --- |
-| Giraffe radar + ATAK multicast | `1 2 9` |
-| Giraffe + drone detection + ATAK | `1 2 8 9` |
-| Giraffe + SitaWare + ATAK multicast | `1 2 6 9` |
-| EFDI tracks pushed out to SitaWare Edge | `1 2 12` |
-| EFDI tracks polled by SitaWare HQ | `1 2 13` |
-| All sensors + TAK Server | `a`, then deselect `9` (cot-udp) |
-| Radar only, no TAK output (debug) | `1 2 14` |
+| Giraffe radar + ATAK multicast | `1 13 22` |
+| Giraffe + drone detection + ATAK | `1 12 13 22` |
+| Giraffe + SitaWare + ATAK multicast | `1 13 17 22` |
+| AIS vessels polled by SitaWare HQ | `1 3 26` |
+| EFDI tracks pushed out to SitaWare Edge | `1 25` |
+| EFDI tracks polled by SitaWare HQ | `1 26` |
+| All sensors + TAK Server | `a`, then deselect `22` (cot-udp) |
+| Radar only, no TAK output (debug) | `1 13 27` |
 
 Processes are tracked via PID files in `$POD_STATE_DIR/.pids/` and log to `$POD_STATE_DIR/logs/<service>.log`.
 
-After a successful launch, `start.sh` remembers the selected services and the last TAK/SitaWare endpoint addresses in `$POD_STATE_DIR/launcher-state.env` (mode 600). It never stores passwords, API keys, or certificate material there. Explicit values in `compose/.env` take precedence over remembered addresses.
+After a successful launch, `start.sh` remembers the selected services and the last TAK/SitaWare endpoint addresses in `$POD_STATE_DIR/launcher-state.env` (mode 600). It also merges any currently running PID-managed services into that selection. On the next interactive launch it displays the complete restored selection and auto-starts it after five seconds; press `c` during the countdown to change it. It never stores passwords, API keys, or certificate material there. Explicit values in `compose/.env` take precedence over remembered addresses.
+
+`aisstream` requires an AISstream API key. Select service 3 and enter the key
+at its hidden prompt for a one-run secret, or set `AISSTREAM_KEY` only in the
+ignored runtime file `compose/.env`. The key is passed through the environment,
+not a command-line argument, and is never copied into launcher memory.
 
 ---
 
@@ -364,7 +390,7 @@ Authentication:            enabled, using the dedicated feed credentials
 Pause Subscription:        no
 ```
 
-The endpoint accepts GET/HEAD only. It requires Basic authentication by default, bounds the cache, removes tracks not refreshed within `SITAWARE_HQ_NVG_STALE_S`, and gives each NVG object a matching `TimeSpan` expiry so HQ hides stale objects even when the feed goes offline. When present in the source, standard NVG modifiers and bounded `ExtendedData` carry callsign, registration/ICAO, aircraft or vessel type, squawk, route, source, APRS path/comment, vessel IDs, sensor identity, and other safe scalar fields. The Attributes view reuses the CoT/TAK domain formatter, presenting clean sections rather than raw Python field names. Aircraft expose separate barometric and geometric altitude, primary altitude in metres/feet/flight level, climb/descent rate, selected/target altitude, speed/heading, emergency/autopilot state, and ADS-B quality. Fixed APRS points and dronuradaras.lt detections use the HQ-supported neutral equipment-sensor symbol; weather stations use a distinct neutral meteorological-unit symbol. It refuses cleartext HTTP on a non-loopback address unless `SITAWARE_HQ_NVG_ALLOW_INSECURE_HTTP=1` is explicitly set for an isolated lab. Do not use a Keycloak account or password for this feed.
+The endpoint accepts GET/HEAD only. It requires Basic authentication by default, bounds the cache, removes tracks not refreshed within `SITAWARE_HQ_NVG_STALE_S`, and gives each NVG object a matching `TimeSpan` expiry so HQ hides stale objects even when the feed goes offline. When present in the source, standard NVG modifiers and bounded `ExtendedData` carry callsign, registration/ICAO, aircraft or vessel type, squawk, route, source, APRS path/comment, vessel IDs, sensor identity, and other safe scalar fields. The Attributes view reuses the CoT/TAK domain formatter, presenting clean sections rather than raw Python field names. Aircraft expose separate barometric and geometric altitude, primary altitude in metres/feet/flight level, climb/descent rate, selected/target altitude, speed/heading, emergency/autopilot state, and ADS-B quality. Fixed APRS points and dronuradaras.lt detections use the HQ-supported generic neutral equipment-sensor symbol; weather observations use the distinct neutral emplaced-sensor symbol because HQ 6.22 renders standards-native METOC symbols as Unknown. Neither is classified as a military-intelligence unit. It refuses cleartext HTTP on a non-loopback address unless `SITAWARE_HQ_NVG_ALLOW_INSECURE_HTTP=1` is explicitly set for an isolated lab. Do not use a Keycloak account or password for this feed.
 
 ### Icon reference
 
@@ -378,7 +404,7 @@ The endpoint accepts GET/HEAD only. It requires Basic authentication by default,
 | Red aircraft | `a-h-A-M-F` | SitaWare hostile air unit |
 | Blue vessel | `a-f-S-X-L` | SitaWare friendly vessel |
 | Red vessel | `a-h-S-X-L` | SitaWare hostile vessel |
-| Green/yellow/red sensor box (same icon, recolors) | `a-n-G-E-S` / `a-u-G-E-S` / `a-h-G-E-S` | dronuradaras.lt acoustic sensor — green=idle, yellow=cooling down, red=active detection (last 60s) |
+| Green/yellow/red sensor box (same icon, recolors) | `a-n-G-E-S` / `a-u-G-E-S` / `a-h-G-E-S` | currently-online dronuradaras.lt acoustic sensor — green=idle, yellow=cooling down, red=active detection (last 60s); offline devices are removed |
 | White unknown aircraft | `a-u-A-C-F` | Unclassified radar track |
 
 > Position, speed, and course on the radar marker update automatically from the live CAT-34 stream. On a mobile platform, ATAK will show a speed vector and movement trail.
@@ -390,9 +416,12 @@ The endpoint accepts GET/HEAD only. It requires Basic authentication by default,
 | Service | Script | Zenoh topic (abbreviated) | Trigger |
 | --- | --- | --- | --- |
 | `asterix` | `bridges/asterix_bridge.py` | `…/air/asterix/cat48/unknown/aircraft/tracks/v1` | Streaming UDP |
-| `dronuradaras` | `bridges/dronuradaras_bridge.py` | `…/land/dronuradaras/acoustic/neutral/sensor/status/v1` | 60 s device poll / 10 s detection poll |
+| `dronuradaras` | `bridges/dronuradaras_bridge.py` | `…/land/dronuradaras/acoustic/neutral/sensor/status/v1` | 60 s online-only device poll with offline eviction / 10 s detection poll |
+| `aisstream` | `bridges/aisstream_ws_bridge.py` | `…/sea/aisstream/ais/civ/vessel/tracks/v1` | Authenticated WSS stream |
 | `sitaware` | `bridges/sitaware_bridge.py` | `…/land/sitaware/rest/friendly/unit/tracks/v1` | Configurable REST poll |
 | `nffi` | `layers/nato_nffi_layer.py` | `…/land/nato/nffi/friendly/unit/tracks/v1` | Streaming TCP (NFFI XML) |
+| `cot-rx` | `layers/cot_receiver_bridge.py` | `…/land/radar/cot/friendly/unit/tracks/v1` | TAK Server mTLS user-SA input |
+| `sitaware-cot-rx` | `layers/cot_receiver_bridge.py` | `…/land/radar/cot/*/unit/tracks/v1` | SitaWare Edge/Frontline CoT Gateway input |
 | `link16` | `bridges/link16_bridge.py` | `…/air/link16/jreap/*/aircraft/tracks/v1` | Streaming UDP |
 | `mavlink` | `bridges/mavlink_bridge.py` | `…/air/mavlink/mav2/*/uav/tracks/v1` | Streaming UDP/TCP |
 | `cot-udp` | `layers/cot_layer.py` | Subscriber — all topics | Event-driven |
@@ -400,6 +429,49 @@ The endpoint accepts GET/HEAD only. It requires Basic authentication by default,
 | `sitaware-nvg` | `layers/nato_nvg_layer.py` | Subscriber — all track topics | Event-driven, 10 s refresh |
 | `sitaware-hq-nvg` | `layers/sitaware_hq_nvg_feed.py` | Subscriber — all track topics | Pull-based NVG snapshot |
 | `track-fusion` | `layers/track_fusion_layer.py` | CAT-48 + CAT-21 subscriber | Event-driven |
+
+### TAK users and SitaWare Frontline vehicles
+
+`cot-rx` can connect to a TAK Server TLS input with a TAK-issued client
+certificate and import ground-user situational-awareness events into SitaWare:
+
+```dotenv
+COT_RX_HOST=<tak-server>:8089
+COT_RX_TLS=1
+COT_RX_SERVER_NAME=<DNS name in the TAK server certificate>
+COT_RX_TAK_USERS_ONLY=1
+# Defaults: $EFDI_CERT_DIR/tak/cert.pem, key.pem, and ca.pem
+```
+
+The certificate identity must share the required TAK IN/OUT groups with the
+users. Both iTAK and WinTAK must themselves connect to the same TAK Server and
+share compatible groups; receiving EFDI points over direct UDP is one-way and
+does not make WinTAK visible to iTAK.
+
+For the reverse direction, enable the licensed SitaWare Edge/Frontline CoT
+Gateway and configure one EFDI side only:
+
+```dotenv
+SITAWARE_COT_RX_PORT=<efdi-listen-port>
+SITAWARE_COT_RX_BIND=<efdi-address>
+SITAWARE_COT_RX_ALLOW_PEER=<sitaware-gateway-ip>
+# Or: SITAWARE_COT_RX_HOST=<sitaware-gateway>:<port>
+```
+
+Listener mode rejects every source except `SITAWARE_COT_RX_ALLOW_PEER`. The
+dedicated `sitaware-cot-rx` process preserves the incoming CoT type. A
+Frontline tank or armoured vehicle is therefore forwarded to TAK Server and the
+direct ATAK/WinTAK outputs with the same affiliation and military entity type.
+Exclude the EFDI Live Tracks source/layer from the SitaWare CoT export policy to
+prevent tracks imported through NVG from being exported back into EFDI. When a
+deployment exposes NFFI instead of CoT, configure `NFFI_HOST`/`NFFI_PORT` for
+friendly-force positions; do not guess or reverse the Edge NVG REST endpoint.
+
+CoT and both SitaWare NVG outputs apply the same scenario affiliation policy:
+aircraft in the configured RU/BY ICAO address ranges and vessels with RU/BY
+MMSI MIDs are hostile; other public ADS-B/AIS contacts remain neutral. An
+origin-country label alone does not override an invalid or missing transponder
+identifier.
 
 > **ASTERIX editions:** CAT-48 follows EUROCONTROL Edition 1.32 and CAT-34 follows Edition 1.29. CAT-20, CAT-21, and CAT-62 currently use legacy compatibility UAPs and print a warning when enabled; do not connect modern CAT-20 1.9, CAT-21 2.2+, or CAT-62 1.21 feeds until their exact decoder profiles are implemented. Link-16 accepts UDP only because the gateway's TCP framing is not yet documented.
 
@@ -761,7 +833,8 @@ This catches syntax errors, TypeScript errors, and Dockerfile breakage before me
 | 2026-07-05 | Added isolated `zenoh-router-test` service (`test` compose profile) for local pub/sub testing without touching the real pod or its fabric connection |
 | 2026-07-05 | Removed the `gps-ew` bridge (GPSJam-based) — gpsjam.org has no public API for its own processed data, so this bridge never actually worked; removed from `start.sh` and `cot_layer.py` rather than left silently broken |
 | 2026-07-05 | Fixed cross-source/cross-pod duplicate tracks in SitaWare: `nato_nvg_layer.py`'s `_uid()` baked the source name into the track ID (unlike `cot_layer.py`'s already-correct version), so the same aircraft from two sources got two different SitaWare tracks |
-| 2026-07-05 | Fixed `dronuradaras_bridge.py` publishing only `is_online` sensors (22 of 199 registered) — now publishes all sensors with a known position, matching what the public dronuradaras.lt site shows |
+| 2026-07-05 | `dronuradaras_bridge.py` was changed to publish every positioned registered sensor; superseded by the 2026-07-15 online-only operator policy below |
+| 2026-07-15 | `dronuradaras_bridge.py` now publishes only devices explicitly reported as `is_online=true`; offline devices emit deletion events so CoT, SitaWare Edge, and the HQ NVG snapshot evict cached markers |
 | 2026-07-05 | Added `.github/workflows/ci.yml`: compile-checks bridges/layers, type-checks + builds the zenoh-admin frontend, builds both Docker images on every push/PR |
 | 2026-07-05 | Added `shellcheck` and `compose-validate` CI jobs; fixed the one real finding (`compose/rebuild.sh` missing `cd ... \|\| exit`) and silenced a false-positive (`SC2163` on the intentional "export by dynamic name" idiom in `start.sh`/`stop.sh`/`run.sh`) |
 | 2026-07-10 | Fixed `nato_nvg_layer.py` reusing the inbound `sitaware_bridge.py`'s env var names (`SITAWARE_URL`/`USER`/`PASS`) — renamed to `SITAWARE_NVG_*` since HQ (inbound) and Edge (outbound) are usually separate hosts/credentials |

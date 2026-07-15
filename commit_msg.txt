@@ -23,8 +23,26 @@ fix: restore native bridges and complete CoT/SitaWare delivery
   domain-aware Identity, IFF, Kinematics, Radar, Flight Plan, Status, sensor,
   maritime, and weather formatter
 - keep weather distinct from dronuradaras.lt in both protocols: meteorological
-  `a-n-G-I-R`/`SNGPUUMMO-*****` versus equipment-sensor
+  `a-n-G-I-R`/`SNGPESE---*****` versus equipment-sensor
   `a-*-G-E-S`/`SNGPES----*****`; fix the meteo.lt source-name match
+- publish only dronuradaras.lt devices whose current API state is
+  `is_online=true`; prevent cached detections from reviving offline devices and
+  evict their stable IDs immediately from CoT, SitaWare Edge, and HQ NVG caches
+- use HQ 6.22's supported neutral emplaced-sensor weather fallback instead of
+  either an Unknown METOC marker or a military-intelligence unit
+- align SitaWare HQ/Edge with CoT's RU/BY ICAO and MMSI hostile classifiers so
+  ADS-B/AIS affiliation is resolved per track instead of statically per topic
+- add AISstream to the native interactive launcher with a hidden runtime-only
+  API-key prompt; make both launchers consume it only from the environment and
+  never persist the key or expose it in process arguments
+- expand `start.sh` to all 28 retained services, merge saved selections with
+  running PID-managed processes, and auto-start the restored set after a
+  five-second change window while keeping all secrets ephemeral
+- port TAK's PageHeader/HUD card language to the Zenoh Config route with
+  responsive Transport, Namespace, and Connection Policy panels while
+  preserving EFDI federation targets and backend fields
+- apply TAK corner brackets consistently to every Dashboard service, Zenoh,
+  topic, peer, status, and loading panel and to certificate loading cards
 - strip invalid XML control characters without dropping the rest of the live
   snapshot
 - retain the documented Airplanes.live ADS-B fields, obey its one-request-per-
@@ -38,17 +56,27 @@ fix: restore native bridges and complete CoT/SitaWare delivery
   and verified HQ/TAK operational setup notes
 
 Verification:
-- 13 focused SitaWare/NVG/CoT, aircraft/radar/weather-card, metadata,
+- 15 focused SitaWare/NVG/CoT, affiliation, aircraft/radar/weather-card, metadata,
   XML-safety, cache, authentication, and HTTP tests pass
 - live SitaWare HQ import renders `2525b` symbols instead of fallback markers
-- final strict-TLS feed check serves NVG 2.0.2 with 1,228 current points,
-  including 23 meteorological and 224 generic-sensor points under distinct
-  SIDCs; sampled cards contain no duplicate rows or raw Python keys
+- final strict-TLS feed sample serves HTTP 200 / NVG 2.0.2 with 1,093 current
+  points; sampled cards contain no duplicate rows or raw Python keys
 - live aircraft expose altitude, vertical-rate, airspeed, identity, status, and
   ADS-B-quality values; Airplanes.live polling completes without HTTP 429
+- live HQ validation renders eight Russian-range ICAO aircraft as hostile air;
+  only four APRS-origin sea points are present because full AIS traffic remains
+  gated on a runtime AISstream key
+- post-restart strict-TLS validation renders 23 weather points with complete
+  Weather/Conditions cards and zero intelligence-unit weather symbols
+- live dronuradaras/API comparison renders exactly the 25 currently-online
+  sensors in HQ, with zero missing online IDs and zero cached offline IDs; 185
+  positioned offline registrations are excluded
 - every bridge/layer module compiles and targeted Ruff checks pass
 - all `.proto` contracts compile with protoc
-- frontend type-check and production build pass
-- shell syntax, warning-level ShellCheck, Compose rendering, and diff checks pass
+- frontend type-check and production build pass; the rebuilt live Config route
+  returns HTTP 200, serves the new policy/target/namespace controls, and renders
+  consistent TAK corner brackets across Dashboard panels
+- all shell syntax, warning-level ShellCheck, all three Compose renders, the
+  28-service launcher pseudo-terminal check, and diff checks pass
 - Python and production frontend dependency audits report no known
   vulnerabilities

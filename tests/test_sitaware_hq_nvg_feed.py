@@ -22,6 +22,7 @@ from sitaware_hq_nvg_feed import (  # noqa: E402
 )
 from nato_nvg_layer import NVG_NS  # noqa: E402
 from nato_nvg_layer import _TOPIC_SIDC  # noqa: E402
+from nato_nvg_layer import _resolve_sidc  # noqa: E402
 from nato_nvg_layer import track_to_nvg_item  # noqa: E402
 from airplaneslive_adsb_bridge import normalize as normalize_airplaneslive  # noqa: E402
 
@@ -136,16 +137,52 @@ class NVGFeedCacheTests(unittest.TestCase):
         _, count = self.cache.document()
         self.assertEqual(count, 1)
 
+    def test_offline_tombstone_removes_cached_sensor_immediately(self):
+        track = self.track("offline-sensor")
+        track.update(_src="dronuradaras.lt", sensor_id="DRONU-OFFLINE")
+        self.cache.upsert(track, "SNGPES----*****")
+        self.assertEqual(self.cache.document()[1], 1)
+
+        removed = self.cache.remove(track)
+
+        self.assertEqual(removed, "EFDI-SENS-DRONU-OFFLINE")
+        self.assertEqual(self.cache.document()[1], 0)
+
     def test_feed_covers_enabled_ground_and_weather_sources(self):
         self.assertIn("land/**/neutral/station/**", _TOPIC_SIDC)
         self.assertIn("land/**/neutral/sensor/**", _TOPIC_SIDC)
         self.assertIn("land/**/neutral/radar/**", _TOPIC_SIDC)
         self.assertIn("env/weather/station/**", _TOPIC_SIDC)
         self.assertEqual(_TOPIC_SIDC["land/**/neutral/station/**"], "SNGPES----*****")
-        self.assertEqual(_TOPIC_SIDC["env/weather/station/**"], "SNGPUUMMO-*****")
+        self.assertEqual(_TOPIC_SIDC["env/weather/station/**"], "SNGPESE---*****")
         self.assertNotEqual(
             _TOPIC_SIDC["env/weather/station/**"],
             _TOPIC_SIDC["land/**/neutral/sensor/**"],
+        )
+
+    def test_air_and_sea_affiliation_matches_cot_hostile_classification(self):
+        civil_air = _TOPIC_SIDC["air/**/civ/aircraft/**"]
+        military_air = _TOPIC_SIDC["air/**/mil/aircraft/**"]
+        civil_sea = _TOPIC_SIDC["sea/**/civ/vessel/**"]
+
+        self.assertEqual(
+            _resolve_sidc(civil_air, {"icao24": "151d4f"}), "SHAPCF----*****"
+        )
+        self.assertEqual(
+            _resolve_sidc(military_air, {"icao24": "140001"}), "SHAPMF----*****"
+        )
+        self.assertEqual(
+            _resolve_sidc(civil_air, {"icao24": "4ca123"}), "SNAPCF----*****"
+        )
+        self.assertEqual(
+            _resolve_sidc(civil_air, {"emitter_category_str": "C2"}),
+            "SNGPEV----*****",
+        )
+        self.assertEqual(
+            _resolve_sidc(civil_sea, {"mmsi": "273123456"}), "SHSPXF----*****"
+        )
+        self.assertEqual(
+            _resolve_sidc(civil_sea, {"mmsi": "257123456"}), "SNSPXF----*****"
         )
 
     def test_upstream_control_characters_are_removed_from_xml(self):
@@ -218,7 +255,7 @@ class NVGFeedCacheTests(unittest.TestCase):
         )
         point = ET.fromstring(xml).find("{%s}point" % NVG_NS)
         self.assertEqual(point.attrib["label"], "Vilnius")
-        self.assertEqual(point.attrib["symbol"], "2525b:SNGPUUMMO-*****")
+        self.assertEqual(point.attrib["symbol"], "2525b:SNGPESE---*****")
         values = {
             item.attrib["key"]: item.text
             for item in point.findall(
