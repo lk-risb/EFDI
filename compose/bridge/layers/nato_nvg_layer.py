@@ -44,6 +44,9 @@ from cot_layer import (
     _build_remarks,
     _callsign as _cot_callsign,
     _course,
+    _is_adsb_surface_vehicle,
+    _is_hostile_icao24,
+    _is_hostile_mmsi,
     _speed_ms,
     _uid as _cot_uid,
 )
@@ -61,11 +64,36 @@ NVG_VERSION = "2.0.2"
 REFRESH_S   = 10    # re-PUT all live tracks at this interval
 STALE_S     = 120   # delete tracks older than this
 
-# APP-6(B) SIDC codes — keyed by new schema wildcard patterns.
+# APP-6(B) SIDC codes — keyed by new schema wildcard patterns. A resolver
+# function is used where CoT already derives affiliation from ICAO/MMSI ranges;
+# both output protocols must classify the same track identically.
 # ** matches zero-or-more Zenoh path segments.
+def _civil_air_sidc(track: dict) -> str:
+    if _is_adsb_surface_vehicle(track):
+        return "SNGPEV----*****"
+    return "SHAPCF----*****" if _is_hostile_icao24(track.get("icao24")) \
+        else "SNAPCF----*****"
+
+
+def _military_air_sidc(track: dict) -> str:
+    if _is_adsb_surface_vehicle(track):
+        return "SNGPEV----*****"
+    return "SHAPMF----*****" if _is_hostile_icao24(track.get("icao24")) \
+        else "SNAPMF----*****"
+
+
+def _civil_sea_sidc(track: dict) -> str:
+    return "SHSPXF----*****" if _is_hostile_mmsi(track.get("mmsi")) \
+        else "SNSPXF----*****"
+
+
+def _resolve_sidc(resolver, track: dict) -> str:
+    return resolver(track) if callable(resolver) else resolver
+
+
 _TOPIC_SIDC = {
-    "air/**/civ/aircraft/**":        "SNAPCF----*****",  # Neutral Air Fixed Wing (civil ADS-B)
-    "air/**/mil/aircraft/**":        "SNAPMF----*****",  # Neutral Air Fixed Wing (military)
+    "air/**/civ/aircraft/**":        _civil_air_sidc,
+    "air/**/mil/aircraft/**":        _military_air_sidc,
     "air/**/friendly/aircraft/**":   "SFAPMF----*****",
     "air/**/hostile/aircraft/**":    "SHAPMF----*****",
     "air/**/neutral/aircraft/**":    "SNAPMF----*****",
@@ -78,7 +106,7 @@ _TOPIC_SIDC = {
     "land/**/hostile/unit/**":       "SHGPU-----*****",
     "land/**/neutral/unit/**":       "SNGPU-----*****",
     "land/**/unknown/unit/**":       "SUGPU-----*****",
-    "sea/**/civ/vessel/**":          "SFSPXF----*****",  # Friendly Sea Surface
+    "sea/**/civ/vessel/**":          _civil_sea_sidc,
     "sea/**/mil/vessel/**":          "SNSPXF----*****",  # Neutral Sea Surface (military)
     "sea/**/friendly/vessel/**":     "SFSPXF----*****",
     "sea/**/hostile/vessel/**":      "SHSPXF----*****",
@@ -89,9 +117,10 @@ _TOPIC_SIDC = {
     "space/**/hostile/satellite/**": "SHPP------*****",
     "space/**/neutral/satellite/**": "SNPP------*****",
     "space/**/unknown/satellite/**": "SUPP------*****",
-    # Ground unit / military intelligence / meteorological. Keep this distinct
-    # from the generic equipment-sensor symbol used by Dronų radar points.
-    "env/weather/station/**":        "SNGPUUMMO-*****",
+    # Neutral emplaced sensor: supported by HQ 6.22, appropriate for a fixed
+    # measuring device, and distinct from the generic dronuradaras sensor. The
+    # standards-native METOC scheme renders as Unknown in this HQ release.
+    "env/weather/station/**":        "SNGPESE---*****",
 }
 
 
@@ -681,6 +710,14 @@ class TrackCache:
         with self._lock:
             self._tracks[uid] = {"track": track, "sidc": sidc, "last_seen": time.time()}
 
+    def remove(self, track: dict):
+        uid = _uid(track)
+        with self._lock:
+            self._tracks.pop(uid, None)
+        self._client.delete_item(uid)
+        if self._verbose:
+            print("NVG DEL offline", uid, flush=True)
+
     def _refresh_loop(self):
         while True:
             time.sleep(self._refresh_s)
@@ -716,13 +753,16 @@ class TrackCache:
 # Zenoh subscriber callbacks
 # ---------------------------------------------------------------------------
 
-def make_handler(sidc: str, cache: TrackCache):
+def make_handler(sidc, cache: TrackCache):
     def handler(sample):
         try:
             track = json.loads(bytes(sample.payload).decode())
         except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
             return
-        cache.upsert(track, sidc)
+        if track.get("_delete"):
+            cache.remove(track)
+            return
+        cache.upsert(track, _resolve_sidc(sidc, track))
     return handler
 
 
@@ -749,7 +789,10 @@ def run(args):
     for suffix, sidc in _TOPIC_SIDC.items():
         key = "{}/{}".format(TOPIC_ROOT, suffix)
         subs.append(session.declare_subscriber(key, make_handler(sidc, cache)))
-        print("SUB {} → SIDC {}".format(key, sidc), flush=True)
+        print(
+            "SUB {} → SIDC {}".format(key, getattr(sidc, "__name__", sidc)),
+            flush=True,
+        )
 
     print("Bridge running — Ctrl-C to stop", flush=True)
     try:

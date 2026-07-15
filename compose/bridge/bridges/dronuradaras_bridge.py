@@ -49,6 +49,7 @@ REFERER_HEADER    = "https://dronuradaras.lt/"
 _device_names:     dict[str, str]   = {}   # device_id → display_name
 _device_positions: dict[str, tuple] = {}   # device_id → (lat, lon)
 _last_detection:   dict[str, float] = {}   # device_id → epoch of most recent detection
+_online_devices:   set[str]         = set()
 _device_lock  = threading.Lock()
 
 DEVICE_POLL_S     = 60    # radar nodes move rarely
@@ -113,26 +114,43 @@ def run_devices(pub: "zenoh.Publisher", verbose: bool):
         data = _get("devices")
         if data:
             devices = data.get("devices") or []
-            # Update shared name cache for all devices (online or not)
+            with_position = [
+                dev for dev in devices
+                if dev.get("id")
+                and dev.get("latitude") is not None
+                and dev.get("longitude") is not None
+            ]
+            online_ids = {
+                dev["id"] for dev in with_position
+                if dev.get("is_online") is True
+            }
+
+            # Keep positions and detection state only for devices confirmed
+            # online by the latest successful device poll. Offline payloads are
+            # emitted as tombstones so downstream caches delete old markers.
             with _device_lock:
                 for dev in devices:
                     if dev.get("id") and dev.get("display_name"):
                         _device_names[dev["id"]] = dev["display_name"]
+                _online_devices.clear()
+                _online_devices.update(online_ids)
+                for dev_id in list(_device_positions):
+                    if dev_id not in online_ids:
+                        _device_positions.pop(dev_id, None)
+                        _last_detection.pop(dev_id, None)
 
-            # Publish every device with a known position, not just currently-online
-            # ones — "is_online" is a narrow live flag (most registered sensors read
-            # false at any given moment even when recently active), so gating on it
-            # dropped the vast majority of real sensors the public site still shows.
-            # is_online stays in the payload for status display.
-            with_position = [d for d in devices if d.get("latitude") is not None and d.get("longitude") is not None]
             for dev in with_position:
                 lat = dev["latitude"]
                 lon = dev["longitude"]
 
                 dev_id = dev["id"]
+                is_online = dev_id in online_ids
                 with _device_lock:
-                    _device_positions[dev_id] = (lat, lon)
-                    last_det = _last_detection.get(dev_id)
+                    if is_online:
+                        _device_positions[dev_id] = (lat, lon)
+                        last_det = _last_detection.get(dev_id)
+                    else:
+                        last_det = None
 
                 payload = {
                     "_src":        "dronuradaras.lt",
@@ -142,10 +160,12 @@ def run_devices(pub: "zenoh.Publisher", verbose: bool):
                     "sensor_name": dev.get("display_name", "dronu-sensor"),
                     "lat_deg":     round(lat, 6),
                     "lon_deg":     round(lon, 6),
-                    "is_online":   dev.get("is_online", False),
+                    "is_online":   is_online,
                     "last_seen":   dev.get("last_seen_at", ""),
                 }
-                if last_det is not None:
+                if not is_online:
+                    payload["_delete"] = True
+                elif last_det is not None:
                     payload["last_detection_ts"] = last_det
 
                 pub.put(json.dumps(payload).encode(),
@@ -155,9 +175,8 @@ def run_devices(pub: "zenoh.Publisher", verbose: bool):
                           "online={}".format(payload["is_online"]),
                           "{:.4f},{:.4f}".format(lat, lon), flush=True)
 
-            online_count = sum(1 for d in with_position if d.get("is_online"))
-            print("Devices: {} published ({} online, {} total registered)".format(
-                len(with_position), online_count, len(devices)), flush=True)
+            print("Devices: {} online published, {} offline removed ({} total registered)".format(
+                len(online_ids), len(with_position) - len(online_ids), len(devices)), flush=True)
 
         time.sleep(DEVICE_POLL_S)
 
@@ -174,8 +193,9 @@ def _publish_sensor_alert(pub_dev: "zenoh.Publisher", dev_id: str, last_detectio
     with _device_lock:
         pos  = _device_positions.get(dev_id)
         name = _device_names.get(dev_id, dev_id[:8] if dev_id else "unknown")
-    if pos is None:
-        return  # haven't seen this device's position yet — next device poll will catch up
+        is_online = dev_id in _online_devices
+    if pos is None or not is_online:
+        return  # never revive a device marked offline by the latest device poll
     lat, lon = pos
     payload = {
         "_src":              "dronuradaras.lt",

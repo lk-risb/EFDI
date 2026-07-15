@@ -135,7 +135,7 @@ start_bridges() {
     if skip_if_no_key AISSTREAM_KEY; then
         echo "  [skip] aisstream — AISSTREAM_KEY not set"
     else
-        start aisstream bridges/aisstream_ws_bridge.py --apikey "$AISSTREAM_KEY"
+        start aisstream bridges/aisstream_ws_bridge.py
     fi
 
     start aprs bridges/aprsis_bridge.py
@@ -143,7 +143,7 @@ start_bridges() {
     if skip_if_no_key FR24_KEY; then
         echo "  [skip] fr24 — FR24_KEY not set"
     else
-        start fr24 bridges/fr24_live_bridge.py --key "$FR24_KEY"
+        start fr24 bridges/fr24_live_bridge.py
     fi
 
     start opensky bridges/opensky_states_bridge.py
@@ -162,13 +162,13 @@ start_bridges() {
     if skip_if_no_key HERE_KEY; then
         echo "  [skip] here-traffic — HERE_KEY not set"
     else
-        start here-traffic bridges/here_traffic_bridge.py --key "$HERE_KEY"
+        start here-traffic bridges/here_traffic_bridge.py
     fi
 
     if skip_if_no_key ICAO_NOTAM_KEY; then
         echo "  [skip] notam — ICAO_NOTAM_KEY not set"
     else
-        start notam bridges/icao_notam_bridge.py --key "$ICAO_NOTAM_KEY"
+        start notam bridges/icao_notam_bridge.py
     fi
 }
 
@@ -259,7 +259,8 @@ start_layers() {
         echo "  [skip] sitaware-hq-nvg — set SITAWARE_HQ_NVG_ENABLE=1 to enable"
     fi
 
-    # CoT receiver — inbound CoT from external source (e.g. Giraffe radar)
+    # CoT receiver — inbound CoT or TAK Server user-SA stream. TLS credentials
+    # and TAK-user filtering are read from COT_RX_* environment variables.
     # Set COT_RX_PORT to open a listener (they connect to us)
     # Set COT_RX_HOST to connect outbound (we connect to them, format IP:PORT)
     if [[ "${COT_RX_PORT:-}" ]]; then
@@ -268,6 +269,22 @@ start_layers() {
         start cot-rx layers/cot_receiver_bridge.py --connect "$COT_RX_HOST"
     else
         echo "  [skip] cot-rx — set COT_RX_PORT or COT_RX_HOST in .env to enable"
+    fi
+
+    # Dedicated SitaWare Edge/Frontline CoT Gateway ingress. Keep this separate
+    # from TAK Server ingress so both bidirectional paths can run concurrently.
+    if [[ "${SITAWARE_COT_RX_PORT:-}" ]]; then
+        start sitaware-cot-rx layers/cot_receiver_bridge.py \
+            --listen "$SITAWARE_COT_RX_PORT" \
+            --bind "${SITAWARE_COT_RX_BIND:-}" \
+            --allow-peer "${SITAWARE_COT_RX_ALLOW_PEER:-}" \
+            --source sitaware_cot_rx --no-tls --no-tak-users-only
+    elif [[ "${SITAWARE_COT_RX_HOST:-}" ]]; then
+        start sitaware-cot-rx layers/cot_receiver_bridge.py \
+            --connect "$SITAWARE_COT_RX_HOST" --source sitaware_cot_rx \
+            --no-tls --no-tak-users-only
+    else
+        echo "  [skip] sitaware-cot-rx — set SITAWARE_COT_RX_PORT or SITAWARE_COT_RX_HOST in .env to enable"
     fi
 
     # SAPIENT — only if SAPIENT_HOST set

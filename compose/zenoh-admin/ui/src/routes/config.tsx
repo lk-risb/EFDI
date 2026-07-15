@@ -1,10 +1,11 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
 import { Layout } from '@/components/Layout'
+import { PageHeader } from '@/components/PageHeader'
 import { apiJson, apiFetch, errorMessage } from '@/lib/api'
 import { useAuth } from '@/store/auth'
 import { notify } from '@/lib/notify'
-import { Save, RotateCw } from 'lucide-react'
+import { FileCode2, Network, RotateCw, Save, ShieldCheck, Waypoints } from 'lucide-react'
 import { HudCorners } from '@/components/HudCorners'
 
 export const Route = createFileRoute('/config')({
@@ -51,6 +52,36 @@ function Field({ label, help, children }: { label: string; help?: string; childr
       {children}
       {help && <p className="text-xs text-zinc-500">{help}</p>}
     </div>
+  )
+}
+
+function ConfigSection({
+  icon,
+  title,
+  description,
+  children,
+  className = '',
+}: {
+  icon: React.ReactNode
+  title: string
+  description: string
+  children: React.ReactNode
+  className?: string
+}) {
+  return (
+    <section className={`hud-frame relative hud-enter rounded-md border border-zinc-200 bg-white p-5 dark:border-white/10 dark:bg-[#111113] ${className}`}>
+      <HudCorners />
+      <div className="mb-5 flex items-start gap-3 border-b border-zinc-200 pb-4 dark:border-white/10">
+        <div className="mt-0.5 rounded-md border border-accent-ring/30 bg-accent-ring/10 p-2 text-accent-ring">
+          {icon}
+        </div>
+        <div>
+          <h2 className="hud-label text-sm font-semibold text-zinc-800 dark:text-zinc-200">{title}</h2>
+          <p className="mt-1 text-xs text-zinc-500">{description}</p>
+        </div>
+      </div>
+      <div className="space-y-4">{children}</div>
+    </section>
   )
 }
 
@@ -158,13 +189,11 @@ function ConfigPage() {
 
   return (
     <Layout>
-      <div className="p-6 max-w-2xl">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-xl font-semibold">Zenoh Config</h1>
-            {path && <p className="text-xs text-zinc-500 font-mono mt-1">{path}</p>}
-          </div>
-          <div className="flex items-center gap-2">
+      <div className="max-w-5xl p-6">
+        <PageHeader
+          title="Zenoh Config"
+          actions={
+            <>
             <button onClick={load} disabled={loading}
               className="flex items-center gap-2 px-3 py-2 rounded-md text-sm text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-200/50 dark:hover:bg-white/[0.05] transition-colors disabled:opacity-50">
               <RotateCw size={14} /> Reload
@@ -172,84 +201,139 @@ function ConfigPage() {
             {canWrite && (
               <button onClick={handleSave} disabled={saving || loading}
                 className="flex items-center gap-2 px-4 py-2 bg-accent-fill hover:bg-accent-fill-hover text-accent-text text-sm rounded-md transition-colors disabled:opacity-50">
-                <Save size={14} /> {saving ? 'Saving…' : 'Save & Restart'}
+                <Save size={14} /> {saving ? 'Saving…' : target === 'local' ? 'Save & Restart' : 'Push Config'}
               </button>
             )}
+            </>
+          }
+        />
+
+        <div className="mb-6 grid gap-3 sm:grid-cols-2">
+          <div className="hud-frame relative flex min-h-20 items-center gap-3 rounded-md border border-zinc-200 bg-white px-4 py-3 dark:border-white/10 dark:bg-[#111113]">
+            <HudCorners />
+            <FileCode2 size={18} className="shrink-0 text-zinc-500" />
+            <div className="min-w-0">
+              <p className="hud-label text-[11px] text-zinc-500">Configuration source</p>
+              <p className="mt-1 truncate font-mono text-xs text-zinc-700 dark:text-zinc-300" title={path || undefined}>
+                {path || 'Loading configuration path…'}
+              </p>
+            </div>
+          </div>
+
+          <div className="hud-frame relative flex min-h-20 items-center gap-3 rounded-md border border-zinc-200 bg-white px-4 py-3 dark:border-white/10 dark:bg-[#111113]">
+            <HudCorners />
+            <Waypoints size={18} className="shrink-0 text-zinc-500" />
+            <div className="min-w-0 flex-1">
+              <label className="hud-label text-[11px] text-zinc-500" htmlFor="config-target">Apply target</label>
+              {children.length > 0 ? (
+                <select id="config-target" value={target} onChange={e => setTarget(e.target.value)}
+                  className="mt-1 w-full bg-transparent text-sm text-zinc-800 focus:outline-none focus:ring-2 focus:ring-accent-ring dark:text-zinc-200">
+                  <option value="local">This pod</option>
+                  {children.map(c => <option key={c.id} value={c.id}>{c.name} ({c.namespace})</option>)}
+                </select>
+              ) : (
+                <p className="mt-1 text-sm text-zinc-700 dark:text-zinc-300">This pod</p>
+              )}
+            </div>
           </div>
         </div>
-        {children.length > 0 && (
-          <div className="mb-4 space-y-1">
-            <label className="text-sm text-zinc-700 dark:text-zinc-300">Push target</label>
-            <select value={target} onChange={e => setTarget(e.target.value)}
-              className="w-full sm:w-64 px-3 py-2 rounded-md bg-zinc-200 dark:bg-[#1a1a1d] border border-zinc-300 dark:border-white/10 text-zinc-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-accent-ring">
-              <option value="local">This pod</option>
-              {children.map(c => <option key={c.id} value={c.id}>{c.name} ({c.namespace})</option>)}
-            </select>
+
+        {!canWrite && (
+          <div className="mb-4 rounded-md border border-yellow-500/30 bg-yellow-500/10 px-4 py-3 text-xs text-yellow-700 dark:text-yellow-300">
+            Your role can inspect this configuration but only a superadmin can change or push it.
           </div>
         )}
-        {!canWrite && (
-          <p className="text-xs text-yellow-600 dark:text-yellow-400 mb-3">Your role can view but not edit this config.</p>
-        )}
-        <div className="hud-frame relative rounded-md border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#111113] p-5 space-y-4">
-          <HudCorners />
-          <Field label="Local mTLS port" help="Mesh-facing listen port for bridges, audit-sink (default 7447)">
-            <input type="number" min={1} max={65535} disabled={!canWrite} className={inputClass}
-              value={fields.mtls_port} onChange={e => set('mtls_port', Number(e.target.value))} />
-          </Field>
-          <Field label="Local TCP port" help="Plaintext local-only listen port for bridges + this GUI (default 7448)">
-            <input type="number" min={1} max={65535} disabled={!canWrite} className={inputClass}
-              value={fields.local_tcp_port} onChange={e => set('local_tcp_port', Number(e.target.value))} />
-          </Field>
-          <Field label="Fabric endpoint" help="The parent peer this pod dials over mTLS. Leave empty only on the fabric root.">
-            <div className="flex flex-wrap gap-2 mb-2">
-              <button type="button" disabled={!canWrite}
-                onClick={() => set('fabric_endpoint', '')}
-                className="px-2.5 py-1 rounded-full text-xs border border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:border-zinc-500 transition-colors disabled:opacity-50">
-                Root / no upstream
-              </button>
-              {FABRIC_PRESETS.map(p => (
-                <button key={p.label} type="button" disabled={!canWrite}
-                  onClick={() => set('fabric_endpoint', `tls/${p.host}:${p.port}`)}
-                  className="px-2.5 py-1 rounded-full text-xs border border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:border-zinc-500 transition-colors disabled:opacity-50">
-                  {p.label}
-                </button>
-              ))}
-            </div>
-            <div className="flex gap-2">
-              <div className="flex-1 flex items-center gap-2 bg-zinc-200 dark:bg-[#1a1a1d] border border-zinc-300 dark:border-white/10 rounded-md px-3 focus-within:ring-2 focus-within:ring-accent-ring">
-                <span className="text-zinc-500 text-sm shrink-0">tls://</span>
-                <input type="text" disabled={!canWrite} placeholder="host or NetBird name"
-                  className="flex-1 py-2 bg-transparent text-zinc-900 dark:text-white text-sm font-mono focus:outline-none disabled:opacity-50"
-                  value={parseFabricEndpoint(fields.fabric_endpoint).host}
-                  onChange={e => set('fabric_endpoint', `tls/${e.target.value}:${parseFabricEndpoint(fields.fabric_endpoint).port}`)} />
+
+        {loading ? (
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="h-80 animate-pulse rounded-md bg-zinc-200 dark:bg-zinc-800" />
+            <div className="h-80 animate-pulse rounded-md bg-zinc-200 dark:bg-zinc-800" />
+          </div>
+        ) : (
+          <div className="grid items-start gap-4 lg:grid-cols-2">
+            <ConfigSection
+              icon={<Network size={17} />}
+              title="Transport"
+              description="Local listeners and the encrypted parent-fabric connection."
+              className="lg:col-span-2"
+            >
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Local mTLS port" help="Mesh-facing listener for bridges and audit clients (default 7447).">
+                  <input type="number" min={1} max={65535} disabled={!canWrite} className={inputClass}
+                    value={fields.mtls_port} onChange={e => set('mtls_port', Number(e.target.value))} />
+                </Field>
+                <Field label="Local TCP port" help="Plaintext loopback listener for native processes and this GUI (default 7448).">
+                  <input type="number" min={1} max={65535} disabled={!canWrite} className={inputClass}
+                    value={fields.local_tcp_port} onChange={e => set('local_tcp_port', Number(e.target.value))} />
+                </Field>
               </div>
-              <input type="number" min={1} max={65535} disabled={!canWrite}
-                className={`${inputClass} w-28`}
-                value={parseFabricEndpoint(fields.fabric_endpoint).port}
-                onChange={e => set('fabric_endpoint', `tls/${parseFabricEndpoint(fields.fabric_endpoint).host}:${e.target.value}`)} />
-            </div>
-          </Field>
-          <Field label="Org namespace prefix" help="Your org's topic prefix — first segment fixed, rest is any depth (e.g. LTU/CISB, LTU/CISB/LTK). Saving restarts the router and all bridges.">
-            <input type="text" disabled={!canWrite} className={inputClass}
-              value={fields.namespace_prefix} onChange={e => set('namespace_prefix', e.target.value)} />
-          </Field>
-          <Field label="Partner namespace" help="This pod's first-party publish/subscribe prefix (its slot)">
-            <input type="text" disabled={!canWrite} className={inputClass}
-              value={fields.partner_namespace} onChange={e => set('partner_namespace', e.target.value)} />
-          </Field>
-          <Field label="Inbound namespace" help="Bilateral prefix the fabric publishes TO this pod">
-            <input type="text" disabled={!canWrite} className={inputClass}
-              value={fields.inbound_namespace} onChange={e => set('inbound_namespace', e.target.value)} />
-          </Field>
-          <div className="pt-2 border-t border-zinc-200 dark:border-white/10 space-y-4">
+              <Field label="Fabric endpoint" help="The parent peer this pod dials over mTLS. Leave empty only on the fabric root.">
+                <div className="mb-2 flex flex-wrap gap-2">
+                  <button type="button" disabled={!canWrite}
+                    onClick={() => set('fabric_endpoint', '')}
+                    className="rounded-full border border-zinc-300 px-2.5 py-1 text-xs text-zinc-600 transition-colors hover:border-zinc-500 hover:text-zinc-900 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-400 dark:hover:text-white">
+                    Root / no upstream
+                  </button>
+                  {FABRIC_PRESETS.map(p => (
+                    <button key={p.label} type="button" disabled={!canWrite}
+                      onClick={() => set('fabric_endpoint', `tls/${p.host}:${p.port}`)}
+                      className="rounded-full border border-zinc-300 px-2.5 py-1 text-xs text-zinc-600 transition-colors hover:border-zinc-500 hover:text-zinc-900 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-400 dark:hover:text-white">
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <div className="flex flex-1 items-center gap-2 rounded-md border border-zinc-300 bg-zinc-200 px-3 focus-within:ring-2 focus-within:ring-accent-ring dark:border-white/10 dark:bg-[#1a1a1d]">
+                    <span className="shrink-0 text-sm text-zinc-500">tls://</span>
+                    <input type="text" disabled={!canWrite} placeholder="host or NetBird name"
+                      className="flex-1 bg-transparent py-2 font-mono text-sm text-zinc-900 focus:outline-none disabled:opacity-50 dark:text-white"
+                      value={parseFabricEndpoint(fields.fabric_endpoint).host}
+                      onChange={e => set('fabric_endpoint', `tls/${e.target.value}:${parseFabricEndpoint(fields.fabric_endpoint).port}`)} />
+                  </div>
+                  <input type="number" min={1} max={65535} disabled={!canWrite}
+                    className={`${inputClass} w-28`}
+                    value={parseFabricEndpoint(fields.fabric_endpoint).port}
+                    onChange={e => set('fabric_endpoint', `tls/${parseFabricEndpoint(fields.fabric_endpoint).host}:${e.target.value}`)} />
+                </div>
+              </Field>
+            </ConfigSection>
+
+            <ConfigSection
+              icon={<Waypoints size={17} />}
+              title="Namespace"
+              description="Ownership and bilateral routing boundaries for this pod."
+            >
+              <Field label="Org namespace prefix" help="Organization path at any depth, for example LTU/CISB or LTU/CISB/LTK.">
+                <input type="text" disabled={!canWrite} className={inputClass}
+                  value={fields.namespace_prefix} onChange={e => set('namespace_prefix', e.target.value)} />
+              </Field>
+              <Field label="Partner namespace" help="This pod's first-party publish and subscribe slot.">
+                <input type="text" disabled={!canWrite} className={inputClass}
+                  value={fields.partner_namespace} onChange={e => set('partner_namespace', e.target.value)} />
+              </Field>
+              <Field label="Inbound namespace" help="Bilateral prefix that the fabric publishes toward this pod.">
+                <input type="text" disabled={!canWrite} className={inputClass}
+                  value={fields.inbound_namespace} onChange={e => set('inbound_namespace', e.target.value)} />
+              </Field>
+              <p className="rounded border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+                Namespace changes restart the router. Native bridge processes must also be restarted to publish under the new prefix.
+              </p>
+            </ConfigSection>
+
+            <ConfigSection
+              icon={<ShieldCheck size={17} />}
+              title="Connection policy"
+              description="Certificate verification and retained-value plugin behavior."
+            >
             <Toggle label="Verify name on connect" disabled={!canWrite}
               help="Verify the fabric endpoint's cert SAN against the DNS name dialed. Off by default: the gateway cert SAN binds the mesh IP, not the DNS name — turning this on can break the fabric connection."
               checked={fields.verify_name_on_connect} onChange={v => set('verify_name_on_connect', v)} />
             <Toggle label="Storage plugin loading" disabled={!canWrite}
               help="Whether the storage_manager plugin loads at all. Off means new subscribers no longer get a last-known value via get() — publish/subscribe still works."
               checked={fields.plugins_loading_enabled} onChange={v => set('plugins_loading_enabled', v)} />
+            </ConfigSection>
           </div>
-        </div>
+        )}
       </div>
     </Layout>
   )

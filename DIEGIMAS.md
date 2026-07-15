@@ -193,30 +193,50 @@ Interaktyvus paleidiklis rodo visas paslaugas su jų parengties būsena. Įjunki
   ──────────────────────────────────────────────────────────
   [ 1] [✓] zenoh          Zenoh message router (Docker)          ready
 
+  Open-data bridges
+  ──────────────────────────────────────────────────────────
+  [ 2] [✓] airplaneslive  Airplanes.live ADS-B aircraft          ready
+  [ 3] [ ] aisstream      AISstream live vessel positions        will prompt for API key
+  [ 4] [✓] aprs           APRS-IS stations, vehicles, vessels    ready
+  [ 5] [ ] fr24           FlightRadar24 aircraft                 will prompt for API key
+  [ 6] [✓] opensky        OpenSky ADS-B aircraft                 ready
+  [ 7] [✓] openmeteo      Open-Meteo weather stations            ready
+  [ 8] [✓] meteolt        meteo.lt weather stations              ready
+  [ 9] [ ] cmems          Copernicus Marine conditions           optional package/credentials required
+  [10] [ ] here-traffic   HERE road traffic flow                 will prompt for API key
+  [11] [ ] notam          ICAO active NOTAMs                     will prompt for API key
+
   Sensor bridges
   ──────────────────────────────────────────────────────────
-  [ 2] [✓] asterix        ASTERIX CAT-48/34 radar tracks         ready
-  [ 3] [ ] link16         Link-16 JREAP-C datalink               LINK16_PORT not set
-  [ 4] [ ] mavlink        MAVLink UAV telemetry                   MAVLINK_PORT not set
-  [ 5] [ ] vmf            VMF MIL-STD-47001C messages            VMF_PORT not set
-  [ 6] [ ] sitaware       SitaWare HQ dokumentuotas JSON resursas (gaunamas)  will prompt for address+login
-  [ 7] [ ] nffi           NATO NFFI friendly force XML feed (inbound)         NFFI_HOST not set
-  [ 8] [ ] dronuradaras   dronuradaras.lt drone detection        ready
+  [12] [✓] dronuradaras   dronuradaras.lt drone detection        ready
+  [13] [✓] asterix        ASTERIX CAT-48/34 radar tracks         ready
+  [14] [ ] link16         Link-16 JREAP-C datalink               LINK16_PORT not set
+  [15] [ ] mavlink        MAVLink UAV telemetry                  MAVLINK_PORT not set
+  [16] [ ] vmf            VMF MIL-STD-47001C messages            VMF_PORT not set
+  [17] [ ] sitaware       SitaWare HQ dokumentuotas JSON resursas (gaunamas)  will prompt for address+login
+  [18] [ ] nffi           NATO NFFI friendly force XML feed (inbound)         NFFI_HOST not set
+
+  Protocol adapters
+  ──────────────────────────────────────────────────────────
+  [19] [ ] cot-rx         Inbound Cursor-on-Target stream        COT_RX_PORT/HOST not set
+  [20] [ ] sapient        SAPIENT sensor feed                    will prompt for address
+  [21] [ ] stanag4586     STANAG 4586 UAV feed                   will prompt for address
+
   Output layers
   ──────────────────────────────────────────────────────────
-  [ 9] [✓] cot-udp        CoT → ATAK UDP multicast 239.2.3.1:6969
-  [10] [ ] cot-udp-tak    CoT → WinTAK/ATAK UDP unicast
-  [11] [✓] cot-tcp        CoT → TAK Server TCP
-  [13] [ ] sitaware-nvg   EFDI tracks → SitaWare Edge (outbound NVG)          will prompt for address+login
-  [14] [ ] sitaware-hq-nvg EFDI tracks → SitaWare HQ pull feed                SITAWARE_HQ_NVG_ENABLE=0
-  [15] [✓] track-fusion   Radar/ADS-B track correlation
+  [22] [✓] cot-udp        CoT → ATAK UDP multicast 239.2.3.1:6969
+  [23] [ ] cot-udp-tak    CoT → WinTAK/ATAK UDP unicast
+  [24] [✓] cot-tcp        CoT → TAK Server TCP
+  [25] [ ] sitaware-nvg   EFDI tracks → SitaWare Edge (outbound NVG)          will prompt for address+login
+  [26] [ ] sitaware-hq-nvg EFDI tracks → SitaWare HQ pull feed                SITAWARE_HQ_NVG_ENABLE=0
+  [27] [✓] track-fusion   Radar/ADS-B track correlation
 ```
 
 **Paleidiklio valdymas:**
 
 | Įvestis | Veiksmas |
 | --- | --- |
-| `1`–`15` | Įjungti / išjungti paslaugą (keli skaičiai atskiriami tarpu) |
+| `1`–`27` | Įjungti / išjungti paslaugą (keli skaičiai atskiriami tarpu) |
 | `a` | Pasirinkti visas paruoštas paslaugas |
 | `n` | Atžymėti visas |
 | Enter | Paleisti pažymėtas paslaugas |
@@ -226,17 +246,23 @@ Interaktyvus paleidiklis rodo visas paslaugas su jų parengties būsena. Įjunki
 
 | Scenarijus | Pasirinkimas |
 | --- | --- |
-| Giraffe radaras + ATAK multicast | `1 2 9` |
-| Giraffe + drono aptikimai + ATAK | `1 2 8 9` |
-| Giraffe + SitaWare + ATAK multicast | `1 2 6 9` |
-| EFDI takeliai siunčiami į SitaWare Edge | `1 2 12` |
-| SitaWare HQ periodiškai ima EFDI takelius | `1 2 13` |
-| Visi jutikliai + TAK serveris | `a`, tada atžymėkite `9` (cot-udp) |
-| Tik radaras be TAK išvesties (derinimui) | `1 2 14` |
+| Giraffe radaras + ATAK multicast | `1 13 22` |
+| Giraffe + drono aptikimai + ATAK | `1 12 13 22` |
+| Giraffe + SitaWare + ATAK multicast | `1 13 17 22` |
+| AIS laivai rodomi SitaWare HQ | `1 3 26` |
+| EFDI takeliai siunčiami į SitaWare Edge | `1 25` |
+| SitaWare HQ periodiškai ima EFDI takelius | `1 26` |
+| Visi jutikliai + TAK serveris | `a`, tada atžymėkite `22` (cot-udp) |
+| Tik radaras be TAK išvesties (derinimui) | `1 13 27` |
 
 Procesų PID failai saugomi `$POD_STATE_DIR/.pids/`, žurnalai rašomi į `$POD_STATE_DIR/logs/<paslauga>.log`.
 
-Po sėkmingo paleidimo `start.sh` išsaugo pasirinktų paslaugų sąrašą ir paskutinius TAK/SitaWare adresus faile `$POD_STATE_DIR/launcher-state.env` (teisės 600). Slaptažodžiai, API raktai ir sertifikatai ten nesaugomi. Aiškiai `compose/.env` nustatyti adresai turi pirmenybę.
+Po sėkmingo paleidimo `start.sh` išsaugo pasirinktų paslaugų sąrašą ir paskutinius TAK/SitaWare adresus faile `$POD_STATE_DIR/launcher-state.env` (teisės 600). Jis taip pat įtraukia visus tuo metu veikiančius PID valdomus procesus. Kitą kartą interaktyviai paleidus rodomas visas atkurtas pasirinkimas ir po penkių sekundžių automatiškai paleidžiamas; per atgalinį skaičiavimą paspauskite `c`, jei norite pakeisti nustatymus. Slaptažodžiai, API raktai ir sertifikatai ten nesaugomi. Aiškiai `compose/.env` nustatyti adresai turi pirmenybę.
+
+`aisstream` reikia AISstream API rakto. Pasirinkite 3 paslaugą ir įveskite
+raktą paslėptame lauke vienam paleidimui arba nustatykite `AISSTREAM_KEY` tik
+ignoruojamame vykdymo faile `compose/.env`. Raktas perduodamas per aplinką,
+nerodomas proceso argumentuose ir neišsaugomas paleidiklio atmintyje.
 
 ---
 
@@ -366,7 +392,7 @@ Authentication:            įjungta, atskiri srauto prisijungimo duomenys
 Pause Subscription:        ne
 ```
 
-Adresas priima tik GET/HEAD, pagal nutylėjimą reikalauja Basic autentifikavimo, riboja talpyklos dydį, pašalina ilgiau nei `SITAWARE_HQ_NVG_STALE_S` neatnaujintus takelius ir kiekvienam NVG objektui prideda tokios pačios trukmės `TimeSpan`, kad HQ paslėptų pasenusius objektus net nutrūkus srautui. Kai šaltinyje yra duomenų, standartiniai NVG modifikatoriai ir ribotas `ExtendedData` taip pat perduoda šaukinį, registraciją/ICAO, orlaivio ar laivo tipą, squawk, maršrutą, šaltinį, APRS kelią/komentarą, laivo ID bei sensoriaus tapatybę. Attributes kortelė naudoja tą patį domeno formatavimą kaip CoT/TAK, todėl rodomi tvarkingi skyriai, o ne neapdoroti Python laukų pavadinimai. Orlaiviams atskirai pateikiamas barometrinis ir geometrinis aukštis, pagrindinis aukštis metrais/pėdomis/skrydžio lygiu, kilimo ar leidimosi greitis, pasirinktas/tikslinis aukštis, greitis, kryptis, avarinė/autopiloto būsena ir ADS-B kokybės laukai. Stacionarūs APRS taškai ir dronuradaras.lt aptikimai naudoja HQ palaikomą neutralaus įrangos sensoriaus simbolį, o orų stotys — atskirą neutralų meteorologinio vieneto simbolį. Ne lokaliame adrese procesas atsisako startuoti per paprastą HTTP, nebent izoliuotai laboratorijai aiškiai nustatyta `SITAWARE_HQ_NVG_ALLOW_INSECURE_HTTP=1`. Nenaudokite Keycloak paskyros ar slaptažodžio šiam srautui.
+Adresas priima tik GET/HEAD, pagal nutylėjimą reikalauja Basic autentifikavimo, riboja talpyklos dydį, pašalina ilgiau nei `SITAWARE_HQ_NVG_STALE_S` neatnaujintus takelius ir kiekvienam NVG objektui prideda tokios pačios trukmės `TimeSpan`, kad HQ paslėptų pasenusius objektus net nutrūkus srautui. Kai šaltinyje yra duomenų, standartiniai NVG modifikatoriai ir ribotas `ExtendedData` taip pat perduoda šaukinį, registraciją/ICAO, orlaivio ar laivo tipą, squawk, maršrutą, šaltinį, APRS kelią/komentarą, laivo ID bei sensoriaus tapatybę. Attributes kortelė naudoja tą patį domeno formatavimą kaip CoT/TAK, todėl rodomi tvarkingi skyriai, o ne neapdoroti Python laukų pavadinimai. Orlaiviams atskirai pateikiamas barometrinis ir geometrinis aukštis, pagrindinis aukštis metrais/pėdomis/skrydžio lygiu, kilimo ar leidimosi greitis, pasirinktas/tikslinis aukštis, greitis, kryptis, avarinė/autopiloto būsena ir ADS-B kokybės laukai. Stacionarūs APRS taškai ir dronuradaras.lt aptikimai naudoja HQ palaikomą bendrą neutralaus įrangos sensoriaus simbolį, o orų stebėjimai — atskirą neutralaus stacionaraus sensoriaus simbolį, nes HQ 6.22 standartinius METOC simbolius rodo kaip nežinomus. Nei vienas jų neklasifikuojamas kaip karinės žvalgybos vienetas. Ne lokaliame adrese procesas atsisako startuoti per paprastą HTTP, nebent izoliuotai laboratorijai aiškiai nustatyta `SITAWARE_HQ_NVG_ALLOW_INSECURE_HTTP=1`. Nenaudokite Keycloak paskyros ar slaptažodžio šiam srautui.
 
 ### Piktogramų žinynas
 
@@ -380,7 +406,7 @@ Adresas priima tik GET/HEAD, pagal nutylėjimą reikalauja Basic autentifikavimo
 | Raudonas orlaivis | `a-h-A-M-F` | SitaWare priešiškas oro vienetas |
 | Mėlynas laivas | `a-f-S-X-L` | SitaWare draugiškas laivas |
 | Raudonas laivas | `a-h-S-X-L` | SitaWare priešiškas laivas |
-| Žalia/geltona/raudona sensorių dėžutė (ta pati ikona, keičiasi spalva) | `a-n-G-E-S` / `a-u-G-E-S` / `a-h-G-E-S` | dronuradaras.lt akustinis jutiklis — žalia=neaktyvus, geltona=atvėsta, raudona=aptikimas aktyvus (paskutinės 60s) |
+| Žalia/geltona/raudona sensorių dėžutė (ta pati ikona, keičiasi spalva) | `a-n-G-E-S` / `a-u-G-E-S` / `a-h-G-E-S` | šiuo metu prisijungęs dronuradaras.lt akustinis jutiklis — žalia=neaktyvus, geltona=atvėsta, raudona=aptikimas aktyvus (paskutinės 60s); atsijungę jutikliai pašalinami |
 | Balta nežinoma orlaivio | `a-u-A-C-F` | Neklasifikuotas radaro takelis |
 
 > Radaro žymeklio pozicija, greitis ir kursas atnaujinami automatiškai iš gyvo CAT-34 srauto. Mobilioje platformoje ATAK rodys greičio vektorių ir judėjimo taką.
@@ -392,9 +418,12 @@ Adresas priima tik GET/HEAD, pagal nutylėjimą reikalauja Basic autentifikavimo
 | Paslauga | Scenarijus | Zenoh tema (sutrumpinta) | Suaktyvinimas |
 | --- | --- | --- | --- |
 | `asterix` | `bridges/asterix_bridge.py` | `…/air/asterix/cat48/unknown/aircraft/tracks/v1` | Srautinis UDP |
-| `dronuradaras` | `bridges/dronuradaras_bridge.py` | `…/land/dronuradaras/acoustic/neutral/sensor/status/v1` | Įrenginių apklausa 60 s / aptikimų apklausa 10 s |
+| `dronuradaras` | `bridges/dronuradaras_bridge.py` | `…/land/dronuradaras/acoustic/neutral/sensor/status/v1` | Tik prisijungusių įrenginių apklausa 60 s ir atsijungusių pašalinimas / aptikimų apklausa 10 s |
+| `aisstream` | `bridges/aisstream_ws_bridge.py` | `…/sea/aisstream/ais/civ/vessel/tracks/v1` | Autentifikuotas WSS srautas |
 | `sitaware` | `bridges/sitaware_bridge.py` | `…/land/sitaware/rest/friendly/unit/tracks/v1` | Konfigūruojama REST apklausa |
 | `nffi` | `layers/nato_nffi_layer.py` | `…/land/nato/nffi/friendly/unit/tracks/v1` | Srautinis TCP (NFFI XML) |
+| `cot-rx` | `layers/cot_receiver_bridge.py` | `…/land/radar/cot/friendly/unit/tracks/v1` | TAK Server mTLS naudotojų pozicijos |
+| `sitaware-cot-rx` | `layers/cot_receiver_bridge.py` | `…/land/radar/cot/*/unit/tracks/v1` | SitaWare Edge/Frontline CoT Gateway įvestis |
 | `link16` | `bridges/link16_bridge.py` | `…/air/link16/jreap/*/aircraft/tracks/v1` | Srautinis UDP |
 | `mavlink` | `bridges/mavlink_bridge.py` | `…/air/mavlink/mav2/*/uav/tracks/v1` | Srautinis UDP/TCP |
 | `cot-udp` | `layers/cot_layer.py` | Prenumeratorius — visos temos | Įvykio valdomas |
@@ -402,6 +431,30 @@ Adresas priima tik GET/HEAD, pagal nutylėjimą reikalauja Basic autentifikavimo
 | `sitaware-nvg` | `layers/nato_nvg_layer.py` | Prenumeratorius — visos takelių temos | Įvykio valdomas, 10 s atnaujinimas |
 | `sitaware-hq-nvg` | `layers/sitaware_hq_nvg_feed.py` | Prenumeratorius — visos takelių temos | HQ periodiškai ima NVG būseną |
 | `track-fusion` | `layers/track_fusion_layer.py` | CAT-48 + CAT-21 prenumeratorius | Įvykio valdomas |
+
+### TAK naudotojai ir SitaWare Frontline technika
+
+`cot-rx` gali su TAK išduotu kliento sertifikatu prisijungti prie TAK Server
+TLS įvesties ir perduoti žemės naudotojų pozicijas į SitaWare. Sertifikato
+tapatybė turi priklausyti toms pačioms TAK IN/OUT grupėms kaip matomi naudotojai.
+Ir iTAK, ir WinTAK turi jungtis prie to paties TAK Server bei turėti suderinamas
+grupes; vienpusė EFDI UDP įvestis į WinTAK nepadaro jo matomo iTAK.
+
+Atvirkštinei krypčiai įjunkite licencijuotą SitaWare Edge/Frontline CoT Gateway
+ir nustatykite `SITAWARE_COT_RX_PORT`, `SITAWARE_COT_RX_BIND` bei leidžiamą
+`SITAWARE_COT_RX_ALLOW_PEER` šaltinio IP, arba
+`SITAWARE_COT_RX_HOST`. Atskiras `sitaware-cot-rx` Python procesas išsaugo
+originalų CoT tipą, todėl Frontline tankas ar šarvuota transporto priemonė TAK
+Server ir ATAK/WinTAK pasiekia su ta pačia priklausomybe bei karinio simbolio
+tipu. SitaWare eksportavimo taisyklėje neįtraukite EFDI Live Tracks šaltinio,
+kad NVG importuoti objektai nebūtų grąžinami atgal į EFDI. Jei konkretus
+diegimas vietoje CoT teikia NFFI, draugiškų pajėgų pozicijoms naudokite
+`NFFI_HOST`/`NFFI_PORT`.
+
+CoT ir abi SitaWare NVG išvestys naudoja tą pačią scenarijaus priklausomybės
+taisyklę: orlaiviai iš nustatytų RU/BY ICAO adresų intervalų bei laivai su RU/BY
+MMSI MID žymimi kaip priešiški, o kiti vieši ADS-B/AIS kontaktai — neutralūs.
+Vien šalies pavadinimas nepakeičia trūkstamo arba negaliojančio atsakiklio ID.
 
 > **ASTERIX leidimai:** CAT-48 atitinka EUROCONTROL 1.32 leidimą, o CAT-34 — 1.29 leidimą. CAT-20, CAT-21 ir CAT-62 šiuo metu naudoja tik senus suderinamumo UAP ir įjungti parodo įspėjimą; nejunkite modernių CAT-20 1.9, CAT-21 2.2+ ar CAT-62 1.21 srautų, kol neįgyvendintas tikslus dekoderio profilis. Link-16 priima tik UDP, nes šliuzo TCP kadravimas dar neaprašytas.
 
@@ -763,7 +816,8 @@ Tai pagauna sintaksės klaidas, TypeScript klaidas ir Dockerfile lūžimus prie�
 | 2026-07-05 | Pridėtas izoliuotas `zenoh-router-test` servisas (`test` compose profilis) lokaliam pub/sub testavimui, neliečiant tikro pod'o ar jo fabric ryšio |
 | 2026-07-05 | Pašalintas `gps-ew` bridge (GPSJam pagrindu) — gpsjam.org neturi viešo API savo apdorotiems duomenims, todėl šis bridge niekada realiai neveikė; pašalintas iš `start.sh` ir `cot_layer.py`, o ne paliktas tyliai sulūžęs |
 | 2026-07-05 | Ištaisyti dubliuoti takeliai SitaWare tarp šaltinių/pod'ų: `nato_nvg_layer.py` `_uid()` funkcijoje šaltinio pavadinimas buvo įtraukiamas į takelio ID (skirtingai nuo jau teisingos `cot_layer.py` versijos), todėl tas pats orlaivis iš dviejų šaltinių gaudavo du skirtingus SitaWare takelius |
-| 2026-07-05 | Ištaisyta `dronuradaras_bridge.py` — publikavo tik `is_online` jutiklius (22 iš 199 registruotų) — dabar publikuoja visus jutiklius su žinoma pozicija, atitinka tai, ką rodo viešas dronuradaras.lt puslapis |
+| 2026-07-05 | `dronuradaras_bridge.py` buvo pakeistas publikuoti visus registruotus jutiklius su pozicija; šį sprendimą pakeitė žemiau aprašyta 2026-07-15 tik prisijungusių jutiklių taisyklė |
+| 2026-07-15 | `dronuradaras_bridge.py` dabar publikuoja tik įrenginius, kurių API būsena yra `is_online=true`; atsijungę įrenginiai siunčia pašalinimo įvykį, todėl CoT, SitaWare Edge ir HQ NVG talpykla ištrina senus žymeklius |
 | 2026-07-05 | Pridėtas `.github/workflows/ci.yml`: tikrina bridge'ų/sluoksnių sintaksę, type-check + build zenoh-admin frontend'ui, sukuria abu Docker image'us kas kartą pushinant/darant PR |
 | 2026-07-05 | Pridėti `shellcheck` ir `compose-validate` CI job'ai; ištaisytas vienintelis realus radinys (`compose/rebuild.sh` trūko `cd ... \|\| exit`) ir nutildytas klaidingas teigiamas (`SC2163` dėl sąmoningo "export pagal dinaminį vardą" idiomo `start.sh`/`stop.sh`/`run.sh`) |
 | 2026-07-10 | Ištaisyta: `nato_nvg_layer.py` naudojo tuos pačius aplinkos kintamuosius kaip gaunamas `sitaware_bridge.py` (`SITAWARE_URL`/`USER`/`PASS`) — pervadinta į `SITAWARE_NVG_*`, nes HQ (gaunama) ir Edge (siunčiama) paprastai yra skirtingi serveriai/prisijungimo duomenys |
