@@ -1,26 +1,54 @@
-fix: restore native bridge runtime and harden protocol adapters
+fix: restore native bridges and complete CoT/SitaWare delivery
 
-- keep only router/admin/database/proxy infrastructure in Docker and run all
-  sensor bridges and output layers as PID-managed Python scripts
-- fix native launcher imports, PID reuse checks, complete all-mode coverage,
-  shared runtime paths, namespace state, and infrastructure-only rebuilds
-- finish signed federation topology/status UI, replay protection, namespace
-  configuration, OIDC hardening, refresh rotation, and database migrations
-- harden HTTP, AIS WebSocket, CoT, SitaWare HQ, SitaWare Edge NVG, NFFI,
-  SAPIENT, STANAG 4586, ASTERIX, Link-16, MAVLink, and VMF input handling
-- correct SitaWare affiliation and SIDC dimension routing and complete CoT/NVG
-  air, land, sea, and space affiliation coverage
-- update CAT-48 decoding for Edition 1.32 fields and mark CAT-20/21/62 tables
-  as legacy compatibility UAPs instead of claiming unsupported modern editions
-- disable unframed Link-16 TCP ingestion while retaining JREAP-C UDP support
-- remove Windy, yr.no, PurpleAir, OSM/Overpass, and N2YO bridges and schemas
-- bound external API responses and remove tracked bytecode artifacts
+- keep sensor bridges and output layers as PID-managed Python processes while
+  retaining Docker only for Zenoh and administration infrastructure
+- harden protocol parsing, input bounds, namespace handling, federation ACLs,
+  replay protection, and the admin topology/status surfaces
+- correct ASTERIX CAT-48 decoding and document the legacy CAT-20/21/62 UAPs;
+  reject unsupported unframed Link-16 TCP while retaining JREAP-C UDP
+- remove Windy, yr.no, PurpleAir, OSM/Overpass, N2YO, and CCTV integrations
+  and their launcher, schema, test, and documentation wiring
+- complete CoT routing and direct WinTAK/TAK Server output for air, land, sea,
+  space, sensor, radar, station, and weather topics
+- add a native authenticated TLS NVG 2.0.2 pull feed for SitaWare HQ Import
+  Subscriptions with bounded caching, stable IDs, and per-topic expiry
+- use the NVG 2.0.2 namespace, standard point records, the recognised `2525b:`
+  symbol binding, and `TimeSpan` expiry so HQ renders and ages objects correctly
+- expose callsign, registration, ICAO/MMSI, type, operator, route, squawk,
+  source, and sensor metadata through NVG modifiers and ExtendedData
+- expose aircraft barometric/geometric altitude, metres/feet/flight level,
+  vertical rates, selected altitude, IAS/TAS/Mach, autopilot/emergency state,
+  ADS-B quality, and other bounded scalar fields to SitaWare HQ
+- render clean TAK-style SitaWare Attributes sections by reusing CoT's
+  domain-aware Identity, IFF, Kinematics, Radar, Flight Plan, Status, sensor,
+  maritime, and weather formatter
+- keep weather distinct from dronuradaras.lt in both protocols: meteorological
+  `a-n-G-I-R`/`SNGPUUMMO-*****` versus equipment-sensor
+  `a-*-G-E-S`/`SNGPES----*****`; fix the meteo.lt source-name match
+- strip invalid XML control characters without dropping the rest of the live
+  snapshot
+- retain the documented Airplanes.live ADS-B fields, obey its one-request-per-
+  second limit, and stop treating valid zero measurements as missing data
+- align the OpenSky, Airplanes.live, and FR24 proto3 aircraft schemas with the
+  Python records using explicit optional presence; document `/v1` JSON and the
+  future dual-published `/v2` Protobuf migration boundary
+- require a deployment-documented SitaWare inbound REST path instead of the
+  invalid universal `/rest/v2/units` assumption
+- update English/Lithuanian deployment guidance, agent memory, focused tests,
+  and verified HQ/TAK operational setup notes
 
 Verification:
-- 23 bridge/layer entrypoints load and expose CLI help successfully
-- Python compile and Ruff fatal checks pass across bridges, layers, and admin
-- SitaWare/NVG/CoT round trips, malicious XML rejection, CAT-48 field decoding,
-  ASTERIX framing rejection, and bounded HTTP response checks pass
+- 13 focused SitaWare/NVG/CoT, aircraft/radar/weather-card, metadata,
+  XML-safety, cache, authentication, and HTTP tests pass
+- live SitaWare HQ import renders `2525b` symbols instead of fallback markers
+- final strict-TLS feed check serves NVG 2.0.2 with 1,228 current points,
+  including 23 meteorological and 224 generic-sensor points under distinct
+  SIDCs; sampled cards contain no duplicate rows or raw Python keys
+- live aircraft expose altitude, vertical-rate, airspeed, identity, status, and
+  ADS-B-quality values; Airplanes.live polling completes without HTTP 429
+- every bridge/layer module compiles and targeted Ruff checks pass
+- all `.proto` contracts compile with protoc
 - frontend type-check and production build pass
-- shell syntax, warning-level ShellCheck, Compose config, and diff checks pass
-- Python and frontend dependency audits report no known vulnerabilities
+- shell syntax, warning-level ShellCheck, Compose rendering, and diff checks pass
+- Python and production frontend dependency audits report no known
+  vulnerabilities

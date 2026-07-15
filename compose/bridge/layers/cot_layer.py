@@ -1169,7 +1169,7 @@ def _build_remarks(track: dict, cot_type: str) -> str:
             _sec("SENSOR", sensor_l)
             _sec("ALERT",  alert_l)
 
-        elif src in ("openmeteo", "meteolt"):   # WEATHER
+        elif src in ("openmeteo", "meteo-lt"):   # WEATHER
             place = (track.get("place_name") or track.get("place_code") or src).upper()
             ident_l = []; env_l = []
             if time_str: ident_l.append("TIME: {}".format(time_str))
@@ -1374,6 +1374,14 @@ def track_to_cot(track: dict, cot_type: str, stale_s: float = COT_STALE_S) -> st
             "stockTool": "false",
         })
     ET.SubElement(detail, "remarks").text = _build_remarks(track, cot_type)
+    snapshot_url = track.get("snapshot_url")
+    if isinstance(snapshot_url, str) and snapshot_url.startswith("https://") \
+            and len(snapshot_url) <= 2048:
+        ET.SubElement(detail, "link", {
+            "url": snapshot_url,
+            "type": "image/jpeg",
+            "relation": "r-u",
+        })
 
     return '<?xml version="1.0" encoding="UTF-8"?>' + ET.tostring(event, encoding="unicode")
 

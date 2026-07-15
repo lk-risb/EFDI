@@ -40,6 +40,13 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 
 import zenoh
+from cot_layer import (
+    _build_remarks,
+    _callsign as _cot_callsign,
+    _course,
+    _speed_ms,
+    _uid as _cot_uid,
+)
 from namespace_prefix import prefix
 
 ROUTER = "tls/zenoh.efdi.netbird.efdi-backbone.net:7447"
@@ -49,7 +56,7 @@ HERE   = os.path.dirname(os.path.abspath(__file__))
 _CERT_DIR = os.environ.get("EFDI_CERT_DIR", HERE)
 _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", ROUTER)
 
-NVG_NS      = "http://tide.act.nato.int/schemas/2012/10/nvg"
+NVG_NS      = "https://tide.act.nato.int/schemas/2012/10/nvg"
 NVG_VERSION = "2.0.2"
 REFRESH_S   = 10    # re-PUT all live tracks at this interval
 STALE_S     = 120   # delete tracks older than this
@@ -57,29 +64,34 @@ STALE_S     = 120   # delete tracks older than this
 # APP-6(B) SIDC codes — keyed by new schema wildcard patterns.
 # ** matches zero-or-more Zenoh path segments.
 _TOPIC_SIDC = {
-    "air/**/civ/aircraft/**":        "SNAPCF----E----",  # Neutral Air Fixed Wing (civil ADS-B)
-    "air/**/mil/aircraft/**":        "SNAPCF----E----",  # Neutral Air Fixed Wing (military)
-    "air/**/friendly/aircraft/**":   "SFAPCF----E----",
-    "air/**/hostile/aircraft/**":    "SHAPCF----E----",
-    "air/**/neutral/aircraft/**":    "SNAPCF----E----",
-    "air/**/unknown/aircraft/**":    "SUAPCF----E----",
-    "land/**/civ/vehicle/**":        "SFGPUCV---E----",  # Friendly Ground Vehicle
-    "land/**/neutral/station/**":    "SFGP------E----",  # Neutral Ground Installation
-    "land/**/friendly/unit/**":      "SFGPU-----E----",  # Friendly Ground Unit (NFFI)
-    "land/**/hostile/unit/**":       "SHGPU-----E----",
-    "land/**/neutral/unit/**":       "SNGPU-----E----",
-    "land/**/unknown/unit/**":       "SUGPU-----E----",
-    "sea/**/civ/vessel/**":          "SFSPXF----E----",  # Friendly Sea Surface
-    "sea/**/mil/vessel/**":          "SNSPXF----E----",  # Neutral Sea Surface (military)
-    "sea/**/friendly/vessel/**":     "SFSPXF----E----",
-    "sea/**/hostile/vessel/**":      "SHSPXF----E----",
-    "sea/**/neutral/vessel/**":      "SNSPXF----E----",
-    "sea/**/unknown/vessel/**":      "SUSPXF----E----",
-    "space/**/civ/satellite/**":     "SFPAP-----E----",  # Friendly Space (satellite)
-    "space/**/friendly/satellite/**":"SFPAP-----E----",
-    "space/**/hostile/satellite/**": "SHPAP-----E----",
-    "space/**/neutral/satellite/**": "SNPAP-----E----",
-    "space/**/unknown/satellite/**": "SUPAP-----E----",
+    "air/**/civ/aircraft/**":        "SNAPCF----*****",  # Neutral Air Fixed Wing (civil ADS-B)
+    "air/**/mil/aircraft/**":        "SNAPMF----*****",  # Neutral Air Fixed Wing (military)
+    "air/**/friendly/aircraft/**":   "SFAPMF----*****",
+    "air/**/hostile/aircraft/**":    "SHAPMF----*****",
+    "air/**/neutral/aircraft/**":    "SNAPMF----*****",
+    "air/**/unknown/aircraft/**":    "SUAPMF----*****",
+    "land/**/civ/vehicle/**":        "SFGPUCV---*****",  # Friendly Ground Vehicle
+    "land/**/neutral/station/**":    "SNGPES----*****",  # Neutral Ground Sensor (HQ-supported)
+    "land/**/neutral/sensor/**":     "SNGPES----*****",  # Neutral Ground Sensor
+    "land/**/neutral/radar/**":      "SNGPESR---*****",  # Neutral Ground Radar
+    "land/**/friendly/unit/**":      "SFGPU-----*****",  # Friendly Ground Unit (NFFI)
+    "land/**/hostile/unit/**":       "SHGPU-----*****",
+    "land/**/neutral/unit/**":       "SNGPU-----*****",
+    "land/**/unknown/unit/**":       "SUGPU-----*****",
+    "sea/**/civ/vessel/**":          "SFSPXF----*****",  # Friendly Sea Surface
+    "sea/**/mil/vessel/**":          "SNSPXF----*****",  # Neutral Sea Surface (military)
+    "sea/**/friendly/vessel/**":     "SFSPXF----*****",
+    "sea/**/hostile/vessel/**":      "SHSPXF----*****",
+    "sea/**/neutral/vessel/**":      "SNSPXF----*****",
+    "sea/**/unknown/vessel/**":      "SUSPXF----*****",
+    "space/**/civ/satellite/**":     "SFPP------*****",  # Friendly Space (satellite)
+    "space/**/friendly/satellite/**":"SFPP------*****",
+    "space/**/hostile/satellite/**": "SHPP------*****",
+    "space/**/neutral/satellite/**": "SNPP------*****",
+    "space/**/unknown/satellite/**": "SUPP------*****",
+    # Ground unit / military intelligence / meteorological. Keep this distinct
+    # from the generic equipment-sensor symbol used by Dronų radar points.
+    "env/weather/station/**":        "SNGPUUMMO-*****",
 }
 
 
@@ -106,53 +118,438 @@ def make_config() -> "zenoh.Config":
 # NVG XML builders
 # ---------------------------------------------------------------------------
 
-def _ts_str(ts: float) -> str:
-    return datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
-
-
 def _uid(track: dict) -> str:
-    # Stable, source-agnostic identifier — same as cot_layer.py's _uid(): the same
-    # aircraft/vessel reported by multiple bridges (or multiple pods exchanging
-    # data) must merge to one SitaWare track, not one per source.
-    for key, id_prefix in (("icao24", "ICAO"), ("mmsi", "MMSI"),
-                           ("sensor_id", "SENS"), ("uid", "UID")):
-        v = track.get(key)
-        if v:
-            return "EFDI-{}-{}".format(id_prefix, str(v).upper())
-    src = track.get("_src", "efdi")
-    cs = (track.get("callsign") or "").strip()
-    if cs:
-        return "EFDI-{}-{}".format(src, cs)
-    return "EFDI-{}-{:.5f}-{:.5f}".format(src, track.get("lat_deg", 0), track.get("lon_deg", 0))
+    return _cot_uid(track)
 
 
 def _callsign(track: dict, uid: str) -> str:
-    for key in ("callsign", "registration", "mmsi"):
-        v = track.get(key)
-        if v and str(v).strip():
-            return str(v).strip()
-    return uid[-12:]
+    return _cot_callsign(track, uid)
 
 
-def _hae_m(track: dict) -> float | None:
-    for key, scale in (
-        ("geo_alt_m",   1.0),
-        ("alt_geom_ft", 0.3048),
-        ("baro_alt_m",  1.0),
-        ("alt_baro_ft", 0.3048),
-        ("alt_m",       1.0),
+def _cot_type_for_sidc(sidc: str) -> str:
+    affiliation = {"F": "f", "H": "h", "N": "n", "U": "u"}.get(sidc[1:2], "u")
+    dimension = sidc[2:3] if sidc[2:3] in {"A", "G", "S", "P"} else "G"
+    return "a-{}-{}".format(affiliation, dimension)
+
+
+def _iso_timestamp(value: object) -> str | None:
+    try:
+        numeric_value = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if not math.isfinite(numeric_value):
+        return None
+    try:
+        return (
+            datetime.fromtimestamp(numeric_value, tz=timezone.utc)
+            .isoformat(timespec="milliseconds")
+            .replace("+00:00", "Z")
+        )
+    except (OverflowError, OSError, ValueError):
+        return None
+
+
+def _timestamp(track: dict) -> str | None:
+    return _iso_timestamp(track.get("_ts"))
+
+
+def _xml_safe_text(value: object, limit: int) -> str | None:
+    if value is None or isinstance(value, (dict, list, tuple, set)):
+        return None
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
+    text = "".join(
+        char
+        for char in str(value)
+        if char in "\t\n\r"
+        or "\x20" <= char <= "\ud7ff"
+        or "\ue000" <= char <= "\ufffd"
+    )
+    return text[:limit] if text else None
+
+
+def _nvg_text(value: object, limit: int = 256) -> str | None:
+    text = _xml_safe_text(value, limit)
+    return " ".join(text.split()) if text else None
+
+
+def _finite_number(value: object) -> float | None:
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return number if math.isfinite(number) else None
+
+
+def _metadata_text(value: object, limit: int = 256) -> str | None:
+    if isinstance(value, (list, tuple)):
+        values = [_nvg_text(item, 64) for item in value]
+        return _nvg_text(", ".join(item for item in values if item), limit)
+    return _nvg_text(value, limit)
+
+
+def _primary_altitude(track: dict) -> tuple[float, str] | None:
+    for key, scale, label in (
+        ("geo_alt_m", 1.0, "geometric WGS84"),
+        ("alt_geom_ft", 0.3048, "geometric WGS84"),
+        ("baro_alt_m", 1.0, "barometric"),
+        ("alt_baro_ft", 0.3048, "barometric"),
+        ("alt_3d_ft", 0.3048, "radar 3D"),
+        ("alt_ft", 0.3048, "reported"),
+        ("alt_m", 1.0, "reported"),
+        ("alt_km", 1000.0, "reported"),
     ):
-        v = track.get(key)
-        try:
-            number = float(v)
-        except (TypeError, ValueError):
-            continue
-        if math.isfinite(number) and number != 0:
+        number = _finite_number(track.get(key))
+        if number is not None:
+            return round(number * scale, 1), label
+    return None
+
+
+def _altitude_from(track: dict, fields: tuple[tuple[str, float], ...]) -> float | None:
+    for key, scale in fields:
+        number = _finite_number(track.get(key))
+        if number is not None:
             return round(number * scale, 1)
     return None
 
 
-def track_to_nvg_item(track: dict, sidc: str) -> tuple[str, str] | None:
+def _barometric_altitude_m(track: dict) -> float | None:
+    return _altitude_from(track, (
+        ("baro_alt_m", 1.0),
+        ("alt_baro_ft", 0.3048),
+        ("alt_ft", 0.3048),
+    ))
+
+
+def _geometric_altitude_m(track: dict) -> float | None:
+    return _altitude_from(track, (
+        ("geo_alt_m", 1.0),
+        ("alt_geom_ft", 0.3048),
+    ))
+
+
+def _altitude_modifier_value(track: dict) -> str | None:
+    geometric_m = _geometric_altitude_m(track)
+    barometric_m = _barometric_altitude_m(track)
+    if geometric_m is not None and barometric_m is not None:
+        geometric_ft = geometric_m / 0.3048
+        barometric_ft = barometric_m / 0.3048
+        return "GEO {} ft | {} m | BARO FL{:03d} | {} ft".format(
+            round(geometric_ft),
+            round(geometric_m),
+            round(barometric_ft / 100),
+            round(barometric_ft),
+        )
+    if barometric_m is not None:
+        altitude_ft = barometric_m / 0.3048
+        return "FL{:03d} | {} ft | {} m | barometric".format(
+            round(altitude_ft / 100), round(altitude_ft), round(barometric_m)
+        )
+    primary = _primary_altitude(track)
+    if primary:
+        altitude_m, source = primary
+        return "{} ft | {} m | {}".format(
+            round(altitude_m / 0.3048), round(altitude_m), source
+        )
+    return None
+
+
+_CARD_LABELS = {
+    "CS (callsign)": "Callsign",
+    "REG (registration)": "Registration",
+    "ICAO (hex address)": "ICAO address",
+    "FLAG (country)": "Country",
+    "OPR (operator)": "Operator",
+    "MODE 3 (squawk)": "Squawk / Mode 3",
+    "TIME": "Observation",
+    "LAT (latitude)": "Latitude",
+    "LON (longitude)": "Longitude",
+    "HDG (heading)": "Heading",
+    "ALT (Altitude)": "Altitude",
+    "V/S (vertical speed)": "Vertical speed",
+    "V/S (geometric vertical speed)": "Geometric vertical speed",
+    "SPD (speed)": "Speed",
+    "GS (ground speed)": "Ground speed",
+    "SRC (data source)": "Data source",
+    "RDR (radar ID)": "Radar ID",
+    "SITE (SAC/SIC)": "SAC / SIC",
+    "RNG (range)": "Range / azimuth",
+    "RSSI (signal strength)": "Signal strength",
+    "ACC (position accuracy)": "Position accuracy",
+    "ADS-B ACC (ADS-B accuracy)": "ADS-B accuracy",
+    "EMITTER (aircraft category)": "Emitter category",
+    "TAS (true airspeed)": "True airspeed",
+    "IAS (indicated airspeed)": "Indicated airspeed",
+    "MACH (Mach number)": "Mach",
+    "MAG HDG (magnetic heading)": "Magnetic heading",
+    "SEL ALT (selected altitude)": "Selected altitude",
+    "FINAL ALT (target altitude)": "Target altitude",
+    "TURN RATE": "Turn rate",
+    "TYPE (aircraft)": "Aircraft type",
+    "CALL": "Callsign",
+    "STATION": "Station",
+    "LAT": "Latitude",
+    "LON": "Longitude",
+    "TEMP": "Temperature",
+    "HUMIDITY": "Humidity",
+    "WIND": "Wind",
+    "PRESSURE": "Pressure",
+    "CLOUD": "Cloud cover",
+    "PRECIP": "Precipitation",
+    "SRC": "Data source",
+}
+
+
+def _format_altitude(altitude_m: float, flight_level: bool = False) -> str:
+    altitude_ft = altitude_m / 0.3048
+    prefix = "FL{:03d} / ".format(round(altitude_ft / 100)) if flight_level else ""
+    return "{}{} ft / {} m".format(prefix, round(altitude_ft), round(altitude_m))
+
+
+def _format_vertical_rate_fpm(value: object) -> str | None:
+    rate_fpm = _finite_number(value)
+    if rate_fpm is None:
+        return None
+    return "{:+.0f} ft/min / {:+.1f} m/s".format(rate_fpm, rate_fpm / 196.85)
+
+
+def _nvg_extended_data(track: dict, uid: str, sidc: str) -> list[tuple[str, str]]:
+    """Build an operator-facing NVG attribute card, aligned with TAK remarks."""
+    result: list[tuple[str, str]] = []
+    used_keys: dict[str, int] = {}
+    seen_rows: set[tuple[str, str]] = set()
+
+    def add(key: str, value: object, limit: int = 512) -> None:
+        if len(result) >= 96:
+            return
+        clean_key = _nvg_text(key, 96)
+        clean_value = _metadata_text(value, limit)
+        if not clean_key or clean_value is None:
+            return
+        row = (clean_key, clean_value)
+        if row in seen_rows:
+            return
+        seen_rows.add(row)
+        count = used_keys.get(clean_key, 0) + 1
+        used_keys[clean_key] = count
+        if count > 1:
+            clean_key = "{} ({})".format(clean_key, count)
+        result.append((clean_key, clean_value))
+
+    def section(title: str) -> None:
+        add(title, "────────────")
+
+    # Reuse the domain-aware stat-card formatter used by TAK. This preserves
+    # the detailed CAT-34/48/62 radar, IFF, flight-plan, maritime, sensor and
+    # weather information instead of maintaining a second divergent field map.
+    has_altitude_detail = _primary_altitude(track) is not None
+    remarks = _build_remarks(track, _cot_type_for_sidc(sidc))
+    for line in remarks.splitlines():
+        if line.startswith("─── ") and line.endswith(" ───"):
+            section(line[4:-4].strip())
+            continue
+        if ": " in line:
+            label, value = line.split(": ", 1)
+            card_label = _CARD_LABELS.get(label, label)
+            # The TAK formatter exposes one generic altitude. The dedicated NVG
+            # block below distinguishes pressure flight level from geometric z,
+            # so retaining both rows would be redundant and potentially unclear.
+            if card_label == "Altitude" and has_altitude_detail:
+                continue
+            add(card_label, value)
+        elif line.strip():
+            add("Status", line.strip("[] "))
+
+    # The TAK card selects one primary altitude. NVG can show all independent
+    # readings, so add a compact altitude block without conflating geometric
+    # altitude with pressure flight level.
+    altitude_rows: list[tuple[str, object]] = []
+    geometric_m = _geometric_altitude_m(track)
+    barometric_m = _barometric_altitude_m(track)
+    primary = _primary_altitude(track)
+    if primary and primary[1] not in {"barometric", "geometric WGS84"}:
+        altitude_rows.append(("Primary", "{} ({})".format(
+            _format_altitude(primary[0]), primary[1]
+        )))
+    if barometric_m is not None:
+        altitude_rows.append(("Barometric", _format_altitude(barometric_m, True)))
+    if geometric_m is not None:
+        altitude_rows.append(("Geometric WGS84", _format_altitude(geometric_m)))
+    for key, label, scale in (
+        ("alt_3d_ft", "Radar 3D", 0.3048),
+        ("mode_c_alt_ft", "Mode C", 0.3048),
+        ("measured_alt_ft", "Measured", 0.3048),
+        ("meas_alt_ft", "Measured", 0.3048),
+        ("calc_alt_ft", "Calculated", 0.3048),
+        ("selected_alt_ft", "Selected MCP/FCU", 0.3048),
+        ("fms_selected_alt_ft", "Selected FMS", 0.3048),
+        ("final_alt_ft", "Target / final", 0.3048),
+    ):
+        value = _finite_number(track.get(key))
+        if value is not None:
+            altitude_rows.append((label, _format_altitude(value * scale)))
+    for key, label in (
+        ("baro_vr_fpm", "Barometric vertical rate"),
+        ("geo_vr_fpm", "Geometric vertical rate"),
+    ):
+        value = _format_vertical_rate_fpm(track.get(key))
+        if value:
+            altitude_rows.append((label, value))
+    vertical_rate = _finite_number(track.get("vertical_rate_ms"))
+    if vertical_rate is not None:
+        altitude_rows.append((
+            "Vertical rate",
+            "{:+.1f} m/s / {:+.0f} ft/min".format(
+                vertical_rate, vertical_rate * 196.85
+            ),
+        ))
+    if altitude_rows:
+        section("ALTITUDE DETAIL")
+        for label, value in altitude_rows:
+            add(label, value)
+
+    guidance_rows = (
+        ("Autopilot modes", track.get("nav_modes")),
+        ("Selected heading", (
+            "{}°".format(track["selected_heading_deg"])
+            if track.get("selected_heading_deg") is not None else None
+        )),
+        ("Altimeter / QNH", (
+            "{} hPa".format(track["baro_setting_mb"])
+            if track.get("baro_setting_mb") is not None else None
+        )),
+    )
+    if any(value is not None for _, value in guidance_rows):
+        section("FLIGHT GUIDANCE")
+        for label, value in guidance_rows:
+            add(label, value)
+
+    quality_rows = (
+        ("Position source", track.get("pos_source")),
+        ("NACp / position", track.get("nac_p")),
+        ("NACv / velocity", track.get("nac_v")),
+        ("NIC / integrity", track.get("nic")),
+        ("Containment radius", (
+            "{} m".format(track["radius_containment_m"])
+            if track.get("radius_containment_m") is not None else None
+        )),
+        ("Position age", (
+            "{} s".format(track["position_age_s"])
+            if track.get("position_age_s") is not None else None
+        )),
+        ("SIL", track.get("sil")),
+        ("SIL basis", track.get("sil_type")),
+        ("Geometric vertical accuracy", track.get("gva")),
+        ("System design assurance", track.get("sda")),
+        ("ADS-B version", track.get("adsb_version")),
+        ("Messages received", track.get("message_count")),
+        ("Last message age", (
+            "{} s".format(track["message_age_s"])
+            if track.get("message_age_s") is not None else None
+        )),
+        ("Signal strength", (
+            "{} dBFS".format(track["rssi_db"])
+            if track.get("rssi_db") is not None else None
+        )),
+    )
+    if any(value is not None for _, value in quality_rows):
+        section("ADS-B QUALITY")
+        for label, value in quality_rows:
+            add(label, value)
+
+    detail_rows = (
+        ("Aircraft description", track.get("aircraft_description")),
+        ("APRS symbol", track.get("symbol")),
+        ("APRS path", track.get("path")),
+        ("Comment", track.get("comment")),
+        ("Sensor ID", track.get("sensor_id")),
+        ("Sensor type", track.get("sensor_type")),
+    )
+    if any(value is not None for _, value in detail_rows):
+        section("ADDITIONAL DETAILS")
+        for label, value in detail_rows:
+            add(label, value)
+
+    section("SYSTEM")
+    add("EFDI track ID", uid)
+    return result
+
+
+def _nvg_modifiers(track: dict, label: str) -> str:
+    identity = []
+    for field_label, key in (
+        ("SRC", "_src"),
+        ("ICAO", "icao24"),
+        ("REG", "registration"),
+        ("MMSI", "mmsi"),
+        ("SQ", "squawk"),
+    ):
+        value = _nvg_text(track.get(key), 48)
+        if value:
+            identity.append("{} {}".format(field_label, value))
+
+    modifiers = [("T", label)]
+    entity_type = _nvg_text(
+        track.get("aircraft_type")
+        or track.get("ship_type")
+        or track.get("sensor_type"),
+        64,
+    )
+    if entity_type:
+        modifiers.append(("V", entity_type))
+    if identity:
+        modifiers.append(("H", " | ".join(identity)))
+
+    timestamp = _timestamp(track)
+    if timestamp:
+        modifiers.append(("W", timestamp))
+    altitude_modifier = _altitude_modifier_value(track)
+    if altitude_modifier:
+        modifiers.append(("X", altitude_modifier))
+    lat = _finite_number(track.get("lat_deg"))
+    lon = _finite_number(track.get("lon_deg"))
+    if lat is not None and lon is not None:
+        modifiers.append(("Y", "{:.5f}, {:.5f}".format(lat, lon)))
+    if any(
+        track.get(key) is not None
+        for key in ("speed_ms", "ground_speed_kts", "speed_kts", "sog_ms")
+    ):
+        speed_ms = _speed_ms(track)
+        modifiers.append((
+            "Z",
+            "{} kt | {} km/h".format(
+                round(speed_ms / 0.514444), round(speed_ms * 3.6)
+            ),
+        ))
+    squawk = _nvg_text(track.get("squawk"), 16)
+    if squawk:
+        modifiers.append(("P", squawk))
+
+    status = []
+    if track.get("on_ground"):
+        status.append("ON GROUND")
+    if track.get("is_military"):
+        status.append("MILITARY")
+    emergency = _nvg_text(track.get("emergency_str"), 48)
+    if emergency:
+        status.append("EMERGENCY " + emergency.upper())
+    if status:
+        modifiers.append(("G", " | ".join(status)))
+
+    def safe(value: str) -> str:
+        return value.replace(":", "-").replace(";", ",")
+
+    return ";".join("{}:{}".format(key, safe(value)) for key, value in modifiers)
+
+
+def track_to_nvg_item(
+    track: dict,
+    sidc: str,
+    symbol_scheme: str = "app6c",
+    valid_until: float | None = None,
+) -> tuple[str, str] | None:
     """Return (item_id, NVG XML string) or None if no position."""
     lat = track.get("lat_deg")
     lon = track.get("lon_deg")
@@ -162,57 +559,58 @@ def track_to_nvg_item(track: dict, sidc: str) -> tuple[str, str] | None:
     try:
         lat = float(lat)
         lon = float(lon)
-        ts = float(track.get("_ts", time.time()))
     except (TypeError, ValueError):
         return None
-    if not (math.isfinite(lat) and math.isfinite(lon) and math.isfinite(ts)):
+    if not (math.isfinite(lat) and math.isfinite(lon)):
         return None
     if not (-90 <= lat <= 90 and -180 <= lon <= 180):
         return None
 
     uid   = _uid(track)
-    label = _callsign(track, uid)
+    label = _nvg_text(_callsign(track, uid), 128) or uid[-12:]
 
     ET.register_namespace("", NVG_NS)
     root = ET.Element("{%s}nvg" % NVG_NS, {"version": NVG_VERSION})
 
-    sym_attrs = {
-        "id":     uid,
-        "sidc":   sidc,
+    point_attrs = {
+        "uri":    "urn:efdi:" + urllib.parse.quote(uid, safe="-._~"),
+        "symbol": symbol_scheme + ":" + sidc,
         "label":  label,
-        # NVG points: "lon,lat" (longitude first — GeoJSON convention)
-        "points": "{},{}".format(round(lon, 6), round(lat, 6)),
-        "time":   _ts_str(ts),
+        "modifiers": _nvg_modifiers(track, label),
+        "x":      str(round(lon, 6)),
+        "y":      str(round(lat, 6)),
     }
-    alt = _hae_m(track)
-    if alt is not None:
-        sym_attrs["altitude"] = str(alt)
+    primary_altitude = _primary_altitude(track)
+    if primary_altitude:
+        point_attrs["z"] = str(primary_altitude[0])
+    if any(track.get(key) is not None for key in ("speed_ms", "ground_speed_kts", "speed_kts", "sog_ms")):
+        point_attrs["speed"] = str(round(_speed_ms(track) * 3.6, 2))
+    if any(track.get(key) is not None for key in ("heading_deg", "track_deg", "cog_deg")):
+        point_attrs["course"] = str(_course(track))
 
-    sym = ET.SubElement(root, "{%s}symbol" % NVG_NS, sym_attrs)
-
-    # Speed modifier
-    speed = None
-    if track.get("speed_ms") is not None:
-        speed = round(float(track["speed_ms"]) * 1.94384, 1)  # m/s → knots
-    elif track.get("ground_speed_kts") is not None:
-        speed = round(float(track["ground_speed_kts"]), 1)
-    if speed is not None:
-        ET.SubElement(sym, "{%s}modifier" % NVG_NS, {"name": "Speed", "value": str(speed)})
-
-    # Direction modifier
-    for hkey in ("heading_deg", "track_deg"):
-        v = track.get(hkey)
-        if v is not None:
-            ET.SubElement(sym, "{%s}modifier" % NVG_NS, {"name": "Direction", "value": str(round(float(v), 1))})
-            break
-
-    # Extra info in description
-    parts = ["src:{}".format(track.get("_src", "?"))]
-    for key in ("icao24", "mmsi", "registration", "aircraft_type", "squawk"):
-        v = track.get(key)
-        if v not in (None, ""):
-            parts.append("{}:{}".format(key, v))
-    ET.SubElement(sym, "{%s}description" % NVG_NS).text = " | ".join(parts)
+    point = ET.SubElement(root, "{%s}point" % NVG_NS, point_attrs)
+    text_info = _xml_safe_text(
+        _build_remarks(track, _cot_type_for_sidc(sidc)),
+        20_000,
+    )
+    if text_info:
+        ET.SubElement(point, "{%s}textInfo" % NVG_NS).text = text_info
+    timestamp = _timestamp(track)
+    if timestamp:
+        ET.SubElement(point, "{%s}TimeStamp" % NVG_NS).text = timestamp
+    expiry = _iso_timestamp(valid_until)
+    if expiry:
+        time_span = ET.SubElement(point, "{%s}TimeSpan" % NVG_NS)
+        ET.SubElement(time_span, "{%s}end" % NVG_NS).text = expiry
+    extended_fields = _nvg_extended_data(track, uid, sidc)
+    if extended_fields:
+        extended_data = ET.SubElement(point, "{%s}ExtendedData" % NVG_NS)
+        for key, value in extended_fields:
+            ET.SubElement(
+                extended_data,
+                "{%s}SimpleData" % NVG_NS,
+                {"key": key},
+            ).text = value
 
     xml_str = '<?xml version="1.0" encoding="UTF-8"?>' + ET.tostring(root, encoding="unicode")
     return uid, xml_str

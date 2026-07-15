@@ -6,7 +6,8 @@
 // Placeholders (all supplied by first-boot.sh from compose/.env + scripts/gen-certs.sh output):
 //   ${ZENOH_LISTEN_PORT}      mTLS listen port for mesh-facing pod-side clients (audit-sink, peers)
 //   ${ZENOH_LOCAL_TCP_PORT}   plaintext TCP listen port for local-only clients (bridges, zenoh-admin GUI)
-//   ${ZENOH_FABRIC_ENDPOINT}  the remote endpoint this pod dials OUT to (set in compose/.env)
+//   ${ZENOH_CONNECT_ENDPOINTS} JSON list containing the remote endpoint this pod dials OUT,
+//                              or [] when this pod is the fabric root
 //   ${PARTNER_NAMESPACE}      the pod's first-party write/read prefix (its slot, or release/<partner>)
 //   ${INBOUND_NAMESPACE}      the bilateral prefix the fabric publishes TO the pod (compose/.env-driven)
 //   ${NAMESPACE_PREFIX}       the org prefix (variable depth, e.g. LTU/CISB); pod writes under ${NAMESPACE_PREFIX}/${PARTNER_NAMESPACE}
@@ -34,7 +35,7 @@
 
   // Dial OUT to the remote fabric endpoint (a peer router, or nothing yet on an isolated pod).
   connect: {
-    endpoints: ["${ZENOH_FABRIC_ENDPOINT}"],
+    endpoints: ${ZENOH_CONNECT_ENDPOINTS},
   },
 
   transport: {
