@@ -208,6 +208,7 @@ fi
 section "SitaWare friendly-force tracking"
 ask_opt SITAWARE_URL  "SitaWare URL (e.g. https://sitaware.example.com)" ""
 if [ -n "${SITAWARE_URL:-}" ]; then
+    ask_opt SITAWARE_API_PATH "Documented SitaWare JSON resource path" ""
     ask_opt SITAWARE_USER "SitaWare username" ""
     ask_opt SITAWARE_PASS "SitaWare password" ""
     ask_opt SITAWARE_POLL_S "Poll interval in seconds" "10"
@@ -312,7 +313,7 @@ if [ -f "$ENV_FILE" ]; then
     MANAGED_KEYS+="|CAT48_PORT|CAT48_TCP|CAT48_RADAR_SAC|CAT48_RADAR_SIC|CAT48_RADAR_NAME|CAT48_RADAR_LAT|CAT48_RADAR_LON"
     MANAGED_KEYS+="|CAT21_PORT|CAT21_TCP|CAT20_PORT|CAT20_TCP"
     MANAGED_KEYS+="|LINK16_PORT|LINK16_TCP|MAVLINK_PORT|MAVLINK_TCP|VMF_PORT|VMF_TCP"
-    MANAGED_KEYS+="|SITAWARE_URL|SITAWARE_USER|SITAWARE_PASS|SITAWARE_POLL_S|SITAWARE_DISCOVER"
+    MANAGED_KEYS+="|SITAWARE_URL|SITAWARE_API_PATH|SITAWARE_USER|SITAWARE_PASS|SITAWARE_POLL_S|SITAWARE_DISCOVER"
     MANAGED_KEYS+="|TAK_HOST|TAK_PORT"
     MANAGED_KEYS+="|AISSTREAM_KEY"
     EXTRA_LINES=$(grep -Ev "^(#|[[:space:]]*$)" "$ENV_FILE" 2>/dev/null \
@@ -357,6 +358,7 @@ fi
     echo ""
     echo "# ── Integrations ──────────────────────────────────────────────────────"
     [ -n "${SITAWARE_URL:-}"    ] && echo "SITAWARE_URL=${SITAWARE_URL}"
+    [ -n "${SITAWARE_API_PATH:-}" ] && echo "SITAWARE_API_PATH=${SITAWARE_API_PATH}"
     [ -n "${SITAWARE_USER:-}"   ] && echo "SITAWARE_USER=${SITAWARE_USER}"
     [ -n "${SITAWARE_PASS:-}"   ] && echo "SITAWARE_PASS=${SITAWARE_PASS}"
     [ -n "${SITAWARE_POLL_S:-}" ] && echo "SITAWARE_POLL_S=${SITAWARE_POLL_S}"

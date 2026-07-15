@@ -200,8 +200,13 @@ function ConfigPage() {
             <input type="number" min={1} max={65535} disabled={!canWrite} className={inputClass}
               value={fields.local_tcp_port} onChange={e => set('local_tcp_port', Number(e.target.value))} />
           </Field>
-          <Field label="Fabric endpoint" help="The peer endpoint this pod dials out to (always mTLS — scheme is fixed)">
+          <Field label="Fabric endpoint" help="The parent peer this pod dials over mTLS. Leave empty only on the fabric root.">
             <div className="flex flex-wrap gap-2 mb-2">
+              <button type="button" disabled={!canWrite}
+                onClick={() => set('fabric_endpoint', '')}
+                className="px-2.5 py-1 rounded-full text-xs border border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:border-zinc-500 transition-colors disabled:opacity-50">
+                Root / no upstream
+              </button>
               {FABRIC_PRESETS.map(p => (
                 <button key={p.label} type="button" disabled={!canWrite}
                   onClick={() => set('fabric_endpoint', `tls/${p.host}:${p.port}`)}

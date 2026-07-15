@@ -29,11 +29,24 @@ Read `CLAUDE.md` first; its project constraints apply to every agent and tool.
 
 - Completed before this handoff: publish-script builder, direct signed federation push/status, ACL and replay protection, configurable namespace prefix, TAK-style UI pass, and topology ACL.
 - Completed in the current continuation: restored PID-managed Python bridge runtime; removed live per-bridge containers and their Compose/admin-control wrappers; completed topology aggregation and shared UI map integration for Dashboard, Topology, and Federation.
-- Bridge/protocol audit completed: launchers now provide the shared Python module path and `run.sh all` covers every retained integration; HTTP/WebSocket inputs are bounded; SitaWare HQ inbound and SitaWare Edge NVG outbound remain intentionally separate; CoT parsing/routing is hardened; CAT-48/34 were checked against current EUROCONTROL specifications. CAT-20/21/62 are explicitly documented legacy UAPs, and Link-16 TCP is disabled until a gateway framing ICD exists.
+- Bridge/protocol audit completed: launchers now provide the shared Python module path and `run.sh all` covers every retained integration; HTTP/WebSocket inputs are bounded. SitaWare adapters remain interface-specific: optional deployment-documented HQ REST inbound, Edge NVG REST outbound, and the native HQ NVG pull feed used by an HQ NVG Import Subscription. `/rest/v2/units` is not a universal HQ resource. CoT parsing/routing is hardened; CAT-48/34 were checked against current EUROCONTROL specifications. CAT-20/21/62 are explicitly documented legacy UAPs, and Link-16 TCP is disabled until a gateway framing ICD exists.
 - Windy, yr.no, PurpleAir, OSM/Overpass, and N2YO bridges and their dedicated schemas/downstream wiring were removed at the user's request.
 - Static checks pass. Live browser and real multi-pod topology/config-push checks still require rebuilding/deploying the admin containers.
 - Zero-trust cascading relay remains the next planned feature, but its plan requires successful live topology verification first.
 - `tests/smoke/README.md` still records a genuine missing CI loopback test and live validation runbook.
+- SitaWare HQ aircraft points now carry distinct barometric/geometric altitude,
+  metres/feet/flight level, vertical rates, selected altitude, airspeeds,
+  identity/status, ADS-B quality, and bounded source metadata through standard
+  NVG modifiers and ExtendedData. The live authenticated feed has been verified.
+- Protobuf is the intended internal data-plane direction, but `/v1` remains JSON.
+  The three aircraft proto3 contracts now match their Python records with
+  explicit optional presence. Migrate safely by generating Python bindings and
+  dual-publishing a new `/v2` Protobuf topic before changing consumers; do not
+  silently replace the bytes carried by `/v1`.
+- SitaWare NVG Attributes reuse CoT's domain-aware TAK stat-card formatter.
+  Weather is `a-n-G-I-R` in CoT and `SNGPUUMMO-*****` in NVG; dronuradaras.lt
+  sensors are `a-*-G-E-S` in CoT and `SNGPES----*****` in NVG. Keep these
+  categories visually and semantically distinct.
 
 ## Installed agent skills
 
