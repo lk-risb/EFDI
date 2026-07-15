@@ -14,10 +14,9 @@ Zenoh topic:  <ORG>/ais/aisstream/tracks/v1
 Proto schema: ais_track.proto  (message AisTrack, package ltu.cis.tracks.v1)
 
 Run:
-    venv/bin/python3 ais_bridge.py --apikey <key>
     AISSTREAM_KEY=<key> venv/bin/python3 ais_bridge.py
     # Baltic Sea only:
-    venv/bin/python3 ais_bridge.py --bbox '[[53.5,9.0],[66.0,30.0]]' --apikey <key>
+    AISSTREAM_KEY=<key> venv/bin/python3 ais_bridge.py --bbox '[[53.5,9.0],[66.0,30.0]]'
 """
 
 import argparse
@@ -217,8 +216,10 @@ def normalize(msg: dict) -> dict | None:
             except (ValueError, TypeError):
                 pass
         dim = inner.get("Dimension") or {}
-        a = dim.get("A", 0); b = dim.get("B", 0)
-        c = dim.get("C", 0); d = dim.get("D", 0)
+        a = dim.get("A", 0)
+        b = dim.get("B", 0)
+        c = dim.get("C", 0)
+        d = dim.get("D", 0)
         length = (a or 0) + (b or 0)
         beam   = (c or 0) + (d or 0)
         if length > 0:
@@ -235,8 +236,10 @@ def normalize(msg: dict) -> dict | None:
         if dest and dest not in ("", "NOWHERE", "@@@@@@@@@", "NO DEST"):
             static["destination"] = dest
         eta = inner.get("Eta") or {}
-        mo = eta.get("Month", 0); dy = eta.get("Day", 0)
-        hr = eta.get("Hour", 0);  mi = eta.get("Minute", 0)
+        mo = eta.get("Month", 0)
+        dy = eta.get("Day", 0)
+        hr = eta.get("Hour", 0)
+        mi = eta.get("Minute", 0)
         if mo and dy:
             static["eta"] = "{:02d}-{:02d} {:02d}:{:02d} UTC".format(mo, dy, hr, mi)
         if static:

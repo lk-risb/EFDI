@@ -48,6 +48,8 @@ from nato_nvg_layer import (
     NVG_VERSION,
     TOPIC_ROOT,
     _TOPIC_SIDC,
+    _uid,
+    _resolve_sidc,
     make_config,
     track_to_nvg_item,
 )
@@ -103,6 +105,12 @@ class NVGFeedCache:
                 oldest_uid = min(self._items, key=lambda key: self._items[key][1])
                 del self._items[oldest_uid]
             self._items[uid] = (xml, now, item_stale_s)
+        return uid
+
+    def remove(self, track: dict) -> str:
+        uid = _uid(track)
+        with self._lock:
+            self._items.pop(uid, None)
         return uid
 
     def _snapshot(self) -> list[tuple[str, str]]:
@@ -251,7 +259,7 @@ class NVGFeedHandler(BaseHTTPRequestHandler):
 
 
 def make_handler(
-    sidc: str,
+    sidc,
     cache: NVGFeedCache,
     verbose: bool,
     stale_s: float | None = None,
@@ -268,7 +276,12 @@ def make_handler(
             if verbose:
                 print("NVG feed ignored invalid Zenoh sample: {}".format(exc), flush=True)
             return
-        uid = cache.upsert(track, sidc, stale_s=stale_s)
+        if track.get("_delete"):
+            uid = cache.remove(track)
+            if verbose:
+                print("NVG feed removed {}".format(uid), flush=True)
+            return
+        uid = cache.upsert(track, _resolve_sidc(sidc, track), stale_s=stale_s)
         if verbose and uid:
             print("NVG feed cached {}".format(uid), flush=True)
 
@@ -329,7 +342,12 @@ def run(args) -> None:
                     make_handler(sidc, cache, args.verbose, stale_s=item_stale_s),
                 )
             )
-            print("SUB {} -> SIDC {}".format(key, sidc), flush=True)
+            print(
+                "SUB {} -> SIDC {}".format(
+                    key, getattr(sidc, "__name__", sidc)
+                ),
+                flush=True,
+            )
 
         print(
             "SitaWare HQ NVG feed listening on {}://{}:{}{} (stale={}s, max={})".format(
