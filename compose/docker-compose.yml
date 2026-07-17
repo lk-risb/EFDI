@@ -30,10 +30,13 @@ services:
       # (mirror the sandbox zenoh config) when the pod needs replay/retention.
     command: ["-c", "/etc/zenoh/config.json5"]
     healthcheck:
-      test: ["CMD-SHELL", "true"]
-      interval: 15s
+      # The previous `true` probe reported healthy even when zenohd had
+      # crashed or failed to bind.  The image contains BusyBox nc; probe the
+      # loopback client port that native bridges actually use.
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 ${ZENOH_LOCAL_TCP_PORT:-7448}"]
+      interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 12
 
   zenoh-router-test:
     # Isolated test router for local pub/sub testing — same image, same certs/ACL/namespace
@@ -53,13 +56,13 @@ services:
       - ${POD_STATE_DIR}/zenoh/tls:/etc/zenoh/tls:ro
     command: ["-c", "/etc/zenoh/config.json5"]
     healthcheck:
-      test: ["CMD-SHELL", "true"]
-      interval: 15s
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 ${ZENOH_TEST_LOCAL_TCP_PORT:-7458}"]
+      interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 12
 
   zenoh-admin-db:
-    image: postgres:16-alpine
+    image: postgres:16-alpine3.24@sha256:57c72fd2a128e416c7fcc499958864df5301e940bca0a56f58fddf30ffc07777
     container_name: efdi-pod-zenoh-admin-db
     network_mode: host
     restart: unless-stopped
@@ -84,7 +87,7 @@ services:
   # API (container-create with host binds, exec into other containers, etc)
   # the way a raw /var/run/docker.sock mount would allow. Loopback-only.
   docker-socket-proxy:
-    image: tecnativa/docker-socket-proxy:0.2.0
+    image: tecnativa/docker-socket-proxy:0.3.0@sha256:9e4b9e7517a6b660f2cc903a19b257b1852d5b3344794e3ea334ff00ae677ac2
     container_name: efdi-pod-docker-socket-proxy
     restart: unless-stopped
     environment:
@@ -169,7 +172,7 @@ services:
       disable: true
 
   zenoh-admin-proxy:
-    image: caddy:2-alpine
+    image: caddy:2-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648
     container_name: efdi-pod-zenoh-admin-proxy
     network_mode: host
     restart: unless-stopped

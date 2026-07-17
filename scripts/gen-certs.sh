@@ -50,7 +50,7 @@ openssl x509 -req -in "$CSR" -CA "$CA_CERT" -CAkey "$CA_KEY" -CAcreateserial \
 rm -f "$CSR"
 chmod 600 "$LEAF_KEY"
 # Group-readable by the fixed non-root GID every EFDI container (bridges,
-# zenoh-admin) runs as (see compose/bridge/Dockerfile*, compose/zenoh-admin/
+# zenoh-admin) runs as (see compose/Dockerfile, compose/zenoh-admin/
 # Dockerfile) — those processes open this key themselves for their own mTLS
 # identity, and BUNDLE_DIR is mounted into them read-only, so this is the only
 # way they can read it without running as root or the host's key owner.

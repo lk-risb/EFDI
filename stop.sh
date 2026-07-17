@@ -2,14 +2,15 @@
 # stop.sh — stop native bridges/layers started by start.sh or run.sh
 #
 # Usage:
-#   ./stop.sh           # stop everything (bridges + layers + zenoh)
-#   ./stop.sh giraffe   # stop open-API bridges only; leave cat48/21/20/link16 + cot-udp running
-#   ./stop.sh bridges   # stop open-API source bridges only
-#   ./stop.sh layers    # stop protocol layers only
+#   ./stop.sh           # stop everything (bridges + protocols + layers + zenoh)
+#   ./stop.sh giraffe   # stop source/API bridges; leave sensor protocols + output running
+#   ./stop.sh bridges   # stop source-specific bridges only
+#   ./stop.sh protocols # stop reusable input protocols only
+#   ./stop.sh layers    # stop TAK and SitaWare layers only
 #   ./stop.sh zenoh     # stop zenoh router only
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BRIDGE_DIR="$SCRIPT_DIR/compose/bridge"
+COMPOSE_DIR="$SCRIPT_DIR/compose"
 ENV_FILE="$SCRIPT_DIR/compose/.env"
 MODE="${1:-all}"
 
@@ -36,7 +37,7 @@ is_bridge_pid() {
     local pid="$1" arg
     [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null && [[ -r "/proc/$pid/cmdline" ]] || return 1
     while IFS= read -r -d '' arg; do
-        [[ "$arg" == "$BRIDGE_DIR/"* ]] && return 0
+        [[ "$arg" == "$COMPOSE_DIR/"* ]] && return 0
     done < "/proc/$pid/cmdline"
     return 1
 }
@@ -62,9 +63,13 @@ stop_zenoh() {
     docker compose -f "$SCRIPT_DIR/compose/docker-compose.yml" stop zenoh-router 2>/dev/null || true
 }
 
-_OPEN_API_BRIDGES=(airplaneslive aisstream aprs fr24 opensky openmeteo meteolt here-traffic notam dronuradaras cmems)
-_GIRAFFE_BRIDGES=(cat48 cat21 cat20 link16 mavlink vmf cot-rx)
-_LAYERS=(cot-udp cot-udp-tak cot-tcp cat62 cat48 cat21 cat20 link16 mavlink vmf cot-rx sitaware-cot-rx track-fusion sapient nffi sitaware sitaware-nvg sitaware-hq-nvg stanag4586)
+_SOURCE_BRIDGES=(airplaneslive adsblol aisstream aprs openmeteo meteolt
+                 dronuradaras dji-cloud utm-ans sitaware asterix-udp track-fusion)
+_PROTOCOLS=(asterix-cat10 asterix-cat20 asterix-cat21 asterix-cat34
+            asterix-cat48 asterix-cat62 link16 mavlink opendroneid vmf sapient
+            nffi stanag4586)
+_LAYERS=(cot-rx sitaware-cot-rx cot-udp cot-udp-tak cot-tcp sitaware-nvg
+         sitaware-hq-nvg)
 
 case "$MODE" in
     all)
@@ -74,18 +79,24 @@ case "$MODE" in
         ;;
     giraffe)
         echo "=== Stopping open-API bridges (leaving giraffe sensors + cot-udp) ==="
-        for name in "${_OPEN_API_BRIDGES[@]}"; do
+        for name in "${_SOURCE_BRIDGES[@]}"; do
             stop_scripts "$name"
         done
         ;;
     bridges)
-        echo "=== Stopping open-API source bridges ==="
-        for name in "${_OPEN_API_BRIDGES[@]}"; do
+        echo "=== Stopping source-specific bridges ==="
+        for name in "${_SOURCE_BRIDGES[@]}"; do
+            stop_scripts "$name"
+        done
+        ;;
+    protocols)
+        echo "=== Stopping input protocols ==="
+        for name in "${_PROTOCOLS[@]}"; do
             stop_scripts "$name"
         done
         ;;
     layers)
-        echo "=== Stopping protocol layers ==="
+        echo "=== Stopping TAK and SitaWare layers ==="
         for name in "${_LAYERS[@]}"; do
             stop_scripts "$name"
         done
@@ -94,7 +105,7 @@ case "$MODE" in
         stop_zenoh
         ;;
     *)
-        echo "Usage: $0 [all|giraffe|bridges|layers|zenoh]"
+        echo "Usage: $0 [all|giraffe|bridges|protocols|layers|zenoh]"
         exit 1
         ;;
 esac

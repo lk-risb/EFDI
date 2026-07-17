@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package efdi.protocols.v2;
+
+import "normalized_track.proto";
+
+// Matches EUROCONTROL CAT-048 Ed.1.32 target reports.
+message AsterixCat48Track {
+  efdi.data.v2.NormalizedTrack track = 1;
+  optional uint32 sac = 2;
+  optional uint32 sic = 3;
+  optional uint32 track_number = 4;
+  optional string target_address = 5;
+  optional string target_id = 6;
+  optional string mode3a = 7;
+  optional double range_nm = 8;
+  optional double azimuth_deg = 9;
+  optional double flight_level = 10;
+  optional string track_status_hex = 11;
+  optional bool track_confirmed = 12;
+  optional bool track_terminated = 13;
+}

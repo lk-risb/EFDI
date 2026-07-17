@@ -31,7 +31,7 @@ function emptyRow(): Row {
 const inputClass = "w-full px-3 py-2 rounded-md bg-zinc-200 dark:bg-[#1a1a1d] border border-zinc-300 dark:border-white/10 text-zinc-900 dark:text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-accent-ring disabled:opacity-50"
 
 function PublishBuilderPage() {
-  const [routerEndpoint, setRouterEndpoint] = useState('tls/zenoh.efdi.netbird.efdi-backbone.net:7447')
+  const [routerEndpoint, setRouterEndpoint] = useState('')
   const [clientCn, setClientCn] = useState('')
   const [certDir, setCertDir] = useState('')
   const [rows, setRows] = useState<Row[]>([emptyRow()])
@@ -116,7 +116,7 @@ function PublishBuilderPage() {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="space-y-1">
               <label className="text-sm text-zinc-700 dark:text-zinc-300">Router endpoint</label>
-              <input className={inputClass} value={routerEndpoint} onChange={e => setRouterEndpoint(e.target.value)} />
+              <input className={inputClass} value={routerEndpoint} onChange={e => setRouterEndpoint(e.target.value)} placeholder="tls/<current-router>:7447" />
             </div>
             <div className="space-y-1">
               <label className="text-sm text-zinc-700 dark:text-zinc-300">Client name (cert CN)</label>

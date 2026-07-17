@@ -1,0 +1,73 @@
+syntax = "proto3";
+
+package ltu.cis.tracks.v1;
+
+// Source-record schema colocated with EFDI protocol contracts.
+
+// Live aircraft position from airplanes.live (airplaneslive_adsb_bridge.py).
+// Current JSON topics:
+//   <PREFIX>/<ORG>/air/airplaneslive/adsb/civ/aircraft/tracks/v1
+//   <PREFIX>/<ORG>/air/airplaneslive/adsb/mil/aircraft/tracks/v1
+// Field names map timestamp/source to the Python track keys _ts/_src. Optional
+// scalar presence is significant: zero is a valid altitude/rate/heading value.
+message AirplanesLiveTrack {
+  double timestamp          = 1;  // Unix epoch when fetched (_ts)
+  string source             = 2;  // "airplaneslive" (_src)
+  optional string icao24 = 3;  // ICAO 24-bit hex address, e.g. "4b1234"
+  optional string callsign = 4;  // ATC flight number / callsign
+  optional string registration = 5;  // Aircraft registration
+  optional string aircraft_type = 6;  // ICAO type code, e.g. "B738"
+  double lat_deg            = 7;  // WGS-84 latitude
+  double lon_deg            = 8;  // WGS-84 longitude
+  optional int32 alt_baro_ft = 9;  // Barometric altitude, feet, or absent on ground
+  optional int32 alt_geom_ft = 10; // Geometric WGS-84 altitude, feet
+  optional double ground_speed_kts = 11;
+  optional double track_deg = 12; // True track, degrees clockwise from N
+  optional string squawk = 13;
+  optional bool is_military = 14;
+  optional string route = 15;
+  optional string aircraft_description = 16;
+  optional string pos_source = 17; // adsb_icao, mlat, tisb_icao, etc.
+  optional bool on_ground = 18;
+  optional double ias_kt = 19;
+  optional double tas_kt = 20;
+  optional double mach = 21;
+  optional double track_angle_rate_degs = 22;
+  optional double roll_deg = 23;
+  optional double mag_hdg_deg = 24;
+  optional double true_heading_deg = 25;
+  optional int32 baro_vr_fpm = 26;
+  optional int32 geo_vr_fpm = 27;
+  optional string emergency_str = 28;
+  optional string emitter_category_str = 29;
+  optional double baro_setting_mb = 30;
+  optional int32 selected_alt_ft = 31;
+  optional int32 fms_selected_alt_ft = 32;
+  optional string selected_alt_source = 33;
+  optional double selected_heading_deg = 34;
+  optional string nav_modes = 35;
+  optional double wind_dir_deg = 36;
+  optional double wind_speed_kt = 37;
+  optional double temp_c = 38;
+  optional double total_air_temp_c = 39;
+  optional int32 nic = 40;
+  optional int32 radius_containment_m = 41;
+  optional double position_age_s = 42;
+  optional int32 adsb_version = 43;
+  optional int32 nic_baro = 44;
+  optional int32 nac_p = 45;
+  optional int32 nac_v = 46;
+  optional int32 sil = 47;
+  optional string sil_type = 48;
+  optional int32 gva = 49;
+  optional int32 sda = 50;
+  optional int32 message_count = 51;
+  optional double message_age_s = 52;
+  optional double rssi_db = 53;
+  optional bool spi = 54;
+  optional bool alert = 55;
+  optional int32 database_flags = 56;
+  optional bool is_interesting = 57;
+  optional bool is_pia = 58;
+  optional bool is_ladd = 59;
+}
