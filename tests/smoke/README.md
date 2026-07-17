@@ -32,3 +32,23 @@ sandbox fabric** (sandbox router directly; no partner-net, no release-bridge), t
 - Audit NDJSON accumulates on the LUKS volume.
 
 TODO: capture this as `live-efdi.md` runbook once `first-boot.sh` is wired.
+
+## Identity-bound ACL compatibility gate
+
+Before enabling generated delegation policies, run:
+
+```bash
+tests/security/zenoh_identity_acl.sh
+```
+
+This self-contained security test uses disposable certificates and passwords
+under `mktemp`, the exact `eclipse/zenoh:1.9.0` router image used by Compose,
+and the pinned `eclipse-zenoh==1.9.0` Python binding. It proves that certificate
+CN and username subject fields are enforced together, scope escapes and partial
+identities are denied, an explicit quarantine deny overrides an allow, and an
+active mTLS link is closed when its short-lived certificate expires. It never
+reads deployment certificates, `compose/.env`, API keys, or runtime state.
+
+The image must already be present locally. If the bridge virtual environment is
+not available, set `EFDI_ZENOH_PYTHON` to a Python executable with
+`eclipse-zenoh==1.9.0` installed.

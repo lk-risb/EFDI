@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package efdi.data.v2;
+
+message MissionRoute {
+  double timestamp = 1;
+  string source = 2;
+  string uid = 3;
+  repeated double coordinates = 4;
+  optional string route_type = 5;
+  optional string callsign = 6;
+  optional double lower_altitude_m = 7;
+  optional double upper_altitude_m = 8;
+  optional double valid_from = 9;
+  optional double valid_until = 10;
+  optional string properties_json = 11;
+}

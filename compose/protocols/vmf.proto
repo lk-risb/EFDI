@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package efdi.protocols.v2;
+
+import "normalized_track.proto";
+
+// Matches VMF K04.4/K05.2 position records decoded by vmf.py.
+message VmfTrack {
+  efdi.data.v2.NormalizedTrack track = 1;
+  string message_key = 2;
+  optional uint32 originator_urn = 3;
+  optional string operational_environment = 4;
+  optional string entity = 5;
+}

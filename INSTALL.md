@@ -2,7 +2,14 @@
 
 > **Platform:** Linux · **Zenoh:** 1.9.0 · **Python:** 3.10+
 
-This guide covers deploying the sensor bridge stack on a Linux host. The stack ingests ASTERIX CAT-48/34 (Giraffe AMB radar), dronuradaras.lt acoustic detections, Link-16, MAVLink, and SitaWare, routing all markers through a local Zenoh fabric to TAK and SitaWare clients.
+This guide covers deploying the sensor bridge stack on a Linux host. The stack
+can ingest mixed ASTERIX categories (the current normalized decoders are
+CAT-010, CAT-020, CAT-021, CAT-034, CAT-048, and CAT-062), plus
+dronuradaras.lt acoustic detections, Link-16, MAVLink, and SitaWare. An
+optional bridge can also ingest declared Lithuanian UTM flights when an
+authorized Oro navigacija JSON/GeoJSON export is supplied. This is not a
+national live Remote ID feed. All markers are routed through a local Zenoh
+fabric to TAK and SitaWare clients.
 
 ---
 
@@ -21,13 +28,19 @@ This guide covers deploying the sensor bridge stack on a Linux host. The stack i
 
 | Port / address | Direction | Purpose |
 | --- | --- | --- |
-| UDP `<CAT48_PORT>` (default 30048) | inbound | Giraffe AMB ASTERIX stream |
+| UDP 50010 (`CAT10_PORT`) | inbound | EFDI CAT-010 convention; configure producer destination to match |
+| UDP 50020 (`CAT20_PORT`) | inbound | EFDI CAT-020 convention; configure producer destination to match |
+| UDP 50021 (`CAT21_PORT`) | inbound | EFDI CAT-021 convention; configure producer destination to match |
+| UDP 50034 (`CAT34_PORT`) | inbound | EFDI CAT-034 convention; configure radar destination to match |
+| UDP 50048 (`CAT48_PORT`) | inbound | EFDI CAT-048 convention; configure radar destination to match |
+| UDP 50062 (`CAT62_PORT`) | inbound | EFDI CAT-062 convention; configure producer destination to match |
 | UDP multicast `239.2.3.1:6969` | outbound | CoT delivery to ATAK |
 | UDP `<TAK_UDP_PORT>` (default 8087) | outbound | Optional direct CoT unicast to WinTAK/ATAK |
 | TCP 7448 | localhost | Local Zenoh router |
 | TCP 7447 TLS | outbound | Remote Zenoh router (requires NetBird) |
 | HTTPS 8890 | inbound | Zenoh admin GUI (Caddy-terminated, internal CA — see §10) |
 | HTTPS | outbound | dronuradaras.lt APIs |
+| HTTPS | outbound | Authorized `utm.ans.lt` JSON/GeoJSON export (optional) |
 
 ATAK devices must be on the same L2 segment as the server for multicast delivery. Cross-VLAN or cross-subnet deployments require a TAK Server (`cot-tcp` service).
 
@@ -77,8 +90,8 @@ chmod 600 compose/certs/*-key.pem
 `start.sh` creates the venv automatically on first run. To create it manually:
 
 ```bash
-python3 -m venv compose/bridge/venv
-compose/bridge/venv/bin/pip install eclipse-zenoh==1.9.0
+python3 -m venv compose/venv
+compose/venv/bin/pip install -r compose/requirements.txt
 ```
 
 > The `eclipse-zenoh` version must be **exactly 1.9.0** — minor version mismatches introduce breaking API changes.
@@ -120,14 +133,48 @@ Edit `compose/.env`. The file is read by `start.sh` with safe line-by-line parsi
 # Defaults to compose/state/ (in-repo, gitignored) if left unset.
 #POD_STATE_DIR=/var/lib/efdi-pod
 
-# ── Giraffe AMB radar (ASTERIX CAT-48/34) ───────────────────────────────────
-CAT48_PORT=30048               # UDP port the radar transmits on
+# ── Mixed ASTERIX UDP ingress (Giraffe example: CAT-34/48) ──────────────────
+# For one mixed ASTERIX UDP feed, list every category present in the stream.
+# The independent category translators consume their raw Zenoh topics.
+# CAT-010/020/021/062 may be added to this example when present.
+ASTERIX_PORT=                  # suggested combined-feed convention: 50000
+ASTERIX_BIND=0.0.0.0
+ASTERIX_CATEGORIES=34,48
+ASTERIX_MULTICAST_GROUP=       # optional
+ASTERIX_MULTICAST_INTERFACE=0.0.0.0
+ASTERIX_ALLOW_SOURCE=          # optional sender IPv4 address or CIDR
+
+# Separate publisher streams can continue using these direct listeners.
+CAT10_PORT=50010               # EFDI private-range convention; configure producer output
+CAT20_PORT=50020               # EFDI private-range convention; configure producer output
+CAT21_PORT=50021               # EFDI private-range convention; configure producer output
+CAT34_PORT=50034               # EFDI private-range convention; configure radar output
+CAT48_PORT=50048               # EFDI private-range convention; configure radar output
+CAT62_PORT=50062               # EFDI private-range convention; configure producer output
 CAT48_RADAR_SAC=<SAC>          # ASTERIX Source Area Code
 CAT48_RADAR_SIC=<SIC>          # ASTERIX Source Identification Code
 CAT48_RADAR_NAME=Giraffe AMB   # Callsign displayed in ATAK
 ```
 
 > **Radar position (lat/lon):** The bridge reads radar position automatically from each CAT-34 north marker via ASTERIX field I034/120. You do **not** need to configure coordinates for a static or mobile radar — position, speed, and course update live. Set `CAT48_RADAR_LAT` / `CAT48_RADAR_LON` only as a fallback for radar systems that do not transmit I034/120, or to show an immediate ATAK marker before the first CAT-34 message arrives.
+
+> **ASTERIX ports:** ASTERIX specifies the message format, not a registered
+> network port. In the radar/gateway management interface, set the EFDI host as
+> the destination and use the EFDI category convention: CAT-010→UDP 50010,
+> CAT-020→50020, CAT-021→50021, CAT-034→50034, CAT-048→50048, CAT-062→50062.
+> These are EFDI conventions, not known vendor factory defaults. Confirm
+> transport, category edition, combined/separate streams, and vendor framing in
+> the ICD.
+
+For a combined stream, set `ASTERIX_PORT` to its actual destination port. The
+`asterix-udp` process receives the socket once and republishes intact frames to
+`…/raw/asterix/cat34` and `…/raw/asterix/cat48`; the independent translators
+decode only their category. When `ASTERIX_PORT` is set, it takes precedence only
+for categories named in `ASTERIX_CATEGORIES`. Inspect an unknown feed first:
+
+```bash
+python3 tools/asterix_probe.py --port 30001
+```
 
 ### Optional fields
 
@@ -142,10 +189,8 @@ SITAWARE_USER=
 SITAWARE_PASS=
 SITAWARE_API_PATH=              # required, deployment-specific REST resource
 
-# ── NATO NFFI (STANAG 4677) friendly-force feed (inbound XML) ───────────────
-NFFI_HOST=
-NFFI_PORT=7010
-NFFI_FRAMING=length             # length | newline
+# ── NATO NFFI / ADatP-36 (STANAG 5527) XML already carried by Zenoh ────────
+NFFI_INPUT_TOPIC=               # optional; default: …/raw/nffi/*
 
 # ── SitaWare Edge (outbound NVG push) — separate product/host from HQ above ─
 SITAWARE_NVG_URL=
@@ -194,47 +239,70 @@ The interactive launcher displays all services with their readiness state. Toggl
   Open-data bridges
   ──────────────────────────────────────────────────────────
   [ 2] [✓] airplaneslive  Airplanes.live ADS-B aircraft          ready
-  [ 3] [ ] aisstream      AISstream live vessel positions        will prompt for API key
-  [ 4] [✓] aprs           APRS-IS stations, vehicles, vessels    ready
-  [ 5] [ ] fr24           FlightRadar24 aircraft                 will prompt for API key
-  [ 6] [✓] opensky        OpenSky ADS-B aircraft                 ready
-  [ 7] [✓] openmeteo      Open-Meteo weather stations            ready
-  [ 8] [✓] meteolt        meteo.lt weather stations              ready
-  [ 9] [ ] cmems          Copernicus Marine conditions           optional package/credentials required
-  [10] [ ] here-traffic   HERE road traffic flow                 will prompt for API key
-  [11] [ ] notam          ICAO active NOTAMs                     will prompt for API key
+  [ 3] [✓] adsblol        ADSB.lol open-data aircraft            ready
+  [ 4] [ ] aisstream      AISstream live vessel positions        will prompt for API key
+  [ 5] [✓] aprs           APRS-IS stations, vehicles, vessels    ready
+  [ 6] [✓] openmeteo      Open-Meteo weather stations            ready
+  [ 7] [✓] meteolt        meteo.lt weather stations              ready
+  [ 8] [ ] utm-ans        Lithuanian UTM declared UAV flights    UTM_ANS_API_URL not set
 
   Sensor bridges
   ──────────────────────────────────────────────────────────
-  [12] [✓] dronuradaras   dronuradaras.lt drone detection        ready
-  [13] [✓] asterix        ASTERIX CAT-48/34 radar tracks         ready
-  [14] [ ] link16         Link-16 JREAP-C datalink               LINK16_PORT not set
-  [15] [ ] mavlink        MAVLink UAV telemetry                  MAVLINK_PORT not set
-  [16] [ ] vmf            VMF MIL-STD-47001C messages            VMF_PORT not set
-  [17] [ ] sitaware       SitaWare HQ documented JSON resource (inbound)      will prompt for address+login
-  [18] [ ] nffi           NATO NFFI friendly force XML feed (inbound)         NFFI_HOST not set
+  [ 9] [ ] sitaware       SitaWare HQ documented JSON resource   will prompt for address+login
+  [10] [✓] dronuradaras   dronuradaras.lt drone detection        ready
+  [11] [ ] dji-cloud      DJI Cloud API aircraft                 DJI_MQTT_HOST not set
+  [12] [ ] asterix-udp    Mixed ASTERIX UDP → raw topics         ASTERIX_PORT not set
+  [13] [✓] track-fusion   Radar/ADS-B track correlation          ready
 
-  Protocol adapters
+  Protocols
   ──────────────────────────────────────────────────────────
-  [19] [ ] cot-rx         Inbound Cursor-on-Target stream        COT_RX_PORT/HOST not set
-  [20] [ ] sapient        SAPIENT sensor feed                    will prompt for address
-  [21] [ ] stanag4586     STANAG 4586 UAV feed                   will prompt for address
+  [14] [✓] asterix-cat10  ASTERIX CAT-010 airport surface        UDP 50010
+  [15] [✓] asterix-cat20  ASTERIX CAT-020 legacy MLAT            UDP 50020
+  [16] [✓] asterix-cat21  ASTERIX CAT-021 legacy ADS-B           UDP 50021
+  [17] [✓] asterix-cat34  ASTERIX CAT-034 radar service          UDP 50034
+  [18] [✓] asterix-cat48  ASTERIX CAT-048 radar targets          UDP 50048
+  [19] [✓] asterix-cat62  ASTERIX CAT-062 system tracks          UDP 50062
+  [20] [ ] link16         Link-16 JREAP-C datalink               LINK16_PORT not set
+  [21] [ ] mavlink        MAVLink UAV telemetry                  MAVLINK_PORT not set
+  [22] [✓] opendroneid    Raw Open Drone ID Zenoh translator     ready
+  [23] [ ] vmf            VMF MIL-STD-47001C messages            VMF_PORT not set
+  [24] [✓] nffi           NATO NFFI XML Zenoh translator         ready
+  [25] [ ] sapient        SAPIENT / BSI Flex 335                 will prompt for address
+  [26] [ ] stanag4586     STANAG 4586 UAV feed                   will prompt for address
+  [27] [ ] mavlink-raw    MAVLink socket → Zenoh raw             MAVLINK_RAW_PORT not set
+  [28] [ ] link16-raw     Link-16 socket → Zenoh raw             LINK16_RAW_PORT not set
+  [29] [ ] vmf-raw        VMF socket → Zenoh raw                 VMF_RAW_PORT not set
+  [30] [ ] sapient-raw    SAPIENT socket → Zenoh raw             SAPIENT_RAW_PORT not set
+  [31] [ ] stanag4586-raw STANAG 4586 socket → Zenoh raw         STANAG4586_RAW_PORT not set
+
+  Zenoh-native translators
+  ──────────────────────────────────────────────────────────
+  [32] [✓] cap            CAP 1.2 XML → alerts                   ready
+  [33] [✓] geojson        GeoJSON/OGC Features → areas           ready
+  [34] [✓] ais-nmea       AIS NMEA → vessel tracks               ready
+  [35] [✓] spectrum       RF spectrum observations               ready
+  [36] [✓] sensor-health  Sensor health/heartbeat records         ready
+  [37] [✓] mission-route  UAV routes and corridors                ready
+
+  TAK and SitaWare layers
+  ──────────────────────────────────────────────────────────
+  [38] [ ] cot-rx         Inbound CoT / TAK user positions       COT_RX_PORT/HOST not set
+  [39] [ ] sitaware-cot-rx SitaWare CoT Gateway input            HOST/listener not set
 
   Output layers
   ──────────────────────────────────────────────────────────
-  [22] [✓] cot-udp        CoT → ATAK UDP multicast 239.2.3.1:6969
-  [23] [ ] cot-udp-tak    CoT → WinTAK/ATAK UDP unicast
-  [24] [✓] cot-tcp        CoT → TAK Server TCP
-  [25] [ ] sitaware-nvg   EFDI tracks → SitaWare Edge (outbound NVG)          will prompt for address+login
-  [26] [ ] sitaware-hq-nvg EFDI tracks → SitaWare HQ pull feed                SITAWARE_HQ_NVG_ENABLE=0
-  [27] [✓] track-fusion   Radar/ADS-B track correlation
+  [40] [✓] cot-udp        CoT → ATAK UDP multicast 239.2.3.1:6969
+  [41] [ ] cot-udp-tak    CoT → WinTAK/ATAK UDP unicast
+  [42] [✓] cot-tcp        CoT → TAK Server TCP
+  [43] [ ] sitaware-nvg   EFDI tracks → SitaWare Edge            will prompt for address+login
+  [44] [ ] sitaware-hq-nvg EFDI tracks → SitaWare HQ pull feed   SITAWARE_HQ_NVG_ENABLE=0
 ```
 
 **Launcher controls:**
 
 | Input | Action |
 | --- | --- |
-| `1`–`27` | Toggle individual service (space-separated for multiple) |
+| `1`–`44` | Toggle individual service (space-separated for multiple) |
 | `a` | Select all ready services |
 | `n` | Deselect all |
 | Enter | Launch selected services |
@@ -244,20 +312,20 @@ The interactive launcher displays all services with their readiness state. Toggl
 
 | Scenario | Selection |
 | --- | --- |
-| Giraffe radar + ATAK multicast | `1 13 22` |
-| Giraffe + drone detection + ATAK | `1 12 13 22` |
-| Giraffe + SitaWare + ATAK multicast | `1 13 17 22` |
-| AIS vessels polled by SitaWare HQ | `1 3 26` |
-| EFDI tracks pushed out to SitaWare Edge | `1 25` |
-| EFDI tracks polled by SitaWare HQ | `1 26` |
-| All sensors + TAK Server | `a`, then deselect `22` (cot-udp) |
-| Radar only, no TAK output (debug) | `1 13 27` |
+| Giraffe CAT-34/48 + ATAK multicast | `1 17 18 29` |
+| Giraffe + drone detection + ATAK | `1 10 17 18 29` |
+| Giraffe + SitaWare + ATAK multicast | `1 9 17 18 29` |
+| AIS vessels polled by SitaWare HQ | `1 4 33` |
+| EFDI tracks pushed out to SitaWare Edge | `1 32` |
+| EFDI tracks polled by SitaWare HQ | `1 33` |
+| All ready inputs + TAK Server | `a`, then deselect `29` (cot-udp) |
+| Radar only, no TAK output (debug) | `1 12 17 18` |
 
 Processes are tracked via PID files in `$POD_STATE_DIR/.pids/` and log to `$POD_STATE_DIR/logs/<service>.log`.
 
 After a successful launch, `start.sh` remembers the selected services and the last TAK/SitaWare endpoint addresses in `$POD_STATE_DIR/launcher-state.env` (mode 600). It also merges any currently running PID-managed services into that selection. On the next interactive launch it displays the complete restored selection and auto-starts it after five seconds; press `c` during the countdown to change it. It never stores passwords, API keys, or certificate material there. Explicit values in `compose/.env` take precedence over remembered addresses.
 
-`aisstream` requires an AISstream API key. Select service 3 and enter the key
+`aisstream` requires an AISstream API key. Select service 4 and enter the key
 at its hidden prompt for a one-run secret, or set `AISSTREAM_KEY` only in the
 ignored runtime file `compose/.env`. The key is passed through the environment,
 not a command-line argument, and is never copied into launcher memory.
@@ -311,16 +379,16 @@ The bridge reads MIL-STD-2525B SIDC codes from SitaWare and routes each unit to 
 | Friendly / Hostile / Neutral / Unknown | Space (P) | `…/space/sitaware/rest/<affiliation>/satellite/…` | matching `a-<affiliation>-P` |
 | Any | Special operations forces (F) | `…/land/sitaware/rest/<affiliation>/unit/…` | matching ground-unit type |
 
-### NATO NFFI friendly-force feed (inbound)
+### NATO NFFI friendly-force protocol translator
 
-`nffi` connects to an external NFFI (STANAG 4677 / FMN NFFI) TCP source — e.g. another C2 system, or SitaWare's own NFFI export — and publishes each unit to `…/land/nato/nffi/friendly/unit/tracks/v1`. Separate from `sitaware` (which pulls SitaWare HQ's own REST API); use `nffi` when the only interop path available is a raw NFFI feed.
+`nffi` subscribes to complete NFFI XML documents that a partner receiver or detection system has already published under `…/raw/nffi/{source-id}` in Zenoh. It translates every unit to `…/land/nato/nffi/friendly/unit/tracks/v1`. It owns no TCP client, listener, endpoint, or framing convention. A product-specific connection must live in a separate `_bridge.py` after its endpoint and ICD are known.
+
+NFFI friendly-force interoperability is ADatP-36 / STANAG 5527. STANAG 4677 is the separate dismounted-soldier interoperability family; a 4677 JDSSDM-over-NFFI profile would need a separate, profile-specific implementation.
 
 **`.env` fields:**
 
 ```bash
-NFFI_HOST=<nffi-source-host>
-NFFI_PORT=7010                  # confirm with the NFFI source operator — not a fixed standard port
-NFFI_FRAMING=length             # length | newline — confirm framing with the source
+NFFI_INPUT_TOPIC=               # optional; default: …/raw/nffi/*
 ```
 
 ### SitaWare Edge (outbound NVG)
@@ -332,7 +400,7 @@ Leave `SITAWARE_NVG_URL`/`SITAWARE_NVG_USER`/`SITAWARE_NVG_PASS` unset and the l
 **`.env` fields:**
 
 ```bash
-SITAWARE_NVG_URL=http://<sitaware-edge-host>:<port>   # port varies by deployment — confirm with SitaWare admin
+SITAWARE_NVG_URL=https://<sitaware-edge-host>:<port>   # HTTPS is required; port varies by deployment
 SITAWARE_NVG_USER=<username>
 SITAWARE_NVG_PASS=<password>
 SITAWARE_NVG_SOURCE=efdi-live    # NVG source name, created automatically on first push
@@ -415,22 +483,55 @@ The endpoint accepts GET/HEAD only. It requires Basic authentication by default,
 
 | Service | Script | Zenoh topic (abbreviated) | Trigger |
 | --- | --- | --- | --- |
-| `asterix` | `bridges/asterix_bridge.py` | `…/air/asterix/cat48/unknown/aircraft/tracks/v1` | Streaming UDP |
+| `asterix-udp` | `bridges/asterix_udp_bridge.py` | `…/raw/asterix/catNN` | One mixed unicast/multicast UDP stream |
+| `asterix-cat10/20/21/34/48/62` | `protocols/asterix_catNN.py` | Category-specific normalized ASTERIX topics | Direct UDP/TCP or one category-specific raw Zenoh topic per process |
 | `dronuradaras` | `bridges/dronuradaras_bridge.py` | `…/land/dronuradaras/acoustic/neutral/sensor/status/v1` | 60 s online-only device poll with offline eviction / 10 s detection poll |
+| `utm-ans` | `bridges/utm_ans_bridge.py` | `…/air/utm_ans/utm/unknown/uav/tracks/v1` | Authorized JSON/GeoJSON declared-flight poll; requires `UTM_ANS_API_URL` |
+| `opendroneid` | `protocols/opendroneid.py` | `…/air/opendroneid/astm-f3411/*/uav/tracks/v1` | Raw receiver publications under `…/raw/opendroneid/**`; no radio on the router host |
 | `aisstream` | `bridges/aisstream_ws_bridge.py` | `…/sea/aisstream/ais/civ/vessel/tracks/v1` | Authenticated WSS stream |
 | `sitaware` | `bridges/sitaware_bridge.py` | `…/land/sitaware/rest/friendly/unit/tracks/v1` | Configurable REST poll |
-| `nffi` | `layers/nato_nffi_layer.py` | `…/land/nato/nffi/friendly/unit/tracks/v1` | Streaming TCP (NFFI XML) |
-| `cot-rx` | `layers/cot_receiver_bridge.py` | `…/land/radar/cot/friendly/unit/tracks/v1` | TAK Server mTLS user-SA input |
-| `sitaware-cot-rx` | `layers/cot_receiver_bridge.py` | `…/land/radar/cot/*/unit/tracks/v1` | SitaWare Edge/Frontline CoT Gateway input |
-| `link16` | `bridges/link16_bridge.py` | `…/air/link16/jreap/*/aircraft/tracks/v1` | Streaming UDP |
-| `mavlink` | `bridges/mavlink_bridge.py` | `…/air/mavlink/mav2/*/uav/tracks/v1` | Streaming UDP/TCP |
+| `nffi` | `protocols/nffi.py` | `…/land/nato/nffi/friendly/unit/tracks/v1` | Complete XML documents under `…/raw/nffi/*` in Zenoh |
+| `cot-rx` | `layers/cot_receiver.py` | `…/land/radar/cot/friendly/unit/tracks/v1` | TAK Server mTLS user-SA input |
+| `sitaware-cot-rx` | `layers/cot_receiver.py` | `…/land/radar/cot/*/unit/tracks/v1` | SitaWare Edge/Frontline CoT Gateway input |
+| `link16` | `protocols/link16.py` | `…/air/link16/jreap/*/aircraft/tracks/v1` | Streaming UDP |
+| `mavlink` | `protocols/mavlink.py` | `…/air/mavlink/mav2/*/uav/tracks/v1` | Streaming UDP/TCP |
+| `mavlink-raw`, `link16-raw`, `vmf-raw`, `sapient-raw`, `stanag4586-raw` | `bridges/*_raw_bridge.py` | `…/raw/<protocol>/<source>` | Optional socket ingress; matching protocol runs with `*_ZENOH_RAW=1` |
+| `cap` | `protocols/cap.py` | `…/land/cap/neutral/sensor/alerts/v1` | Complete CAP 1.2 XML on `…/raw/cap/**` |
+| `geojson` | `protocols/geojson_features.py` | `…/land/ogc/neutral/zone/features/v1` | GeoJSON/OGC Features on `…/raw/geojson/**` |
+| `ais-nmea` | `protocols/ais_nmea.py` | `…/sea/ais/nmea/civ/vessel/tracks/v1` | AIVDM/AIVDO on `…/raw/ais/**` |
+| `spectrum` / `sensor-health` / `mission-route` | Matching `protocols/*.py` | `…/land/spectrum/**`, `…/land/health/**`, `…/air/mission/**` | JSON on their `…/raw/**` topics |
+| `dji-cloud` | `bridges/dji_cloud_api_bridge.py` | `…/air/dji/cloud-api/friendly/uav/tracks/v1` | Source-specific authenticated DJI MQTT 5 bridge |
 | `cot-udp` | `layers/cot_layer.py` | Subscriber — all topics | Event-driven |
 | `cot-tcp` | `layers/cot_layer.py` | Subscriber — all topics | Event-driven |
 | `sitaware-nvg` | `layers/nato_nvg_layer.py` | Subscriber — all track topics | Event-driven, 10 s refresh |
 | `sitaware-hq-nvg` | `layers/sitaware_hq_nvg_feed.py` | Subscriber — all track topics | Pull-based NVG snapshot |
-| `track-fusion` | `layers/track_fusion_layer.py` | CAT-48 + CAT-21 subscriber | Event-driven |
+| `track-fusion` | `bridges/track_fusion_bridge.py` | CAT-48 + CAT-21 subscriber | Event-driven |
 
 ### TAK users and SitaWare Frontline vehicles
+
+### Zenoh-native raw ingress
+
+For a receiver host that should own the network socket, select the matching
+`*-raw` bridge and set its raw port. Select the protocol translator separately
+with its `*_ZENOH_RAW=1` setting. For example:
+
+```dotenv
+MAVLINK_RAW_PORT=14550
+MAVLINK_ZENOH_RAW=1
+MAVLINK_RAW_TOPIC=                 # defaults to …/raw/mavlink/<hostname>
+```
+
+The raw bridge publishes octets only; it does not classify or alter them. The
+MAVLink, Link-16, VMF, SAPIENT/FLEX 335, and STANAG 4586 translators consume
+those Zenoh topics and publish normalized JSON. Link-16 TCP remains disabled
+until the gateway provides a documented stream-framing ICD. VMF, SAPIENT, and
+STANAG 4586 TCP ingress use their documented length/header framing; confirm the
+edition and vendor profile before live use.
+
+CAP, GeoJSON, AIS NMEA, spectrum, health, and route translators are idle-safe
+Zenoh subscribers. A partner publishes complete JSON/XML/NMEA payloads below
+the corresponding `raw/**` topic; no internet URL or receiver is embedded in
+the translator.
 
 `cot-rx` can connect to a TAK Server TLS input with a TAK-issued client
 certificate and import ground-user situational-awareness events into SitaWare:
@@ -464,14 +565,262 @@ Frontline tank or armoured vehicle is therefore forwarded to TAK Server and the
 direct ATAK/WinTAK outputs with the same affiliation and military entity type.
 Exclude the EFDI Live Tracks source/layer from the SitaWare CoT export policy to
 prevent tracks imported through NVG from being exported back into EFDI. When a
-deployment exposes NFFI instead of CoT, configure `NFFI_HOST`/`NFFI_PORT` for
-friendly-force positions; do not guess or reverse the Edge NVG REST endpoint.
+deployment exposes NFFI instead of CoT, publish its complete XML documents to
+`…/raw/nffi/{source-id}` through the attached Zenoh node; do not guess or
+reverse the Edge NVG REST endpoint.
 
 CoT and both SitaWare NVG outputs apply the same scenario affiliation policy:
 aircraft in the configured RU/BY ICAO address ranges and vessels with RU/BY
 MMSI MIDs are hostile; other public ADS-B/AIS contacts remain neutral. An
 origin-country label alone does not override an invalid or missing transponder
 identifier.
+
+## C2 ↔ Zenoh bidirectional runbook
+
+The directions are independent. Complete only the paths exposed and licensed
+by the actual deployment, then select their services in `./start.sh`.
+
+### 1. Verify the common Zenoh side
+
+Keep every Python adapter pointed at the local router:
+
+```dotenv
+ZENOH_LOCAL_ENDPOINT=tcp/127.0.0.1:7448
+```
+
+Set `ZENOH_FABRIC_ENDPOINT` only for the `zenoh-router`; bridges and layers do
+not connect directly to the changing backbone address. C2-origin records are
+published below `{NAMESPACE_PREFIX}/{PARTNER_NAMESPACE}/...`. Federation ACLs
+decide which partner routers can receive that namespace.
+
+### 2. Zenoh → TAK Server
+
+Configure the TAK TCP destination and select `cot-tcp`:
+
+```dotenv
+TAK_HOST=<tak-server>
+TAK_PORT=8089
+TAK_TLS=1
+TAK_CERT=/runtime/path/tak-client.pem
+TAK_KEY=/runtime/path/tak-client-key.pem
+TAK_CA=/runtime/path/tak-ca.pem
+```
+
+These must be TAK-issued credentials. The Zenoh certificate is not valid for
+TAK Server. For lab plaintext TCP use the deployment's configured TCP port and
+leave `TAK_TLS=0`; direct `cot-udp`/`cot-udp-tak` output is one-way and does not
+provide a return feed.
+
+On the TAK Server side:
+
+1. Sign in to the TAK Server administration UI with an administrator identity.
+2. Open **User Management** and create a dedicated EFDI client identity; do not
+   reuse a human operator account.
+3. Assign only the mission groups EFDI must publish to. The identity needs the
+   appropriate **IN** membership for traffic it sends into TAK Server.
+4. Use the deployment's certificate/enrollment workflow to issue a client
+   certificate for that identity and export its certificate, private key and
+   TAK CA chain. Current TAK Server exposes user/group and certificate-manager
+   operations in its [official API](https://docs.tak.gov/api/takserver); exact
+   buttons differ between file-user, LDAP and external-identity deployments.
+5. Place the PEM files in a runtime-only directory on the EFDI host, enter their
+   paths above, select `cot-tcp` in `./start.sh`, and confirm the identity appears
+   as connected in TAK Server.
+
+### 3. TAK Server → Zenoh
+
+Use a separate TAK client identity with the IN/OUT groups required to see the
+desired users, then select `cot-rx`:
+
+```dotenv
+COT_RX_HOST=<tak-server>:8089
+COT_RX_TLS=1
+COT_RX_SERVER_NAME=<DNS name in TAK certificate>
+COT_RX_CERT=/runtime/path/tak-client.pem
+COT_RX_KEY=/runtime/path/tak-client-key.pem
+COT_RX_CA=/runtime/path/tak-ca.pem
+COT_RX_TAK_USERS_ONLY=1
+COT_RX_INCLUDE_MARKERS=1
+```
+
+The recommended setting imports ground-user SA plus, when
+`COT_RX_INCLUDE_MARKERS=1`, normal TAK point map markers (`b-m-p-*`). Markers
+go to `…/land/c2/cot/unknown/unit/tracks/v1`, preserve their CoT type for TAK,
+and are represented as generic unknown C2 units for SitaWare NVG. Set
+`COT_RX_TAK_USERS_ONLY=0` only when the TAK group and mission policy is intended
+to expose other CoT map objects. `cot-rx` rejects returned `EFDI-*` UIDs and
+marks TAK ingress so the TAK TCP output does not send those records back.
+
+On the TAK Server side, create a second dedicated receive identity in **User
+Management**. Give it **OUT** membership for the groups whose SA EFDI may read;
+if the same identity must also publish, grant the corresponding IN membership
+explicitly. Issue its TAK client certificate and use those files in `COT_RX_*`.
+No new TAK data feed is entered: `cot-rx` is a normal mTLS TAK client connecting
+to the configured streaming input, normally port 8089. In ATAK/WinTAK, operators
+must connect to the same TAK Server and select/share compatible groups or
+channels; a client hidden by TAK group policy cannot appear in Zenoh.
+
+Verify the receive connection without exposing payloads or credentials:
+
+```bash
+tail -f "${POD_STATE_DIR:-compose/state}/logs/cot-rx.log"
+```
+
+### 4. Zenoh → SitaWare
+
+For SitaWare Edge, configure its documented NVG REST endpoint and select
+`sitaware-nvg`:
+
+```dotenv
+SITAWARE_NVG_URL=https://<edge-server>/<documented-nvg-resource>
+SITAWARE_NVG_USER=<runtime-user>
+SITAWARE_NVG_PASS=<runtime-secret>
+SITAWARE_NVG_SOURCE=efdi-live
+```
+
+In SitaWare Edge administration, enable the licensed NVG REST interface, create
+or choose a non-human integration account with permission to update the target
+NVG source/layer, and copy the documented REST URL into `SITAWARE_NVG_URL`.
+After the first successful push, enable/show the `efdi-live` source or layer in
+the operational map if the deployment does not display new sources by default.
+Systematic does not publish stable public menu names for this licensed screen;
+record the exact menu and resource URL from the installed Edge administration
+manual in the site handover.
+
+For SitaWare HQ, enable `sitaware-hq-nvg`, configure TLS and dedicated feed
+credentials, then create an HQ NVG Import Subscription pointing to the resulting
+`SITAWARE_HQ_NVG_PATH`:
+
+```dotenv
+SITAWARE_HQ_NVG_ENABLE=1
+SITAWARE_HQ_NVG_BIND=<efdi-address>
+SITAWARE_HQ_NVG_PORT=8088
+SITAWARE_HQ_NVG_PATH=/nvg
+SITAWARE_HQ_NVG_USER=<dedicated-feed-user>
+SITAWARE_HQ_NVG_PASS=<runtime-secret>
+SITAWARE_HQ_NVG_TLS_CERT=/runtime/path/feed-cert.pem
+SITAWARE_HQ_NVG_TLS_KEY=/runtime/path/feed-key.pem
+```
+
+Inside SitaWare HQ, click **SitaWare Communication → NVG → NVG Import
+Subscriptions**, create a subscription, and enter:
+
+```text
+Subscription Name:         EFDI Live Tracks
+Remote Endpoint:           https://<efdi-address>:8088/nvg
+Target Layer:              efdi-live / EFDI Live Tracks
+Request NVG periodically:  yes
+Polling Interval:          10 seconds
+Reconnect Delay:           90 seconds
+Authentication:            enabled; use the dedicated feed user/password
+Pause Subscription:        no
+```
+
+Create the `EFDI Live Tracks` NVG layer first if it is absent. Trust the feed
+certificate's issuing CA in Windows; do not leave certificate verification
+disabled after the connectivity test.
+
+### 5. SitaWare HQ → Zenoh
+
+This requires a real JSON unit resource documented for that HQ deployment; do
+not guess `/rest/v2/units`. Configure and select `sitaware`:
+
+```dotenv
+SITAWARE_URL=https://<hq-server>
+SITAWARE_USER=<runtime-user>
+SITAWARE_PASS=<runtime-secret>
+SITAWARE_API_PATH=/<documented-resource-path>
+SITAWARE_POLL_S=10
+SITAWARE_TLS_VERIFY=1
+```
+
+The bridge publishes below `…/{domain}/sitaware/rest/{affiliation}/{entity}/
+tracks/v1`. Verify with:
+
+```bash
+tail -f "${POD_STATE_DIR:-compose/state}/logs/sitaware.log"
+```
+
+On the SitaWare HQ side, the administrator must enable the licensed API, create
+a read-only integration account, and grant that account access to the exact
+unit/track resource intended for export. Copy these four values from the
+installed product's API/ICD into the handover: base URL, resource path,
+authentication method, and response schema/version. There is no safe generic
+sequence of public HQ menu clicks for this operation and no universal units
+resource; if the administrator cannot identify that screen/resource, do not
+enable `sitaware`. Use the deployment's NFFI or CoT Gateway interface instead.
+
+### 6. SitaWare Edge/Frontline → Zenoh
+
+Enable the licensed SitaWare CoT Gateway. Configure exactly one connection
+direction and select `sitaware-cot-rx`:
+
+```dotenv
+# Gateway connects to EFDI:
+SITAWARE_COT_RX_PORT=<efdi-listen-port>
+SITAWARE_COT_RX_BIND=<efdi-address>
+SITAWARE_COT_RX_ALLOW_PEER=<gateway-ip>
+
+# Or EFDI connects to the gateway:
+# SITAWARE_COT_RX_HOST=<gateway-ip>:<gateway-port>
+```
+
+The listener rejects sources other than `SITAWARE_COT_RX_ALLOW_PEER`. Exclude
+the EFDI Live Tracks source from the SitaWare export policy to prevent an
+NVG→SitaWare→CoT echo. If the product exposes NFFI rather than a CoT Gateway,
+publish each complete document under `…/raw/nffi/{source-id}` and select `nffi`.
+
+In the licensed SitaWare CoT Gateway configuration:
+
+1. Create a new export profile named, for example, `EFDI to Zenoh`.
+2. Select continuous **Cursor on Target / CoT XML** output.
+3. Choose exactly one TCP role: **client**, entering the EFDI address and
+   `SITAWARE_COT_RX_PORT`; or **server**, entering the gateway listen address
+   later as `SITAWARE_COT_RX_HOST` on EFDI.
+4. Select the own-force, vehicle and other operational layers approved for
+   sharing.
+5. Exclude `efdi-live / EFDI Live Tracks` from that export profile.
+6. Save/apply the profile, start the gateway output, select
+   `sitaware-cot-rx` in EFDI, and confirm both connection logs increment.
+
+The licensed Gateway's screen and field captions vary by release; these are the
+values to enter, not a claim that every release uses identical button labels.
+
+### 7. Share C2-origin data with partners
+
+Do not rewrite the record into another partner's namespace. Confirm that the
+origin namespace is permitted by the router/federation policy and that the
+receiving partner subscribes to it. Their `cot-*`, `sitaware-nvg`, or
+`sitaware-hq-nvg` output layers will translate authorized normalized topics in
+the same way as locally generated sensor data.
+
+### 8. Operational-persona test exercise
+
+Use four separate identities or clients in a test. These are operational
+personas, not replacements for the Zenoh Admin panel's `superadmin`, `admin`,
+and `readonly` roles.
+
+| Persona | Test client and action | EFDI services | Expected result |
+| --- | --- | --- | --- |
+| C2 operator | A TAK/WinTAK/ATAK or SitaWare operator account. Place a standard point marker and observe the common picture. | `cot-rx`, `cot-tcp` and/or `sitaware-nvg`; set `COT_RX_TAK_USERS_ONLY=1` and `COT_RX_INCLUDE_MARKERS=1` for TAK. | The marker is published on `…/land/c2/cot/unknown/unit/tracks/v1`, appears on the other C2 output, and is not echoed back through the same TAK TCP connection. |
+| Frontline user | A second, non-admin TAK account publishes its SA position; or a Frontline vehicle is exported through the licensed SitaWare CoT Gateway. | `cot-rx` for TAK, or `sitaware-cot-rx` for Frontline; plus the desired output layer. | Its position and safe CoT type reach the shared C2 picture. The user has no EFDI administration access. |
+| Sensor publisher | A receiver/detection system attached to a local Zenoh router publishes complete frames/documents to that protocol's `…/raw/<protocol>/<source-id>` topic. For a lab publisher, an admin can generate a script in **Publish Script** after entering that publisher's current router endpoint. | The matching protocol translator and desired C2 output layers. | The translator creates normalized EFDI tracks; the C2 systems show derived markers, not the raw frame. |
+| Fabric admin | A separate Zenoh Admin panel account manages router/federation configuration only. | Infrastructure/admin UI; no sensor or C2 feed is required. | May perform its assigned panel actions but is not an operational TAK/SitaWare identity. |
+
+For a first exercise, create two ordinary TAK identities in the same mission
+groups: `c2-operator-test` and `frontline-test`; use a third TAK-issued service
+identity only for `cot-rx`. In the C2 operator client, use the normal map-tool
+**point marker** action—not route/drawing/chat tools—for this initial test.
+Confirm `cot-rx.log` shows the `b-m-p-*` event and its C2 Zenoh topic. Then
+confirm the Frontline client sees the marker and the operator sees the frontline
+SA update. Keep raw sensor publication on a distinct sensor identity/topic; it
+must not impersonate either C2 user.
+
+The current router ACL is namespace-scoped, not yet persona/certificate-scoped.
+The four test clients prove data flow and C2 behaviour; they do **not** prove
+least-privilege Zenoh authorization between personas. Enforced persona access
+needs a subsequent certificate-subject ACL design with separate client
+credentials and topic permissions.
 
 > **ASTERIX editions:** CAT-48 follows EUROCONTROL Edition 1.32 and CAT-34 follows Edition 1.29. CAT-20, CAT-21, and CAT-62 currently use legacy compatibility UAPs and print a warning when enabled; do not connect modern CAT-20 1.9, CAT-21 2.2+, or CAT-62 1.21 feeds until their exact decoder profiles are implemented. Link-16 accepts UDP only because the gateway's TCP framing is not yet documented.
 
@@ -634,7 +983,7 @@ tail -20 $POD_STATE_DIR/logs/asterix.log | grep -E "keepalive|startup|error"
 ### File structure
 
 ```python
-# compose/bridge/bridges/<name>_bridge.py
+# compose/bridges/<name>_bridge.py
 
 import json, os, time
 import zenoh
@@ -794,9 +1143,9 @@ Five workflows in `.github/workflows/` run on every push/PR to `main`:
 | --- | --- |
 | `shellcheck.yml` | Lints every `.sh` script in the repo (`-S warning`) |
 | `compose-validate.yml` | Confirms `compose/docker-compose.yml` parses as valid YAML |
-| `bridge-syntax.yml` | `py_compile` on every file in `compose/bridge/bridges/` and `compose/bridge/layers/` |
+| `bridge-syntax.yml` | `py_compile` on every file in `compose/bridges/`, `compose/protocols/`, and `compose/layers/` |
 | `zenoh-admin-frontend.yml` | `pnpm type-check` + `pnpm build` for `compose/zenoh-admin/ui` |
-| `docker-build.yml` | Builds both `compose/bridge` and `compose/zenoh-admin` Docker images (no push) |
+| `docker-build.yml` | Builds the flattened `compose/Dockerfile` and the `compose/zenoh-admin` image (no push) |
 
 This catches syntax errors, TypeScript errors, and Dockerfile breakage before merge — it does **not** run the bridges themselves (most need real API keys/network access CI doesn't have).
 
@@ -809,9 +1158,7 @@ This catches syntax errors, TypeScript errors, and Dockerfile breakage before me
 | 2026-06-14 | Initial commit — forked from official `efdi-moon-pod-main` repository |
 | 2026-06-15 | Base bridge adapters wired; repository structure established; README added |
 | 2026-06-16 | `airplanes.live` bridge: regional ADS-B feed + worldwide military aircraft tracking |
-| 2026-06-16 | ICAO NOTAM bridge: live NOTAM ingestion via ICAO Dataservices API |
-| 2026-06-16 | FlightRadar24 bridge: FR24 commercial feed integration |
-| 2026-06-16 | Protocol Buffer definitions for new track types (`aircraft_track`, `ais_track`, `aprs_track`, `cat62_track`) |
+| 2026-06-16 | Protocol Buffer definitions for track types; contracts now live beside translators in `compose/protocols/` |
 | 2026-06-17/18 | Quality-of-life improvements: bridge robustness, layer deduplication, track fusion tuning |
 | 2026-06-18 | ASTERIX full-decode design specification document added |
 | 2026-06-19/22 | Further bridge and layer improvements; Giraffe ASTERIX bridge complete |
@@ -834,11 +1181,10 @@ This catches syntax errors, TypeScript errors, and Dockerfile breakage before me
 | 2026-07-05 | Removed the `gps-ew` bridge (GPSJam-based) — gpsjam.org has no public API for its own processed data, so this bridge never actually worked; removed from `start.sh` and `cot_layer.py` rather than left silently broken |
 | 2026-07-05 | Fixed cross-source/cross-pod duplicate tracks in SitaWare: `nato_nvg_layer.py`'s `_uid()` baked the source name into the track ID (unlike `cot_layer.py`'s already-correct version), so the same aircraft from two sources got two different SitaWare tracks |
 | 2026-07-05 | `dronuradaras_bridge.py` was changed to publish every positioned registered sensor; superseded by the 2026-07-15 online-only operator policy below |
-| 2026-07-15 | `dronuradaras_bridge.py` now publishes only devices explicitly reported as `is_online=true`; offline devices emit deletion events so CoT, SitaWare Edge, and the HQ NVG snapshot evict cached markers |
 | 2026-07-05 | Added `.github/workflows/ci.yml`: compile-checks bridges/layers, type-checks + builds the zenoh-admin frontend, builds both Docker images on every push/PR |
 | 2026-07-05 | Added `shellcheck` and `compose-validate` CI jobs; fixed the one real finding (`compose/rebuild.sh` missing `cd ... \|\| exit`) and silenced a false-positive (`SC2163` on the intentional "export by dynamic name" idiom in `start.sh`/`stop.sh`/`run.sh`) |
 | 2026-07-10 | Fixed `nato_nvg_layer.py` reusing the inbound `sitaware_bridge.py`'s env var names (`SITAWARE_URL`/`USER`/`PASS`) — renamed to `SITAWARE_NVG_*` since HQ (inbound) and Edge (outbound) are usually separate hosts/credentials |
-| 2026-07-10 | Wired `nffi` (`layers/nato_nffi_layer.py`) and `sitaware-nvg` (`layers/nato_nvg_layer.py`) into `start.sh` — both existed in the repo but were never registered as launchable services |
+| 2026-07-10 | Wired `nffi` and `sitaware-nvg` into `start.sh` — both existed in the repo but were never registered as launchable services |
 | 2026-07-10 | `start.sh`: `sitaware` and `sitaware-nvg` now prompt for username + hidden-input password at launch (previously only the server address was prompted; login had to be pre-set in `.env` with no interactive fallback) |
 | 2026-07-10 | Zenoh admin GUI: added a "Connected routers" panel — parses `router/transport/unicast/*` entries already present in the admin-space query used for the subscriber/queryable lists, no new ACL or query needed |
 | 2026-07-10 | Zenoh admin GUI: ported the TAK-hud visual language (`hud-card`, `hud-frame`/reticle corners, `hud-glass` sidebar, `hud-grid-bg` backdrop, accent-glow buttons, staggered fade-in) into `index.css`/`Layout.tsx`/dashboard |
@@ -847,6 +1193,11 @@ This catches syntax errors, TypeScript errors, and Dockerfile breakage before me
 | 2026-07-11 | `BUNDLE_DIR`/`POD_STATE_DIR` defaults moved from `$HOME/goat-bundle`/`$HOME/goat-moon` to `compose/certs/`/`compose/state/` (in-repo, gitignored) — scattered state across `$HOME` made cleanup unreliable |
 | 2026-07-11 | Added `dev.sh`: disposable local Postgres + directly-run uvicorn for zenoh-admin UI preview only, bypassing zenoh-router/certs/fabric entirely |
 | 2026-07-11 | Removed the external "goat" vendor entirely: certs are now self-issued via `scripts/gen-certs.sh` (EFDI root CA, no portal/CBOR bundle), containers renamed `goat-moon-*` → `efdi-pod-*`, `GOAT_CERT_DIR` env var renamed `EFDI_CERT_DIR`, `host/first-boot.sh` rewritten to read `compose/.env` directly and drop the `goat-clientd` wrapper (NetBird is called natively — it was always EFDI's own asset, not vendor lock-in), `profiles/` directory removed (orphaned by the rewrite) |
+| 2026-07-15 | `dronuradaras_bridge.py` now publishes only devices explicitly reported as `is_online=true`; offline devices emit deletion events so CoT, SitaWare Edge, and the HQ NVG snapshot evict cached markers |
+| 2026-07-17 | Replaced FlightRadar24 and OpenSky with the free/open-data ADSB.lol bridge |
+| 2026-07-17 | Added deterministic ASTERIX category listener conventions: CAT-010/020/021/034/048/062 use UDP 50010/50020/50021/50034/50048/50062 by default; these are EFDI conventions, not vendor defaults |
+| 2026-07-17 | Added Zenoh-native CAP, GeoJSON/OGC, AIS NMEA, spectrum, sensor-health, mission-route, and raw-ingress translation paths |
+| 2026-07-17 | Security refresh: Vite upgraded, Compose images pinned/refreshed, Python image OS packages upgraded, and authenticated SitaWare/UTM endpoints restricted to HTTPS |
 
 ---
 

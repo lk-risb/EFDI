@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package efdi.data.v2;
+
+// Transport-neutral input envelope.  Bridges publish this record to Zenoh;
+// protocol translators consume it and never need to own a source socket.
+message RawEnvelope {
+  double received_timestamp = 1;
+  string source = 2;
+  string protocol = 3;
+  optional string profile = 4;
+  optional string transport = 5;
+  optional string source_address = 6;
+  optional uint64 sequence = 7;
+  bytes payload = 8;
+  optional string content_type = 9;
+}

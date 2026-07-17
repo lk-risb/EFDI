@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package efdi.data.v2;
+
+message AisNmeaTrack {
+  double timestamp = 1;
+  string source = 2;
+  uint32 message_type = 3;
+  optional uint32 mmsi = 4;
+  optional double lat_deg = 5;
+  optional double lon_deg = 6;
+  optional double speed_knots = 7;
+  optional double course_deg = 8;
+  optional string vessel_name = 9;
+  optional string callsign = 10;
+  optional uint32 nav_status = 11;
+  map<string, string> metadata = 12;
+}

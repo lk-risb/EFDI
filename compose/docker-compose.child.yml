@@ -29,7 +29,7 @@ services:
       retries: 5
 
   zenoh-admin-db-child:
-    image: postgres:16-alpine
+    image: postgres:16-alpine3.24@sha256:57c72fd2a128e416c7fcc499958864df5301e940bca0a56f58fddf30ffc07777
     container_name: efdi-child-zenoh-admin-db
     network_mode: host
     restart: unless-stopped

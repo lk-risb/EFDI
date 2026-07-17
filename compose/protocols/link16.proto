@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package efdi.protocols.v2;
+
+import "normalized_track.proto";
+
+// Matches the verified JREAP-C/Link-16 subsets decoded by link16.py.
+message Link16Track {
+  efdi.data.v2.NormalizedTrack track = 1;
+  string j_message = 2;
+  uint32 track_number = 3;
+  optional string domain = 4;
+  optional int32 altitude_ft = 5;
+}

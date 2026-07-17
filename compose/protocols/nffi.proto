@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package efdi.protocols.v2;
+
+import "normalized_track.proto";
+
+// Matches the NFFI / ADatP-36 (STANAG 5527) XML subset decoded by nffi.py.
+message NffiTrack {
+  efdi.data.v2.NormalizedTrack track = 1;
+  string sensor_id = 2;
+  optional string nffi_affiliation = 3;
+  optional string unit_type = 4;
+}
+
+// Intended /v2 envelope for an NFFI XML document already carried by Zenoh.
+// The live /v1 translator currently accepts the XML document bytes directly.
+message NffiRawIngress {
+  string source_id = 1;
+  bytes xml_document = 2;
+}

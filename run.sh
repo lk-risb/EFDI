@@ -5,18 +5,19 @@
 # Usage:
 #   ./run.sh            # giraffe mode (default) — radar/Link-16 sensors + CoT-UDP only
 #   ./run.sh giraffe    # same as above — CAT-48/21/20, Link-16, cot-udp
-#   ./run.sh all        # everything — all open-API bridges + all layers
-#   ./run.sh bridges    # open-API bridges only (skip zenoh + layers)
-#   ./run.sh layers     # all protocol layers only (cot, cat62, sapient, nffi, …)
+#   ./run.sh all        # everything — bridges, input protocols, and output layers
+#   ./run.sh bridges    # source-specific bridges only (skip zenoh + layers)
+#   ./run.sh protocols  # reusable input protocols only
+#   ./run.sh layers     # TAK and SitaWare output/pointer layers only
 #
 # Logs go to logs/<name>.log  PIDs saved to .pids/
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BRIDGE_DIR="$SCRIPT_DIR/compose/bridge"
+COMPOSE_DIR="$SCRIPT_DIR/compose"
 ENV_FILE="$SCRIPT_DIR/compose/.env"
-VENV="$BRIDGE_DIR/venv"
+VENV="$COMPOSE_DIR/venv"
 
 # ---------------------------------------------------------------------------
 # Load .env
@@ -45,7 +46,7 @@ export BUNDLE_DIR="${BUNDLE_DIR:-$SCRIPT_DIR/compose/certs}"
 export EFDI_CERT_DIR="$BUNDLE_DIR"
 export POD_STATE_DIR="${POD_STATE_DIR:-$SCRIPT_DIR/compose/state}"
 export NAMESPACE_PREFIX_FILE="${POD_STATE_DIR}/namespace-prefix"
-export PYTHONPATH="$BRIDGE_DIR${PYTHONPATH:+:$PYTHONPATH}"
+export PYTHONPATH="$COMPOSE_DIR${PYTHONPATH:+:$PYTHONPATH}"
 LOG_DIR="$POD_STATE_DIR/logs"
 PID_DIR="$POD_STATE_DIR/.pids"
 mkdir -p "$LOG_DIR" "$PID_DIR"
@@ -56,7 +57,7 @@ mkdir -p "$LOG_DIR" "$PID_DIR"
 if [[ ! -x "$VENV/bin/python3" ]]; then
     echo "Creating venv at $VENV …"
     python3 -m venv "$VENV"
-    "$VENV/bin/pip" install --quiet -r "$BRIDGE_DIR/requirements.txt"
+    "$VENV/bin/python3" -m pip install --quiet -r "$COMPOSE_DIR/requirements.txt"
     echo "Venv ready."
 fi
 PYTHON="$VENV/bin/python3"
@@ -68,7 +69,7 @@ is_bridge_pid() {
     local pid="$1" expected_script="$2" arg
     [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null && [[ -r "/proc/$pid/cmdline" ]] || return 1
     while IFS= read -r -d '' arg; do
-        [[ "$arg" == "$BRIDGE_DIR/$expected_script" ]] && return 0
+        [[ "$arg" == "$COMPOSE_DIR/$expected_script" ]] && return 0
     done < "/proc/$pid/cmdline"
     return 1
 }
@@ -87,7 +88,7 @@ start() {
         rm -f "$pid_file"
     fi
 
-    "$PYTHON" "$BRIDGE_DIR/$script" "$@" \
+    "$PYTHON" "$COMPOSE_DIR/$script" "$@" \
         >> "$LOG_DIR/$name.log" 2>&1 &
     echo $! > "$pid_file"
     echo "  [start] $name  (pid $!)"
@@ -96,6 +97,25 @@ start() {
 skip_if_no_key() {
     local key_val="${!1:-}"
     [[ -z "$key_val" ]]
+}
+
+asterix_category_uses_raw() {
+    local wanted="$1" item
+    [[ -n "${ASTERIX_PORT:-}" ]] || return 1
+    IFS=',' read -r -a _asterix_categories <<< "${ASTERIX_CATEGORIES:-34,48}"
+    for item in "${_asterix_categories[@]}"; do
+        item="${item//[[:space:]]/}"
+        [[ "$item" == "$wanted" ]] && return 0
+    done
+    return 1
+}
+
+start_asterix_udp_bridge() {
+    if [[ "${ASTERIX_PORT:-}" ]]; then
+        start asterix-udp bridges/asterix_udp_bridge.py
+    else
+        echo "  [skip] asterix-udp — set ASTERIX_PORT for a mixed UDP feed"
+    fi
 }
 
 # ---------------------------------------------------------------------------
@@ -122,6 +142,40 @@ start_zenoh() {
     fi
 }
 
+start_asterix_protocols() {
+    local category port tcp_var tcp_args host
+    for category in 10 20 21 34 48; do
+        case "$category" in
+            10) port="${CAT10_PORT:-}"; tcp_var="${CAT10_TCP:-}" ;;
+            20) port="${CAT20_PORT:-}"; tcp_var="${CAT20_TCP:-}" ;;
+            21) port="${CAT21_PORT:-}"; tcp_var="${CAT21_TCP:-}" ;;
+            34) port="${CAT34_PORT:-}"; tcp_var="${CAT34_TCP:-}" ;;
+            48) port="${CAT48_PORT:-}"; tcp_var="${CAT48_TCP:-}" ;;
+        esac
+        if asterix_category_uses_raw "$category"; then
+            start "asterix-cat${category}" "protocols/asterix_cat${category}.py" --zenoh-raw
+        elif [[ "$port" ]]; then
+            tcp_args=(); [[ "$tcp_var" == "1" ]] && tcp_args=(--tcp)
+            start "asterix-cat${category}" "protocols/asterix_cat${category}.py" \
+                --port "$port" "${tcp_args[@]}"
+        else
+            echo "  [skip] asterix-cat${category} — set CAT${category}_PORT in .env to enable"
+        fi
+    done
+
+    host="${CAT62_HOST:-${RADAR_HOST:-}}"
+    if asterix_category_uses_raw 62; then
+        start asterix-cat62 protocols/asterix_cat62.py --zenoh-raw
+    elif [[ "$host" && "$host" != "127.0.0.1" ]]; then
+        start asterix-cat62 protocols/asterix_cat62.py --host "$host" \
+            --port "${CAT62_PORT:-${RADAR_PORT:-50062}}"
+    elif [[ "${CAT62_UDP:-}" == "1" ]]; then
+        start asterix-cat62 protocols/asterix_cat62.py --udp --port "${CAT62_PORT:-50062}"
+    else
+        echo "  [skip] asterix-cat62 — set CAT62_HOST or CAT62_UDP=1 in .env to enable"
+    fi
+}
+
 # ---------------------------------------------------------------------------
 # Source bridges (external data → Zenoh)
 # ---------------------------------------------------------------------------
@@ -129,8 +183,23 @@ start_bridges() {
     echo ""
     echo "=== Source bridges ==="
 
+    start_asterix_udp_bridge
+
     start airplaneslive bridges/airplaneslive_adsb_bridge.py
+    start adsblol bridges/adsblol_bridge.py
     start dronuradaras bridges/dronuradaras_bridge.py
+
+    if [[ "${DJI_MQTT_HOST:-}" ]]; then
+        start dji-cloud bridges/dji_cloud_api_bridge.py
+    else
+        echo "  [skip] dji-cloud — set DJI_MQTT_HOST in .env to enable"
+    fi
+
+    if [[ "${UTM_ANS_API_URL:-}" ]]; then
+        start utm-ans bridges/utm_ans_bridge.py
+    else
+        echo "  [skip] utm-ans — set UTM_ANS_API_URL to an authorized JSON/GeoJSON feed"
+    fi
 
     if skip_if_no_key AISSTREAM_KEY; then
         echo "  [skip] aisstream — AISSTREAM_KEY not set"
@@ -140,44 +209,104 @@ start_bridges() {
 
     start aprs bridges/aprsis_bridge.py
 
-    if skip_if_no_key FR24_KEY; then
-        echo "  [skip] fr24 — FR24_KEY not set"
-    else
-        start fr24 bridges/fr24_live_bridge.py
-    fi
-
-    start opensky bridges/opensky_states_bridge.py
     start openmeteo bridges/openmeteo_forecast_bridge.py
     start meteolt bridges/meteolt_forecast_bridge.py
 
-    if [[ -z "${COPERNICUSMARINE_SERVICE_USERNAME:-}" || \
-          -z "${COPERNICUSMARINE_SERVICE_PASSWORD:-}" ]]; then
-        echo "  [skip] cmems — Copernicus Marine credentials not set"
-    elif ! "$PYTHON" -c 'import copernicusmarine' >/dev/null 2>&1; then
-        echo "  [skip] cmems — optional package missing; run: $VENV/bin/pip install copernicusmarine"
+    if [[ "${SITAWARE_URL:-}" ]]; then
+        sitaware_flags=""
+        [[ "${SITAWARE_DISCOVER:-}" == "1" ]] && sitaware_flags="--discover"
+        start sitaware bridges/sitaware_bridge.py ${sitaware_flags:+"$sitaware_flags"}
     else
-        start cmems bridges/cmems_marine_bridge.py
+        echo "  [skip] sitaware — set SITAWARE_URL in .env to enable"
     fi
 
-    if skip_if_no_key HERE_KEY; then
-        echo "  [skip] here-traffic — HERE_KEY not set"
+    start track-fusion bridges/track_fusion_bridge.py
+
+    # Optional transport-only ingress.  These processes publish bytes; the
+    # matching protocol translators below perform all decoding.
+    [[ "${MAVLINK_RAW_PORT:-}" ]] && start mavlink-raw bridges/mavlink_raw_bridge.py --port "$MAVLINK_RAW_PORT" || true
+    [[ "${LINK16_RAW_PORT:-}" ]] && start link16-raw bridges/link16_jreap_bridge.py --port "$LINK16_RAW_PORT" || true
+    [[ "${VMF_RAW_PORT:-}" ]] && start vmf-raw bridges/vmf_bridge.py --port "$VMF_RAW_PORT" || true
+    [[ "${SAPIENT_RAW_PORT:-}" ]] && start sapient-raw bridges/sapient_flex335_bridge.py --tcp --port "$SAPIENT_RAW_PORT" || true
+    [[ "${STANAG4586_RAW_PORT:-}" ]] && start stanag4586-raw bridges/stanag4586_bridge.py --tcp --port "$STANAG4586_RAW_PORT" || true
+}
+
+# ---------------------------------------------------------------------------
+# Reusable input protocols (external wire/API contract → Zenoh)
+# ---------------------------------------------------------------------------
+start_protocols() {
+    echo ""
+    echo "=== Input protocols ==="
+
+    start_asterix_protocols
+
+    # Receiver/detection nodes publish raw ASTM/ASD-STAN messages into Zenoh.
+    # This idle-safe translator runs on the data plane and needs no radio.
+    start opendroneid protocols/opendroneid.py
+
+    start cap protocols/cap.py
+    start geojson protocols/geojson_features.py
+    start ais-nmea protocols/ais_nmea.py
+    start spectrum protocols/spectrum_observation.py
+    start sensor-health protocols/sensor_health.py
+    start mission-route protocols/mission_route.py
+
+    if [[ "${SAPIENT_ZENOH_RAW:-}" == "1" ]]; then
+        start sapient protocols/sapient_flex335.py --zenoh-raw --raw-topic "${SAPIENT_RAW_TOPIC:-}"
+    elif [[ "${SAPIENT_LISTEN_PORT:-}" ]]; then
+        sapient_args=(--listen "$SAPIENT_LISTEN_PORT" --bind "${SAPIENT_BIND:-127.0.0.1}")
+        [[ "${SAPIENT_ALLOW_PEER:-}" ]] && sapient_args+=(--allow-peer "$SAPIENT_ALLOW_PEER")
+        start sapient protocols/sapient_flex335.py "${sapient_args[@]}"
+    elif [[ "${SAPIENT_HOST:-}" ]]; then
+        start sapient protocols/sapient_flex335.py --host "$SAPIENT_HOST" --port "${SAPIENT_PORT:-7001}"
     else
-        start here-traffic bridges/here_traffic_bridge.py
+        echo "  [skip] sapient — set SAPIENT_LISTEN_PORT or SAPIENT_HOST in .env to enable"
     fi
 
-    if skip_if_no_key ICAO_NOTAM_KEY; then
-        echo "  [skip] notam — ICAO_NOTAM_KEY not set"
+    start nffi protocols/nffi.py
+
+    if [[ "${MAVLINK_ZENOH_RAW:-}" == "1" ]]; then
+        start mavlink protocols/mavlink.py --zenoh-raw --raw-topic "${MAVLINK_RAW_TOPIC:-}"
+    elif [[ "${MAVLINK_PORT:-}" ]]; then
+        mav_args=(); [[ "${MAVLINK_TCP:-}" == "1" ]] && mav_args=(--tcp)
+        start mavlink protocols/mavlink.py --port "$MAVLINK_PORT" "${mav_args[@]}"
     else
-        start notam bridges/icao_notam_bridge.py
+        echo "  [skip] mavlink — set MAVLINK_PORT in .env to enable"
+    fi
+
+    if [[ "${VMF_ZENOH_RAW:-}" == "1" ]]; then
+        start vmf protocols/vmf.py --zenoh-raw --raw-topic "${VMF_RAW_TOPIC:-}"
+    elif [[ "${VMF_PORT:-}" ]]; then
+        vmf_args=(); [[ "${VMF_TCP:-}" == "1" ]] && vmf_args=(--tcp)
+        start vmf protocols/vmf.py --port "$VMF_PORT" "${vmf_args[@]}"
+    else
+        echo "  [skip] vmf — set VMF_PORT in .env to enable"
+    fi
+
+    if [[ "${LINK16_ZENOH_RAW:-}" == "1" ]]; then
+        start link16 protocols/link16.py --zenoh-raw --raw-topic "${LINK16_RAW_TOPIC:-}"
+    elif [[ "${LINK16_PORT:-}" ]]; then
+        start link16 protocols/link16.py --port "$LINK16_PORT"
+    else
+        echo "  [skip] link16 — set LINK16_PORT in .env to enable"
+    fi
+
+    if [[ "${STANAG4586_ZENOH_RAW:-}" == "1" ]]; then
+        start stanag4586 protocols/stanag4586.py --zenoh-raw --raw-topic "${STANAG4586_RAW_TOPIC:-}"
+    elif [[ "${STANAG4586_HOST:-}" ]]; then
+        start stanag4586 protocols/stanag4586.py \
+            --host "$STANAG4586_HOST" --port "${STANAG4586_PORT:-4586}"
+    else
+        echo "  [skip] stanag4586 — set STANAG4586_HOST in .env to enable"
     fi
 }
 
 # ---------------------------------------------------------------------------
-# Protocol layers (Zenoh → TAK / external systems)
+# TAK and SitaWare pointer/output layers
 # ---------------------------------------------------------------------------
 start_layers() {
     echo ""
-    echo "=== Protocol layers ==="
+    echo "=== TAK and SitaWare layers ==="
 
     # CoT → ATAK UDP multicast (no TAK Server needed)
     start cot-udp layers/cot_layer.py --udp --host 239.2.3.1 --port 6969
@@ -208,41 +337,6 @@ start_layers() {
         echo "  [skip] cot-tcp — TAK Server not reachable at ${TAK_HOST:-127.0.0.1}:${TAK_PORT:-8087}"
     fi
 
-    # Unified ASTERIX bridge (CAT-048/34 + CAT-021 + CAT-020 + CAT-062)
-    _ax=()
-    if [[ "${CAT48_PORT:-}" ]]; then
-        _ax+=(--cat48-port "$CAT48_PORT")
-        [[ "${CAT48_TCP:-}" == "1" ]]    && _ax+=(--cat48-tcp)
-        [[ "${CAT48_RADAR_LAT:-}" ]]     && _ax+=(--radar-lat "$CAT48_RADAR_LAT")
-        [[ "${CAT48_RADAR_LON:-}" ]]     && _ax+=(--radar-lon "$CAT48_RADAR_LON")
-        [[ "${CAT48_RADAR_NAME:-}" ]]    && _ax+=(--radar-name "$CAT48_RADAR_NAME")
-    fi
-    if [[ "${CAT21_PORT:-}" ]]; then
-        _ax+=(--cat21-port "$CAT21_PORT")
-        [[ "${CAT21_TCP:-}" == "1" ]]    && _ax+=(--cat21-tcp)
-    fi
-    if [[ "${CAT20_PORT:-}" ]]; then
-        _ax+=(--cat20-port "$CAT20_PORT")
-        [[ "${CAT20_TCP:-}" == "1" ]]    && _ax+=(--cat20-tcp)
-    fi
-    if [[ "${RADAR_HOST:-}" && "${RADAR_HOST}" != "127.0.0.1" ]]; then
-        _ax+=(--cat62-host "$RADAR_HOST" --cat62-port "${RADAR_PORT:-30002}")
-    fi
-    if [[ ${#_ax[@]} -gt 0 ]]; then
-        start asterix bridges/asterix_bridge.py "${_ax[@]}"
-    else
-        echo "  [skip] asterix — set CAT48/CAT21/CAT20_PORT or RADAR_HOST in .env to enable"
-    fi
-
-    # SitaWare — REST poll for unit positions (friendly force tracking)
-    if [[ "${SITAWARE_URL:-}" ]]; then
-        sitaware_flags=""
-        [[ "${SITAWARE_DISCOVER:-}" == "1" ]] && sitaware_flags="--discover"
-        start sitaware bridges/sitaware_bridge.py ${sitaware_flags:+"$sitaware_flags"}
-    else
-        echo "  [skip] sitaware — set SITAWARE_URL in .env to enable"
-    fi
-
     # SitaWare Edge NVG is a distinct outbound adapter with separate product,
     # credentials, direction, and lifecycle from the HQ inbound REST poller.
     if [[ "${SITAWARE_NVG_URL:-}" && "${SITAWARE_NVG_USER:-}" ]]; then
@@ -264,9 +358,9 @@ start_layers() {
     # Set COT_RX_PORT to open a listener (they connect to us)
     # Set COT_RX_HOST to connect outbound (we connect to them, format IP:PORT)
     if [[ "${COT_RX_PORT:-}" ]]; then
-        start cot-rx layers/cot_receiver_bridge.py --listen "$COT_RX_PORT"
+        start cot-rx layers/cot_receiver.py --listen "$COT_RX_PORT"
     elif [[ "${COT_RX_HOST:-}" ]]; then
-        start cot-rx layers/cot_receiver_bridge.py --connect "$COT_RX_HOST"
+        start cot-rx layers/cot_receiver.py --connect "$COT_RX_HOST"
     else
         echo "  [skip] cot-rx — set COT_RX_PORT or COT_RX_HOST in .env to enable"
     fi
@@ -274,67 +368,19 @@ start_layers() {
     # Dedicated SitaWare Edge/Frontline CoT Gateway ingress. Keep this separate
     # from TAK Server ingress so both bidirectional paths can run concurrently.
     if [[ "${SITAWARE_COT_RX_PORT:-}" ]]; then
-        start sitaware-cot-rx layers/cot_receiver_bridge.py \
+        start sitaware-cot-rx layers/cot_receiver.py \
             --listen "$SITAWARE_COT_RX_PORT" \
             --bind "${SITAWARE_COT_RX_BIND:-}" \
             --allow-peer "${SITAWARE_COT_RX_ALLOW_PEER:-}" \
             --source sitaware_cot_rx --no-tls --no-tak-users-only
     elif [[ "${SITAWARE_COT_RX_HOST:-}" ]]; then
-        start sitaware-cot-rx layers/cot_receiver_bridge.py \
+        start sitaware-cot-rx layers/cot_receiver.py \
             --connect "$SITAWARE_COT_RX_HOST" --source sitaware_cot_rx \
             --no-tls --no-tak-users-only
     else
         echo "  [skip] sitaware-cot-rx — set SITAWARE_COT_RX_PORT or SITAWARE_COT_RX_HOST in .env to enable"
     fi
 
-    # SAPIENT — only if SAPIENT_HOST set
-    if [[ "${SAPIENT_HOST:-}" ]]; then
-        start sapient layers/sapient_layer.py --host "$SAPIENT_HOST" --port "${SAPIENT_PORT:-7001}"
-    else
-        echo "  [skip] sapient — set SAPIENT_HOST in .env to enable"
-    fi
-
-    # NATO NFFI — only if NFFI_HOST set
-    if [[ "${NFFI_HOST:-}" ]]; then
-        start nffi layers/nato_nffi_layer.py --host "$NFFI_HOST" --port "${NFFI_PORT:-7010}"
-    else
-        echo "  [skip] nffi — set NFFI_HOST in .env to enable"
-    fi
-
-    # MAVLink and VMF tactical sensor inputs.
-    if [[ "${MAVLINK_PORT:-}" ]]; then
-        mav_args=()
-        [[ "${MAVLINK_TCP:-}" == "1" ]] && mav_args+=(--tcp)
-        start mavlink bridges/mavlink_bridge.py --port "$MAVLINK_PORT" "${mav_args[@]}"
-    else
-        echo "  [skip] mavlink — set MAVLINK_PORT in .env to enable"
-    fi
-
-    if [[ "${VMF_PORT:-}" ]]; then
-        vmf_args=()
-        [[ "${VMF_TCP:-}" == "1" ]] && vmf_args+=(--tcp)
-        start vmf bridges/vmf_bridge.py --port "$VMF_PORT" "${vmf_args[@]}"
-    else
-        echo "  [skip] vmf — set VMF_PORT in .env to enable"
-    fi
-
-    # Link 16 JREAP-C — inbound UDP listener. TCP is intentionally unavailable
-    # until the attached gateway's stream framing ICD is known.
-    if [[ "${LINK16_PORT:-}" ]]; then
-        start link16 bridges/link16_bridge.py --port "$LINK16_PORT"
-    else
-        echo "  [skip] link16 — set LINK16_PORT in .env to enable"
-    fi
-
-    # Output/correlation layers that consume the combined native bridge feed.
-    start track-fusion layers/track_fusion_layer.py
-
-    if [[ "${STANAG4586_HOST:-}" ]]; then
-        start stanag4586 layers/stanag4586_layer.py \
-            --host "$STANAG4586_HOST" --port "${STANAG4586_PORT:-4586}"
-    else
-        echo "  [skip] stanag4586 — set STANAG4586_HOST in .env to enable"
-    fi
 }
 
 # ---------------------------------------------------------------------------
@@ -344,31 +390,11 @@ start_giraffe_bridges() {
     echo ""
     echo "=== Giraffe sensor bridges ==="
 
-    # Unified ASTERIX bridge (CAT-048/34 + CAT-021 + CAT-020)
-    _ax=()
-    if [[ "${CAT48_PORT:-}" ]]; then
-        _ax+=(--cat48-port "$CAT48_PORT")
-        [[ "${CAT48_TCP:-}" == "1" ]]    && _ax+=(--cat48-tcp)
-        [[ "${CAT48_RADAR_LAT:-}" ]]     && _ax+=(--radar-lat "$CAT48_RADAR_LAT")
-        [[ "${CAT48_RADAR_LON:-}" ]]     && _ax+=(--radar-lon "$CAT48_RADAR_LON")
-        [[ "${CAT48_RADAR_NAME:-}" ]]    && _ax+=(--radar-name "$CAT48_RADAR_NAME")
-    fi
-    if [[ "${CAT21_PORT:-}" ]]; then
-        _ax+=(--cat21-port "$CAT21_PORT")
-        [[ "${CAT21_TCP:-}" == "1" ]]    && _ax+=(--cat21-tcp)
-    fi
-    if [[ "${CAT20_PORT:-}" ]]; then
-        _ax+=(--cat20-port "$CAT20_PORT")
-        [[ "${CAT20_TCP:-}" == "1" ]]    && _ax+=(--cat20-tcp)
-    fi
-    if [[ ${#_ax[@]} -gt 0 ]]; then
-        start asterix bridges/asterix_bridge.py "${_ax[@]}"
-    else
-        echo "  [skip] asterix — set CAT48/CAT21/CAT20_PORT in .env to enable"
-    fi
+    start_asterix_udp_bridge
+    start_asterix_protocols
 
     if [[ "${LINK16_PORT:-}" ]]; then
-        start link16 bridges/link16_bridge.py --port "$LINK16_PORT"
+        start link16 protocols/link16.py --port "$LINK16_PORT"
     else
         echo "  [skip] link16 — set LINK16_PORT in .env to enable"
     fi
@@ -376,23 +402,29 @@ start_giraffe_bridges() {
     if [[ "${MAVLINK_PORT:-}" ]]; then
         tcp_mav=""
         [[ "${MAVLINK_TCP:-}" == "1" ]] && tcp_mav="--tcp"
-        start mavlink bridges/mavlink_bridge.py --port "$MAVLINK_PORT" ${tcp_mav:+"$tcp_mav"}
+        start mavlink protocols/mavlink.py --port "$MAVLINK_PORT" ${tcp_mav:+"$tcp_mav"}
     else
         echo "  [skip] mavlink — set MAVLINK_PORT in .env to enable"
+    fi
+
+    if [[ "${DJI_MQTT_HOST:-}" ]]; then
+        start dji-cloud bridges/dji_cloud_api_bridge.py
+    else
+        echo "  [skip] dji-cloud — set DJI_MQTT_HOST in .env to enable"
     fi
 
     if [[ "${VMF_PORT:-}" ]]; then
         tcp_vmf=""
         [[ "${VMF_TCP:-}" == "1" ]] && tcp_vmf="--tcp"
-        start vmf bridges/vmf_bridge.py --port "$VMF_PORT" ${tcp_vmf:+"$tcp_vmf"}
+        start vmf protocols/vmf.py --port "$VMF_PORT" ${tcp_vmf:+"$tcp_vmf"}
     else
         echo "  [skip] vmf — set VMF_PORT in .env to enable"
     fi
 
     if [[ "${COT_RX_PORT:-}" ]]; then
-        start cot-rx layers/cot_receiver_bridge.py --listen "$COT_RX_PORT"
+        start cot-rx layers/cot_receiver.py --listen "$COT_RX_PORT"
     elif [[ "${COT_RX_HOST:-}" ]]; then
-        start cot-rx layers/cot_receiver_bridge.py --connect "$COT_RX_HOST"
+        start cot-rx layers/cot_receiver.py --connect "$COT_RX_HOST"
     else
         echo "  [skip] cot-rx — set COT_RX_PORT or COT_RX_HOST in .env to enable"
     fi
@@ -418,11 +450,11 @@ start_giraffe_layers() {
     fi
 
     # Track fusion — always start in giraffe mode (correlates radar + any ADS-B)
-    start track-fusion layers/track_fusion_layer.py
+    start track-fusion bridges/track_fusion_bridge.py
 
     # STANAG 4586 UAS interface — only if VSM host is configured
     if [[ "${STANAG4586_HOST:-}" ]]; then
-        start stanag4586 layers/stanag4586_layer.py --host "$STANAG4586_HOST" --port "${STANAG4586_PORT:-4586}"
+        start stanag4586 protocols/stanag4586.py --host "$STANAG4586_HOST" --port "${STANAG4586_PORT:-4586}"
     else
         echo "  [skip] stanag4586 — set STANAG4586_HOST in .env to enable"
     fi
@@ -442,16 +474,20 @@ case "$MODE" in
     all)
         start_zenoh
         start_bridges
+        start_protocols
         start_layers
         ;;
     bridges)
         start_bridges
         ;;
+    protocols)
+        start_protocols
+        ;;
     layers)
         start_layers
         ;;
     *)
-        echo "Usage: $0 [giraffe|all|bridges|layers]"
+        echo "Usage: $0 [giraffe|all|bridges|protocols|layers]"
         exit 1
         ;;
 esac

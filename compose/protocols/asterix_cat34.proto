@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package efdi.protocols.v2;
+
+import "normalized_track.proto";
+
+// Matches EUROCONTROL CAT-034 Ed.1.29 radar service messages.
+message AsterixCat34Status {
+  efdi.data.v2.NormalizedTrack sensor = 1;
+  optional uint32 sac = 2;
+  optional uint32 sic = 3;
+  optional uint32 message_type = 4;
+  optional uint32 sector_number = 5;
+  optional double antenna_azimuth_deg = 6;
+  optional double rotation_period_s = 7;
+  optional string system_status = 8;
+  optional string processing_status = 9;
+}

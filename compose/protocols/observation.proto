@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package efdi.data.v2;
+
+message Observation {
+  double timestamp = 1;
+  string source = 2;
+  string uid = 3;
+  optional string sensor_id = 4;
+  optional string object_id = 5;
+  optional string classification = 6;
+  optional string affiliation = 7;
+  optional double lat_deg = 8;
+  optional double lon_deg = 9;
+  optional double altitude_m = 10;
+  optional double bearing_deg = 11;
+  optional double range_m = 12;
+  optional double confidence = 13;
+  optional double accuracy_m = 14;
+  optional string status = 15;
+  map<string, string> metadata = 16;
+}

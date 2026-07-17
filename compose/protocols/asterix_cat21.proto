@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package efdi.protocols.v2;
+
+import "normalized_track.proto";
+
+// Matches the legacy CAT-021 compatibility UAP in asterix_cat21.py.
+message AsterixCat21Track {
+  efdi.data.v2.NormalizedTrack track = 1;
+  optional uint32 sac = 2;
+  optional uint32 sic = 3;
+  optional string icao24 = 4;
+  optional string callsign = 5;
+  optional string mode3a = 6;
+  optional uint32 emitter_category = 7;
+  optional double geometric_altitude_m = 8;
+  optional double flight_level = 9;
+  optional uint32 adsb_version = 10;
+  optional uint32 nac_p = 11;
+  optional uint32 nac_v = 12;
+  optional uint32 sil = 13;
+}

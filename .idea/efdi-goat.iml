@@ -3,7 +3,8 @@
   <component name="NewModuleRootManager" inherit-compiler-output="true">
     <exclude-output />
     <content url="file://$MODULE_DIR$">
-      <sourceFolder url="file://$MODULE_DIR$/compose/bridge/venv/lib64/python3.14/site-packages" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/compose" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/compose/venv/lib64/python3.14/site-packages" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/compose/zenoh-admin/.venv" />
     </content>
     <orderEntry type="inheritedJdk" />

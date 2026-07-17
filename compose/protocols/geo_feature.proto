@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package efdi.data.v2;
+
+message GeoFeature {
+  double timestamp = 1;
+  string source = 2;
+  string uid = 3;
+  string geometry_type = 4;
+  // GeoJSON coordinate order: longitude, latitude, optional altitude.
+  repeated double coordinates = 5;
+  optional string properties_json = 6;
+  optional double valid_from = 7;
+  optional double valid_until = 8;
+  optional double lower_altitude_m = 9;
+  optional double upper_altitude_m = 10;
+}

@@ -17,4 +17,13 @@ jobs:
           python-version: "3.12"
       - name: py_compile all bridges and layers
         run: |
-          python3 -m py_compile compose/bridge/bridges/*.py compose/bridge/layers/*.py
+          python3 -m py_compile compose/bridges/*.py compose/protocols/*.py compose/layers/*.py
+      - name: Compile all Protobuf contracts
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq protobuf-compiler
+          for protocol in compose/protocols/*.py; do
+            schema="${protocol%.py}.proto"
+            test -f "$schema" || { echo "Missing matching schema: $schema"; exit 1; }
+          done
+          protoc -I compose/protocols --descriptor_set_out=/tmp/efdi-protocols.pb --include_imports compose/protocols/*.proto

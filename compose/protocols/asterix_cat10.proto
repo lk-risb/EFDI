@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package efdi.protocols.v2;
+
+import "normalized_track.proto";
+
+// Matches asterix_cat10.py (EUROCONTROL CAT-010 Ed.1.1).
+message AsterixCat10Track {
+  efdi.data.v2.NormalizedTrack track = 1;
+  optional uint32 sac = 2;
+  optional uint32 sic = 3;
+  optional uint32 message_type = 4;
+  optional uint32 track_number = 5;
+  optional string target_address = 6;
+  optional string target_id = 7;
+  optional string mode3a = 8;
+  optional double x_m = 9;
+  optional double y_m = 10;
+  optional double ground_speed_ms = 11;
+  optional double track_angle_deg = 12;
+  optional bool track_terminated = 13;
+  optional string target_type = 14;
+}
+
+message AsterixCat10SensorStatus {
+  efdi.data.v2.NormalizedTrack sensor = 1;
+  optional uint32 sac = 2;
+  optional uint32 sic = 3;
+  optional string status = 4;
+}
