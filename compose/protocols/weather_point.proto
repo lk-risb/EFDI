@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package ltu.cis.tracks.v1;
+
+// Source-record schema colocated with EFDI protocol contracts.
+
+// Current weather observation or forecast point.
+// Shared by: openmeteo_bridge.py, meteo_lt_bridge.py, yr_no_bridge.py
+// Topics:
+//   <ORG>/weather/openmeteo/<place>/current/v1
+//   <ORG>/weather/meteo-lt/<place-code>/forecast/v1
+//   <ORG>/weather/yr-no/<place>/forecast/v1
+// JSON keys _ts → timestamp, _src → source. Zero means "not present" for numerics.
+message WeatherPoint {
+  double timestamp              = 1;  // Unix epoch when fetched (_ts)
+  string source                 = 2;  // "openmeteo" | "meteo-lt" | "yr-no" (_src)
+  string place_name             = 3;  // Human-readable place name, e.g. "Vilnius"
+  string place_code             = 4;  // URL-safe slug, e.g. "vilnius"
+  double lat_deg                = 5;  // WGS-84 latitude
+  double lon_deg                = 6;  // WGS-84 longitude
+  string time_utc               = 7;  // ISO-8601 UTC of observation/forecast time
+  double temperature_c          = 8;  // Air temperature at 2 m, °C
+  double apparent_temperature_c = 9;  // Feels-like temperature, °C
+  int32  relative_humidity_pct  = 10; // Relative humidity, %
+  double precipitation_mm       = 11; // Precipitation amount, mm
+  double wind_speed_ms          = 12; // Wind speed at 10 m, m/s
+  int32  wind_direction_deg     = 13; // Wind direction, degrees clockwise from N (wind FROM)
+  double wind_gusts_ms          = 14; // Wind gusts at 10 m, m/s (0 if not available)
+  int32  weather_code           = 15; // WMO weather code (Open-Meteo only; 0 if absent)
+  int32  cloud_cover_pct        = 16; // Total cloud cover, %
+  double pressure_hpa           = 17; // Sea-level pressure, hPa
+  string condition_code         = 18; // Condition string (meteo-lt/yr-no; e.g. "partly-cloudy")
+}

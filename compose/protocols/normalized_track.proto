@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package efdi.data.v2;
+
+// Shared typed record for the planned /v2 Protobuf data plane. The live /v1
+// topics remain JSON until generated bindings are dual-published and consumed.
+message NormalizedTrack {
+  double timestamp = 1;
+  string source = 2;
+  string uid = 3;
+  optional string callsign = 4;
+  optional string classification = 5;
+  optional string affiliation = 6;
+  double lat_deg = 7;
+  double lon_deg = 8;
+  optional double baro_alt_m = 9;
+  optional double geo_alt_m = 10;
+  optional double height_m = 11;
+  optional double speed_ms = 12;
+  optional double airspeed_ms = 13;
+  optional double heading_deg = 14;
+  optional double vertical_rate_ms = 15;
+  optional bool on_ground = 16;
+  optional bool emergency = 17;
+  optional bool deleted = 18;
+  map<string, string> source_metadata = 19;
+}

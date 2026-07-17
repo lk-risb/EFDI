@@ -52,13 +52,16 @@
         // Router/gateway cert SAN binds the mesh IP, not the DNS name we dial — match the
         // audit-subscriber + the sandbox router posture.
         verify_name_on_connect: ${ZENOH_VERIFY_NAME_ON_CONNECT},
+        // Drop expired client certificates instead of leaving a stale mTLS
+        // session alive until its next transport failure.
+        close_link_on_expiration: true,
       },
     },
   },
 
   plugins_loading: {
     enabled: ${ZENOH_PLUGINS_LOADING_ENABLED},
-    search_dirs: ["/", "/opt/zenoh/plugins"],
+    search_dirs: ["/", "/lib", "/opt/zenoh/plugins"],
   },
 
   // In-memory storage — new subscribers get last-known value per topic immediately via get().

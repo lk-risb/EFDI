@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package efdi.data.v2;
+
+message SensorHealth {
+  double timestamp = 1;
+  string source = 2;
+  string sensor_id = 3;
+  string status = 4;
+  optional string model = 5;
+  optional string firmware = 6;
+  optional double lat_deg = 7;
+  optional double lon_deg = 8;
+  optional double altitude_m = 9;
+  optional double last_detection_timestamp = 10;
+  optional string detail = 11;
+  map<string, string> metadata = 12;
+}

@@ -7,7 +7,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || echo "$PWD")"
 ENV_FILE="$SCRIPT_DIR/compose/.env"
-VENV="$SCRIPT_DIR/compose/bridge/venv"
+VENV="$SCRIPT_DIR/compose/venv"
 
 [ -t 0 ] || exec < /dev/tty 2>/dev/null || true
 
@@ -167,7 +167,7 @@ else
     section "Test namespace and directories"
     PARTNER_NAMESPACE=$(gen_uuid)
     NAMESPACE_PREFIX="LTU/CISB"
-    BUNDLE_DIR="$SCRIPT_DIR/compose/bridge/test-certs"
+    BUNDLE_DIR="$SCRIPT_DIR/compose/test-certs"
     POD_STATE_DIR="$SCRIPT_DIR/.test-pod-state"
     ZENOH_LOCAL_ENDPOINT="tcp/127.0.0.1:7448"
     info "Generated PARTNER_NAMESPACE: $PARTNER_NAMESPACE"

@@ -8,10 +8,10 @@ import unittest
 import xml.etree.ElementTree as ET
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "compose" / "bridge"))
-sys.path.insert(0, str(ROOT / "compose" / "bridge" / "layers"))
+sys.path.insert(0, str(ROOT / "compose"))
+sys.path.insert(0, str(ROOT / "compose" / "layers"))
 
-from cot_receiver_bridge import _parse_cot, _should_publish, _topic  # noqa: E402
+from cot_receiver import _parse_cot, _should_publish, _topic  # noqa: E402
 from cot_layer import make_handler  # noqa: E402
 
 
@@ -29,6 +29,14 @@ TAK_USER_COT = """<?xml version="1.0" encoding="UTF-8"?>
     <precisionlocation geopointsrc="GPS" altsrc="GPS"/>
     <remarks>Patrol lead</remarks>
   </detail>
+</event>"""
+
+TAK_POINT_MARKER = """<?xml version="1.0" encoding="UTF-8"?>
+<event version="2.0" uid="MARKER-123" type="b-m-p-s-m" how="h-g-i-g-o"
+       time="2026-07-15T11:00:00Z" start="2026-07-15T11:00:00Z"
+       stale="2026-07-15T11:30:00Z">
+  <point lat="54.6872" lon="25.2797" hae="105.5" ce="10" le="10"/>
+  <detail><contact callsign="CHECKPOINT BRAVO"/><remarks>test marker</remarks></detail>
 </event>"""
 
 
@@ -57,6 +65,39 @@ class CotReceiverTests(unittest.TestCase):
         self.assertFalse(track["tak_user"])
         self.assertFalse(_should_publish(track, tak_users_only=True))
         self.assertTrue(_should_publish(track, tak_users_only=False))
+
+    def test_tak_user_filter_optionally_accepts_point_markers(self):
+        track = _parse_cot(TAK_POINT_MARKER)
+
+        self.assertFalse(_should_publish(track, tak_users_only=True))
+        self.assertTrue(_should_publish(
+            track, tak_users_only=True, include_markers=True
+        ))
+        self.assertIn("/land/c2/cot/unknown/unit/tracks/v1", _topic(track))
+
+    def test_c2_point_marker_preserves_its_cot_type_on_output(self):
+        class Sender:
+            def __init__(self):
+                self.messages = []
+
+            def send(self, message):
+                self.messages.append(message)
+
+        class Sample:
+            key_expr = "test/land/c2/cot/unknown/unit/tracks/v1"
+
+            def __init__(self, track):
+                self.payload = json.dumps(track).encode()
+
+        track = _parse_cot(TAK_POINT_MARKER)
+        track["_src"] = "cot_rx"
+        track["_ingress"] = "cot_source"
+        sender = Sender()
+
+        make_handler("a-u-G-U-C", sender, verbose=False)(Sample(track))
+
+        self.assertEqual(len(sender.messages), 1)
+        self.assertEqual(ET.fromstring(sender.messages[0]).attrib["type"], "b-m-p-s-m")
 
     def test_efdi_round_trip_uid_is_always_rejected(self):
         track = _parse_cot(TAK_USER_COT.replace("ANDROID-123", "EFDI-UID-OWN"))

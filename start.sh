@@ -3,9 +3,9 @@
 # Usage: ./start.sh
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BRIDGE_DIR="$SCRIPT_DIR/compose/bridge"
+COMPOSE_DIR="$SCRIPT_DIR/compose"
 ENV_FILE="$SCRIPT_DIR/compose/.env"
-VENV="$BRIDGE_DIR/venv"
+VENV="$COMPOSE_DIR/venv"
 
 # ── Load .env (safe — no shell re-parsing of values) ──────────────────────
 if [[ -f "$ENV_FILE" ]]; then
@@ -41,7 +41,7 @@ export EFDI_CERT_DIR="$BUNDLE_DIR"
 export POD_STATE_DIR="${POD_STATE_DIR:-$SCRIPT_DIR/compose/state}"
 # Host-launched bridges read the same prefix state file the admin writes.
 export NAMESPACE_PREFIX_FILE="${POD_STATE_DIR}/namespace-prefix"
-export PYTHONPATH="$BRIDGE_DIR${PYTHONPATH:+:$PYTHONPATH}"
+export PYTHONPATH="$COMPOSE_DIR${PYTHONPATH:+:$PYTHONPATH}"
 LOG_DIR="$POD_STATE_DIR/logs"
 PID_DIR="$POD_STATE_DIR/.pids"
 LAUNCHER_STATE_FILE="$POD_STATE_DIR/launcher-state.env"
@@ -51,7 +51,7 @@ mkdir -p "$LOG_DIR" "$PID_DIR"
 if [[ ! -x "$VENV/bin/python3" ]]; then
     echo "Creating venv at $VENV…"
     python3 -m venv "$VENV"
-    "$VENV/bin/pip" install --quiet -r "$BRIDGE_DIR/requirements.txt"
+    "$VENV/bin/python3" -m pip install --quiet -r "$COMPOSE_DIR/requirements.txt"
     echo "Venv ready."
 fi
 PYTHON="$VENV/bin/python3"
@@ -67,10 +67,14 @@ fi
 # ── Service registry ───────────────────────────────────────────────────────
 SERVICES=(
     zenoh
-    airplaneslive aisstream aprs fr24 opensky openmeteo meteolt cmems
-    here-traffic notam dronuradaras asterix link16 mavlink vmf sitaware nffi
-    cot-rx sitaware-cot-rx sapient stanag4586
-    cot-udp cot-udp-tak cot-tcp sitaware-nvg sitaware-hq-nvg track-fusion
+    airplaneslive adsblol aisstream aprs openmeteo meteolt
+    sitaware dronuradaras dji-cloud utm-ans asterix-udp track-fusion
+    asterix-cat10 asterix-cat20 asterix-cat21 asterix-cat34 asterix-cat48 asterix-cat62
+    link16 mavlink opendroneid vmf nffi sapient stanag4586
+    mavlink-raw link16-raw vmf-raw sapient-raw stanag4586-raw
+    cap geojson ais-nmea spectrum sensor-health mission-route
+    cot-rx sitaware-cot-rx
+    cot-udp cot-udp-tak cot-tcp sitaware-nvg sitaware-hq-nvg
 )
 
 # Restore only non-secret launcher choices. Explicit compose/.env values win;
@@ -132,47 +136,70 @@ load_launcher_state
 
 declare -A SVC_CAT=(
     [zenoh]="Infrastructure"
-    [airplaneslive]="Open-data bridges" [aisstream]="Open-data bridges"
-    [aprs]="Open-data bridges" [fr24]="Open-data bridges"
-    [opensky]="Open-data bridges" [openmeteo]="Open-data bridges"
-    [meteolt]="Open-data bridges" [cmems]="Open-data bridges"
-    [here-traffic]="Open-data bridges" [notam]="Open-data bridges"
-    [asterix]="Sensor bridges"  [link16]="Sensor bridges"
-    [mavlink]="Sensor bridges"  [vmf]="Sensor bridges"
-    [sitaware]="Sensor bridges" [nffi]="Sensor bridges"
-    [dronuradaras]="Sensor bridges"
-    [cot-rx]="Protocol adapters" [sitaware-cot-rx]="Protocol adapters"
-    [sapient]="Protocol adapters"
-    [stanag4586]="Protocol adapters"
+    [airplaneslive]="Open-data bridges" [adsblol]="Open-data bridges"
+    [aisstream]="Open-data bridges" [aprs]="Open-data bridges"
+    [openmeteo]="Open-data bridges"
+    [meteolt]="Open-data bridges"
+    [asterix-udp]="Sensor bridges"
+    [asterix-cat10]="Protocols" [asterix-cat20]="Protocols"
+    [asterix-cat21]="Protocols" [asterix-cat34]="Protocols"
+    [asterix-cat48]="Protocols" [asterix-cat62]="Protocols"
+    [link16]="Protocols" [mavlink]="Protocols" [vmf]="Protocols"
+    [opendroneid]="Protocols" [nffi]="Protocols"
+    [sitaware]="Sensor bridges" [dronuradaras]="Sensor bridges" [dji-cloud]="Sensor bridges"
+    [utm-ans]="Open-data bridges"
+    [sapient]="Protocols" [stanag4586]="Protocols"
+    [mavlink-raw]="Sensor bridges" [link16-raw]="Sensor bridges"
+    [vmf-raw]="Sensor bridges" [sapient-raw]="Sensor bridges"
+    [stanag4586-raw]="Sensor bridges"
+    [cap]="Protocols" [geojson]="Protocols" [ais-nmea]="Protocols"
+    [spectrum]="Protocols" [sensor-health]="Protocols" [mission-route]="Protocols"
+    [cot-rx]="TAK and SitaWare layers" [sitaware-cot-rx]="TAK and SitaWare layers"
     [cot-udp]="Output layers"   [cot-udp-tak]="Output layers"
     [cot-tcp]="Output layers"   [sitaware-nvg]="Output layers"
     [sitaware-hq-nvg]="Output layers"
-    [track-fusion]="Output layers"
+    [track-fusion]="Sensor bridges"
 )
 
 declare -A SVC_DESC=(
     [zenoh]="Zenoh message router (Docker)"
     [airplaneslive]="Airplanes.live ADS-B aircraft"
+    [adsblol]="ADSB.lol open-data aircraft"
     [aisstream]="AISstream live vessel positions"
     [aprs]="APRS-IS stations, vehicles, and vessels"
-    [fr24]="FlightRadar24 aircraft (API key)"
-    [opensky]="OpenSky ADS-B aircraft"
     [openmeteo]="Open-Meteo weather stations"
     [meteolt]="meteo.lt weather stations"
-    [cmems]="Copernicus Marine conditions"
-    [here-traffic]="HERE road traffic flow"
-    [notam]="ICAO active NOTAMs"
-    [asterix]="ASTERIX CAT-48/34 radar tracks"
+    [asterix-udp]="Mixed ASTERIX UDP → raw category topics"
+    [asterix-cat10]="ASTERIX CAT-010 Ed.1.1 airport surface"
+    [asterix-cat20]="ASTERIX CAT-020 legacy MLAT profile"
+    [asterix-cat21]="ASTERIX CAT-021 legacy ADS-B profile"
+    [asterix-cat34]="ASTERIX CAT-034 Ed.1.29 radar service"
+    [asterix-cat48]="ASTERIX CAT-048 Ed.1.32 radar targets"
+    [asterix-cat62]="ASTERIX CAT-062 legacy system tracks"
     [link16]="Link-16 JREAP-C datalink"
     [mavlink]="MAVLink UAV telemetry"
+    [opendroneid]="Raw Open Drone ID on Zenoh → normalized UAV tracks"
+    [dji-cloud]="DJI Cloud API MQTT aircraft telemetry"
+    [utm-ans]="Lithuanian UTM declared civilian UAV flights"
     [vmf]="VMF MIL-STD-47001C messages"
     [sitaware]="SitaWare HQ friendly force tracking (inbound REST)"
-    [nffi]="NATO NFFI friendly force XML feed (inbound)"
+    [nffi]="Raw NFFI XML on Zenoh → normalized friendly-force tracks"
     [dronuradaras]="dronuradaras.lt drone detection network"
     [cot-rx]="Inbound CoT / TAK Server user positions"
     [sitaware-cot-rx]="SitaWare Edge/Frontline CoT → TAK"
-    [sapient]="SAPIENT sensor feed"
+    [sapient]="SAPIENT / BSI Flex 335 sensor feed"
     [stanag4586]="STANAG 4586 UAV feed"
+    [mavlink-raw]="MAVLink UDP/TCP → Zenoh raw"
+    [link16-raw]="Link-16/JREAP-C UDP/TCP → Zenoh raw"
+    [vmf-raw]="VMF UDP/TCP → Zenoh raw"
+    [sapient-raw]="SAPIENT/FLEX 335 TCP → Zenoh raw"
+    [stanag4586-raw]="STANAG 4586 TCP → Zenoh raw"
+    [cap]="CAP 1.2 XML on Zenoh → alerts"
+    [geojson]="GeoJSON/OGC Features on Zenoh → areas"
+    [ais-nmea]="AIS NMEA on Zenoh → vessels"
+    [spectrum]="RF spectrum observations on Zenoh"
+    [sensor-health]="Sensor health on Zenoh"
+    [mission-route]="UAV routes and corridors on Zenoh"
     [cot-udp]="CoT → ATAK UDP multicast 239.2.3.1:6969 (same LAN only)"
     [cot-udp-tak]="CoT → WinTAK/ATAK UDP unicast (crosses LAN/VPN)"
     [cot-tcp]="CoT → TAK Server TCP"
@@ -181,20 +208,44 @@ declare -A SVC_DESC=(
     [track-fusion]="Radar/ADS-B track correlation"
 )
 
+asterix_category_uses_raw() {
+    local wanted="$1" item
+    [[ -n "${ASTERIX_PORT:-}" ]] || return 1
+    IFS=',' read -r -a _asterix_categories <<< "${ASTERIX_CATEGORIES:-34,48}"
+    for item in "${_asterix_categories[@]}"; do
+        item="${item//[[:space:]]/}"
+        [[ "$item" == "$wanted" ]] && return 0
+    done
+    return 1
+}
+
 # ── Ready check — 0=can start, 1=missing config ───────────────────────────
 svc_ready() {
     case "$1" in
-        zenoh|airplaneslive|aisstream|aprs|fr24|opensky|openmeteo|meteolt|\
-        here-traffic|notam|dronuradaras|cot-udp|cot-udp-tak|cot-tcp|track-fusion)
+        zenoh|airplaneslive|adsblol|aisstream|aprs|openmeteo|meteolt|\
+        dronuradaras|opendroneid|nffi|cot-udp|cot-udp-tak|cot-tcp|track-fusion|\
+        cap|geojson|ais-nmea|spectrum|sensor-health|mission-route)
             return 0 ;;
-        cmems)
-            "$PYTHON" -c 'import copernicusmarine' >/dev/null 2>&1 ;;
-        asterix)  [[ "${CAT48_PORT:-}${CAT21_PORT:-}${CAT20_PORT:-}" ]] ;;
-        link16)   [[ "${LINK16_PORT:-}" ]] ;;
-        mavlink)  [[ "${MAVLINK_PORT:-}" ]] ;;
-        vmf)          [[ "${VMF_PORT:-}" ]] ;;
+        asterix-udp) [[ "${ASTERIX_PORT:-}" ]] ;;
+        asterix-cat10) asterix_category_uses_raw 10 || [[ "${CAT10_PORT:-}" ]] ;;
+        asterix-cat20) asterix_category_uses_raw 20 || [[ "${CAT20_PORT:-}" ]] ;;
+        asterix-cat21) asterix_category_uses_raw 21 || [[ "${CAT21_PORT:-}" ]] ;;
+        asterix-cat34) asterix_category_uses_raw 34 || [[ "${CAT34_PORT:-}" ]] ;;
+        asterix-cat48) asterix_category_uses_raw 48 || [[ "${CAT48_PORT:-}" ]] ;;
+        asterix-cat62)
+            asterix_category_uses_raw 62 ||
+                [[ "${CAT62_HOST:-${RADAR_HOST:-}}" || "${CAT62_UDP:-}" == "1" ]] ;;
+        link16)   [[ "${LINK16_ZENOH_RAW:-}" == "1" || "${LINK16_PORT:-}" ]] ;;
+        mavlink)  [[ "${MAVLINK_ZENOH_RAW:-}" == "1" || "${MAVLINK_PORT:-}" ]] ;;
+        dji-cloud) [[ "${DJI_MQTT_HOST:-}" ]] ;;
+        utm-ans) [[ "${UTM_ANS_API_URL:-}" ]] ;;
+        vmf)          [[ "${VMF_ZENOH_RAW:-}" == "1" || "${VMF_PORT:-}" ]] ;;
+        mavlink-raw)  [[ "${MAVLINK_RAW_PORT:-}" ]] ;;
+        link16-raw)   [[ "${LINK16_RAW_PORT:-}" ]] ;;
+        vmf-raw)      [[ "${VMF_RAW_PORT:-}" ]] ;;
+        sapient-raw)  [[ "${SAPIENT_RAW_PORT:-}" ]] ;;
+        stanag4586-raw) [[ "${STANAG4586_RAW_PORT:-}" ]] ;;
         sitaware)     return 0 ;;  # always ready; prompts for server IP at launch if unset
-        nffi)         [[ "${NFFI_HOST:-}" ]] ;;
         cot-rx)       [[ "${COT_RX_PORT:-}${COT_RX_HOST:-}" ]] ;;
         sitaware-cot-rx)
             [[ "${SITAWARE_COT_RX_HOST:-}" || ( "${SITAWARE_COT_RX_PORT:-}" && \
@@ -209,11 +260,23 @@ svc_ready() {
 # Short config note shown in status column when not ready
 svc_hint() {
     case "$1" in
-        asterix)  echo "CAT48_PORT=${CAT48_PORT:-not set}" ;;
-        link16)   echo "LINK16_PORT not set" ;;
-        mavlink)  echo "MAVLINK_PORT not set" ;;
-        vmf)      echo "VMF_PORT not set" ;;
-        nffi)     echo "NFFI_HOST not set" ;;
+        asterix-udp) echo "ASTERIX_PORT not set" ;;
+        asterix-cat10) echo "CAT10_PORT not set" ;;
+        asterix-cat20) echo "CAT20_PORT not set" ;;
+        asterix-cat21) echo "CAT21_PORT not set" ;;
+        asterix-cat34) echo "CAT34_PORT not set" ;;
+        asterix-cat48) echo "CAT48_PORT not set" ;;
+        asterix-cat62) echo "CAT62_HOST/UDP not set" ;;
+        link16)   echo "set LINK16_PORT or LINK16_ZENOH_RAW=1" ;;
+        mavlink)  echo "set MAVLINK_PORT or MAVLINK_ZENOH_RAW=1" ;;
+        dji-cloud) echo "DJI_MQTT_HOST not set" ;;
+        utm-ans) echo "UTM_ANS_API_URL not set (authorized JSON/GeoJSON feed required)" ;;
+        vmf)      echo "set VMF_PORT or VMF_ZENOH_RAW=1" ;;
+        mavlink-raw) echo "MAVLINK_RAW_PORT not set" ;;
+        link16-raw) echo "LINK16_RAW_PORT not set" ;;
+        vmf-raw) echo "VMF_RAW_PORT not set" ;;
+        sapient-raw) echo "SAPIENT_RAW_PORT not set" ;;
+        stanag4586-raw) echo "STANAG4586_RAW_PORT not set" ;;
         cot-rx)
             if [[ "${COT_RX_TLS:-}" == "1" ]]; then
                 echo "TAK mTLS ${COT_RX_HOST:-host not set}"
@@ -222,25 +285,21 @@ svc_hint() {
             fi ;;
         sitaware-cot-rx) echo "set HOST, or PORT + ALLOW_PEER" ;;
         sapient)
-            [[ "${SAPIENT_HOST:-}" ]] && echo "${SAPIENT_HOST}:${SAPIENT_PORT:-7001}" || echo "will prompt for address" ;;
+            if [[ "${SAPIENT_ZENOH_RAW:-}" == "1" ]]; then
+                _start sapient protocols/sapient_flex335.py --zenoh-raw --raw-topic "${SAPIENT_RAW_TOPIC:-}"
+                return
+            fi
+            if [[ "${SAPIENT_LISTEN_PORT:-}" ]]; then
+                echo "listen ${SAPIENT_BIND:-127.0.0.1}:${SAPIENT_LISTEN_PORT}"
+            elif [[ "${SAPIENT_HOST:-}" ]]; then
+                echo "${SAPIENT_HOST}:${SAPIENT_PORT:-7001}"
+            else
+                echo "will prompt for address"
+            fi ;;
         stanag4586)
             [[ "${STANAG4586_HOST:-}" ]] && echo "${STANAG4586_HOST}:${STANAG4586_PORT:-4586}" || echo "will prompt for address" ;;
         aisstream)
             [[ "${AISSTREAM_KEY:-}" ]] && echo "API key configured" || echo "will prompt for API key" ;;
-        fr24)
-            [[ "${FR24_KEY:-}" ]] && echo "API key configured" || echo "will prompt for API key" ;;
-        cmems)
-            if ! "$PYTHON" -c 'import copernicusmarine' >/dev/null 2>&1; then
-                echo "optional package missing"
-            elif [[ -z "${COPERNICUSMARINE_SERVICE_USERNAME:-}" ]]; then
-                echo "will prompt for login"
-            else
-                echo "credentials configured"
-            fi ;;
-        here-traffic)
-            [[ "${HERE_KEY:-}" ]] && echo "API key configured" || echo "will prompt for API key" ;;
-        notam)
-            [[ "${ICAO_NOTAM_KEY:-}" ]] && echo "API key configured" || echo "will prompt for API key" ;;
         sitaware-nvg)
             if [[ "${SITAWARE_NVG_URL:-}" ]]; then
                 echo "${SITAWARE_NVG_URL}"
@@ -280,8 +339,8 @@ is_bridge_pid() {
     [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null && [[ -r "/proc/$pid/cmdline" ]] || return 1
     while IFS= read -r -d '' arg; do
         if [[ -n "$expected_script" ]]; then
-            [[ "$arg" == "$BRIDGE_DIR/$expected_script" ]] && return 0
-        elif [[ "$arg" == "$BRIDGE_DIR/"* ]]; then
+            [[ "$arg" == "$COMPOSE_DIR/$expected_script" ]] && return 0
+        elif [[ "$arg" == "$COMPOSE_DIR/"* ]]; then
             return 0
         fi
     done < "/proc/$pid/cmdline"
@@ -335,7 +394,7 @@ _start() {   # _start <name> <rel-script-path> [args…]
         return
     fi
     rm -f "$pid_file"
-    "$PYTHON" "$BRIDGE_DIR/$script" "$@" >> "$LOG_DIR/$name.log" 2>&1 &
+    "$PYTHON" "$COMPOSE_DIR/$script" "$@" >> "$LOG_DIR/$name.log" 2>&1 &
     echo $! > "$pid_file"
     printf "  ${GREEN}[start]${R} %-16s pid %s\n" "$name" "$!"
 }
@@ -368,6 +427,10 @@ launch() {
             _start airplaneslive bridges/airplaneslive_adsb_bridge.py
             ;;
 
+        adsblol)
+            _start adsblol bridges/adsblol_bridge.py
+            ;;
+
         aisstream)
             if [[ -z "${AISSTREAM_KEY:-}" ]]; then
                 local ais_key
@@ -385,23 +448,6 @@ launch() {
             _start aprs bridges/aprsis_bridge.py
             ;;
 
-        fr24)
-            if [[ -z "${FR24_KEY:-}" ]]; then
-                local fr24_key
-                _prompt_secret "FlightRadar24 API key" fr24_key
-                if [[ -z "$fr24_key" ]]; then
-                    printf "  ${YELLOW}[skip]${R}  fr24            no API key entered\n"
-                    return
-                fi
-                export FR24_KEY="$fr24_key"
-            fi
-            _start fr24 bridges/fr24_live_bridge.py
-            ;;
-
-        opensky)
-            _start opensky bridges/opensky_states_bridge.py
-            ;;
-
         openmeteo)
             _start openmeteo bridges/openmeteo_forecast_bridge.py
             ;;
@@ -410,78 +456,119 @@ launch() {
             _start meteolt bridges/meteolt_forecast_bridge.py
             ;;
 
-        cmems)
-            if ! "$PYTHON" -c 'import copernicusmarine' >/dev/null 2>&1; then
-                printf "  ${YELLOW}[skip]${R}  cmems             optional copernicusmarine package missing\n"
-                return
-            fi
-            if [[ -z "${COPERNICUSMARINE_SERVICE_USERNAME:-}" ]]; then
-                local cmems_user cmems_pass
-                _prompt_credentials "Copernicus Marine" cmems_user cmems_pass
-                if [[ -z "$cmems_user" || -z "$cmems_pass" ]]; then
-                    printf "  ${YELLOW}[skip]${R}  cmems             credentials not entered\n"
-                    return
-                fi
-                export COPERNICUSMARINE_SERVICE_USERNAME="$cmems_user"
-                export COPERNICUSMARINE_SERVICE_PASSWORD="$cmems_pass"
-            fi
-            _start cmems bridges/cmems_marine_bridge.py
+        asterix-udp)
+            _start asterix-udp bridges/asterix_udp_bridge.py
             ;;
 
-        here-traffic)
-            if [[ -z "${HERE_KEY:-}" ]]; then
-                local here_key
-                _prompt_secret "HERE API key" here_key
-                if [[ -z "$here_key" ]]; then
-                    printf "  ${YELLOW}[skip]${R}  here-traffic      no API key entered\n"
-                    return
-                fi
-                export HERE_KEY="$here_key"
+        asterix-cat10|asterix-cat20|asterix-cat21|asterix-cat34|asterix-cat48)
+            local cat_num="${name#asterix-cat}"
+            local port_var="CAT${cat_num}_PORT" tcp_var="CAT${cat_num}_TCP"
+            local ast_args=()
+            if asterix_category_uses_raw "$cat_num"; then
+                ast_args=(--zenoh-raw)
+            else
+                ast_args=(--port "${!port_var}")
+                [[ "${!tcp_var:-}" == "1" ]] && ast_args+=(--tcp)
             fi
-            _start here-traffic bridges/here_traffic_bridge.py
+            _start "$name" "protocols/asterix_cat${cat_num}.py" "${ast_args[@]}"
             ;;
 
-        notam)
-            if [[ -z "${ICAO_NOTAM_KEY:-}" ]]; then
-                local notam_key
-                _prompt_secret "ICAO NOTAM API key" notam_key
-                if [[ -z "$notam_key" ]]; then
-                    printf "  ${YELLOW}[skip]${R}  notam             no API key entered\n"
-                    return
-                fi
-                export ICAO_NOTAM_KEY="$notam_key"
+        asterix-cat62)
+            if asterix_category_uses_raw 62; then
+                _start asterix-cat62 protocols/asterix_cat62.py --zenoh-raw
+            elif [[ "${CAT62_UDP:-}" == "1" ]]; then
+                _start asterix-cat62 protocols/asterix_cat62.py --udp --port "${CAT62_PORT:-50062}"
+            else
+                _start asterix-cat62 protocols/asterix_cat62.py \
+                    --host "${CAT62_HOST:-${RADAR_HOST:-}}" \
+                    --port "${CAT62_PORT:-${RADAR_PORT:-50062}}"
             fi
-            _start notam bridges/icao_notam_bridge.py
-            ;;
-
-        asterix)
-            local ax=()
-            [[ "${CAT48_PORT:-}"       ]] && ax+=(--cat48-port  "$CAT48_PORT")
-            [[ "${CAT48_TCP:-}" == "1" ]] && ax+=(--cat48-tcp)
-            [[ "${CAT48_RADAR_LAT:-}"  ]] && ax+=(--radar-lat   "$CAT48_RADAR_LAT")
-            [[ "${CAT48_RADAR_LON:-}"  ]] && ax+=(--radar-lon   "$CAT48_RADAR_LON")
-            [[ "${CAT48_RADAR_NAME:-}" ]] && ax+=(--radar-name  "$CAT48_RADAR_NAME")
-            [[ "${CAT48_RADAR_SAC:-}"  ]] && ax+=(--radar-sac   "$CAT48_RADAR_SAC")
-            [[ "${CAT48_RADAR_SIC:-}"  ]] && ax+=(--radar-sic   "$CAT48_RADAR_SIC")
-            [[ "${CAT21_PORT:-}"       ]] && ax+=(--cat21-port  "$CAT21_PORT")
-            [[ "${CAT21_TCP:-}" == "1" ]] && ax+=(--cat21-tcp)
-            [[ "${CAT20_PORT:-}"       ]] && ax+=(--cat20-port  "$CAT20_PORT")
-            [[ "${CAT20_TCP:-}" == "1" ]] && ax+=(--cat20-tcp)
-            _start asterix bridges/asterix_bridge.py "${ax[@]}"
             ;;
 
         link16)
-            _start link16 bridges/link16_bridge.py --port "$LINK16_PORT"
+            if [[ "${LINK16_ZENOH_RAW:-}" == "1" ]]; then
+                _start link16 protocols/link16.py --zenoh-raw --raw-topic "${LINK16_RAW_TOPIC:-}"
+            else
+                _start link16 protocols/link16.py --port "$LINK16_PORT"
+            fi
             ;;
 
         mavlink)
-            local tmav=(); [[ "${MAVLINK_TCP:-}" == "1" ]] && tmav=(--tcp)
-            _start mavlink bridges/mavlink_bridge.py --port "$MAVLINK_PORT" "${tmav[@]}"
+            if [[ "${MAVLINK_ZENOH_RAW:-}" == "1" ]]; then
+                _start mavlink protocols/mavlink.py --zenoh-raw --raw-topic "${MAVLINK_RAW_TOPIC:-}"
+            else
+                local tmav=(); [[ "${MAVLINK_TCP:-}" == "1" ]] && tmav=(--tcp)
+                _start mavlink protocols/mavlink.py --port "$MAVLINK_PORT" "${tmav[@]}"
+            fi
+            ;;
+
+        opendroneid)
+            _start opendroneid protocols/opendroneid.py
+            ;;
+
+        dji-cloud)
+            _start dji-cloud bridges/dji_cloud_api_bridge.py
+            ;;
+
+        utm-ans)
+            if [[ "${UTM_ANS_API_URL:-}" ]]; then
+                _start utm-ans bridges/utm_ans_bridge.py
+            else
+                printf "  ${YELLOW}[skip]${R}  utm-ans         set UTM_ANS_API_URL to an authorized JSON/GeoJSON feed\n"
+            fi
             ;;
 
         vmf)
-            local tvmf=(); [[ "${VMF_TCP:-}" == "1" ]] && tvmf=(--tcp)
-            _start vmf bridges/vmf_bridge.py --port "$VMF_PORT" "${tvmf[@]}"
+            if [[ "${VMF_ZENOH_RAW:-}" == "1" ]]; then
+                _start vmf protocols/vmf.py --zenoh-raw --raw-topic "${VMF_RAW_TOPIC:-}"
+            else
+                local tvmf=(); [[ "${VMF_TCP:-}" == "1" ]] && tvmf=(--tcp)
+                _start vmf protocols/vmf.py --port "$VMF_PORT" "${tvmf[@]}"
+            fi
+            ;;
+
+        mavlink-raw)
+            _start mavlink-raw bridges/mavlink_raw_bridge.py --port "$MAVLINK_RAW_PORT"
+            ;;
+
+        link16-raw)
+            _start link16-raw bridges/link16_jreap_bridge.py --port "$LINK16_RAW_PORT"
+            ;;
+
+        vmf-raw)
+            _start vmf-raw bridges/vmf_bridge.py --port "$VMF_RAW_PORT"
+            ;;
+
+        sapient-raw)
+            _start sapient-raw bridges/sapient_flex335_bridge.py --tcp --port "$SAPIENT_RAW_PORT"
+            ;;
+
+        stanag4586-raw)
+            _start stanag4586-raw bridges/stanag4586_bridge.py --tcp --port "$STANAG4586_RAW_PORT"
+            ;;
+
+        cap)
+            _start cap protocols/cap.py
+            ;;
+
+        geojson)
+            _start geojson protocols/geojson_features.py
+            ;;
+
+        ais-nmea)
+            _start ais-nmea protocols/ais_nmea.py
+            ;;
+
+        spectrum)
+            _start spectrum protocols/spectrum_observation.py
+            ;;
+
+        sensor-health)
+            _start sensor-health protocols/sensor_health.py
+            ;;
+
+        mission-route)
+            _start mission-route protocols/mission_route.py
             ;;
 
         sitaware)
@@ -505,15 +592,14 @@ launch() {
             ;;
 
         nffi)
-            local tnffi=(); [[ "${NFFI_FRAMING:-}" == "newline" ]] && tnffi=(--framing newline)
-            _start nffi layers/nato_nffi_layer.py "${tnffi[@]}"
+            _start nffi protocols/nffi.py
             ;;
 
         cot-rx)
             if [[ "${COT_RX_PORT:-}" ]]; then
-                _start cot-rx layers/cot_receiver_bridge.py --listen "$COT_RX_PORT"
+                _start cot-rx layers/cot_receiver.py --listen "$COT_RX_PORT"
             elif [[ "${COT_RX_HOST:-}" ]]; then
-                _start cot-rx layers/cot_receiver_bridge.py --connect "$COT_RX_HOST"
+                _start cot-rx layers/cot_receiver.py --connect "$COT_RX_HOST"
             else
                 printf "  ${YELLOW}[skip]${R}  cot-rx            set COT_RX_PORT or COT_RX_HOST\n"
             fi
@@ -521,13 +607,13 @@ launch() {
 
         sitaware-cot-rx)
             if [[ "${SITAWARE_COT_RX_PORT:-}" ]]; then
-                _start sitaware-cot-rx layers/cot_receiver_bridge.py \
+                _start sitaware-cot-rx layers/cot_receiver.py \
                     --listen "$SITAWARE_COT_RX_PORT" \
                     --bind "${SITAWARE_COT_RX_BIND:-}" \
                     --allow-peer "${SITAWARE_COT_RX_ALLOW_PEER:-}" \
                     --source sitaware_cot_rx --no-tls --no-tak-users-only
             elif [[ "${SITAWARE_COT_RX_HOST:-}" ]]; then
-                _start sitaware-cot-rx layers/cot_receiver_bridge.py \
+                _start sitaware-cot-rx layers/cot_receiver.py \
                     --connect "$SITAWARE_COT_RX_HOST" --source sitaware_cot_rx \
                     --no-tls --no-tak-users-only
             else
@@ -536,6 +622,12 @@ launch() {
             ;;
 
         sapient)
+            if [[ "${SAPIENT_LISTEN_PORT:-}" ]]; then
+                local sapient_args=(--listen "$SAPIENT_LISTEN_PORT" --bind "${SAPIENT_BIND:-127.0.0.1}")
+                [[ "${SAPIENT_ALLOW_PEER:-}" ]] && sapient_args+=(--allow-peer "$SAPIENT_ALLOW_PEER")
+                _start sapient protocols/sapient_flex335.py "${sapient_args[@]}"
+                return
+            fi
             if [[ -z "${SAPIENT_HOST:-}" ]]; then
                 local sapient_host
                 _prompt_address "SAPIENT source" sapient_host
@@ -545,10 +637,14 @@ launch() {
                 fi
                 export SAPIENT_HOST="$sapient_host"
             fi
-            _start sapient layers/sapient_layer.py --host "$SAPIENT_HOST" --port "${SAPIENT_PORT:-7001}"
+            _start sapient protocols/sapient_flex335.py --host "$SAPIENT_HOST" --port "${SAPIENT_PORT:-7001}"
             ;;
 
         stanag4586)
+            if [[ "${STANAG4586_ZENOH_RAW:-}" == "1" ]]; then
+                _start stanag4586 protocols/stanag4586.py --zenoh-raw --raw-topic "${STANAG4586_RAW_TOPIC:-}"
+                return
+            fi
             if [[ -z "${STANAG4586_HOST:-}" ]]; then
                 local stanag_host
                 _prompt_address "STANAG 4586 source" stanag_host
@@ -558,7 +654,7 @@ launch() {
                 fi
                 export STANAG4586_HOST="$stanag_host"
             fi
-            _start stanag4586 layers/stanag4586_layer.py \
+            _start stanag4586 protocols/stanag4586.py \
                 --host "$STANAG4586_HOST" --port "${STANAG4586_PORT:-4586}"
             ;;
 
@@ -638,7 +734,7 @@ launch() {
             ;;
 
         track-fusion)
-            _start track-fusion layers/track_fusion_layer.py
+            _start track-fusion bridges/track_fusion_bridge.py
             ;;
 
     esac
@@ -654,6 +750,9 @@ restored=0
 if [[ -n "$REMEMBERED_SERVICES" ]]; then
     IFS=',' read -r -a remembered_services <<< "$REMEMBERED_SERVICES"
     for remembered in "${remembered_services[@]}"; do
+        # Migrate the former router-host radio service selection to the raw
+        # Zenoh translator; the next save drops the obsolete name.
+        [[ "$remembered" == "remote-id" ]] && remembered="opendroneid"
         for svc in "${SERVICES[@]}"; do
             if [[ "$remembered" == "$svc" ]]; then
                 sel[$svc]=1
@@ -676,7 +775,11 @@ for svc in "${SERVICES[@]}"; do
 done
 if (( restored == 0 )); then
     for svc in zenoh cot-udp cot-tcp track-fusion; do sel[$svc]=1; done
-    svc_ready asterix && sel[asterix]=1 || true
+    svc_ready asterix-udp && sel[asterix-udp]=1 || true
+    for svc in asterix-cat10 asterix-cat20 asterix-cat21 \
+               asterix-cat34 asterix-cat48 asterix-cat62; do
+        svc_ready "$svc" && sel[$svc]=1 || true
+    done
 fi
 
 draw_menu() {

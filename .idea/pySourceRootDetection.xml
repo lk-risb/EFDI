@@ -3,7 +3,7 @@
   <component name="PySourceRootDetectionService">
     <option name="sourcePathsSet">
       <set>
-        <option value="$PROJECT_DIR$/compose/bridge/venv/lib64/python3.14/site-packages/pip/_internal/metadata" />
+        <option value="$PROJECT_DIR$/compose/venv/lib64/python3.14/site-packages/pip/_internal/metadata" />
       </set>
     </option>
   </component>

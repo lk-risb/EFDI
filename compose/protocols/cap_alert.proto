@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package efdi.data.v2;
+
+message CapAlert {
+  double timestamp = 1;
+  string source = 2;
+  string identifier = 3;
+  string status = 4;
+  string severity = 5;
+  optional string event = 6;
+  optional string headline = 7;
+  optional string description = 8;
+  optional double effective = 9;
+  optional double expires = 10;
+  optional string geometry_json = 11;
+}
