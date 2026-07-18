@@ -16,7 +16,7 @@ import time
 
 import zenoh
 
-from namespace_prefix import prefix
+from namespace_prefix import topic_root
 
 
 def make_config() -> "zenoh.Config":
@@ -38,7 +38,7 @@ def make_config() -> "zenoh.Config":
 
 
 def run_raw(protocol: str, default_port: int, args, frame_mode: str = "chunk") -> None:
-    root = prefix() + "/" + os.environ.get("PARTNER_NAMESPACE", "")
+    root = topic_root()
     topic = args.topic or "{}/raw/{}/{}".format(root, protocol, args.source)
     session = zenoh.open(make_config())
     publisher = session.declare_publisher(topic)

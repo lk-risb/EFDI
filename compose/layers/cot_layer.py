@@ -52,7 +52,7 @@ from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 import zenoh
-from namespace_prefix import prefix
+from namespace_prefix import topic_root
 
 try:
     import mgrs as _mgrs_lib
@@ -63,7 +63,7 @@ except Exception:
     _MGRS_RE = None
 
 ORG       = os.environ.get("PARTNER_NAMESPACE", "")
-TOPIC_ROOT = prefix() + "/" + ORG   # org prefix (configurable) precedes the pod namespace
+TOPIC_ROOT = topic_root()
 HERE      = os.path.dirname(os.path.abspath(__file__))
 _CERT_DIR = os.environ.get("EFDI_CERT_DIR", HERE)
 # Prefer the local router (plaintext, no TLS handshake over relay) when running

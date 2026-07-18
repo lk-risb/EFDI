@@ -104,8 +104,9 @@ All bridges and protocols are lightweight Python processes with no shared state 
 
 Native processes connect to `ZENOH_LOCAL_ENDPOINT`, which defaults to
 `tcp/127.0.0.1:7448`. They never default to a remote hackathon/backbone router.
-Only the local `zenoh-router` owns `ZENOH_FABRIC_ENDPOINT`, so changing a parent
-or federation address does not require modifying or restarting every adapter.
+Only the local `zenoh-router` owns `ZENOH_FABRIC_ENDPOINT` (or the preferred
+multi-link `ZENOH_FABRIC_ENDPOINTS` JSON array), so changing a parent or
+federation address does not require modifying or restarting every adapter.
 
 ASTERIX compatibility is edition-specific. CAT-48 is aligned to EUROCONTROL Edition 1.32 and CAT-34 to Edition 1.29. The existing CAT-20, CAT-21, and CAT-62 tables are retained only as legacy compatibility UAPs; they emit startup warnings and must not be used for modern CAT-20 1.9, CAT-21 2.2+, or CAT-62 1.21 streams without implementing the producer's exact edition/ICD. Link-16/JREAP-C field layouts are likewise gateway-profile dependent; UDP is available, while TCP is intentionally disabled until its stream framing is documented.
 
@@ -274,7 +275,7 @@ with mode 600 when an administrator explicitly saves them.
 
 The admin panel's **Runtime Control** page can start, stop, restart, and inspect
 logs for those host-managed processes. `start.sh` and `run.sh all` keep a
-localhost `admin-control` process available on port 8896; the panel uses it to
+localhost `admin-control` process available on port 18896; the panel uses it to
 update the deployment `.env` as data and delegate lifecycle actions to the same
 launcher scripts used from a terminal. Secret values are write-only. Set
 `EFDI_CONTROL_TOKEN` in `compose/.env` for an additional local bearer token.

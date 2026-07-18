@@ -38,12 +38,15 @@ const FIELD_GROUPS: { title: string; description: string; fields: { key: string;
     { key: 'ZENOH_LOCAL_ENDPOINT', label: 'Local Zenoh endpoint', placeholder: 'tcp/127.0.0.1:7448' },
     { key: 'PARTNER_NAMESPACE', label: 'Partner namespace', placeholder: 'partner-a' },
   ] },
-  { title: 'TAK and CoT', description: 'TAK Server, direct client, and inbound CoT connection details.', fields: [
-    { key: 'TAK_HOST', label: 'TAK Server host' }, { key: 'TAK_PORT', label: 'TAK Server port', placeholder: '8087' },
-    { key: 'TAK_TLS', label: 'TAK TLS (1/0)', placeholder: '1' }, { key: 'TAK_UDP_HOST', label: 'TAK UDP client host' },
-    { key: 'TAK_UDP_PORT', label: 'TAK UDP client port', placeholder: '6969' },
-    { key: 'COT_RX_HOST', label: 'CoT receiver host' }, { key: 'COT_RX_PORT', label: 'CoT receiver listen port' },
-    { key: 'COT_RX_TLS', label: 'CoT receiver TLS (1/0)', placeholder: '1' },
+  { title: 'TAK and CoT', description: 'Split the TAK paths by direction: server output, direct UDP output, and inbound CoT receiver.', fields: [
+    { key: 'TAK_HOST', label: 'TAK Server host / IP', placeholder: '192.168.20.6' },
+    { key: 'TAK_PORT', label: 'TAK Server TLS port', placeholder: '8087' },
+    { key: 'TAK_TLS', label: 'TAK TLS enabled (1/0)', placeholder: '1' },
+    { key: 'TAK_UDP_HOST', label: 'TAK UDP destination host / IP', placeholder: '239.2.3.1' },
+    { key: 'TAK_UDP_PORT', label: 'TAK UDP destination port', placeholder: '6969' },
+    { key: 'COT_RX_HOST', label: 'CoT receiver peer host / IP', placeholder: '192.168.20.6' },
+    { key: 'COT_RX_PORT', label: 'CoT receiver listen port', placeholder: '8089' },
+    { key: 'COT_RX_TLS', label: 'CoT receiver TLS enabled (1/0)', placeholder: '1' },
   ] },
   { title: 'SitaWare and UTM', description: 'HTTPS endpoints and polling settings. Passwords and tokens are write-only.', fields: [
     { key: 'SITAWARE_URL', label: 'SitaWare HQ URL', placeholder: 'https://host.example' },

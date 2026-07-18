@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { buildTree, type TopologyNode, type TreeNode } from '@/lib/topology'
+import { buildTree, type TopologyNode, type TopologyTransportEdge, type TreeNode } from '@/lib/topology'
 
 const NODE_W = 160
 const NODE_H = 42
@@ -12,7 +12,7 @@ interface Positioned {
   y: number
 }
 
-function layout(roots: TreeNode[], collapsed: Set<string>) {
+function layout(roots: TreeNode[], collapsed: Set<string>, transportEdges: TopologyTransportEdge[]) {
   const positioned: Positioned[] = []
   const edges: { x1: number; y1: number; x2: number; y2: number }[] = []
   let nextX = 0
@@ -44,7 +44,20 @@ function layout(roots: TreeNode[], collapsed: Set<string>) {
   for (const root of roots) place(root)
   const width = Math.max(nextX - H_GAP, NODE_W)
   const maxY = positioned.reduce((value, item) => Math.max(value, item.y), 0)
-  return { positioned, edges, width, height: maxY + NODE_H }
+  const byNamespace = new Map(positioned.map(item => [item.node.namespace, item]))
+  const observedEdges = transportEdges.flatMap(edge => {
+    const source = byNamespace.get(edge.source)
+    const target = byNamespace.get(edge.target)
+    if (!source || !target) return []
+    return [{
+      ...edge,
+      x1: source.x + NODE_W / 2,
+      y1: source.y + NODE_H / 2,
+      x2: target.x + NODE_W / 2,
+      y2: target.y + NODE_H / 2,
+    }]
+  })
+  return { positioned, edges, observedEdges, width, height: maxY + NODE_H }
 }
 
 function statusColor(node: TreeNode): string {
@@ -59,16 +72,18 @@ export function TopologyMap({
   nodes,
   onSelect,
   selected,
+  transportEdges = [],
   compact = false,
 }: {
   nodes: TopologyNode[]
   onSelect?: (namespace: string) => void
   selected?: string | null
+  transportEdges?: TopologyTransportEdge[]
   compact?: boolean
 }) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const { roots } = useMemo(() => buildTree(nodes), [nodes])
-  const drawing = useMemo(() => layout(roots, collapsed), [roots, collapsed])
+  const drawing = useMemo(() => layout(roots, collapsed, transportEdges), [roots, collapsed, transportEdges])
 
   if (nodes.length === 0) {
     return <p className="text-sm text-zinc-500">No routers discovered yet.</p>
@@ -109,6 +124,21 @@ export function TopologyMap({
               strokeWidth={1.5}
             />
           ))}
+          {drawing.observedEdges.map((edge, index) => (
+            <line
+              key={`observed-${index}`}
+              x1={edge.x1}
+              y1={edge.y1}
+              x2={edge.x2}
+              y2={edge.y2}
+              stroke="#2dd4bf"
+              strokeWidth={2}
+              strokeDasharray="5 4"
+              opacity={0.85}
+            >
+              <title>Observed Zenoh transport link{edge.protocols.length ? ` (${edge.protocols.join(', ')})` : ''}</title>
+            </line>
+          ))}
           {drawing.positioned.map(({ node, x, y }) => {
             const hasChildren = node.childNodes.length > 0
             const isCollapsed = collapsed.has(node.namespace)
@@ -120,7 +150,7 @@ export function TopologyMap({
                 className={onSelect ? 'cursor-pointer' : undefined}
                 onClick={() => onSelect?.(node.namespace)}
               >
-                <title>{node.namespace} — {node.online ? (node.healthy ? 'online' : 'degraded') : 'offline'}</title>
+                <title>{node.namespace} — {node.reported === false ? 'observed peer' : node.online ? (node.healthy ? 'online' : 'degraded') : 'offline'}</title>
                 <rect
                   width={NODE_W}
                   height={NODE_H}
@@ -141,7 +171,7 @@ export function TopologyMap({
                   {node.namespace.length > 17 ? `${node.namespace.slice(0, 16)}…` : node.namespace}
                 </text>
                 <text x={26} y={NODE_H / 2 + 11} className="fill-zinc-500" fontSize={9} dominantBaseline="middle">
-                  {node.role === 'hq' ? 'HQ' : node.online ? (node.healthy ? 'online' : 'degraded') : 'offline'}
+                  {node.reported === false ? 'observed peer' : node.role === 'hq' ? 'HQ' : node.online ? (node.healthy ? 'online' : 'degraded') : 'offline'}
                 </text>
                 {hasChildren && (
                   <g onClick={event => { event.stopPropagation(); toggle(node.namespace) }}>
@@ -170,6 +200,12 @@ export function TopologyMap({
           })}
         </g>
       </svg>
+      {transportEdges.length > 0 && (
+        <div className="flex items-center gap-4 border-t border-zinc-200 px-3 py-2 text-[10px] text-zinc-500 dark:border-white/10">
+          <span className="flex items-center gap-1.5"><span className="inline-block w-5 border-t border-zinc-400 dark:border-white/30" /> Logical parent</span>
+          <span className="flex items-center gap-1.5"><span className="inline-block w-5 border-t-2 border-dashed border-teal-400" /> Observed transport</span>
+        </div>
+      )}
     </div>
   )
 }
