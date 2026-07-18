@@ -32,6 +32,7 @@ _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", "tcp/127.0.0.1:7448")
 MAX_NFFI_XML = 10_000_000
 DEFAULT_INPUT_TOPIC = "{}/raw/nffi/*".format(TOPIC_ROOT)
 OUTPUT_TOPIC = "{}/land/nato/nffi/friendly/unit/tracks/v1".format(TOPIC_ROOT)
+ZENOH_RETRY_S = 5
 
 # NFFI XML namespaces used by ADatP-36 / STANAG 5527 implementations
 _NS = {
@@ -195,8 +196,17 @@ def make_handler(publisher, verbose: bool = False):
     return on_sample
 
 
+def _open_session() -> "zenoh.Session":
+    while True:
+        try:
+            return zenoh.open(make_config())
+        except zenoh.ZError as exc:
+            print("NFFI Zenoh connect failed: {} — retry in {}s".format(exc, ZENOH_RETRY_S), flush=True)
+            time.sleep(ZENOH_RETRY_S)
+
+
 def run(args):
-    session = zenoh.open(make_config())
+    session = _open_session()
     publisher = session.declare_publisher(OUTPUT_TOPIC)
     subscriber = session.declare_subscriber(
         args.input_topic,

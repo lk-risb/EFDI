@@ -93,7 +93,12 @@ def _get_load_avg() -> list[float]:
 
 
 def _get_disk_usage() -> dict:
-    st = os.statvfs(DISK_PATH)
+    # The production container mounts the persistent Zenoh state at
+    # ``/zenoh-config``.  The disposable dev server intentionally has no
+    # router/certificate mounts, so use its root filesystem rather than
+    # turning the whole health document into a 500 response.
+    path = DISK_PATH if os.path.isdir(DISK_PATH) else "/"
+    st = os.statvfs(path)
     total = st.f_blocks * st.f_frsize
     free = st.f_bfree * st.f_frsize
     used = total - free

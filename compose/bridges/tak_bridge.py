@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Inbound CoT TCP/TLS layer for TAK Server and SitaWare gateways → Zenoh.
+"""Direct TAK Server CoT bridge → Zenoh.
 
-Receives Cursor-on-Target (CoT) XML from an external source (e.g. Giraffe radar,
-another TAK device) and republishes each track as a JSON message on the Zenoh fabric
-so cot_layer.py and ATAK pick them up automatically.
+Receives Cursor-on-Target (CoT) XML from a TAK Server or other direct CoT
+source and republishes each track as a JSON message on the Zenoh fabric so
+cot_layer.py and ATAK pick them up automatically.
 
 Two modes:
   --listen PORT   We open a TCP server. Remote side connects to us.
-                  Give the Giraffe crew: <our-netbird-ip>:PORT
+                  Give the TAK admin: <our-netbird-ip>:PORT
                   Our NetBird IP: <POD_NETBIRD_IP>
 
   --connect IP:PORT  We connect to the remote side. Mutual TLS and TAK-user-only
@@ -28,14 +28,14 @@ CoT affiliation → Zenoh affiliation:
   a-u-*  →  unknown   (default for radar returns)
 
 Run:
-    # Listen mode — Giraffe connects to us on port 8088
-    compose/venv/bin/python3 compose/layers/cot_receiver.py --listen 8088
+    # Listen mode — TAK server connects to us on port 8088
+    compose/venv/bin/python3 compose/bridges/tak_bridge.py --listen 8088
 
     # Plain TCP source
-    compose/venv/bin/python3 compose/layers/cot_receiver.py --connect 100.x.x.x:8089
+    compose/venv/bin/python3 compose/bridges/tak_bridge.py --connect 100.x.x.x:8089
 
     # TAK Server mTLS — receive ground-user situational-awareness positions
-    compose/venv/bin/python3 compose/layers/cot_receiver.py --connect tak.example:8089 --tls \
+    compose/venv/bin/python3 compose/bridges/tak_bridge.py --connect tak.example:8089 --tls \
       --cert cert.pem --key key.pem --ca ca.pem --tak-users-only
 """
 
@@ -61,6 +61,7 @@ _CERT_DIR = os.environ.get("EFDI_CERT_DIR", HERE)
 _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", "tcp/127.0.0.1:7448")
 
 RECONNECT_S = 10
+ZENOH_RETRY_S = 5
 BUFSIZE     = 65536
 
 
@@ -197,7 +198,7 @@ def _parse_cot(xml_str: str) -> dict | None:
     result = {
         "_ts":          source_ts,
         "_received_ts": received_ts,
-        "_src":         "cot_rx",
+        "_src":         "tak_rx",
         "cot_type":     cot_type,
         "uid":          uid,
         "callsign":     callsign,
@@ -293,9 +294,9 @@ def handle_connection(
     verbose: bool,
     tak_users_only: bool = False,
     include_markers: bool = False,
-    source: str = "cot_rx",
+    source: str = "tak_rx",
 ):
-    print("CoT RX connected: {}".format(addr), flush=True)
+    print("TAK RX connected: {}".format(addr), flush=True)
     buf = ""
     try:
         while True:
@@ -304,7 +305,7 @@ def handle_connection(
                 break
             buf += data.decode("utf-8", errors="replace")
             if len(buf) > 10_000_000:
-                print("CoT RX connection closed: incomplete message exceeds 10 MB", flush=True)
+                print("TAK RX connection closed: incomplete message exceeds 10 MB", flush=True)
                 break
             messages, buf = _split_messages(buf)
             for xml_str in messages:
@@ -324,10 +325,10 @@ def handle_connection(
                         track.get("callsign") or track.get("uid", "?"),
                         topic), flush=True)
     except OSError as exc:
-        print("CoT RX connection error ({}): {}".format(addr, exc), flush=True)
+        print("TAK RX connection error ({}): {}".format(addr, exc), flush=True)
     finally:
         sock.close()
-        print("CoT RX disconnected: {}".format(addr), flush=True)
+        print("TAK RX disconnected: {}".format(addr), flush=True)
 
 
 def run_listen(
@@ -335,7 +336,7 @@ def run_listen(
     session: "zenoh.Session",
     verbose: bool,
     requested_bind: str = "",
-    source: str = "cot_rx",
+    source: str = "tak_rx",
     allowed_peer: str = "",
     include_markers: bool = False,
 ):
@@ -348,27 +349,27 @@ def run_listen(
     # interface; the safe automatic fallback is loopback.
     bind_ip = requested_bind or our_ip or "127.0.0.1"
     if our_ip is None and not requested_bind:
-        print("CoT RX WARNING: NetBird interface (wt0/netbird0) not found — "
+        print("TAK RX WARNING: NetBird interface (wt0/netbird0) not found — "
               "listening on 127.0.0.1 only; pass --bind explicitly to expose "
               "another interface", flush=True)
     srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     srv.bind((bind_ip, port))
     srv.listen(5)
-    print("CoT RX listening on {}:{}".format(bind_ip, port), flush=True)
+    print("TAK RX listening on {}:{}".format(bind_ip, port), flush=True)
     print("Tell remote: connect to {}:{} (TCP)".format(our_ip or socket.gethostname(), port), flush=True)
     while True:
         try:
             sock, addr = srv.accept()
             if allowed_peer and addr[0] != allowed_peer:
-                print("CoT RX rejected untrusted peer {}".format(addr[0]), flush=True)
+                print("TAK RX rejected untrusted peer {}".format(addr[0]), flush=True)
                 sock.close()
                 continue
             t = threading.Thread(target=handle_connection,
                                  args=(sock, addr, session, verbose, False, include_markers, source), daemon=True)
             t.start()
         except OSError as exc:
-            print("CoT RX accept error:", exc, flush=True)
+            print("TAK RX accept error:", exc, flush=True)
             break
 
 
@@ -381,7 +382,7 @@ def run_connect(
     server_name: str = "",
     tak_users_only: bool = False,
     include_markers: bool = False,
-    source: str = "cot_rx",
+    source: str = "tak_rx",
 ):
     while True:
         mode = "TAK TLS" if tls_context else "CoT TCP"
@@ -403,7 +404,7 @@ def run_connect(
                 source,
             )
         except OSError as exc:
-            print("CoT RX connect failed: {} — retry in {}s".format(exc, RECONNECT_S), flush=True)
+            print("TAK RX connect failed: {} — retry in {}s".format(exc, RECONNECT_S), flush=True)
         time.sleep(RECONNECT_S)
 
 
@@ -414,8 +415,17 @@ def _make_tls_context(certfile: str, keyfile: str, cafile: str) -> ssl.SSLContex
     return context
 
 
+def _open_session() -> "zenoh.Session":
+    while True:
+        try:
+            return zenoh.open(make_config())
+        except zenoh.ZError as exc:
+            print("TAK RX Zenoh connect failed: {} — retry in {}s".format(exc, ZENOH_RETRY_S), flush=True)
+            time.sleep(ZENOH_RETRY_S)
+
+
 def main():
-    ap = argparse.ArgumentParser(description="Inbound CoT TCP → Zenoh bridge")
+    ap = argparse.ArgumentParser(description="TAK Server CoT TCP → Zenoh bridge")
     mode = ap.add_mutually_exclusive_group(required=True)
     mode.add_argument("--listen", type=int, metavar="PORT",
                       help="Listen for incoming CoT connections on PORT")
@@ -443,7 +453,7 @@ def main():
     ap.add_argument("--include-markers", action=argparse.BooleanOptionalAction,
                     default=os.environ.get("COT_RX_INCLUDE_MARKERS", "") == "1",
                     help="With --tak-users-only, also import CoT b-m-p-* point markers")
-    ap.add_argument("--source", default=os.environ.get("COT_RX_SOURCE", "cot_rx"),
+    ap.add_argument("--source", default=os.environ.get("COT_RX_SOURCE", "tak_rx"),
                     help="Safe source label stored in Zenoh track records")
     ap.add_argument("--allow-peer", default=os.environ.get("COT_RX_ALLOW_PEER", ""),
                     help="Listener mode: accept only this source IP")
@@ -460,9 +470,9 @@ def main():
         try:
             tls_context = _make_tls_context(args.cert, args.key, args.ca)
         except (OSError, ssl.SSLError) as exc:
-            raise SystemExit("Unable to load CoT RX TLS credentials: {}".format(exc)) from exc
+            raise SystemExit("Unable to load TAK RX TLS credentials: {}".format(exc)) from exc
 
-    session = zenoh.open(make_config())
+    session = _open_session()
     try:
         if args.listen:
             run_listen(

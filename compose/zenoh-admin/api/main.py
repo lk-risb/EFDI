@@ -22,6 +22,7 @@ from .federation import router as federation_router
 from .publish_script import router as publish_script_router
 from .oidc import router as oidc_router, OIDC_ENABLED
 from .topology import router as topology_router, start_topology
+from .control import router as control_router
 from .deps import SECRET_KEY
 
 
@@ -111,6 +112,7 @@ app.include_router(federation_router)
 app.include_router(publish_script_router)
 app.include_router(oidc_router)
 app.include_router(topology_router)
+app.include_router(control_router)
 
 
 class SPAStaticFiles(StaticFiles):

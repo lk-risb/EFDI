@@ -88,8 +88,13 @@ start() {
         rm -f "$pid_file"
     fi
 
-    "$PYTHON" "$COMPOSE_DIR/$script" "$@" \
-        >> "$LOG_DIR/$name.log" 2>&1 &
+    if [[ "$name" == "admin-control" ]]; then
+        ( exec setsid "$PYTHON" "$COMPOSE_DIR/$script" "$@" \
+            >> "$LOG_DIR/$name.log" 2>&1 ) &
+    else
+        "$PYTHON" "$COMPOSE_DIR/$script" "$@" \
+            >> "$LOG_DIR/$name.log" 2>&1 &
+    fi
     echo $! > "$pid_file"
     echo "  [start] $name  (pid $!)"
 }
@@ -134,12 +139,13 @@ start_zenoh() {
             if docker compose -f "$SCRIPT_DIR/compose/docker-compose.yml" ps zenoh-router \
                     --format "{{.Status}}" 2>/dev/null | grep -q "healthy"; then
                 echo " OK"
-                return
+                break
             fi
             echo -n "."
         done
         echo " timeout — continuing anyway"
     fi
+    start admin-control admin_control.py
 }
 
 start_asterix_protocols() {
@@ -213,9 +219,13 @@ start_bridges() {
     start meteolt bridges/meteolt_forecast_bridge.py
 
     if [[ "${SITAWARE_URL:-}" ]]; then
+        if [[ -z "${SITAWARE_API_PATH:-}" && "${SITAWARE_DISCOVER:-}" != "1" ]]; then
+            echo "  [skip] sitaware — set SITAWARE_API_PATH or SITAWARE_DISCOVER=1"
+        else
         sitaware_flags=""
         [[ "${SITAWARE_DISCOVER:-}" == "1" ]] && sitaware_flags="--discover"
         start sitaware bridges/sitaware_bridge.py ${sitaware_flags:+"$sitaware_flags"}
+        fi
     else
         echo "  [skip] sitaware — set SITAWARE_URL in .env to enable"
     fi
@@ -227,8 +237,8 @@ start_bridges() {
     [[ "${MAVLINK_RAW_PORT:-}" ]] && start mavlink-raw bridges/mavlink_raw_bridge.py --port "$MAVLINK_RAW_PORT" || true
     [[ "${LINK16_RAW_PORT:-}" ]] && start link16-raw bridges/link16_jreap_bridge.py --port "$LINK16_RAW_PORT" || true
     [[ "${VMF_RAW_PORT:-}" ]] && start vmf-raw bridges/vmf_bridge.py --port "$VMF_RAW_PORT" || true
-    [[ "${SAPIENT_RAW_PORT:-}" ]] && start sapient-raw bridges/sapient_flex335_bridge.py --tcp --port "$SAPIENT_RAW_PORT" || true
-    [[ "${STANAG4586_RAW_PORT:-}" ]] && start stanag4586-raw bridges/stanag4586_bridge.py --tcp --port "$STANAG4586_RAW_PORT" || true
+    [[ "${SAPIENT_RAW_PORT:-}" ]] && start sapient-raw bridges/sapient_flex335_bridge.py --tcp --port "${SAPIENT_RAW_PORT:-7001}" || true
+    [[ "${STANAG4586_RAW_PORT:-}" ]] && start stanag4586-raw bridges/stanag4586_bridge.py --tcp --port "${STANAG4586_RAW_PORT:-4586}" || true
 }
 
 # ---------------------------------------------------------------------------
@@ -260,7 +270,7 @@ start_protocols() {
     elif [[ "${SAPIENT_HOST:-}" ]]; then
         start sapient protocols/sapient_flex335.py --host "$SAPIENT_HOST" --port "${SAPIENT_PORT:-7001}"
     else
-        echo "  [skip] sapient — set SAPIENT_LISTEN_PORT or SAPIENT_HOST in .env to enable"
+        start sapient protocols/sapient_flex335.py --zenoh-raw --raw-topic "${SAPIENT_RAW_TOPIC:-}"
     fi
 
     start nffi protocols/nffi.py
@@ -337,48 +347,24 @@ start_layers() {
         echo "  [skip] cot-tcp — TAK Server not reachable at ${TAK_HOST:-127.0.0.1}:${TAK_PORT:-8087}"
     fi
 
-    # SitaWare Edge NVG is a distinct outbound adapter with separate product,
-    # credentials, direction, and lifecycle from the HQ inbound REST poller.
-    if [[ "${SITAWARE_NVG_URL:-}" && "${SITAWARE_NVG_USER:-}" ]]; then
-        start sitaware-nvg layers/nato_nvg_layer.py
-    else
-        echo "  [skip] sitaware-nvg — set SITAWARE_NVG_URL and SITAWARE_NVG_USER to enable"
-    fi
-
     # SitaWare HQ NVG Import Subscription pulls a complete NVG snapshot from
     # this native HTTP(S) feed. This is separate from the Edge REST adapter.
     if [[ "${SITAWARE_HQ_NVG_ENABLE:-}" == "1" ]]; then
-        start sitaware-hq-nvg layers/sitaware_hq_nvg_feed.py
+        start sitaware-hq-nvg bridges/nvg_bridge.py
     else
         echo "  [skip] sitaware-hq-nvg — set SITAWARE_HQ_NVG_ENABLE=1 to enable"
     fi
 
-    # CoT receiver — inbound CoT or TAK Server user-SA stream. TLS credentials
-    # and TAK-user filtering are read from COT_RX_* environment variables.
+    # TAK Server receiver — direct CoT user-SA stream over TCP/TLS.
+    # TLS credentials and TAK-user filtering are read from COT_RX_* environment variables.
     # Set COT_RX_PORT to open a listener (they connect to us)
     # Set COT_RX_HOST to connect outbound (we connect to them, format IP:PORT)
     if [[ "${COT_RX_PORT:-}" ]]; then
-        start cot-rx layers/cot_receiver.py --listen "$COT_RX_PORT"
+        start cot-rx bridges/tak_bridge.py --listen "$COT_RX_PORT" --source tak_rx
     elif [[ "${COT_RX_HOST:-}" ]]; then
-        start cot-rx layers/cot_receiver.py --connect "$COT_RX_HOST"
+        start cot-rx bridges/tak_bridge.py --connect "$COT_RX_HOST" --source tak_rx
     else
         echo "  [skip] cot-rx — set COT_RX_PORT or COT_RX_HOST in .env to enable"
-    fi
-
-    # Dedicated SitaWare Edge/Frontline CoT Gateway ingress. Keep this separate
-    # from TAK Server ingress so both bidirectional paths can run concurrently.
-    if [[ "${SITAWARE_COT_RX_PORT:-}" ]]; then
-        start sitaware-cot-rx layers/cot_receiver.py \
-            --listen "$SITAWARE_COT_RX_PORT" \
-            --bind "${SITAWARE_COT_RX_BIND:-}" \
-            --allow-peer "${SITAWARE_COT_RX_ALLOW_PEER:-}" \
-            --source sitaware_cot_rx --no-tls --no-tak-users-only
-    elif [[ "${SITAWARE_COT_RX_HOST:-}" ]]; then
-        start sitaware-cot-rx layers/cot_receiver.py \
-            --connect "$SITAWARE_COT_RX_HOST" --source sitaware_cot_rx \
-            --no-tls --no-tak-users-only
-    else
-        echo "  [skip] sitaware-cot-rx — set SITAWARE_COT_RX_PORT or SITAWARE_COT_RX_HOST in .env to enable"
     fi
 
 }
@@ -422,9 +408,9 @@ start_giraffe_bridges() {
     fi
 
     if [[ "${COT_RX_PORT:-}" ]]; then
-        start cot-rx layers/cot_receiver.py --listen "$COT_RX_PORT"
+        start cot-rx bridges/tak_bridge.py --listen "$COT_RX_PORT" --source tak_rx
     elif [[ "${COT_RX_HOST:-}" ]]; then
-        start cot-rx layers/cot_receiver.py --connect "$COT_RX_HOST"
+        start cot-rx bridges/tak_bridge.py --connect "$COT_RX_HOST" --source tak_rx
     else
         echo "  [skip] cot-rx — set COT_RX_PORT or COT_RX_HOST in .env to enable"
     fi
@@ -456,7 +442,7 @@ start_giraffe_layers() {
     if [[ "${STANAG4586_HOST:-}" ]]; then
         start stanag4586 protocols/stanag4586.py --host "$STANAG4586_HOST" --port "${STANAG4586_PORT:-4586}"
     else
-        echo "  [skip] stanag4586 — set STANAG4586_HOST in .env to enable"
+        start stanag4586 protocols/stanag4586.py --zenoh-raw
     fi
 }
 

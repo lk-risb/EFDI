@@ -41,6 +41,7 @@ RAW_INPUT_TOPIC = "{}/raw/asterix/cat62".format(TOPIC_ROOT)
 CAT_062 = 0x3E
 
 RECONNECT_DELAY_S = 5.0
+ZENOH_RETRY_S = 5.0
 
 _CHARSET_6BIT = "@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_ !\"#$%&'()*+,-./0123456789:;<=>?"
 
@@ -761,7 +762,14 @@ def main():
     args = parser.parse_args()
     if not args.zenoh_raw and not args.host and not args.udp: parser.error("--host is required unless --udp or --zenoh-raw is selected")
     print("WARNING: CAT-62 uses a legacy compatibility UAP; Edition 1.21 is not supported", flush=True)
-    session = zenoh.open(make_config()); publisher = session.declare_publisher(args.topic)
+    while True:
+        try:
+            session = zenoh.open(make_config())
+            break
+        except zenoh.ZError as exc:
+            print("CAT-62 Zenoh connect failed: {} — retry in {}s".format(exc, ZENOH_RETRY_S), flush=True)
+            time.sleep(ZENOH_RETRY_S)
+    publisher = session.declare_publisher(args.topic)
     handler = _make_cat062_handler(publisher)
     try:
         if args.zenoh_raw: _run_zenoh_raw(session, args.input_topic, CAT_062, handler, args.verbose)

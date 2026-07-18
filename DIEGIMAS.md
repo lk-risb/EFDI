@@ -194,7 +194,7 @@ SITAWARE_API_PATH=              # privalomas konkretus diegimo REST resursas
 # ── NATO NFFI / ADatP-36 (STANAG 5527) XML jau perduodamas per Zenoh ───────
 NFFI_INPUT_TOPIC=               # neprivaloma; numatyta: …/raw/nffi/*
 
-# ── SitaWare Edge (siunčiamas NVG) — atskiras produktas/serveris nei HQ ─────
+# ── SitaWare legacy NVG push adapter (retained for compatibility) ───────────
 SITAWARE_NVG_URL=
 SITAWARE_NVG_USER=
 SITAWARE_NVG_PASS=
@@ -296,7 +296,7 @@ Interaktyvus paleidiklis rodo visas paslaugas su jų parengties būsena. Įjunki
   [40] [✓] cot-udp        CoT → ATAK UDP multicast 239.2.3.1:6969
   [41] [ ] cot-udp-tak    CoT → WinTAK/ATAK UDP unicast
   [42] [✓] cot-tcp        CoT → TAK Server TCP
-  [43] [ ] sitaware-nvg   EFDI tracks → SitaWare Edge            will prompt for address+login
+  [43] [ ] sitaware-nvg   EFDI tracks → legacy NVG push adapter  will prompt for address+login
   [44] [ ] sitaware-hq-nvg EFDI tracks → SitaWare HQ pull feed   SITAWARE_HQ_NVG_ENABLE=0
 ```
 
@@ -318,7 +318,7 @@ Interaktyvus paleidiklis rodo visas paslaugas su jų parengties būsena. Įjunki
 | Giraffe + drono aptikimai + ATAK | `1 10 17 18 40` |
 | Giraffe + SitaWare + ATAK multicast | `1 9 17 18 40` |
 | AIS laivai rodomi SitaWare HQ | `1 4 44` |
-| EFDI takeliai siunčiami į SitaWare Edge | `1 43` |
+| EFDI takeliai siunčiami į legacy NVG push adapterį | `1 43` |
 | SitaWare HQ periodiškai ima EFDI takelius | `1 44` |
 | Visi parengti šaltiniai + TAK serveris | `a`, tada atžymėkite `40` (cot-udp) |
 | Tik radaras be TAK išvesties (derinimui) | `1 12 17 18` |
@@ -393,24 +393,24 @@ NFFI draugiškų pajėgų sąveiką aprašo ADatP-36 / STANAG 5527. STANAG 4677 
 NFFI_INPUT_TOPIC=               # neprivaloma; numatyta: …/raw/nffi/*
 ```
 
-### SitaWare Edge (siunčiama kryptis, NVG)
+### SitaWare HQ (siunčiama kryptis, NVG)
 
-`sitaware-nvg` prenumeruoja visas EFDI takelių temas ir siunčia jas į SitaWare **Edge** serverį per jo NVG v2 REST API, todėl bet kuris SitaWare Frontline klientas, prijungtas prie to Edge serverio, automatiškai mato EFDI takelius — atskiros Frontline integracijos nereikia. Tai priešinga kryptis nei `sitaware`/`nffi` aukščiau (EFDI → SitaWare, ne SitaWare → EFDI), ir dažniausiai kitas serveris/prisijungimo duomenys, nes SitaWare HQ ir SitaWare Edge paprastai yra atskiri serveriai.
+`sitaware-hq-nvg` prenumeruoja visas EFDI takelių temas ir pateikia jas per HQ NVG importo srautą, todėl SitaWare Headquarters automatiškai mato EFDI takelius — atskiros papildomos integracijos nereikia. Tai priešinga kryptis nei `sitaware`/`nffi` aukščiau (EFDI → SitaWare, ne SitaWare → EFDI).
 
-Palikite `SITAWARE_NVG_URL`/`SITAWARE_NVG_USER`/`SITAWARE_NVG_PASS` tuščius ir paleidiklis paklaus adreso bei prisijungimo pasirinkus `sitaware-nvg`.
+Palikite `SITAWARE_HQ_NVG_URL`/`SITAWARE_HQ_NVG_USER`/`SITAWARE_HQ_NVG_PASS` tuščius ir paleidiklis paklaus adreso bei prisijungimo pasirinkus `sitaware-hq-nvg`.
 
 **`.env` laukai:**
 
 ```bash
-SITAWARE_NVG_URL=https://<sitaware-edge-serveris>:<portas>   # HTTPS privalomas; portas priklauso nuo diegimo
-SITAWARE_NVG_USER=<vartotojo vardas>
-SITAWARE_NVG_PASS=<slaptažodis>
-SITAWARE_NVG_SOURCE=efdi-live    # NVG šaltinio pavadinimas, sukuriamas automatiškai pirmo siuntimo metu
+SITAWARE_HQ_NVG_URL=https://<sitaware-hq-serveris>:<portas>   # HTTPS privalomas; portas priklauso nuo diegimo
+SITAWARE_HQ_NVG_USER=<vartotojo vardas>
+SITAWARE_HQ_NVG_PASS=<slaptažodis>
+SITAWARE_HQ_NVG_SOURCE=efdi-live    # NVG šaltinio pavadinimas, sukuriamas automatiškai pirmo siuntimo metu
 ```
 
 ### SitaWare Headquarters (siunčiamas NVG srautas, kurį ima HQ)
 
-`sitaware-hq-nvg` yra natyvus Python išvesties procesas, skirtas HQ diegimui. Jis prenumeruoja EFDI takelius, laiko riboto dydžio gyvą momentinę būseną ir pateikia NVG 2.0.2 per tik skaitymui skirtą HTTP(S) adresą. SitaWare Headquarters jį periodiškai ima per **SitaWare Communication → NVG → NVG Import Subscriptions**. Tai nėra aukščiau aprašytas Edge REST adapteris.
+`sitaware-hq-nvg` yra natyvus Python išvesties procesas, skirtas HQ diegimui. Jis prenumeruoja EFDI takelius, laiko riboto dydžio gyvą momentinę būseną ir pateikia NVG 2.0.2 per tik skaitymui skirtą HTTP(S) adresą. SitaWare Headquarters jį periodiškai ima per **SitaWare Communication → NVG → NVG Import Subscriptions**. Tai nėra aukščiau aprašytas legacy NVG push adapteris.
 
 Pirmiausia HQ sukurkite sluoksnį:
 
@@ -494,17 +494,17 @@ Adresas priima tik GET/HEAD, pagal nutylėjimą reikalauja Basic autentifikavimo
 | `sitaware` | `bridges/sitaware_bridge.py` | `…/land/sitaware/rest/friendly/unit/tracks/v1` | Konfigūruojama REST apklausa |
 | `nffi` | `protocols/nffi.py` | `…/land/nato/nffi/friendly/unit/tracks/v1` | Pilni XML dokumentai Zenoh temoje `…/raw/nffi/*` |
 | `cot-rx` | `layers/cot_receiver.py` | `…/land/radar/cot/friendly/unit/tracks/v1` | TAK Server mTLS naudotojų pozicijos |
-| `sitaware-cot-rx` | `layers/cot_receiver.py` | `…/land/radar/cot/*/unit/tracks/v1` | SitaWare Edge/Frontline CoT Gateway įvestis |
+| `sitaware-cot-rx` | `layers/cot_receiver.py` | `…/land/radar/cot/*/unit/tracks/v1` | SitaWare CoT Gateway įvestis |
 | `link16` | `protocols/link16.py` | `…/air/link16/jreap/*/aircraft/tracks/v1` | Srautinis UDP |
 | `mavlink` | `protocols/mavlink.py` | `…/air/mavlink/mav2/*/uav/tracks/v1` | Srautinis UDP/TCP |
 | `dji-cloud` | `bridges/dji_cloud_api_bridge.py` | `…/air/dji/cloud-api/friendly/uav/tracks/v1` | DJI šaltiniui skirtas autentifikuotas MQTT 5 tiltas |
 | `cot-udp` | `layers/cot_layer.py` | Prenumeratorius — visos temos | Įvykio valdomas |
 | `cot-tcp` | `layers/cot_layer.py` | Prenumeratorius — visos temos | Įvykio valdomas |
-| `sitaware-nvg` | `layers/nato_nvg_layer.py` | Prenumeratorius — visos takelių temos | Įvykio valdomas, 10 s atnaujinimas |
+| `sitaware-nvg` | `layers/nato_nvg_layer.py` | Prenumeratorius — visos takelių temos | Legacy NVG push adapteris |
 | `sitaware-hq-nvg` | `layers/sitaware_hq_nvg_feed.py` | Prenumeratorius — visos takelių temos | HQ periodiškai ima NVG būseną |
 | `track-fusion` | `bridges/track_fusion_bridge.py` | CAT-48 + CAT-21 prenumeratorius | Įvykio valdomas |
 
-### TAK naudotojai ir SitaWare Frontline technika
+### TAK naudotojai ir SitaWare HQ technika
 
 `cot-rx` gali su TAK išduotu kliento sertifikatu prisijungti prie TAK Server
 TLS įvesties ir perduoti žemės naudotojų pozicijas į SitaWare. Sertifikato
@@ -512,14 +512,14 @@ tapatybė turi priklausyti toms pačioms TAK IN/OUT grupėms kaip matomi naudoto
 Ir iTAK, ir WinTAK turi jungtis prie to paties TAK Server bei turėti suderinamas
 grupes; vienpusė EFDI UDP įvestis į WinTAK nepadaro jo matomo iTAK.
 
-Atvirkštinei krypčiai įjunkite licencijuotą SitaWare Edge/Frontline CoT Gateway
+Atvirkštinei krypčiai įjunkite licencijuotą SitaWare CoT Gateway
 ir nustatykite `SITAWARE_COT_RX_PORT`, `SITAWARE_COT_RX_BIND` bei leidžiamą
 `SITAWARE_COT_RX_ALLOW_PEER` šaltinio IP, arba
 `SITAWARE_COT_RX_HOST`. Atskiras `sitaware-cot-rx` Python procesas išsaugo
-originalų CoT tipą, todėl Frontline tankas ar šarvuota transporto priemonė TAK
-Server ir ATAK/WinTAK pasiekia su ta pačia priklausomybe bei karinio simbolio
-tipu. SitaWare eksportavimo taisyklėje neįtraukite EFDI Live Tracks šaltinio,
-kad NVG importuoti objektai nebūtų grąžinami atgal į EFDI. Jei konkretus
+originalų CoT tipą, todėl transporto priemonė TAK Server ir ATAK/WinTAK
+pasiekia su ta pačia priklausomybe bei karinio simbolio tipu. SitaWare
+eksportavimo taisyklėje neįtraukite EFDI Live Tracks šaltinio, kad NVG
+importuoti objektai nebūtų grąžinami atgal į EFDI. Jei konkretus
 diegimas vietoje CoT teikia NFFI, pilnus XML dokumentus skelbkite į
 `…/raw/nffi/{source-id}` per prijungtą Zenoh mazgą.
 
@@ -596,20 +596,20 @@ NVG rodomi kaip bendri nežinomi C2 vienetai. `COT_RX_TAK_USERS_ONLY=0`
 naudokite tik jei politika leidžia perduoti kitus CoT objektus. Grąžinti
 `EFDI-*` UID atmetami, o TAK įvestis negrąžinama atgal per TAK TCP išvestį.
 
-### 4. Zenoh → SitaWare Edge arba HQ
+### 4. Zenoh → SitaWare HQ
 
-Edge administravime įjunkite licencijuotą NVG REST sąsają, sukurkite ne žmogaus
+HQ administravime įjunkite licencijuotą NVG REST sąsają, sukurkite ne žmogaus
 integracijos paskyrą su tikslinio NVG šaltinio/sluosnio rašymo teise ir iš
 įdiegto produkto ICD nukopijuokite tikslų URL:
 
 ```dotenv
-SITAWARE_NVG_URL=https://<edge-serveris>/<dokumentuotas-nvg-resursas>
-SITAWARE_NVG_USER=<runtime-vartotojas>
-SITAWARE_NVG_PASS=<runtime-slaptažodis>
-SITAWARE_NVG_SOURCE=efdi-live
+SITAWARE_HQ_NVG_URL=https://<hq-serveris>/<dokumentuotas-nvg-resursas>
+SITAWARE_HQ_NVG_USER=<runtime-vartotojas>
+SITAWARE_HQ_NVG_PASS=<runtime-slaptažodis>
+SITAWARE_HQ_NVG_SOURCE=efdi-live
 ```
 
-Pasirinkite `sitaware-nvg`; po pirmo sėkmingo siuntimo Edge žemėlapyje
+Pasirinkite `sitaware-hq-nvg`; po pirmo sėkmingo siuntimo HQ žemėlapyje
 įjunkite/rodykite `efdi-live`, jei nauji šaltiniai pagal nutylėjimą paslėpti.
 
 HQ atveju pirmiausia paleiskite `sitaware-hq-nvg`, tada SitaWare HQ spauskite
@@ -650,7 +650,7 @@ Pasirinkite `sitaware`. Universalaus `/rest/v2/units` resurso nėra; jei
 administratorius negali parodyti tikro API ekrano/resurso, jo neatspėkite —
 naudokite konkretaus diegimo NFFI arba CoT Gateway.
 
-### 6. SitaWare Edge/Frontline → Zenoh
+### 6. SitaWare CoT Gateway → Zenoh
 
 Licencijuotoje SitaWare CoT Gateway konfigūracijoje:
 
@@ -674,7 +674,8 @@ publikuokite į `…/raw/nffi/{source-id}` ir pasirinkite `nffi`.
 Nerašykite į kito partnerio vardų sritį. Leiskite pradinę vardų sritį
 maršrutizatoriaus/federacijos politikoje, o gavėjo pusėje prenumeruokite ją.
 Gavėjo `cot-*`, `sitaware-nvg` ar `sitaware-hq-nvg` sluoksniai leidžiamas
-normalizuotas temas išvers taip pat kaip vietinius sensorių duomenis.
+normalizuotas temas išvers taip pat kaip vietinius sensorių duomenis. `sitaware-nvg`
+čia reiškia tik paliktą legacy NVG push adapterį.
 
 ### 8. Operacinių naudotojų testas
 
@@ -683,8 +684,8 @@ rolės, o ne Zenoh Admin panelės `superadmin`, `admin` ir `readonly` teisės.
 
 | Rolė | Testo klientas ir veiksmas | EFDI paslaugos | Laukiamas rezultatas |
 | --- | --- | --- | --- |
-| C2 operatorius | TAK/WinTAK/ATAK arba SitaWare naudotojas sukuria įprastą taškinį žymeklį. | `cot-rx`, `cot-tcp` ir/arba `sitaware-nvg`; TAK atveju `COT_RX_TAK_USERS_ONLY=1`, `COT_RX_INCLUDE_MARKERS=1`. | Žymeklis patenka į `…/land/c2/cot/unknown/unit/tracks/v1`, pasirodo kitame C2 išvedime ir negrįžta tuo pačiu TAK TCP ryšiu. |
-| Priešakinės linijos naudotojas | Antra ne administratoriaus TAK tapatybė siunčia SA poziciją arba Frontline transportas eksportuojamas per licencijuotą SitaWare CoT Gateway. | TAK: `cot-rx`; Frontline: `sitaware-cot-rx`; ir reikalingi išvedimo sluoksniai. | Pozicija bei saugus CoT tipas patenka į bendrą C2 vaizdą. EFDI administravimo prieigos nėra. |
+| C2 operatorius | TAK/WinTAK/ATAK arba SitaWare naudotojas sukuria įprastą taškinį žymeklį. | `cot-rx`, `cot-tcp` ir/arba `sitaware-hq-nvg`; TAK atveju `COT_RX_TAK_USERS_ONLY=1`, `COT_RX_INCLUDE_MARKERS=1`. | Žymeklis patenka į `…/land/c2/cot/unknown/unit/tracks/v1`, pasirodo kitame C2 išvedime ir negrįžta tuo pačiu TAK TCP ryšiu. |
+| Priešakinės linijos naudotojas | Antra ne administratoriaus TAK tapatybė siunčia SA poziciją arba SitaWare CoT Gateway eksportuoja transporto žinutes. | TAK: `cot-rx`; CoT Gateway: `sitaware-cot-rx`; ir reikalingi išvedimo sluoksniai. | Pozicija bei saugus CoT tipas patenka į bendrą C2 vaizdą. EFDI administravimo prieigos nėra. |
 | Sensoriaus leidėjas | Prie vietinio Zenoh router prijungtas imtuvas/aptikimo sistema publikuoja pilnus kadrus ar dokumentus į atitinkamą `…/raw/<protokolas>/<source-id>` temą. Laboratoriniam leidėjui administratorius **Publish Script** lange įrašo tuo metu galiojantį šio leidėjo router adresą ir sugeneruoja skriptą. | Atitinkamas protokolo vertėjas ir C2 išvedimo sluoksniai. | Vertėjas sukuria normalizuotus EFDI takelius; C2 sistemos rodo išvestus žymeklius, ne neapdorotą kadrą. |
 | Fabric administratorius | Atskira Zenoh Admin panelės paskyra administruoja tik router/federacijos nustatymus. | Infrastruktūra/Admin UI; sensoriaus ar C2 srautas nereikalingas. | Gali atlikti tik jai priskirtus panelės veiksmus; tai nėra TAK/SitaWare operacinė tapatybė. |
 
@@ -693,7 +694,8 @@ tapatybes: `c2-operator-test` ir `frontline-test`; `cot-rx` naudokite tik treči
 TAK išduotą tarnybinę tapatybę. C2 operatoriaus kliente pirmam bandymui naudokite
 įprastą žemėlapio **taškinio žymeklio** įrankį, ne maršrutų, brėžinių ar pokalbio
 įrankius. `cot-rx.log` turi parodyti `b-m-p-*` įvykį ir C2 Zenoh temą. Po to
-patikrinkite, kad Frontline klientas mato žymeklį, o operatorius — Frontline SA.
+patikrinkite, kad TAK arba SitaWare klientas mato žymeklį, o operatorius —
+žemės naudotojo SA.
 
 Dabartinė router ACL politika riboja vardų sritį, bet dar nėra susieta su
 konkrečiomis asmens rolėmis ar sertifikatų subjektais. Šie keturi klientai
@@ -974,6 +976,26 @@ Tada atidarykite `https://<pod-host>:8890`.
 
 Pats skydelis (`zenoh-admin`) klausosi tik `127.0.0.1:8895` — tiesiogiai nepasiekiamas. Caddy reverse proxy (`zenoh-admin-proxy`) baigia tikrą TLS ant `:8890` naudodamas savo vidinį CA (`local_certs` + `tls internal`, be išorinio ACME/CA priklausomybės), išsaugotą `zenoh_admin_caddy_data` tome, kad CA išliktų po perkrovimų. Naršyklė pirmą kartą parodys savarankiškai pasirašyto sertifikato įspėjimą — pasitikėkite Caddy vidiniu CA (arba priimkite įspėjimą), kad tęstumėte; čia sąmoningai nėra viešo sertifikato, nes šis skydelis nėra skirtas interneto prieigai.
 
+### Runtime Control skydelis
+
+TAK stiliaus **Runtime Control** skydelyje `superadmin` gali vienoje vietoje:
+
+- paleisti, sustabdyti, perkrauti ir peržiūrėti visų registruotų bridge'ų, protokolų vertėjų, raw ingress bei TAK/SitaWare išvesties sluoksnių log'us;
+- keisti endpoint'us, portus, Zenoh temas, API URL ir protokolų nustatymus;
+- rodyti ir keisti papildomus konkretaus diegimo `.env` laukus, kurie jau yra pod'e;
+- įvesti naudotojų vardus, slaptažodžius, API raktus ir token'us, nerodant jau išsaugotų paslapčių.
+
+Native procesai lieka valdomi host PID failais. `start.sh` ir `run.sh all`
+palaiko `admin-control` procesą tik loopback sąsajoje, porte 8896. API kviečia
+tuos pačius launcher skriptus, todėl nekuriamas atskiras Docker konteineris
+kiekvienam integracijos tipui. Papildomam apsaugos sluoksniui `compose/.env`
+galima nustatyti `EFDI_CONTROL_TOKEN`. Po pakeitimo perkraukite paveiktą
+servisą, kad jis perskaitytų naują aplinką.
+
+Paleidus `./dev.sh up`, laikinas control agent automatiškai persikelia į 18896
+jei gamybinis/numatytasis 8896 jau užimtas, o dev API nukreipiamas į pasirinktą
+portą.
+
 ### Rolės
 
 | Rolė | Skydelis | Konfigūracija (peržiūra) | Konfigūracija (redagavimas + routerio perkrovimas) | Admin vartotojai |
@@ -1071,6 +1093,7 @@ Tai pagauna sintaksės klaidas, TypeScript klaidas ir Dockerfile lūžimus prie�
 | 2026-07-17 | Pridėti deterministiniai ASTERIX kategorijų listener'ių susitarimai: CAT-010/020/021/034/048/062 pagal nutylėjimą naudoja UDP 50010/50020/50021/50034/50048/50062; tai EFDI, ne gamintojų numatytieji prievadai |
 | 2026-07-17 | Pridėti Zenoh-native CAP, GeoJSON/OGC, AIS NMEA, spektro, jutiklių būklės, misijų maršrutų ir neapdoroto įėjimo vertimo keliai |
 | 2026-07-17 | Saugumo atnaujinimas: atnaujintas Vite, prisegti/atnaujinti Compose image'ai, atnaujinti Python image'ų OS paketai, o autentifikuoti SitaWare/UTM endpoint'ai apriboti iki HTTPS |
+| 2026-07-18 | Pridėtas TAK stiliaus Runtime Control: host bridge/protokolų/sluoksnių lifecycle veiksmai, apriboti log'ai, endpoint/temų/portų redagavimas, write-only kredencialai, localhost admin-control agent ir veikiantis Vite dev stack su suderintais API/Vite portais |
 
 ---
 

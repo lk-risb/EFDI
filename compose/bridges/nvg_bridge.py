@@ -3,11 +3,11 @@
 
 SitaWare Headquarters 6.22 can create an ``NVG Import Subscription`` whose
 remote endpoint is polled periodically.  This native process subscribes to the
-same Zenoh track topics as the Edge NVG adapter, keeps a bounded live snapshot,
+same Zenoh track topics as the legacy outbound NVG adapter, keeps a bounded live snapshot,
 and serves that snapshot as one NVG document over HTTP(S).
 
-This is deliberately separate from ``nato_nvg_layer.py``'s SitaWare Edge REST
-client: HQ pulls this document; Edge receives per-item PUT/DELETE requests.
+This is deliberately separate from the legacy outbound NVG push adapter: HQ
+pulls this document, while the push adapter writes per-item updates elsewhere.
 
 Required configuration:
 
@@ -43,7 +43,7 @@ from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import zenoh
-from nato_nvg_layer import (
+from layers.nvg_layer import (
     NVG_NS,
     NVG_VERSION,
     TOPIC_ROOT,
