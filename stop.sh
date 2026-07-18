@@ -105,6 +105,14 @@ case "$MODE" in
         stop_zenoh
         ;;
     *)
+        case "$MODE" in
+            admin-control|airplaneslive|adsblol|aisstream|aprs|openmeteo|meteolt|dronuradaras|dji-cloud|utm-ans|sitaware|asterix-udp|track-fusion|asterix-cat10|asterix-cat20|asterix-cat21|asterix-cat34|asterix-cat48|asterix-cat62|link16|mavlink|opendroneid|vmf|sapient|nffi|stanag4586|mavlink-raw|link16-raw|vmf-raw|sapient-raw|stanag4586-raw|cap|geojson|ais-nmea|spectrum|sensor-health|mission-route|cot-rx|sitaware-cot-rx|cot-udp|cot-udp-tak|cot-tcp|sitaware-nvg|sitaware-hq-nvg)
+                echo "=== Stopping $MODE ==="
+                stop_scripts "$MODE"
+                echo "Done."
+                exit 0
+                ;;
+        esac
         echo "Usage: $0 [all|giraffe|bridges|protocols|layers|zenoh]"
         exit 1
         ;;

@@ -67,14 +67,15 @@ fi
 # ── Service registry ───────────────────────────────────────────────────────
 SERVICES=(
     zenoh
+    admin-control
     airplaneslive adsblol aisstream aprs openmeteo meteolt
     sitaware dronuradaras dji-cloud utm-ans asterix-udp track-fusion
     asterix-cat10 asterix-cat20 asterix-cat21 asterix-cat34 asterix-cat48 asterix-cat62
     link16 mavlink opendroneid vmf nffi sapient stanag4586
     mavlink-raw link16-raw vmf-raw sapient-raw stanag4586-raw
     cap geojson ais-nmea spectrum sensor-health mission-route
-    cot-rx sitaware-cot-rx
-    cot-udp cot-udp-tak cot-tcp sitaware-nvg sitaware-hq-nvg
+    cot-rx
+    cot-udp cot-udp-tak cot-tcp sitaware-hq-nvg
 )
 
 # Restore only non-secret launcher choices. Explicit compose/.env values win;
@@ -95,8 +96,7 @@ load_launcher_state() {
                 REMEMBERED_SERVICES="$val"
                 ;;
             TAK_HOST|TAK_HOST_FALLBACK|TAK_UDP_HOST|TAK_UDP_HOST_FALLBACK|\
-            SITAWARE_URL|SITAWARE_URL_FALLBACK|SITAWARE_NVG_URL|COT_RX_HOST|\
-            SITAWARE_COT_RX_HOST|\
+            SITAWARE_URL|SITAWARE_URL_FALLBACK|COT_RX_HOST|\
             SAPIENT_HOST|STANAG4586_HOST)
                 if [[ -z "${!key:-}" ]]; then
                     printf -v "$key" '%s' "$val"
@@ -120,8 +120,8 @@ save_launcher_state() {
         printf '# EFDI launcher memory: selections and endpoint addresses only.\n'
         printf 'SELECTED_SERVICES=%s\n' "$selected"
         for key in TAK_HOST TAK_HOST_FALLBACK TAK_UDP_HOST TAK_UDP_HOST_FALLBACK \
-                   SITAWARE_URL SITAWARE_URL_FALLBACK SITAWARE_NVG_URL \
-                   COT_RX_HOST SITAWARE_COT_RX_HOST \
+                   SITAWARE_URL SITAWARE_URL_FALLBACK \
+                   COT_RX_HOST \
                    SAPIENT_HOST STANAG4586_HOST; do
             # A URL with user-info may contain credentials. Use it for this run,
             # but never copy it into persistent launcher memory.
@@ -136,6 +136,7 @@ load_launcher_state
 
 declare -A SVC_CAT=(
     [zenoh]="Infrastructure"
+    [admin-control]="Infrastructure"
     [airplaneslive]="Open-data bridges" [adsblol]="Open-data bridges"
     [aisstream]="Open-data bridges" [aprs]="Open-data bridges"
     [openmeteo]="Open-data bridges"
@@ -154,15 +155,15 @@ declare -A SVC_CAT=(
     [stanag4586-raw]="Sensor bridges"
     [cap]="Protocols" [geojson]="Protocols" [ais-nmea]="Protocols"
     [spectrum]="Protocols" [sensor-health]="Protocols" [mission-route]="Protocols"
-    [cot-rx]="TAK and SitaWare layers" [sitaware-cot-rx]="TAK and SitaWare layers"
+    [cot-rx]="TAK and SitaWare layers"
     [cot-udp]="Output layers"   [cot-udp-tak]="Output layers"
-    [cot-tcp]="Output layers"   [sitaware-nvg]="Output layers"
     [sitaware-hq-nvg]="Output layers"
     [track-fusion]="Sensor bridges"
 )
 
 declare -A SVC_DESC=(
     [zenoh]="Zenoh message router (Docker)"
+    [admin-control]="Web UI host control agent"
     [airplaneslive]="Airplanes.live ADS-B aircraft"
     [adsblol]="ADSB.lol open-data aircraft"
     [aisstream]="AISstream live vessel positions"
@@ -185,8 +186,7 @@ declare -A SVC_DESC=(
     [sitaware]="SitaWare HQ friendly force tracking (inbound REST)"
     [nffi]="Raw NFFI XML on Zenoh → normalized friendly-force tracks"
     [dronuradaras]="dronuradaras.lt drone detection network"
-    [cot-rx]="Inbound CoT / TAK Server user positions"
-    [sitaware-cot-rx]="SitaWare Edge/Frontline CoT → TAK"
+    [cot-rx]="TAK Server direct CoT receiver"
     [sapient]="SAPIENT / BSI Flex 335 sensor feed"
     [stanag4586]="STANAG 4586 UAV feed"
     [mavlink-raw]="MAVLink UDP/TCP → Zenoh raw"
@@ -203,7 +203,6 @@ declare -A SVC_DESC=(
     [cot-udp]="CoT → ATAK UDP multicast 239.2.3.1:6969 (same LAN only)"
     [cot-udp-tak]="CoT → WinTAK/ATAK UDP unicast (crosses LAN/VPN)"
     [cot-tcp]="CoT → TAK Server TCP"
-    [sitaware-nvg]="EFDI tracks → SitaWare Edge (outbound NVG)"
     [sitaware-hq-nvg]="EFDI tracks → SitaWare HQ pull feed (outbound NVG)"
     [track-fusion]="Radar/ADS-B track correlation"
 )
@@ -222,7 +221,7 @@ asterix_category_uses_raw() {
 # ── Ready check — 0=can start, 1=missing config ───────────────────────────
 svc_ready() {
     case "$1" in
-        zenoh|airplaneslive|adsblol|aisstream|aprs|openmeteo|meteolt|\
+        zenoh|admin-control|airplaneslive|adsblol|aisstream|aprs|openmeteo|meteolt|\
         dronuradaras|opendroneid|nffi|cot-udp|cot-udp-tak|cot-tcp|track-fusion|\
         cap|geojson|ais-nmea|spectrum|sensor-health|mission-route)
             return 0 ;;
@@ -247,11 +246,7 @@ svc_ready() {
         stanag4586-raw) [[ "${STANAG4586_RAW_PORT:-}" ]] ;;
         sitaware)     return 0 ;;  # always ready; prompts for server IP at launch if unset
         cot-rx)       [[ "${COT_RX_PORT:-}${COT_RX_HOST:-}" ]] ;;
-        sitaware-cot-rx)
-            [[ "${SITAWARE_COT_RX_HOST:-}" || ( "${SITAWARE_COT_RX_PORT:-}" && \
-                "${SITAWARE_COT_RX_ALLOW_PEER:-}" ) ]] ;;
         sapient|stanag4586) return 0 ;;
-        sitaware-nvg) return 0 ;;  # always ready; prompts for address+login at launch if unset
         sitaware-hq-nvg) [[ "${SITAWARE_HQ_NVG_ENABLE:-}" == "1" ]] ;;
         *)        return 0 ;;
     esac
@@ -283,7 +278,6 @@ svc_hint() {
             else
                 echo "COT_RX_PORT/HOST not set"
             fi ;;
-        sitaware-cot-rx) echo "set HOST, or PORT + ALLOW_PEER" ;;
         sapient)
             if [[ "${SAPIENT_ZENOH_RAW:-}" == "1" ]]; then
                 _start sapient protocols/sapient_flex335.py --zenoh-raw --raw-topic "${SAPIENT_RAW_TOPIC:-}"
@@ -300,12 +294,6 @@ svc_hint() {
             [[ "${STANAG4586_HOST:-}" ]] && echo "${STANAG4586_HOST}:${STANAG4586_PORT:-4586}" || echo "will prompt for address" ;;
         aisstream)
             [[ "${AISSTREAM_KEY:-}" ]] && echo "API key configured" || echo "will prompt for API key" ;;
-        sitaware-nvg)
-            if [[ "${SITAWARE_NVG_URL:-}" ]]; then
-                echo "${SITAWARE_NVG_URL}"
-            else
-                echo "will prompt for address+login"
-            fi ;;
         sitaware-hq-nvg)
             if [[ "${SITAWARE_HQ_NVG_ENABLE:-}" == "1" ]]; then
                 echo "${SITAWARE_HQ_NVG_BIND:-127.0.0.1}:${SITAWARE_HQ_NVG_PORT:-8088}${SITAWARE_HQ_NVG_PATH:-/nvg}"
@@ -360,6 +348,10 @@ is_running() {
 #   _prompt_address <label> <addr_var>
 _prompt_address() {
     local label="$1" addr_var="$2"
+    if [[ "${EFDI_NONINTERACTIVE:-}" == "1" ]]; then
+        printf -v "$addr_var" '%s' ""
+        return
+    fi
     local addr_in
     read -rp "$(printf "  ${BOLD}${label} IP/URL${R} (blank to skip): ")" addr_in
     printf -v "$addr_var" '%s' "$addr_in"
@@ -369,6 +361,11 @@ _prompt_address() {
 #   _prompt_credentials <label> <user_var> <pass_var>
 _prompt_credentials() {
     local label="$1" user_var="$2" pass_var="$3"
+    if [[ "${EFDI_NONINTERACTIVE:-}" == "1" ]]; then
+        printf -v "$user_var" '%s' ""
+        printf -v "$pass_var" '%s' ""
+        return
+    fi
     local user_in pass_in
     read -rp "$(printf "  ${BOLD}${label} username${R}: ")" user_in
     read -rsp "$(printf "  ${BOLD}${label} password${R}: ")" pass_in
@@ -379,6 +376,10 @@ _prompt_credentials() {
 
 _prompt_secret() {
     local label="$1" value_var="$2" value
+    if [[ "${EFDI_NONINTERACTIVE:-}" == "1" ]]; then
+        printf -v "$value_var" '%s' ""
+        return
+    fi
     read -rsp "$(printf "  ${BOLD}%s${R} (blank to skip): " "$label")" value
     echo
     printf -v "$value_var" '%s' "$value"
@@ -421,6 +422,18 @@ launch() {
                 done
                 echo " (timeout — continuing)"
             fi
+            ;;
+
+        admin-control)
+            if is_running "admin-control" "admin_control.py"; then
+                printf "  ${DIM}[skip]${R}  %-16s already running (pid %s)\n" "admin-control" "$(cat "$PID_DIR/admin-control.pid")"
+                return
+            fi
+            rm -f "$PID_DIR/admin-control.pid"
+            ( exec setsid "$PYTHON" "$COMPOSE_DIR/admin_control.py" \
+                >> "$LOG_DIR/admin-control.log" 2>&1 ) &
+            echo $! > "$PID_DIR/admin-control.pid"
+            printf "  ${GREEN}[start]${R} %-16s pid %s\n" "admin-control" "$!"
             ;;
 
         airplaneslive)
@@ -478,10 +491,12 @@ launch() {
                 _start asterix-cat62 protocols/asterix_cat62.py --zenoh-raw
             elif [[ "${CAT62_UDP:-}" == "1" ]]; then
                 _start asterix-cat62 protocols/asterix_cat62.py --udp --port "${CAT62_PORT:-50062}"
-            else
+            elif [[ "${CAT62_HOST:-${RADAR_HOST:-}}" ]]; then
                 _start asterix-cat62 protocols/asterix_cat62.py \
                     --host "${CAT62_HOST:-${RADAR_HOST:-}}" \
                     --port "${CAT62_PORT:-${RADAR_PORT:-50062}}"
+            else
+                _start asterix-cat62 protocols/asterix_cat62.py --zenoh-raw
             fi
             ;;
 
@@ -540,11 +555,11 @@ launch() {
             ;;
 
         sapient-raw)
-            _start sapient-raw bridges/sapient_flex335_bridge.py --tcp --port "$SAPIENT_RAW_PORT"
+            _start sapient-raw bridges/sapient_flex335_bridge.py --tcp --port "${SAPIENT_RAW_PORT:-7001}"
             ;;
 
         stanag4586-raw)
-            _start stanag4586-raw bridges/stanag4586_bridge.py --tcp --port "$STANAG4586_RAW_PORT"
+            _start stanag4586-raw bridges/stanag4586_bridge.py --tcp --port "${STANAG4586_RAW_PORT:-4586}"
             ;;
 
         cap)
@@ -587,6 +602,10 @@ launch() {
                 export SITAWARE_USER="$sw_user"
                 export SITAWARE_PASS="$sw_pass"
             fi
+            if [[ -z "${SITAWARE_API_PATH:-}" && "${SITAWARE_DISCOVER:-}" != "1" ]]; then
+                printf "  ${YELLOW}[skip]${R}  sitaware        set SITAWARE_API_PATH or SITAWARE_DISCOVER=1\n"
+                return
+            fi
             local sf=(); [[ "${SITAWARE_DISCOVER:-}" == "1" ]] && sf=(--discover)
             _start sitaware bridges/sitaware_bridge.py "${sf[@]}"
             ;;
@@ -597,27 +616,11 @@ launch() {
 
         cot-rx)
             if [[ "${COT_RX_PORT:-}" ]]; then
-                _start cot-rx layers/cot_receiver.py --listen "$COT_RX_PORT"
+                _start cot-rx bridges/tak_bridge.py --listen "$COT_RX_PORT" --source tak_rx
             elif [[ "${COT_RX_HOST:-}" ]]; then
-                _start cot-rx layers/cot_receiver.py --connect "$COT_RX_HOST"
+                _start cot-rx bridges/tak_bridge.py --connect "$COT_RX_HOST" --source tak_rx
             else
                 printf "  ${YELLOW}[skip]${R}  cot-rx            set COT_RX_PORT or COT_RX_HOST\n"
-            fi
-            ;;
-
-        sitaware-cot-rx)
-            if [[ "${SITAWARE_COT_RX_PORT:-}" ]]; then
-                _start sitaware-cot-rx layers/cot_receiver.py \
-                    --listen "$SITAWARE_COT_RX_PORT" \
-                    --bind "${SITAWARE_COT_RX_BIND:-}" \
-                    --allow-peer "${SITAWARE_COT_RX_ALLOW_PEER:-}" \
-                    --source sitaware_cot_rx --no-tls --no-tak-users-only
-            elif [[ "${SITAWARE_COT_RX_HOST:-}" ]]; then
-                _start sitaware-cot-rx layers/cot_receiver.py \
-                    --connect "$SITAWARE_COT_RX_HOST" --source sitaware_cot_rx \
-                    --no-tls --no-tak-users-only
-            else
-                printf "  ${YELLOW}[skip]${R}  sitaware-cot-rx   set SITAWARE_COT_RX_PORT or SITAWARE_COT_RX_HOST\n"
             fi
             ;;
 
@@ -629,6 +632,10 @@ launch() {
                 return
             fi
             if [[ -z "${SAPIENT_HOST:-}" ]]; then
+                if [[ "${EFDI_NONINTERACTIVE:-}" == "1" ]]; then
+                    _start sapient protocols/sapient_flex335.py --zenoh-raw --raw-topic "${SAPIENT_RAW_TOPIC:-}"
+                    return
+                fi
                 local sapient_host
                 _prompt_address "SAPIENT source" sapient_host
                 if [[ -z "$sapient_host" ]]; then
@@ -646,6 +653,10 @@ launch() {
                 return
             fi
             if [[ -z "${STANAG4586_HOST:-}" ]]; then
+                if [[ "${EFDI_NONINTERACTIVE:-}" == "1" ]]; then
+                    _start stanag4586 protocols/stanag4586.py --zenoh-raw --raw-topic "${STANAG4586_RAW_TOPIC:-}"
+                    return
+                fi
                 local stanag_host
                 _prompt_address "STANAG 4586 source" stanag_host
                 if [[ -z "$stanag_host" ]]; then
@@ -703,25 +714,6 @@ launch() {
             _start cot-tcp layers/cot_layer.py "${tcp_args[@]}"
             ;;
 
-        sitaware-nvg)
-            if [[ -z "${SITAWARE_NVG_URL:-}" ]]; then
-                local nvg_addr
-                _prompt_address "SitaWare Edge (NVG)" nvg_addr
-                if [[ -z "$nvg_addr" ]]; then
-                    printf "  ${YELLOW}[skip]${R}  sitaware-nvg    no address entered\n"
-                    return
-                fi
-                export SITAWARE_NVG_URL="$nvg_addr"
-            fi
-            if [[ -z "${SITAWARE_NVG_USER:-}" ]]; then
-                local nvg_user nvg_pass
-                _prompt_credentials "SitaWare Edge" nvg_user nvg_pass
-                export SITAWARE_NVG_USER="$nvg_user"
-                export SITAWARE_NVG_PASS="$nvg_pass"
-            fi
-            _start sitaware-nvg layers/nato_nvg_layer.py
-            ;;
-
         sitaware-hq-nvg)
             if [[ -z "${SITAWARE_HQ_NVG_USER:-}" && \
                   "${SITAWARE_HQ_NVG_ALLOW_ANONYMOUS:-}" != "1" ]]; then
@@ -730,7 +722,7 @@ launch() {
                 export SITAWARE_HQ_NVG_USER="$hq_nvg_user"
                 export SITAWARE_HQ_NVG_PASS="$hq_nvg_pass"
             fi
-            _start sitaware-hq-nvg layers/sitaware_hq_nvg_feed.py
+            _start sitaware-hq-nvg bridges/nvg_bridge.py
             ;;
 
         track-fusion)
@@ -739,6 +731,21 @@ launch() {
 
     esac
 }
+
+# Non-interactive entrypoint used by the localhost admin-control agent.  It
+# reuses the exact same launch table as the human menu, including environment
+# validation and PID handling, without opening a terminal prompt.
+if [[ "${1:-}" == "--service" ]]; then
+    requested="${2:-}"
+    for svc in "${SERVICES[@]}"; do
+        if [[ "$svc" == "$requested" ]]; then
+            launch "$requested"
+            exit $?
+        fi
+    done
+    echo "Unknown service: $requested" >&2
+    exit 2
+fi
 
 # ── Interactive menu ───────────────────────────────────────────────────────
 declare -A sel
@@ -774,13 +781,16 @@ for svc in "${SERVICES[@]}"; do
     fi
 done
 if (( restored == 0 )); then
-    for svc in zenoh cot-udp cot-tcp track-fusion; do sel[$svc]=1; done
+    for svc in zenoh admin-control cot-udp cot-tcp track-fusion; do sel[$svc]=1; done
     svc_ready asterix-udp && sel[asterix-udp]=1 || true
     for svc in asterix-cat10 asterix-cat20 asterix-cat21 \
                asterix-cat34 asterix-cat48 asterix-cat62; do
         svc_ready "$svc" && sel[$svc]=1 || true
     done
 fi
+# The web UI's native-process control plane is always kept selected so an old
+# launcher-state file cannot leave Runtime Control disconnected after upgrade.
+sel[admin-control]=1
 
 draw_menu() {
     clear

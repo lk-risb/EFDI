@@ -9,7 +9,7 @@ import { useBranding } from '@/store/branding'
 import { useTheme } from '@/store/theme'
 import { useNotifications } from '@/store/notifications'
 import {
-  LayoutDashboard, FileCog, ShieldUser, LogOut, Users, Sun, Moon, Bell, ShieldCheck, Radio, Network, Waypoints
+  LayoutDashboard, FileCog, ShieldUser, LogOut, Users, Sun, Moon, Bell, ShieldCheck, Radio, Network, Waypoints, SlidersHorizontal, MonitorCog
 } from 'lucide-react'
 
 // Three-bar icon that morphs into an X on open — plain CSS transitions on
@@ -39,6 +39,8 @@ const navItems = [
 
 const adminItems = [
   { to: '/config', label: 'Config', icon: FileCog },
+  { to: '/ui-settings', label: 'WebUI Settings', icon: MonitorCog },
+  { to: '/runtime', label: 'Runtime Control', icon: SlidersHorizontal },
   { to: '/topology', label: 'Topology', icon: Waypoints },
 ]
 

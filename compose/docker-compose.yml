@@ -162,6 +162,8 @@ services:
       - OIDC_DEFAULT_ROLE=${OIDC_DEFAULT_ROLE:-readonly}
       - OIDC_POST_LOGIN_URL=${OIDC_POST_LOGIN_URL:-/}
       - DOCKER_HOST=tcp://127.0.0.1:2375
+      - EFDI_CONTROL_URL=${EFDI_CONTROL_URL:-http://127.0.0.1:18896}
+      - EFDI_CONTROL_TOKEN=${EFDI_CONTROL_TOKEN:-}
     volumes:
       - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
       - ${POD_STATE_DIR}/zenoh:/zenoh-config
