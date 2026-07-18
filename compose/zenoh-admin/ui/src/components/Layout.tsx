@@ -9,7 +9,7 @@ import { useBranding } from '@/store/branding'
 import { useTheme } from '@/store/theme'
 import { useNotifications } from '@/store/notifications'
 import {
-  LayoutDashboard, FileCog, ShieldUser, LogOut, Users, Sun, Moon, Bell, ShieldCheck, Radio, Network, Waypoints, SlidersHorizontal, MonitorCog
+  LayoutDashboard, FileCog, ShieldUser, LogOut, Users, Sun, Moon, Bell, ShieldCheck, Radio, Network, Waypoints, SlidersHorizontal, MonitorCog, Settings2
 } from 'lucide-react'
 
 // Three-bar icon that morphs into an X on open — plain CSS transitions on
@@ -307,6 +307,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 >
                   {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
                   {theme === 'dark' ? 'Light mode' : 'Dark mode'}
+                </button>
+                <button
+                  onClick={() => { setUserMenuOpen(false); navigate({ to: '/ui-settings' }) }}
+                  className="flex items-center gap-3 w-full px-3 py-2 rounded-md text-sm text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-200/50 dark:hover:bg-white/[0.05] transition-colors"
+                >
+                  <Settings2 size={16} />
+                  WebUI settings
                 </button>
                 <button
                   onClick={() => { setUserMenuOpen(false); setShowUserSettings(true) }}

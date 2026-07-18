@@ -58,7 +58,7 @@ function TopologyPage() {
             <p className="text-sm text-zinc-500">Loading…</p>
           ) : nodes.length === 0 ? (
             <p className="text-sm text-zinc-500">No topology facts received yet. Pods publish every {data.publish_interval_s}s.</p>
-          ) : <TopologyMap nodes={nodes} />}
+          ) : <TopologyMap nodes={nodes} transportEdges={data.transport_edges} />}
         </div>
       </div>
     </Layout>

@@ -8,7 +8,7 @@ import { notify } from '@/lib/notify'
 import { Trash2 } from 'lucide-react'
 import { HudCorners } from '@/components/HudCorners'
 import { TopologyMap } from '@/components/TopologyMap'
-import { fetchTopology, type TopologyNode } from '@/lib/topology'
+import { fetchTopology, type TopologyNode, type TopologyTransportEdge } from '@/lib/topology'
 
 export const Route = createFileRoute('/federation')({
   beforeLoad: () => {
@@ -55,6 +55,7 @@ function FederationPage() {
   const [namespace, setNamespace] = useState('')
   const [creating, setCreating] = useState(false)
   const [topology, setTopology] = useState<TopologyNode[]>([])
+  const [transportEdges, setTransportEdges] = useState<TopologyTransportEdge[]>([])
   const [selectedNamespace, setSelectedNamespace] = useState<string | null>(null)
 
   async function load() {
@@ -63,6 +64,7 @@ function FederationPage() {
       setChildren(data)
       const topologyData = await fetchTopology()
       setTopology(topologyData.nodes)
+      setTransportEdges(topologyData.transport_edges)
     } catch (e) {
       notify.error(errorMessage(e))
     }
@@ -144,7 +146,7 @@ function FederationPage() {
           <HudCorners />
           <div className="rounded-md border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#111113] p-4">
             <h2 className="hud-label text-sm font-semibold text-zinc-600 dark:text-zinc-400 mb-3">Topology</h2>
-            <TopologyMap nodes={topology} selected={selectedNamespace} onSelect={setSelectedNamespace} />
+            <TopologyMap nodes={topology} transportEdges={transportEdges} selected={selectedNamespace} onSelect={setSelectedNamespace} />
           </div>
         </div>
 

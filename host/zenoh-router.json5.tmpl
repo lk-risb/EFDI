@@ -6,15 +6,18 @@
 // Placeholders (all supplied by first-boot.sh from compose/.env + scripts/gen-certs.sh output):
 //   ${ZENOH_LISTEN_PORT}      mTLS listen port for mesh-facing pod-side clients (audit-sink, peers)
 //   ${ZENOH_LOCAL_TCP_PORT}   plaintext TCP listen port for local-only clients (bridges, zenoh-admin GUI)
-//   ${ZENOH_CONNECT_ENDPOINTS} JSON list containing the remote endpoint this pod dials OUT,
-//                              or [] when this pod is the fabric root
+//   ${ZENOH_CONNECT_ENDPOINTS} JSON list containing the explicitly configured remote endpoints
+//                              this pod dials OUT, or [] when this pod is the fabric root
 //   ${PARTNER_NAMESPACE}      the pod's first-party write/read prefix (its slot, or release/<partner>)
 //   ${INBOUND_NAMESPACE}      the bilateral prefix the fabric publishes TO the pod (compose/.env-driven)
 //   ${NAMESPACE_PREFIX}       the org prefix (variable depth, e.g. LTU/CISB); pod writes under ${NAMESPACE_PREFIX}/${PARTNER_NAMESPACE}
 //   ${NAMESPACE_ROOT}         first segment of the prefix; scopes mesh-wide federation/topology wildcards
-//   ${POD_CERT_PEM}           pod leaf cert  (from scripts/gen-certs.sh)
-//   ${POD_KEY_PEM}            pod leaf key   (from scripts/gen-certs.sh)
-//   ${CA_ROOTS_PEM}           EFDI root CA   (from scripts/gen-certs.sh)
+//   ${DATA_TOPIC_ROOT}        runtime data publish root; may be the slot itself on the EFDI sandbox
+//   ${LISTEN_CERT_PEM}        selected local listener certificate
+//   ${LISTEN_KEY_PEM}         selected local listener key
+//   ${CONNECT_CERT_PEM}       selected outbound connector certificate
+//   ${CONNECT_KEY_PEM}        selected outbound connector key
+//   ${CA_ROOTS_PEM}           selected fabric trust roots
 //   ${ZENOH_VERIFY_NAME_ON_CONNECT}    true/false — verify the fabric endpoint's cert SAN against
 //                                       the DNS name dialed (default false: gateway cert SAN binds
 //                                       the mesh IP, not the DNS name)
@@ -43,10 +46,10 @@
       tls: {
         // Pod identity for BOTH directions: as a listener (local clients verify us) and as a
         // connector (the remote peer verifies us). CA roots are EFDI's own root, never compiled in.
-        listen_certificate: "${POD_CERT_PEM}",
-        listen_private_key: "${POD_KEY_PEM}",
-        connect_certificate: "${POD_CERT_PEM}",
-        connect_private_key: "${POD_KEY_PEM}",
+        listen_certificate: "${LISTEN_CERT_PEM}",
+        listen_private_key: "${LISTEN_KEY_PEM}",
+        connect_certificate: "${CONNECT_CERT_PEM}",
+        connect_private_key: "${CONNECT_KEY_PEM}",
         root_ca_certificate: "${CA_ROOTS_PEM}",
         enable_mtls: true,
         // Router/gateway cert SAN binds the mesh IP, not the DNS name we dial — match the
@@ -69,8 +72,8 @@
     storage_manager: {
       storages: {
         efdi_live: {
-          // ${NAMESPACE_PREFIX} org prefix (configurable) precedes the pod namespace — see bridge TOPIC_ROOT.
-          key_expr: "${NAMESPACE_PREFIX}/${PARTNER_NAMESPACE}/**",
+          // Runtime data root is configurable independently from the federation prefix.
+          key_expr: "${DATA_TOPIC_ROOT}/**",
           volume: { id: "memory" },
         },
       },
@@ -89,8 +92,8 @@
         messages: ["put", "delete", "declare_subscriber", "query", "declare_queryable", "reply"],
         flows: ["egress", "ingress"],
         permission: "allow",
-        // ${NAMESPACE_PREFIX} org prefix (configurable) precedes the pod namespace — see bridge TOPIC_ROOT.
-        key_exprs: ["${NAMESPACE_PREFIX}/${PARTNER_NAMESPACE}/**"],
+        // Runtime data root is configurable independently from the federation prefix.
+        key_exprs: ["${DATA_TOPIC_ROOT}/**"],
       },
       {
         // Inbound bilateral data from the fabric: subscribe/deliver only (no pod writes here).

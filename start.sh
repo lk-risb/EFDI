@@ -29,7 +29,7 @@ export ZENOH_LOCAL_ENDPOINT="${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}"
 # inside the repo, under compose/certs/ — gitignored, admins drop the router's
 # certificates here rather than scattering them somewhere in $HOME.
 export BUNDLE_DIR="${BUNDLE_DIR:-$SCRIPT_DIR/compose/certs}"
-export EFDI_CERT_DIR="$BUNDLE_DIR"
+export EFDI_CERT_DIR="${EFDI_CERT_DIR:-$BUNDLE_DIR/efdi}"
 
 # Runtime state (logs, PID files, Zenoh's own config/certs under
 # ${POD_STATE_DIR}/zenoh/...) defaults inside the repo, under compose/state/ —
@@ -41,6 +41,7 @@ export EFDI_CERT_DIR="$BUNDLE_DIR"
 export POD_STATE_DIR="${POD_STATE_DIR:-$SCRIPT_DIR/compose/state}"
 # Host-launched bridges read the same prefix state file the admin writes.
 export NAMESPACE_PREFIX_FILE="${POD_STATE_DIR}/namespace-prefix"
+export DATA_NAMESPACE_PREFIX_FILE="${POD_STATE_DIR}/data-topic-prefix"
 export PYTHONPATH="$COMPOSE_DIR${PYTHONPATH:+:$PYTHONPATH}"
 LOG_DIR="$POD_STATE_DIR/logs"
 PID_DIR="$POD_STATE_DIR/.pids"
@@ -395,7 +396,7 @@ _start() {   # _start <name> <rel-script-path> [args…]
         return
     fi
     rm -f "$pid_file"
-    "$PYTHON" "$COMPOSE_DIR/$script" "$@" >> "$LOG_DIR/$name.log" 2>&1 &
+    ( exec setsid "$PYTHON" "$COMPOSE_DIR/$script" "$@" >> "$LOG_DIR/$name.log" 2>&1 ) &
     echo $! > "$pid_file"
     printf "  ${GREEN}[start]${R} %-16s pid %s\n" "$name" "$!"
 }

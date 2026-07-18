@@ -24,7 +24,7 @@ from opendroneid import (  # noqa: E402
     make_handler as make_opendroneid_handler,
 )
 from cot_layer import _unknown_air_type, make_handler  # noqa: E402
-from nato_nvg_layer import _unknown_air_sidc, track_to_nvg_item  # noqa: E402
+from nvg_layer import _unknown_air_sidc, track_to_nvg_item  # noqa: E402
 
 
 def basic_id(uas_id="DJI-MAVIC-3E-001"):

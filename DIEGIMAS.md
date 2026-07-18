@@ -48,9 +48,9 @@ ATAK įrenginiai turi būti tame pačiame L2 tinklo segmente kaip serveris (mult
 
 ### Sertifikatai
 
-Zenoh mTLS sertifikatai išduodami savarankiškai — jokio išorinio CA ar vendor bundle. `scripts/gen-certs.sh <namespace>` sugeneruoja (vieną kartą) EFDI root CA faile `compose/certs/efdi-ca-root.pem`/`efdi-ca-root-key.pem`, tada pasirašo lapo sertifikatą+raktą nurodytam namespace; tas pats root CA naudojamas visiems vėlesniems namespace'ams.
+Zenoh mTLS sertifikatai išduodami savarankiškai — jokio išorinio CA ar vendor bundle. `scripts/gen-certs.sh <namespace>` sugeneruoja (vieną kartą) EFDI root CA kataloge `compose/certs/efdi/`, tada pasirašo lapo sertifikatą+raktą nurodytam namespace; tas pats root CA naudojamas visiems vėlesniems namespace'ams.
 
-Sugeneruota medžiaga (`efdi-ca-root.pem`, `<NAMESPACE>-cert.pem`, `<NAMESPACE>-key.pem`) saugoma `compose/certs/` — įtraukta į `.gitignore`, niekada nekomituojama. Numatytasis kelias nustatomas `start.sh`; jei norite laikyti jį visai už repozitorijos ribų, perrašykite per `BUNDLE_DIR` faile `compose/.env`.
+Sugeneruota medžiaga (`efdi-ca-root.pem`, `<NAMESPACE>-cert.pem`, `<NAMESPACE>-key.pem`) saugoma `compose/certs/efdi/` — įtraukta į `.gitignore`, niekada nekomituojama. Kataloge taip pat atskirai laikomi `tak/`, `sitaware/`, `tests/` ir `zenoh-sandbox` identitetai. Numatytasis kelias nustatomas `start.sh`; jei norite laikyti jį visai už repozitorijos ribų, perrašykite per `BUNDLE_DIR` faile `compose/.env`.
 
 ---
 
@@ -73,18 +73,19 @@ Tai sukuria:
 
 ```text
 compose/certs/
-├── efdi-ca-root.pem          # EFDI root CA sertifikatas (viešas)
-├── efdi-ca-root-key.pem      # EFDI root CA privatus raktas — saugokite, juo pasirašomas kiekvieno pod'o lapo sertifikatas
-├── <NAMESPACE>-cert.pem      # Mazgo sertifikatas
-└── <NAMESPACE>-key.pem       # Privatus raktas — apribokite prieigą
+├── efdi/                     # EFDI Zenoh CA ir pod'ų identitetai
+├── sitaware/                 # SitaWare tiekimo CA ir serverio identitetas
+├── tak/                      # TAK Serverio identitetas
+├── tests/                    # testinių child/grandchild identitetai
+└── zenoh-sandbox/             # seno sandbox Zenoh identitetas
 ```
 
 `<NAMESPACE>` turi sutapti su `PARTNER_NAMESPACE` faile `compose/.env`.
 
 ```bash
 # Patikrinimas
-ls compose/certs/*.pem
-chmod 600 compose/certs/*-key.pem
+ls compose/certs/efdi/*.pem
+chmod 600 compose/certs/efdi/*-key.pem
 ```
 
 ### 2.3 Python virtualios aplinkos kūrimas
@@ -542,7 +543,8 @@ ZENOH_LOCAL_ENDPOINT=tcp/127.0.0.1:7448
 ```
 
 Kintantis tėvinio ar backbone maršrutizatoriaus adresas rašomas tik į
-`ZENOH_FABRIC_ENDPOINT`. C2 duomenys publikuojami po
+`ZENOH_FABRIC_ENDPOINT` (arba kelių nuorodų `ZENOH_FABRIC_ENDPOINTS` JSON
+masyvą). C2 duomenys publikuojami po
 `{NAMESPACE_PREFIX}/{PARTNER_NAMESPACE}/...`; ACL ir federacijos politika
 nustato, kuriems partneriams ši vardų sritis perduodama.
 
@@ -986,14 +988,14 @@ TAK stiliaus **Runtime Control** skydelyje `superadmin` gali vienoje vietoje:
 - įvesti naudotojų vardus, slaptažodžius, API raktus ir token'us, nerodant jau išsaugotų paslapčių.
 
 Native procesai lieka valdomi host PID failais. `start.sh` ir `run.sh all`
-palaiko `admin-control` procesą tik loopback sąsajoje, porte 8896. API kviečia
+palaiko `admin-control` procesą tik loopback sąsajoje, porte 18896. API kviečia
 tuos pačius launcher skriptus, todėl nekuriamas atskiras Docker konteineris
 kiekvienam integracijos tipui. Papildomam apsaugos sluoksniui `compose/.env`
 galima nustatyti `EFDI_CONTROL_TOKEN`. Po pakeitimo perkraukite paveiktą
 servisą, kad jis perskaitytų naują aplinką.
 
 Paleidus `./dev.sh up`, laikinas control agent automatiškai persikelia į 18896
-jei gamybinis/numatytasis 8896 jau užimtas, o dev API nukreipiamas į pasirinktą
+jei kūrimo/numatytasis 8896 jau užimtas, o dev API nukreipiamas į pasirinktą
 portą.
 
 ### Rolės

@@ -9,7 +9,7 @@ import { CheckCircle, XCircle, ChevronRight, Radio, Cpu, MemoryStick, HardDrive,
 import { cn } from '@/lib/utils'
 import { Skeleton } from '@/components/Skeleton'
 import { TopologyMap } from '@/components/TopologyMap'
-import { fetchTopology, type TopologyNode } from '@/lib/topology'
+import { fetchTopology, type TopologyResponse } from '@/lib/topology'
 
 export const Route = createFileRoute('/')({
   beforeLoad: () => {
@@ -248,7 +248,7 @@ function DashboardPage() {
   const [status, setStatus] = useState<StatusData | null>(null)
   const [services, setServices] = useState<ServiceState[]>([])
   const [system, setSystem] = useState<SystemStats | null>(null)
-  const [topology, setTopology] = useState<TopologyNode[]>([])
+  const [topology, setTopology] = useState<TopologyResponse | null>(null)
 
   async function load() {
     try {
@@ -262,7 +262,7 @@ function DashboardPage() {
     } catch {}
     try {
       const data = await fetchTopology()
-      setTopology(data.nodes)
+      setTopology(data)
     } catch {}
   }
 
@@ -326,7 +326,7 @@ function DashboardPage() {
                 Open topology →
               </button>
             </div>
-            <TopologyMap nodes={topology} compact onSelect={() => navigate({ to: '/topology' })} />
+            <TopologyMap nodes={topology?.nodes ?? []} transportEdges={topology?.transport_edges} compact onSelect={() => navigate({ to: '/topology' })} />
           </div>
         </div>
 
