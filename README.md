@@ -50,9 +50,9 @@ This repository is the EFDI-partner collaboration surface. It carries **no partn
 [AISstream]      ──WSS/AIS─────► aisstream_ws_bridge ─┤
 [SitaWare HQ]    ──documented REST API──► sitaware_bridge ─┤──► Zenoh router (local) ──► cot_layer ──► ATAK
 [NFFI publisher] ──Zenoh/XML───► nffi                  ─┤                                      ├──► TAK Server
-[Link-16]        ──UDP────────► link16                 ─┤                                      ├──► nato_nvg_layer ──► SitaWare Edge
+[Link-16]        ──UDP────────► link16                 ─┤                                      ├──► nvg_bridge ◄── SitaWare HQ polls
 [MAVLink]        ──UDP/TCP────► mavlink                ─┘              └──► track_fusion_bridge
-                                                                      └──► sitaware_hq_nvg_feed ◄── SitaWare HQ polls
+                                                                      └──► nvg_bridge ◄── SitaWare HQ polls
 ```
 
 Zenoh-native translators are also included for CAP 1.2 alerts, GeoJSON/OGC
@@ -85,9 +85,8 @@ consumers continue to decode `/v1` safely.
 | `aisstream_ws_bridge` | Authenticated WSS stream, AIS vessel positions and static data |
 | `sitaware_bridge` | SitaWare HQ friendly-force REST polling (inbound) |
 | `nffi` | NATO NFFI / ADatP-36 (STANAG 5527) XML translator for raw Zenoh publications |
-| `nato_nvg_layer` | EFDI tracks → SitaWare Edge NVG v2 push (outbound) |
-| `sitaware_hq_nvg_feed` | Pull-based NVG 2.0.2 snapshot for SitaWare HQ Import Subscriptions (outbound) |
-| `cot_receiver` | Inbound plain CoT or TAK Server mTLS layer; can import loop-protected TAK ground-user SA positions |
+| `nvg_bridge` | Pull-based NVG 2.0.2 snapshot for SitaWare HQ Import Subscriptions (outbound) |
+| `tak_bridge` | Inbound plain CoT or TAK Server mTLS layer; can import loop-protected TAK ground-user SA positions |
 | `link16` | JREAP-C UDP; TCP requires a verified gateway framing ICD |
 | `mavlink` | MAVLink 2 UDP/TCP, including OPEN_DRONE_ID messages |
 | `mavlink_raw_bridge` / `link16_jreap_bridge` / `vmf_bridge` / `stanag4586_bridge` | Optional socket ingress only; publishes raw bytes to Zenoh |
@@ -99,7 +98,7 @@ consumers continue to decode `/v1` safely.
 | `dji_cloud_api_bridge` | Source-specific DJI Cloud API MQTT 5 aircraft telemetry bridge |
 | `cot_layer` | CoT XML output — UDP multicast + TAK Server TCP |
 | `track_fusion_bridge` | ASTERIX CAT-48 / CAT-21 correlation |
-| `zenoh-admin` | FastAPI + React panel — router status, config editing, service health |
+| `zenoh-admin` | FastAPI + React panel — router status, config, bridge/protocol/layer lifecycle, endpoints, and write-only credentials |
 
 All bridges and protocols are lightweight Python processes with no shared state beyond the Zenoh session. They publish self-describing JSON payloads. The CoT layer translates any incoming Zenoh topic to the appropriate MIL-STD-2525C CoT type using a topic-pattern → CoT-type map — adding a new sensor requires no changes to the output layer.
 
@@ -114,25 +113,22 @@ Client onboarding is certificate-based: each pod gets a signed mTLS bundle issue
 
 ### SitaWare integration (bidirectional)
 
-Five independent paths are available; enable only interfaces documented and licensed in the target deployment. HQ, Frontline, and Edge expose different deployment-dependent interfaces, so the adapters use disjoint environment-variable prefixes rather than sharing endpoints or credentials.
+Five independent paths are available; enable only interfaces documented and licensed in the target deployment. This setup is HQ-focused, so the adapters use disjoint environment-variable prefixes rather than sharing endpoints or credentials.
 
 | Direction | Bridge/layer | Path |
 |---|---|---|
 | Inbound | `sitaware_bridge.py` | SitaWare **HQ** REST API → EFDI (poll-based) |
 | Inbound | `nffi.py` | Raw NATO NFFI / ADatP-36 XML on Zenoh → normalized EFDI tracks |
-| Inbound | `cot_receiver.py` (`sitaware-cot-rx`) | Licensed SitaWare Edge/Frontline CoT Gateway → EFDI → TAK |
-| Outbound | `nato_nvg_layer.py` | EFDI tracks → SitaWare **Edge** NVG v2 REST API (push) |
-| Outbound | `sitaware_hq_nvg_feed.py` | EFDI tracks → pull-based NVG 2.0.2 feed for SitaWare **HQ** |
+| Inbound | `tak_bridge.py` (`cot-rx`) | Licensed TAK Server CoT / user-SA stream → EFDI |
+| Outbound | `nvg_bridge.py` | EFDI tracks → pull-based NVG 2.0.2 feed for SitaWare **HQ** |
 
 **`sitaware_bridge.py` (inbound, HQ)** — polls an explicitly configured `SITAWARE_API_PATH` on a `SITAWARE_POLL_S`-second interval. There is no universal `/rest/v2/units` resource: HQ 6.22 may map a MIP4 servlet at `/rest/v2/*` while returning 404 for that guessed resource. Enable this adapter only after confirming the deployment's resource path, schema, and authentication method in its API/ICD. Primary and fallback base URLs remain supported for deployments that do expose a compatible JSON unit resource.
 
 **`nffi.py` (protocol translator)** — subscribes to complete NFFI XML documents already carried by Zenoh under `…/raw/nffi/{source-id}` and publishes normalized friendly-force tracks. It contains no receiver socket, endpoint, framing, or vendor connection logic. NFFI friendly-force interoperability is specified by ADatP-36 / STANAG 5527; STANAG 4677 is the separate dismounted-soldier interoperability family and requires its own exact JDSSDM/NFFI profile implementation.
 
-**`sitaware-cot-rx` (inbound, Edge/Frontline)** — runs a second native `cot_receiver.py` instance for the SitaWare CoT Gateway, independently of the TAK Server receiver. Configure either `SITAWARE_COT_RX_PORT` for a SitaWare-initiated TCP connection or `SITAWARE_COT_RX_HOST` for an EFDI-initiated connection. Safe source CoT types are preserved end-to-end, so a Frontline tank/armoured-vehicle type reaches ATAK/WinTAK as that same military symbol rather than a generic point. Configure the SitaWare gateway to export the desired own-force/vehicle layers and exclude the EFDI Live Tracks source to prevent an NVG→SitaWare→CoT echo loop. If the deployment exposes NFFI instead of a licensed CoT Gateway, use the existing NFFI adapter for friendly-force positions.
+**`cot-rx` (inbound, TAK Server)** — runs the dedicated `tak_bridge.py` entrypoint for direct TAK Server user-situation-awareness feeds. Configure either `COT_RX_PORT` for a TAK-initiated TCP connection or `COT_RX_HOST` for an EFDI-initiated connection. If you are relaying TAK point markers, keep `COT_RX_INCLUDE_MARKERS=1`; otherwise the receiver stays focused on user-SA data.
 
-**`nato_nvg_layer.py` (outbound, Edge)** — pushes every EFDI track update as a NATO Vector Graphics (NVG) 2.0 item via `PUT` to the SitaWare Edge REST API, so any SitaWare Frontline client connected to that Edge server sees EFDI tracks live. Each item carries position, speed, course, and a SIDC-derived symbol; deleted/stale tracks are removed with a corresponding NVG delete call rather than left stale on the Edge map.
-
-**`sitaware_hq_nvg_feed.py` (outbound, HQ)** — maintains a bounded snapshot of live EFDI tracks and serves one NVG 2.0.2 document for HQ's **NVG Import Subscription** manager to poll. The endpoint supports GET/HEAD only, requires dedicated HTTP Basic credentials unless anonymous access is explicitly enabled, expires stale tracks, includes an NVG `TimeSpan` so HQ also hides expired objects if the feed goes offline, and attaches standard symbol modifiers plus bounded `ExtendedData`. Its Attributes view reuses the same domain-aware stat-card formatter as CoT/TAK, with clean Identity, IFF, Kinematics, Radar, Flight Plan, Status, Altitude, Guidance, and ADS-B Quality sections instead of raw Python keys. Aircraft include distinct barometric/geometric altitude readings, primary altitude in metres/feet/flight level, climb/descent rate, selected/target altitude, speed/heading, identity, route, emergency/autopilot state, ADS-B quality, and other safe scalar source fields available in the track. SitaWare uses the same RU/BY ICAO and MMSI hostile-affiliation classifiers as CoT rather than assigning every ADS-B/AIS topic one static affiliation. Because HQ 6.22 renders the standards-native METOC scheme as Unknown, weather stations use its supported neutral emplaced-sensor SIDC, distinct from the generic neutral sensor used by dronuradaras.lt. The dronuradaras bridge publishes only devices whose latest API status is `is_online=true`; an offline transition immediately removes that device from this snapshot and from the CoT/Edge caches. XML-illegal upstream characters are removed and a malformed cached record cannot break the complete feed. The endpoint refuses non-loopback cleartext HTTP unless the lab-only override is set. Prefer HTTPS with a certificate trusted by the HQ Windows host. This native Python service is enabled with `SITAWARE_HQ_NVG_ENABLE=1`; it does not add a bridge container.
+**`nvg_bridge.py` (outbound, HQ)** — maintains a bounded snapshot of live EFDI tracks and serves one NVG 2.0.2 document for HQ's **NVG Import Subscription** manager to poll. The endpoint supports GET/HEAD only, requires dedicated HTTP Basic credentials unless anonymous access is explicitly enabled, expires stale tracks, includes an NVG `TimeSpan` so HQ also hides expired objects if the feed goes offline, and attaches standard symbol modifiers plus bounded `ExtendedData`. Its Attributes view reuses the same domain-aware stat-card formatter as CoT/TAK, with clean Identity, IFF, Kinematics, Radar, Flight Plan, Status, Altitude, Guidance, and ADS-B Quality sections instead of raw Python keys. Aircraft include distinct barometric/geometric altitude readings, primary altitude in metres/feet/flight level, climb/descent rate, selected/target altitude, speed/heading, identity, route, emergency/autopilot state, ADS-B quality, and other safe scalar source fields available in the track. SitaWare uses the same RU/BY ICAO and MMSI hostile-affiliation classifiers as CoT rather than assigning every ADS-B/AIS topic one static affiliation. Because HQ 6.22 renders the standards-native METOC scheme as Unknown, weather stations use its supported neutral emplaced-sensor SIDC, distinct from the generic neutral sensor used by dronuradaras.lt. The dronuradaras bridge publishes only devices whose latest API status is `is_online=true`; an offline transition immediately removes that device from this snapshot and from the CoT caches. XML-illegal upstream characters are removed and a malformed cached record cannot break the complete feed. The endpoint refuses non-loopback cleartext HTTP unless the lab-only override is set. Prefer HTTPS with a certificate trusted by the HQ Windows host. This native Python service is enabled with `SITAWARE_HQ_NVG_ENABLE=1`; it does not add a bridge container.
 
 ADS-B emitter categories `C1` and `C2` are surface emergency/service vehicles, not aircraft. CoT and both SitaWare NVG paths classify them as neutral ground vehicles (`a-n-G-E-V` / `SNGPEV----*****`). The ordinary `on_ground` flag alone is not used for this decision because taxiing aircraft must remain aircraft.
 
@@ -141,7 +137,10 @@ TAK and SitaWare inbound records are written under this pod's normal
 ordinary Zenoh data for authorized subscribers and federated partner routers;
 the Zenoh ACL and federation policy—not the C2 adapter—decide which other pods
 may receive them. Enabling an outbound TAK/NVG layer does not enable the reverse
-path: select and configure `cot-rx`, `sitaware`, or `sitaware-cot-rx` separately.
+path: select and configure `cot-rx`, `sitaware`, or `sitaware-hq-nvg` separately.
+
+`cot_bridge.py` is the Zenoh-side CoT entrypoint: it stays on the fabric and
+delegates to the CoT output layer instead of opening a direct TAK socket.
 
 ### C2 activation summary
 
@@ -149,10 +148,8 @@ path: select and configure `cot-rx`, `sitaware`, or `sitaware-cot-rx` separately
 |---|---|---|
 | Zenoh → TAK Server | `cot-tcp` | `TAK_HOST/PORT`; add `TAK_TLS=1` and TAK-issued client credentials for mTLS |
 | TAK Server → Zenoh | `cot-rx` | `COT_RX_HOST`, TAK mTLS credentials and matching TAK groups; normally `COT_RX_TAK_USERS_ONLY=1`; set `COT_RX_INCLUDE_MARKERS=1` to relay TAK point markers |
-| Zenoh → SitaWare Edge | `sitaware-nvg` | Edge NVG URL and credentials |
 | Zenoh → SitaWare HQ | `sitaware-hq-nvg` | Enable the authenticated NVG feed and create an HQ NVG Import Subscription |
 | SitaWare HQ → Zenoh | `sitaware` | Deployment-documented REST resource, schema, URL and credentials |
-| SitaWare Edge/Frontline → Zenoh | `sitaware-cot-rx` | Licensed CoT Gateway and one configured TCP direction |
 
 TAK certificates are issued by TAK, not by the Zenoh CA. SitaWare endpoint paths
 must come from that deployment's licensed documentation; `/rest/v2/units` is
@@ -199,7 +196,7 @@ Every pod dials a single fabric endpoint over mutual TLS — the pod writes only
 | UDP `<TAK_UDP_PORT>` (default 8087) | outbound | Optional direct CoT unicast to WinTAK/ATAK |
 | HTTP 8890 | inbound | zenoh-admin panel (web UI) |
 | TCP `<SITAWARE_HQ_NVG_PORT>` (default 8088) | inbound | SitaWare HQ polls the EFDI NVG feed |
-| HTTPS | outbound | SitaWare HQ/Edge, dronuradaras.lt, and any explicitly authorized UTM export API |
+| HTTPS | outbound | SitaWare HQ, dronuradaras.lt, and any explicitly authorized UTM export API |
 
 See [INSTALL.md](INSTALL.md) for the full network prerequisites table.
 
@@ -216,7 +213,6 @@ See [INSTALL.md](INSTALL.md) for the full network prerequisites table.
 | ADSB.lol bridge | ✅ | ODbL open aircraft data from the public v2 API |
 | SitaWare HQ bridge | ✅ | Friendly-force REST polling (inbound) |
 | NATO NFFI protocol | ✅ | ADatP-36 / STANAG 5527 XML published through Zenoh |
-| SitaWare Edge (NVG) layer | ✅ | EFDI tracks → SitaWare Edge push (outbound) |
 | SitaWare HQ NVG feed | ✅ | EFDI tracks → HQ NVG Import Subscription (outbound pull feed) |
 | Link-16 bridge | ✅ | JREAP-C UDP |
 | MAVLink bridge | ✅ | MAVLink 2 UDP/TCP |
@@ -262,17 +258,26 @@ See **[INSTALL.md](INSTALL.md)** for the full English deployment guide, or **[DI
 ```bash
 ./start.sh              # interactive launcher — pick services, prompts for missing config
 ./stop.sh                # tear down running services
-./dev.sh up              # zenoh-admin UI preview only — disposable Postgres + API, no router/certs
-./dev.sh down             # tear down the dev preview stack
+./dev.sh up              # live zenoh-admin preview — disposable Postgres + API + Vite UI, no router/certs
+./dev.sh down             # tear down the dev preview stack and Vite process
 docker compose logs -f zenoh-router   # follow the router's logs
 ```
 
-`start.sh` lists all 44 retained infrastructure, bridge, protocol-adapter, and
+`start.sh` lists all retained infrastructure, bridge, protocol-adapter, and
 output services. It restores the
 previous selection, merges in processes already running from `run.sh`, displays
 the complete result, and auto-starts it after a five-second window. Press `c`
 during that window to change the selection. Endpoint addresses are remembered
-in the mode-600 runtime state file; passwords and API keys are never saved.
+in the mode-600 runtime state file; passwords and API keys are never written
+there. Runtime Control writes credentials only to the gitignored `compose/.env`
+with mode 600 when an administrator explicitly saves them.
+
+The admin panel's **Runtime Control** page can start, stop, restart, and inspect
+logs for those host-managed processes. `start.sh` and `run.sh all` keep a
+localhost `admin-control` process available on port 8896; the panel uses it to
+update the deployment `.env` as data and delegate lifecycle actions to the same
+launcher scripts used from a terminal. Secret values are write-only. Set
+`EFDI_CONTROL_TOKEN` in `compose/.env` for an additional local bearer token.
 
 ---
 

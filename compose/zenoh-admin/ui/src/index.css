@@ -191,10 +191,12 @@
    children (see HudCorners.tsx). */
 .hud-frame {
   position: relative;
+  isolation: isolate;
+  z-index: 0;
 }
 .hud-corner {
   position: absolute;
-  z-index: 1001;
+  z-index: 20;
   width: 14px;
   height: 14px;
   border-color: var(--color-accent-fill);

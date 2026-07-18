@@ -32,6 +32,7 @@ from namespace_prefix import prefix
 
 MAX_FRAME_BYTES = 1_048_576
 MAX_OBJECTS = 20_000
+ZENOH_RETRY_S = 5
 
 _CONTENT_FIELDS = {
     4: "registration",
@@ -832,7 +833,13 @@ def _listen_loop(session, args):
 def run(args):
     if args.zenoh_raw:
         return run_zenoh_raw(args)
-    session = zenoh.open(make_config())
+    while True:
+        try:
+            session = zenoh.open(make_config())
+            break
+        except zenoh.ZError as exc:
+            print("SAPIENT Zenoh connect failed: {} — retry in {}s".format(exc, ZENOH_RETRY_S), flush=True)
+            time.sleep(ZENOH_RETRY_S)
     print("SAPIENT FLEX 335 -> Zenoh root: {}".format(TOPIC_ROOT), flush=True)
     try:
         if args.listen:
@@ -847,7 +854,13 @@ def run(args):
 
 def run_zenoh_raw(args):
     """Decode FLEX 335 length-prefixed bytes received by a raw Zenoh bridge."""
-    session = zenoh.open(make_config())
+    while True:
+        try:
+            session = zenoh.open(make_config())
+            break
+        except zenoh.ZError as exc:
+            print("SAPIENT raw Zenoh connect failed: {} — retry in {}s".format(exc, ZENOH_RETRY_S), flush=True)
+            time.sleep(ZENOH_RETRY_S)
     topic = args.raw_topic or TOPIC_ROOT + "/raw/sapient/flex335/**"
     decoder = SapientDecoder()
     buffer = bytearray()

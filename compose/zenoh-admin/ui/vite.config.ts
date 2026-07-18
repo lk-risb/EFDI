@@ -4,6 +4,8 @@ import tailwindcss from '@tailwindcss/vite'
 import { TanStackRouterVite } from '@tanstack/router-plugin/vite'
 import path from 'path'
 
+const devApiPort = Number(process.env.ZENOH_ADMIN_DEV_API_PORT || 8895)
+
 export default defineConfig({
   plugins: [
     TanStackRouterVite({ routesDirectory: './src/routes', generatedRouteTree: './src/routeTree.gen.ts' }),
@@ -17,8 +19,8 @@ export default defineConfig({
     port: 5174,
     strictPort: true,
     proxy: {
-      '/api': 'http://localhost:8895',
-      '/auth': 'http://localhost:8895',
+      '/api': `http://127.0.0.1:${devApiPort}`,
+      '/auth': `http://127.0.0.1:${devApiPort}`,
     },
   },
   build: {

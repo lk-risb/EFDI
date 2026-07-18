@@ -83,6 +83,7 @@ _SOURCE      = os.environ.get("SITAWARE_SOURCE",   "sitaware")
 _API_PATH    = os.environ.get("SITAWARE_API_PATH", "").strip()
 _POLL_S      = float(os.environ.get("SITAWARE_POLL_S", "10"))
 _TLS_VERIFY  = os.environ.get("SITAWARE_TLS_VERIFY", "1") not in ("0", "false", "no")
+ZENOH_RETRY_S = 5
 
 # Common fallback API paths tried in order if the primary returns 404
 _API_FALLBACKS = [
@@ -374,7 +375,13 @@ def run(args):
         )
         return
 
-    session = zenoh.open(make_config())
+    while True:
+        try:
+            session = zenoh.open(make_config())
+            break
+        except zenoh.ZError as exc:
+            print("SitaWare Zenoh connect failed: {} — retry in {}s".format(exc, ZENOH_RETRY_S), flush=True)
+            time.sleep(ZENOH_RETRY_S)
     print("SitaWare bridge started", flush=True)
     if len(_BASE_URLS) > 1:
         print("  Servers: {} (+{} fallback)".format(_BASE_URLS[0], len(_BASE_URLS) - 1), flush=True)

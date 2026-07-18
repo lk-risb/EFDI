@@ -52,6 +52,7 @@ _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", "tcp/127.0.0.1:7448")
 RECONNECT_S     = 10
 HEARTBEAT_S     = 5
 TOPIC_UAV_OUT   = "{}/air/stanag4586/uav/civ/aircraft/tracks/v1".format(TOPIC_ROOT)
+ZENOH_RETRY_S   = 5
 
 # Message type constants (STANAG 4586 Ed.3 — confirm against VSM docs)
 MSG_VSM_HEARTBEAT  = 0x4001
@@ -222,7 +223,13 @@ def _run_session(host: str, port: int, session: "zenoh.Session", verbose: bool):
 def run(args):
     if args.zenoh_raw:
         return run_zenoh_raw(args)
-    session = zenoh.open(make_config())
+    while True:
+        try:
+            session = zenoh.open(make_config())
+            break
+        except zenoh.ZError as exc:
+            print("STANAG4586 Zenoh connect failed: {} — retry in {}s".format(exc, ZENOH_RETRY_S), flush=True)
+            time.sleep(ZENOH_RETRY_S)
     print("STANAG 4586 layer started", flush=True)
     print("  VSM: {}:{}".format(args.host, args.port), flush=True)
     print("  NOTE: Message numbers per Ed.3 — verify against your VSM before use", flush=True)
@@ -241,7 +248,13 @@ def run(args):
 
 def run_zenoh_raw(args):
     """Decode complete or concatenated Ed.3 frames from a Zenoh raw topic."""
-    session = zenoh.open(make_config())
+    while True:
+        try:
+            session = zenoh.open(make_config())
+            break
+        except zenoh.ZError as exc:
+            print("STANAG4586 raw Zenoh connect failed: {} — retry in {}s".format(exc, ZENOH_RETRY_S), flush=True)
+            time.sleep(ZENOH_RETRY_S)
     topic = args.raw_topic or TOPIC_ROOT + "/raw/stanag4586/**"
     buffer = bytearray()
 

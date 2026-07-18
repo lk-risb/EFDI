@@ -18,4 +18,10 @@ docs/
 dev.env
 .dev-api.pid
 .dev-api.log
+.dev-ui.pid
+.dev-ui.log
+.dev-control.pid
+.dev-control.log
+.dev-runtime.env
+.dev-state/
 compose/zenoh-admin/.venv/
