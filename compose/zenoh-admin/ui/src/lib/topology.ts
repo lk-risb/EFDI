@@ -4,18 +4,35 @@ export interface TopologyNode {
   namespace: string
   router_zid: string | null
   parent_namespace: string | null
-  role: 'hq' | 'pod'
+  role: 'hq' | 'pod' | 'peer'
   children: string[]
   healthy: boolean
   online: boolean
   last_seen_seconds: number
+  reported?: boolean
+  neighbors: TopologyNeighbor[]
   config_status: string | null
   config_status_version: number | null
   config_status_at: string | null
 }
 
+export interface TopologyNeighbor {
+  router_zid: string
+  whatami: string
+  link_count: number | null
+  protocols: string[]
+}
+
+export interface TopologyTransportEdge {
+  source: string
+  target: string
+  protocols: string[]
+  observers: string[]
+}
+
 export interface TopologyResponse {
   nodes: TopologyNode[]
+  transport_edges: TopologyTransportEdge[]
   generated_at: number
   publish_interval_s: number
   stale_after_s: number

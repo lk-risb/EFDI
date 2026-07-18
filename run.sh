@@ -43,9 +43,10 @@ fi
 
 export ZENOH_LOCAL_ENDPOINT="${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}"
 export BUNDLE_DIR="${BUNDLE_DIR:-$SCRIPT_DIR/compose/certs}"
-export EFDI_CERT_DIR="$BUNDLE_DIR"
+export EFDI_CERT_DIR="${EFDI_CERT_DIR:-$BUNDLE_DIR/efdi}"
 export POD_STATE_DIR="${POD_STATE_DIR:-$SCRIPT_DIR/compose/state}"
 export NAMESPACE_PREFIX_FILE="${POD_STATE_DIR}/namespace-prefix"
+export DATA_NAMESPACE_PREFIX_FILE="${POD_STATE_DIR}/data-topic-prefix"
 export PYTHONPATH="$COMPOSE_DIR${PYTHONPATH:+:$PYTHONPATH}"
 LOG_DIR="$POD_STATE_DIR/logs"
 PID_DIR="$POD_STATE_DIR/.pids"
@@ -92,8 +93,8 @@ start() {
         ( exec setsid "$PYTHON" "$COMPOSE_DIR/$script" "$@" \
             >> "$LOG_DIR/$name.log" 2>&1 ) &
     else
-        "$PYTHON" "$COMPOSE_DIR/$script" "$@" \
-            >> "$LOG_DIR/$name.log" 2>&1 &
+        ( exec setsid "$PYTHON" "$COMPOSE_DIR/$script" "$@" \
+            >> "$LOG_DIR/$name.log" 2>&1 ) &
     fi
     echo $! > "$pid_file"
     echo "  [start] $name  (pid $!)"

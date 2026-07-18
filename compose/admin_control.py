@@ -17,7 +17,6 @@ import re
 import subprocess
 import tempfile
 import threading
-import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
@@ -98,6 +97,7 @@ _SERVICE_REQUIRED_KEYS = {
 # narrow: arbitrary environment variables would become an injection surface.
 EDITABLE_EXACT = {
     "PARTNER_NAMESPACE", "NAMESPACE_PREFIX", "NAMESPACE_PREFIX_FILE",
+    "DATA_NAMESPACE_PREFIX",
     "ZENOH_LOCAL_ENDPOINT", "ZENOH_LISTEN_PORT", "ZENOH_LOCAL_TCP_PORT",
     "ZENOH_VERIFY_NAME_ON_CONNECT", "ZENOH_PLUGINS_LOADING_ENABLED",
     "ASTERIX_PORT", "ASTERIX_BIND", "ASTERIX_CATEGORIES", "ASTERIX_MULTICAST_GROUP",
@@ -109,6 +109,7 @@ EDITABLE_EXACT = {
     "SITAWARE_URL", "SITAWARE_URL_FALLBACK", "SITAWARE_API_PATH", "SITAWARE_USER", "SITAWARE_PASS", "SITAWARE_POLL_S",
     "SITAWARE_TLS_VERIFY", "SITAWARE_DISCOVER",
     "SITAWARE_HQ_NVG_ENABLE", "SITAWARE_HQ_NVG_BIND", "SITAWARE_HQ_NVG_PORT", "SITAWARE_HQ_NVG_PATH",
+    "SITAWARE_HQ_NVG_USER", "SITAWARE_HQ_NVG_PASS",
     "SITAWARE_HQ_NVG_TLS_CERT", "SITAWARE_HQ_NVG_TLS_KEY", "SITAWARE_HQ_NVG_ALLOW_ANONYMOUS",
     "SITAWARE_HQ_NVG_ALLOW_INSECURE_HTTP",
     "UTM_ANS_API_URL", "UTM_ANS_API_TOKEN", "UTM_ANS_POLL_S", "UTM_ANS_TLS_VERIFY",
@@ -195,6 +196,11 @@ def _write_env(updates: dict[str, str]) -> None:
         temporary = prefix_path.with_name(f".{prefix_path.name}.tmp")
         temporary.write_text(updates["NAMESPACE_PREFIX"] + "\n", encoding="utf-8")
         os.replace(temporary, prefix_path)
+    if "DATA_NAMESPACE_PREFIX" in updates:
+        data_prefix_path = STATE_DIR / "data-topic-prefix"
+        temporary = data_prefix_path.with_name(f".{data_prefix_path.name}.tmp")
+        temporary.write_text(updates["DATA_NAMESPACE_PREFIX"] + "\n", encoding="utf-8")
+        os.replace(temporary, data_prefix_path)
 
 
 def _pid_record(name: str) -> tuple[int | None, bool]:

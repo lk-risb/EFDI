@@ -11,19 +11,19 @@ import urllib.request
 import xml.etree.ElementTree as ET
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "compose" / "bridge"))
-sys.path.insert(0, str(ROOT / "compose" / "bridge" / "bridges"))
-sys.path.insert(0, str(ROOT / "compose" / "bridge" / "layers"))
+sys.path.insert(0, str(ROOT / "compose"))
+sys.path.insert(0, str(ROOT / "compose" / "bridges"))
+sys.path.insert(0, str(ROOT / "compose" / "layers"))
 
-from sitaware_hq_nvg_feed import (  # noqa: E402
+from nvg_bridge import (  # noqa: E402
     NVGFeedCache,
     NVGFeedServer,
     basic_authorized,
 )
-from nato_nvg_layer import NVG_NS  # noqa: E402
-from nato_nvg_layer import _TOPIC_SIDC  # noqa: E402
-from nato_nvg_layer import _resolve_sidc  # noqa: E402
-from nato_nvg_layer import track_to_nvg_item  # noqa: E402
+from nvg_layer import NVG_NS  # noqa: E402
+from nvg_layer import _TOPIC_SIDC  # noqa: E402
+from nvg_layer import _resolve_sidc  # noqa: E402
+from nvg_layer import track_to_nvg_item  # noqa: E402
 from airplaneslive_adsb_bridge import normalize as normalize_airplaneslive  # noqa: E402
 
 

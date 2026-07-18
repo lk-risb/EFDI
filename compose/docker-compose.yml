@@ -133,8 +133,9 @@ services:
       docker-socket-proxy:
         condition: service_started
     environment:
-      - EFDI_CERT_DIR=/certs
+      - EFDI_CERT_DIR=${EFDI_CERT_DIR:-/certs/efdi}
       - PARTNER_NAMESPACE=${PARTNER_NAMESPACE}
+      - DATA_NAMESPACE_PREFIX_FILE=/data-topic-prefix
       - ZENOH_LOCAL_ENDPOINT=${ZENOH_ADMIN_ZENOH_ENDPOINT:-tcp/127.0.0.1:7448}
       - ZENOH_CONFIG_PATH=/zenoh-config/config.json5
       - ZENOH_TEMPLATE_PATH=/zenoh-config-template/zenoh-router.json5.tmpl
@@ -170,6 +171,7 @@ services:
       - ../host/zenoh-router.json5.tmpl:/zenoh-config-template/zenoh-router.json5.tmpl:ro
       - ${POD_STATE_DIR}/zenoh-admin-data:/data
       - ${POD_STATE_DIR}/namespace-prefix:/namespace-prefix:rw
+      - ${POD_STATE_DIR}/data-topic-prefix:/data-topic-prefix:rw
     healthcheck:
       disable: true
 

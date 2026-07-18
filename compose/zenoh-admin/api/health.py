@@ -15,7 +15,7 @@ _client = docker.from_env()
 # compose service names (docker-compose.yml keys), not container_name.
 SERVICES = ["zenoh-router", "zenoh-admin", "zenoh-admin-db"]
 
-_CERT_DIR = os.environ.get("EFDI_CERT_DIR", "/certs")
+_CERT_DIR = os.environ.get("EFDI_CERT_DIR", "/certs/efdi")
 _ORG = os.environ.get("PARTNER_NAMESPACE", "")
 CERT_PATHS = [
     ("ca-root", os.path.join(_CERT_DIR, "efdi-ca-root.pem")),

@@ -33,7 +33,20 @@ set +a
 : "${INBOUND_NAMESPACE:=${PARTNER_NAMESPACE}}"
 : "${NAMESPACE_PREFIX:=LTU/CISB}"
 NAMESPACE_ROOT="${NAMESPACE_PREFIX%%/*}"
+# Runtime data root is independently configurable. An explicitly empty value means that
+# publishers use the slot itself (the live EFDI sandbox contract: <slot_id>/**).
+if [[ ! -v DATA_NAMESPACE_PREFIX ]]; then
+  DATA_NAMESPACE_PREFIX="${NAMESPACE_PREFIX}"
+fi
+if [[ -n "${DATA_NAMESPACE_PREFIX}" ]]; then
+  DATA_TOPIC_ROOT="${DATA_NAMESPACE_PREFIX}/${PARTNER_NAMESPACE}"
+else
+  DATA_TOPIC_ROOT="${PARTNER_NAMESPACE}"
+fi
+# Backward-compatible single endpoint plus an optional JSON array for redundant uplinks and
+# same-level links. The array is passed through only when it is explicitly configured.
 : "${ZENOH_FABRIC_ENDPOINT:=}"
+: "${ZENOH_FABRIC_ENDPOINTS:=}"
 
 echo "==> EFDI first-boot (namespace=${PARTNER_NAMESPACE}, state=${POD_STATE_DIR})"
 
@@ -43,9 +56,18 @@ chmod 700 "${POD_STATE_DIR}"
 
 # --- [1/4] Lay this pod's Zenoh mTLS certs --------------------------------------------------------
 echo "==> [1/4] laying Zenoh mTLS certs"
-CERT_PATH="${BUNDLE_DIR}/${PARTNER_NAMESPACE}-cert.pem"
-KEY_PATH="${BUNDLE_DIR}/${PARTNER_NAMESPACE}-key.pem"
-CA_PATH="${BUNDLE_DIR}/efdi-ca-root.pem"
+CERT_BUNDLE_DIR="${BUNDLE_DIR}/efdi"
+CERT_PATH="${CERT_BUNDLE_DIR}/${PARTNER_NAMESPACE}-cert.pem"
+KEY_PATH="${CERT_BUNDLE_DIR}/${PARTNER_NAMESPACE}-key.pem"
+CA_PATH="${CERT_BUNDLE_DIR}/efdi-ca-root.pem"
+# Accept pre-folder-layout bundles during migration; new material is always
+# generated under compose/certs/efdi by scripts/gen-certs.sh.
+if [ ! -f "$CERT_PATH" ] || [ ! -f "$KEY_PATH" ] || [ ! -f "$CA_PATH" ]; then
+  CERT_BUNDLE_DIR="$BUNDLE_DIR"
+  CERT_PATH="${CERT_BUNDLE_DIR}/${PARTNER_NAMESPACE}-cert.pem"
+  KEY_PATH="${CERT_BUNDLE_DIR}/${PARTNER_NAMESPACE}-key.pem"
+  CA_PATH="${CERT_BUNDLE_DIR}/efdi-ca-root.pem"
+fi
 for f in "$CERT_PATH" "$KEY_PATH" "$CA_PATH"; do
   [ -f "$f" ] || { echo "missing ${f} — run scripts/gen-certs.sh ${PARTNER_NAMESPACE} first"; exit 1; }
 done
@@ -56,23 +78,32 @@ install -m 644 "$CA_PATH"   "${ZENOH_TLS_DIR}/ca-roots.pem"
 # --- [2/4] Render the pod Zenoh router config ----------------------------------------------------
 echo "==> [2/4] rendering Zenoh router config"
 ZENOH_CONNECT_ENDPOINTS="[]"
-if [ -n "${ZENOH_FABRIC_ENDPOINT}" ]; then
+if [ -n "${ZENOH_FABRIC_ENDPOINTS}" ]; then
+  case "${ZENOH_FABRIC_ENDPOINTS}" in
+    \[*\]) ZENOH_CONNECT_ENDPOINTS="${ZENOH_FABRIC_ENDPOINTS}" ;;
+    *) echo "ZENOH_FABRIC_ENDPOINTS must be a JSON array, for example [\"tls/100.64.0.2:7447\"]"; exit 2 ;;
+  esac
+elif [ -n "${ZENOH_FABRIC_ENDPOINT}" ]; then
   # shellcheck disable=SC2089  # JSON quotes are data consumed by envsubst.
   printf -v ZENOH_CONNECT_ENDPOINTS '["%s"]' "${ZENOH_FABRIC_ENDPOINT}"
 fi
 # shellcheck disable=SC2090  # Preserve the JSON string for envsubst below.
-export ZENOH_LISTEN_PORT ZENOH_LOCAL_TCP_PORT ZENOH_CONNECT_ENDPOINTS PARTNER_NAMESPACE INBOUND_NAMESPACE NAMESPACE_PREFIX NAMESPACE_ROOT
+export ZENOH_LISTEN_PORT ZENOH_LOCAL_TCP_PORT ZENOH_CONNECT_ENDPOINTS PARTNER_NAMESPACE INBOUND_NAMESPACE NAMESPACE_PREFIX NAMESPACE_ROOT DATA_NAMESPACE_PREFIX DATA_TOPIC_ROOT
 export ZENOH_VERIFY_NAME_ON_CONNECT ZENOH_PLUGINS_LOADING_ENABLED
-export POD_CERT_PEM="/etc/zenoh/tls/pod-cert.pem"   # in-container paths (compose mounts ZENOH_TLS_DIR ro)
-export POD_KEY_PEM="/etc/zenoh/tls/pod-key.pem"
+export LISTEN_CERT_PEM="/etc/zenoh/tls/pod-cert.pem"   # in-container paths (compose mounts ZENOH_TLS_DIR ro)
+export LISTEN_KEY_PEM="/etc/zenoh/tls/pod-key.pem"
+export CONNECT_CERT_PEM="/etc/zenoh/tls/pod-cert.pem"
+export CONNECT_KEY_PEM="/etc/zenoh/tls/pod-key.pem"
 export CA_ROOTS_PEM="/etc/zenoh/tls/ca-roots.pem"
 envsubst \
-  '${ZENOH_LISTEN_PORT} ${ZENOH_LOCAL_TCP_PORT} ${ZENOH_CONNECT_ENDPOINTS} ${PARTNER_NAMESPACE} ${INBOUND_NAMESPACE} ${NAMESPACE_PREFIX} ${NAMESPACE_ROOT} ${ZENOH_VERIFY_NAME_ON_CONNECT} ${ZENOH_PLUGINS_LOADING_ENABLED} ${POD_CERT_PEM} ${POD_KEY_PEM} ${CA_ROOTS_PEM}' \
+  '${ZENOH_LISTEN_PORT} ${ZENOH_LOCAL_TCP_PORT} ${ZENOH_CONNECT_ENDPOINTS} ${PARTNER_NAMESPACE} ${INBOUND_NAMESPACE} ${NAMESPACE_PREFIX} ${NAMESPACE_ROOT} ${DATA_TOPIC_ROOT} ${ZENOH_VERIFY_NAME_ON_CONNECT} ${ZENOH_PLUGINS_LOADING_ENABLED} ${LISTEN_CERT_PEM} ${LISTEN_KEY_PEM} ${CONNECT_CERT_PEM} ${CONNECT_KEY_PEM} ${CA_ROOTS_PEM}' \
   < "${POD_DIR}/host/zenoh-router.json5.tmpl" \
   > "${POD_STATE_DIR}/zenoh/config.json5"
 echo "    wrote ${POD_STATE_DIR}/zenoh/config.json5"
 printf '%s\n' "${NAMESPACE_PREFIX}" > "${POD_STATE_DIR}/namespace-prefix"
 echo "    wrote ${POD_STATE_DIR}/namespace-prefix (${NAMESPACE_PREFIX})"
+printf '%s\n' "${DATA_NAMESPACE_PREFIX}" > "${POD_STATE_DIR}/data-topic-prefix"
+echo "    wrote ${POD_STATE_DIR}/data-topic-prefix (${DATA_NAMESPACE_PREFIX:-<slot-root>})"
 
 # --- [3/4] Bring up the NetBird mesh link (optional) ----------------------------------------------
 echo "==> [3/4] NetBird mesh"

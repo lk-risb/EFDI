@@ -1,17 +1,25 @@
-"""Single source of truth for this pod's org namespace prefix.
+"""Single source of truth for this pod's runtime data namespace prefix.
 
-The prefix (e.g. "LTU/CISB", "LTU/CISB/LTK") is deployment-chosen and variable
-depth; only the first segment is fixed by convention. It is written to a state
-file the admin API can update live; bridges read it here at startup. Falls back
-to the NAMESPACE_PREFIX env var, then the historical default "LTU/CISB".
+The prefix (e.g. "LTU/CISB", "LTU/CISB/LTK", or empty for a slot-root
+sandbox namespace) is deployment-chosen and variable depth. It is written to a
+dedicated state file the admin can update live; bridges read it here at startup.
+The legacy namespace-prefix state file remains the fallback for older installs.
 """
 import os
 
 _PREFIX_FILE = os.environ.get("NAMESPACE_PREFIX_FILE", "/namespace-prefix")
+_DATA_PREFIX_FILE = os.environ.get("DATA_NAMESPACE_PREFIX_FILE", "/data-topic-prefix")
 _DEFAULT = "LTU/CISB"
 
 
 def prefix() -> str:
+    try:
+        with open(_DATA_PREFIX_FILE) as f:
+            return f.read().strip().strip("/")
+    except OSError:
+        pass
+    if "DATA_NAMESPACE_PREFIX" in os.environ:
+        return os.environ["DATA_NAMESPACE_PREFIX"].strip().strip("/")
     try:
         with open(_PREFIX_FILE) as f:
             v = f.read().strip()
@@ -20,6 +28,13 @@ def prefix() -> str:
     except OSError:
         pass
     return os.environ.get("NAMESPACE_PREFIX", _DEFAULT)
+
+
+def topic_root(org: str | None = None) -> str:
+    """Return the complete runtime data root without introducing a stray slash."""
+    organization = org if org is not None else os.environ.get("PARTNER_NAMESPACE", "")
+    configured = prefix()
+    return "/".join(part for part in (configured, organization.strip("/")) if part)
 
 
 if __name__ == "__main__":

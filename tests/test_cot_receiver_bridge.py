@@ -9,9 +9,10 @@ import xml.etree.ElementTree as ET
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "compose"))
+sys.path.insert(0, str(ROOT / "compose" / "bridges"))
 sys.path.insert(0, str(ROOT / "compose" / "layers"))
 
-from cot_receiver import _parse_cot, _should_publish, _topic  # noqa: E402
+from tak_bridge import _parse_cot, _should_publish, _topic  # noqa: E402
 from cot_layer import make_handler  # noqa: E402
 
 

@@ -46,9 +46,9 @@ ATAK devices must be on the same L2 segment as the server for multicast delivery
 
 ### Certificates
 
-Zenoh mTLS certs are self-issued — no external CA or vendor bundle. `scripts/gen-certs.sh <namespace>` generates (once) an EFDI root CA at `compose/certs/efdi-ca-root.pem`/`efdi-ca-root-key.pem`, then signs a leaf cert+key for the given namespace, reusing the same root CA for every namespace after the first run.
+Zenoh mTLS certs are self-issued — no external CA or vendor bundle. `scripts/gen-certs.sh <namespace>` generates (once) an EFDI root CA under `compose/certs/efdi/`, then signs a leaf cert+key for the given namespace, reusing the same root CA for every namespace after the first run.
 
-The generated material (`efdi-ca-root.pem`, `<NAMESPACE>-cert.pem`, `<NAMESPACE>-key.pem`) lives at `compose/certs/` — gitignored, never committed. Default path is set by `start.sh`; override with `BUNDLE_DIR` in `compose/.env` if you'd rather keep it outside the repo entirely.
+The generated material (`efdi-ca-root.pem`, `<NAMESPACE>-cert.pem`, `<NAMESPACE>-key.pem`) lives at `compose/certs/efdi/` — gitignored, never committed. The ignored bundle directory also keeps `tak/`, `sitaware/`, `tests/`, and `zenoh-sandbox/` identities separate. Default path is set by `start.sh`; override with `BUNDLE_DIR` in `compose/.env` if you'd rather keep it outside the repo entirely.
 
 ---
 
@@ -71,18 +71,19 @@ This produces:
 
 ```text
 compose/certs/
-├── efdi-ca-root.pem          # EFDI root CA certificate (public)
-├── efdi-ca-root-key.pem      # EFDI root CA private key — keep safe, signs every pod's leaf cert
-├── <NAMESPACE>-cert.pem      # Node certificate
-└── <NAMESPACE>-key.pem       # Private key — restrict permissions
+├── efdi/                     # EFDI Zenoh CA and pod identities
+├── sitaware/                 # SitaWare feed CA and server identity
+├── tak/                      # TAK Server identity
+├── tests/                    # test child/grandchild identities
+└── zenoh-sandbox/             # legacy sandbox Zenoh identity
 ```
 
 `<NAMESPACE>` must match `PARTNER_NAMESPACE` in `compose/.env`.
 
 ```bash
 # Verify
-ls compose/certs/*.pem
-chmod 600 compose/certs/*-key.pem
+ls compose/certs/efdi/*.pem
+chmod 600 compose/certs/efdi/*-key.pem
 ```
 
 ### 2.3 Create the Python virtual environment
@@ -543,8 +544,10 @@ Keep every Python adapter pointed at the local router:
 ZENOH_LOCAL_ENDPOINT=tcp/127.0.0.1:7448
 ```
 
-Set `ZENOH_FABRIC_ENDPOINT` only for the `zenoh-router`; bridges and layers do
-not connect directly to the changing backbone address. C2-origin records are
+Set `ZENOH_FABRIC_ENDPOINT` only for the `zenoh-router`, or use the
+`ZENOH_FABRIC_ENDPOINTS` JSON array for two or more explicitly configured
+uplinks. Bridges and layers do not connect directly to changing backbone
+addresses. C2-origin records are
 published below `{NAMESPACE_PREFIX}/{PARTNER_NAMESPACE}/...`. Federation ACLs
 decide which partner routers can receive that namespace.
 
@@ -1006,14 +1009,14 @@ The TAK-style **Runtime Control** page gives a `superadmin` one place to:
 - enter usernames, passwords, API keys, and tokens without displaying existing secret values.
 
 Native processes remain host PID-managed. `start.sh` and `run.sh all` keep
-`admin-control` running on localhost port 8896. The API delegates to those same
+`admin-control` running on localhost port 18896. The API delegates to those same
 launcher scripts rather than creating one container per integration. Set
 `EFDI_CONTROL_TOKEN` in `compose/.env` for a bearer token between the admin API
 and the local control process. Restart an affected service after saving a
 setting so it reads the new environment.
 
 For `./dev.sh up`, the disposable control agent automatically moves to port
-18896 when the production/default 8896 is already occupied, and the dev API is
+18896 when the development/default 8896 is already occupied, and the dev API is
 pointed at that selected port.
 
 ### Roles

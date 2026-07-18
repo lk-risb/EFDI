@@ -2,14 +2,15 @@
 # EFDI — self-issued mTLS certs for the Zenoh fabric.
 #
 # No external CA, no vendor bundle/portal: this script generates (once) an EFDI root CA at
-# compose/certs/efdi-ca-root.pem + compose/certs/efdi-ca-root-key.pem (gitignored, keep this
+# compose/certs/efdi/efdi-ca-root.pem + compose/certs/efdi/efdi-ca-root-key.pem (gitignored, keep this
 # key safe — it signs every pod's leaf cert), then signs a leaf cert+key for the given
 # namespace. Re-running for a new namespace reuses the existing root CA; it is only generated
 # once.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CERT_DIR="${BUNDLE_DIR:-${SCRIPT_DIR}/compose/certs}"
+BUNDLE_ROOT="${BUNDLE_DIR:-${SCRIPT_DIR}/compose/certs}"
+CERT_DIR="${BUNDLE_ROOT}/efdi"
 NAMESPACE="${1:-}"
 
 usage() {

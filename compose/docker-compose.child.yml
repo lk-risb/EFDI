@@ -66,7 +66,7 @@ services:
     # port for the child instead.
     command: ["uvicorn", "api.main:app", "--host", "127.0.0.1", "--port", "8896"]
     environment:
-      - EFDI_CERT_DIR=/certs
+      - EFDI_CERT_DIR=${EFDI_CERT_DIR:-/certs/efdi}
       - PARTNER_NAMESPACE=${PARTNER_NAMESPACE_CHILD:?set PARTNER_NAMESPACE_CHILD}
       - ZENOH_LOCAL_ENDPOINT=tcp/127.0.0.1:${ZENOH_LOCAL_TCP_PORT_CHILD:-7458}
       - ZENOH_CONFIG_PATH=/zenoh-config/config.json5

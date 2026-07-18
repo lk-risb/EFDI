@@ -5,7 +5,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { apiJson, apiFetch, errorMessage } from '@/lib/api'
 import { useAuth } from '@/store/auth'
 import { notify } from '@/lib/notify'
-import { FileCode2, Network, RotateCw, Save, ShieldCheck, Waypoints } from 'lucide-react'
+import { FileCode2, Network, Plus, RotateCw, Save, ShieldCheck, Trash2, Waypoints } from 'lucide-react'
 import { HudCorners } from '@/components/HudCorners'
 
 export const Route = createFileRoute('/config')({
@@ -24,8 +24,11 @@ interface ConfigFields {
   partner_namespace: string
   inbound_namespace: string
   namespace_prefix: string
+  publish_prefix: string
   verify_name_on_connect: boolean
   plugins_loading_enabled: boolean
+  fabric_endpoints: string[]
+  fabric_tls_profile: string
 }
 
 const EMPTY_FIELDS: ConfigFields = {
@@ -35,8 +38,11 @@ const EMPTY_FIELDS: ConfigFields = {
   partner_namespace: '',
   inbound_namespace: '',
   namespace_prefix: '',
+  publish_prefix: '',
   verify_name_on_connect: false,
   plugins_loading_enabled: true,
+  fabric_endpoints: [],
+  fabric_tls_profile: 'efdi',
 }
 
 interface FederatedChild {
@@ -88,8 +94,9 @@ function ConfigSection({
 // Known-good fabric endpoints seen in this pod's history — one-click fill,
 // still just host/port under the hood (scheme is always tls, never exposed).
 const FABRIC_PRESETS = [
-  { label: 'EFDI backbone', host: 'zenoh.efdi.netbird.efdi-backbone.net', port: 7447 },
-  { label: 'Sandbox (nbio.fairytail.eu)', host: 'nbio.fairytail.eu', port: 7447 },
+  { label: 'EFDI backbone · EFDI mTLS', host: 'zenoh.efdi.netbird.efdi-backbone.net', port: 7447, profile: 'efdi' },
+  { label: 'EFDI backbone sandbox · legacy mTLS', host: 'zenoh.efdi.netbird.efdi-backbone.net', port: 7447, profile: 'sandbox' },
+  { label: 'Legacy sandbox (nbio.fairytail.eu)', host: 'nbio.fairytail.eu', port: 7447, profile: 'sandbox' },
 ]
 
 function parseFabricEndpoint(v: string): { host: string; port: number } {
@@ -134,7 +141,14 @@ function ConfigPage() {
     setLoading(true)
     try {
       const data = await apiJson<{ fields: ConfigFields; path: string }>('/api/config')
-      setFields(data.fields)
+      setFields({
+        ...data.fields,
+        // Keep the new UI compatible with an older admin API during a rolling
+        // rebuild; older responses expose only the primary endpoint.
+        fabric_endpoints: data.fields.fabric_endpoints ?? (data.fields.fabric_endpoint ? [data.fields.fabric_endpoint] : []),
+        fabric_tls_profile: data.fields.fabric_tls_profile ?? 'efdi',
+        publish_prefix: data.fields.publish_prefix ?? data.fields.namespace_prefix ?? '',
+      })
       setPath(data.path)
     } catch (e) {
       notify.error(errorMessage(e))
@@ -151,6 +165,42 @@ function ConfigPage() {
 
   function set<K extends keyof ConfigFields>(key: K, value: ConfigFields[K]) {
     setFields(f => ({ ...f, [key]: value }))
+  }
+
+  function endpointValues(): string[] {
+    if (fields.fabric_endpoints.length > 0) return fields.fabric_endpoints
+    return fields.fabric_endpoint ? [fields.fabric_endpoint] : ['']
+  }
+
+  function setEndpoint(index: number, value: string) {
+    setFields(current => {
+      const endpoints = current.fabric_endpoints.length > 0
+        ? [...current.fabric_endpoints]
+        : current.fabric_endpoint ? [current.fabric_endpoint] : []
+      while (endpoints.length <= index) endpoints.push('')
+      endpoints[index] = value
+      return { ...current, fabric_endpoint: endpoints[0] ?? '', fabric_endpoints: endpoints }
+    })
+  }
+
+  function removeEndpoint(index: number) {
+    setFields(current => {
+      const endpoints = current.fabric_endpoints.length > 0
+        ? [...current.fabric_endpoints]
+        : current.fabric_endpoint ? [current.fabric_endpoint] : []
+      endpoints.splice(index, 1)
+      return { ...current, fabric_endpoint: endpoints[0] ?? '', fabric_endpoints: endpoints }
+    })
+  }
+
+  function addEndpoint() {
+    setFields(current => {
+      const endpoints = current.fabric_endpoints.length > 0
+        ? [...current.fabric_endpoints]
+        : current.fabric_endpoint ? [current.fabric_endpoint] : ['']
+      endpoints.push('')
+      return { ...current, fabric_endpoints: endpoints }
+    })
   }
 
   async function handleSave() {
@@ -267,33 +317,57 @@ function ConfigPage() {
                     value={fields.local_tcp_port} onChange={e => set('local_tcp_port', Number(e.target.value))} />
                 </Field>
               </div>
-              <Field label="Fabric endpoint" help="The parent peer this pod dials over mTLS. Leave empty only on the fabric root.">
+              <Field label="Fabric endpoints" help="Explicit Zenoh peers this pod dials over mTLS. Use two or more for redundant uplinks or same-level links.">
                 <div className="mb-2 flex flex-wrap gap-2">
                   <button type="button" disabled={!canWrite}
-                    onClick={() => set('fabric_endpoint', '')}
+                    onClick={() => setFields(f => ({ ...f, fabric_endpoint: '', fabric_endpoints: [], fabric_tls_profile: 'efdi' }))}
                     className="rounded-full border border-zinc-300 px-2.5 py-1 text-xs text-zinc-600 transition-colors hover:border-zinc-500 hover:text-zinc-900 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-400 dark:hover:text-white">
                     Root / no upstream
                   </button>
                   {FABRIC_PRESETS.map(p => (
                     <button key={p.label} type="button" disabled={!canWrite}
-                      onClick={() => set('fabric_endpoint', `tls/${p.host}:${p.port}`)}
+                      onClick={() => setFields(f => ({ ...f, fabric_endpoint: `tls/${p.host}:${p.port}`, fabric_endpoints: [`tls/${p.host}:${p.port}`], fabric_tls_profile: p.profile }))}
                       className="rounded-full border border-zinc-300 px-2.5 py-1 text-xs text-zinc-600 transition-colors hover:border-zinc-500 hover:text-zinc-900 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-400 dark:hover:text-white">
                       {p.label}
                     </button>
                   ))}
                 </div>
-                <div className="flex gap-2">
-                  <div className="flex flex-1 items-center gap-2 rounded-md border border-zinc-300 bg-zinc-200 px-3 focus-within:ring-2 focus-within:ring-accent-ring dark:border-white/10 dark:bg-[#1a1a1d]">
-                    <span className="shrink-0 text-sm text-zinc-500">tls://</span>
-                    <input type="text" disabled={!canWrite} placeholder="host or NetBird name"
-                      className="flex-1 bg-transparent py-2 font-mono text-sm text-zinc-900 focus:outline-none disabled:opacity-50 dark:text-white"
-                      value={parseFabricEndpoint(fields.fabric_endpoint).host}
-                      onChange={e => set('fabric_endpoint', `tls/${e.target.value}:${parseFabricEndpoint(fields.fabric_endpoint).port}`)} />
-                  </div>
-                  <input type="number" min={1} max={65535} disabled={!canWrite}
-                    className={`${inputClass} w-28`}
-                    value={parseFabricEndpoint(fields.fabric_endpoint).port}
-                    onChange={e => set('fabric_endpoint', `tls/${parseFabricEndpoint(fields.fabric_endpoint).host}:${e.target.value}`)} />
+                <Field label="Fabric mTLS identity" help="The selected certificate, private key, and trust roots are used for every TLS link in this router. Choose the profile that belongs to the selected federation endpoint.">
+                  <select disabled={!canWrite} className={inputClass} value={fields.fabric_tls_profile}
+                    onChange={e => set('fabric_tls_profile', e.target.value)}>
+                    <option value="efdi">EFDI backbone (EFDI CA)</option>
+                    <option value="sandbox">EFDI backbone sandbox (Desert Bread CA)</option>
+                  </select>
+                </Field>
+                <div className="space-y-2">
+                  {endpointValues().map((endpoint, index) => {
+                    const parsed = parseFabricEndpoint(endpoint)
+                    return (
+                      <div key={index} className="flex gap-2">
+                        <div className="flex flex-1 items-center gap-2 rounded-md border border-zinc-300 bg-zinc-200 px-3 focus-within:ring-2 focus-within:ring-accent-ring dark:border-white/10 dark:bg-[#1a1a1d]">
+                          <span className="shrink-0 text-sm text-zinc-500">tls://</span>
+                          <input type="text" disabled={!canWrite} placeholder="host or NetBird name"
+                            className="flex-1 bg-transparent py-2 font-mono text-sm text-zinc-900 focus:outline-none disabled:opacity-50 dark:text-white"
+                            value={parsed.host}
+                            onChange={e => setEndpoint(index, e.target.value ? `tls/${e.target.value}:${parsed.port}` : '')} />
+                        </div>
+                        <input type="number" min={1} max={65535} disabled={!canWrite}
+                          className={`${inputClass} w-28`}
+                          value={parsed.port}
+                          onChange={e => setEndpoint(index, parsed.host ? `tls/${parsed.host}:${e.target.value}` : '')} />
+                        {endpointValues().length > 1 && (
+                          <button type="button" disabled={!canWrite} onClick={() => removeEndpoint(index)}
+                            className="rounded-md px-2 text-zinc-500 hover:bg-zinc-200 hover:text-red-600 disabled:opacity-50 dark:hover:bg-white/[0.05] dark:hover:text-red-400" aria-label="Remove endpoint">
+                            <Trash2 size={15} />
+                          </button>
+                        )}
+                      </div>
+                    )
+                  })}
+                  <button type="button" disabled={!canWrite} onClick={addEndpoint}
+                    className="flex items-center gap-1.5 text-xs text-accent-ring hover:underline disabled:opacity-50">
+                    <Plus size={13} /> Add direct link
+                  </button>
                 </div>
               </Field>
             </ConfigSection>
@@ -303,6 +377,10 @@ function ConfigPage() {
               title="Namespace"
               description="Ownership and bilateral routing boundaries for this pod."
             >
+              <Field label="Data publish prefix" help="Prepended to the partner slot for bridge data. Leave empty for the EFDI sandbox contract: <slot-id>/**. Changes are applied live and restart native bridges.">
+                <input type="text" disabled={!canWrite} className={inputClass}
+                  value={fields.publish_prefix} onChange={e => set('publish_prefix', e.target.value)} placeholder="empty = slot root" />
+              </Field>
               <Field label="Org namespace prefix" help="Organization path at any depth, for example LTU/CISB or LTU/CISB/LTK.">
                 <input type="text" disabled={!canWrite} className={inputClass}
                   value={fields.namespace_prefix} onChange={e => set('namespace_prefix', e.target.value)} />

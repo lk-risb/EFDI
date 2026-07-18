@@ -22,11 +22,11 @@ import ssl
 import time
 
 import zenoh
-from namespace_prefix import prefix
+from namespace_prefix import topic_root
 
 
 ORG = os.environ.get("PARTNER_NAMESPACE", "")
-TOPIC_ROOT = prefix() + "/" + ORG
+TOPIC_ROOT = topic_root()
 HERE = os.path.dirname(os.path.abspath(__file__))
 _CERT_DIR = os.environ.get("EFDI_CERT_DIR", HERE)
 _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", "tcp/127.0.0.1:7448")

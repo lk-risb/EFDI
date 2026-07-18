@@ -13,11 +13,11 @@ import time
 
 import zenoh
 
-from namespace_prefix import prefix
+from namespace_prefix import topic_root
 
 
 ORG = os.environ.get("PARTNER_NAMESPACE", "")
-TOPIC_ROOT = prefix() + "/" + ORG
+TOPIC_ROOT = topic_root()
 HERE = os.path.dirname(os.path.abspath(__file__))
 CERT_DIR = os.environ.get("EFDI_CERT_DIR", HERE)
 ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", "tcp/127.0.0.1:7448")
@@ -58,4 +58,3 @@ def base_record(source: str, uid: str, **fields) -> dict:
     record = {"_ts": time.time(), "_src": source, "uid": uid}
     record.update(fields)
     return record
-

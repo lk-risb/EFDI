@@ -16,7 +16,7 @@ from .deps import require_role, write_audit
 
 
 router = APIRouter(prefix="/api/runtime", tags=["runtime"])
-_CONTROL_URL = os.environ.get("EFDI_CONTROL_URL", "http://127.0.0.1:8896").rstrip("/")
+_CONTROL_URL = os.environ.get("EFDI_CONTROL_URL", "http://127.0.0.1:18896").rstrip("/")
 _CONTROL_TOKEN = os.environ.get("EFDI_CONTROL_TOKEN", "")
 
 

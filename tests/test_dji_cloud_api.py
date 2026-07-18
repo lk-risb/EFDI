@@ -15,7 +15,7 @@ sys.path.insert(0, os.fspath(ROOT / "compose" / "layers"))
 
 from dji_cloud_api_bridge import decode_osd  # noqa: E402
 from cot_layer import _TOPIC_COT  # noqa: E402
-from nato_nvg_layer import _TOPIC_SIDC  # noqa: E402
+from nvg_layer import _TOPIC_SIDC  # noqa: E402
 
 
 class DjiCloudApiTests(unittest.TestCase):

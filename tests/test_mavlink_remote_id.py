@@ -18,7 +18,7 @@ sys.path.insert(0, os.fspath(COMPOSE / "layers"))
 
 import mavlink as mav  # noqa: E402
 from cot_layer import _unknown_air_type  # noqa: E402
-from nato_nvg_layer import _unknown_air_sidc  # noqa: E402
+from nvg_layer import _unknown_air_sidc  # noqa: E402
 
 
 IDENTITY = bytes(range(1, 21))
