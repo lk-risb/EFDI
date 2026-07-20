@@ -191,11 +191,11 @@ _RAW_SENSOR_SOURCES = frozenset({"ASTERIX CAT-48", "ASTERIX CAT-20"})
 # Wildcards: ** matches zero-or-more segments, so air/**/civ/aircraft/** catches any
 # vendor+protocol combination under civil air.
 # NOTE: air/fused/** is caught by the broad air/** wildcards below — no separate
-# fused entries needed. The broad wildcards also catch SAPIENT / Link-16 / cot-rx
+# fused entries needed. The broad wildcards also catch SAPIENT and Link-16.
 # that don't go through the radar fusion path.
 _TOPIC_COT = {
     # AIR — affiliation slot drives CoT type; ICAO24 classifier overrides for RU/BY
-    # Covers fused tracks (air/fused/**) + SAPIENT + Link-16 + cot-rx.
+    # Covers fused tracks (air/fused/**) + SAPIENT + Link-16.
     # Raw CAT-48 / CAT-20 are dropped by _RAW_SENSOR_SOURCES check in make_handler.
     "air/**/civ/aircraft/**":    (_civ_air_type,  AIR_STALE_S),
     "air/**/mil/aircraft/**":    (_mil_air_type,  AIR_STALE_S),
@@ -1622,15 +1622,6 @@ def make_handler(cot_type_or_fn, sender, verbose: bool, stale_s: float = COT_STA
         else:
             cot_type     = cot_type_or_fn(track) if callable(cot_type_or_fn) else cot_type_or_fn
             stale_s_used = stale_s
-            # A CoT receiver is a protocol gateway, not a classifier: retain a
-            # syntactically safe source type so round-trips do not silently turn
-            # friendly/hostile/ground/sea events into a generic air symbol.
-            original_type = track.get("cot_type") if src in {
-                "cot_rx", "sitaware_cot_rx"
-            } else None
-            if (isinstance(original_type, str) and 1 <= len(original_type) <= 128 and
-                    re.fullmatch(r"[A-Za-z0-9_.-]+", original_type)):
-                cot_type = original_type
             # Emergency squawk → force red hostile + one-shot GeoChat alert
             sq = str(track.get("squawk") or "")
             if sq in _EMERGENCY_SQUAWK and "-A-" in cot_type:

@@ -43,7 +43,7 @@ function LoginPage() {
       }
       const { access_token } = await res.json()
       const payload = JSON.parse(atob(access_token.split('.')[1]))
-      setToken(access_token, payload.role, payload.username)
+      setToken(access_token, payload.role, payload.username, payload.auth_provider)
       navigate({ to: '/' })
     } catch (err) {
       notify.error(errorMessage(err))
@@ -54,7 +54,7 @@ function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-zinc-50 dark:bg-[#000000] hud-grid-bg">
-      <div className="hud-frame w-full max-w-sm space-y-6 p-8 rounded-md border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#111113] hud-glass">
+      <div className="hud-frame w-full max-w-sm space-y-6 p-8 rounded-md border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#0c0c0e] hud-glass">
         <HudCorners />
         <div>
           {logoUrl && <img src={logoUrl} alt="" className="w-10 h-10 rounded object-contain mb-3" />}
@@ -69,7 +69,7 @@ function LoginPage() {
               value={username}
               onChange={e => setUsername(e.target.value)}
               required
-              className="w-full px-3 py-2 rounded-md bg-zinc-200 dark:bg-[#1a1a1d] border border-zinc-300 dark:border-white/10 text-zinc-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-accent-ring"
+              className="w-full px-3 py-2 rounded-md bg-zinc-200 dark:bg-[#141416] border border-zinc-300 dark:border-white/10 text-zinc-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-accent-ring"
             />
           </div>
           <div className="space-y-1">
@@ -79,7 +79,7 @@ function LoginPage() {
               value={password}
               onChange={e => setPassword(e.target.value)}
               required
-              className="w-full px-3 py-2 rounded-md bg-zinc-200 dark:bg-[#1a1a1d] border border-zinc-300 dark:border-white/10 text-zinc-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-accent-ring"
+              className="w-full px-3 py-2 rounded-md bg-zinc-200 dark:bg-[#141416] border border-zinc-300 dark:border-white/10 text-zinc-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-accent-ring"
             />
           </div>
           <button

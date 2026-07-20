@@ -102,7 +102,6 @@ _ADSB_TOPICS = [
     "{}/air/asterix/cat21/**".format(TOPIC_ROOT),
     "{}/air/airplaneslive/**".format(TOPIC_ROOT),
     "{}/air/adsblol/**".format(TOPIC_ROOT),
-    "{}/air/cot-rx/**".format(TOPIC_ROOT),
 ]
 
 # Fields that carry identity (we prefer ADS-B values for these)

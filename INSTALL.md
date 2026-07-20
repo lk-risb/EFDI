@@ -42,7 +42,7 @@ fabric to TAK and SitaWare clients.
 | HTTPS | outbound | dronuradaras.lt APIs |
 | HTTPS | outbound | Authorized `utm.ans.lt` JSON/GeoJSON export (optional) |
 
-ATAK devices must be on the same L2 segment as the server for multicast delivery. Cross-VLAN or cross-subnet deployments require a TAK Server (`cot-tcp` service).
+ATAK devices must be on the same L2 segment as the server for multicast delivery. Cross-VLAN or cross-subnet deployments require a TAK Server (`cot-bridge` service).
 
 ### Certificates
 
@@ -180,7 +180,7 @@ python3 tools/asterix_probe.py --port 30001
 ### Optional fields
 
 ```bash
-# ── TAK Server (use cot-tcp service instead of cot-udp) ─────────────────────
+# ── TAK Server (use cot-bridge service instead of cot-udp) ─────────────────────
 TAK_HOST=127.0.0.1
 TAK_PORT=8087
 
@@ -281,13 +281,12 @@ The interactive launcher displays all services with their readiness state. Toggl
 
   TAK and SitaWare layers
   ──────────────────────────────────────────────────────────
-  [38] [ ] cot-rx         Inbound CoT / TAK user positions       COT_RX_PORT/HOST not set
 
   Output layers
   ──────────────────────────────────────────────────────────
   [40] [✓] cot-udp        CoT → ATAK UDP multicast 239.2.3.1:6969
   [41] [ ] cot-udp-tak    CoT → WinTAK/ATAK UDP unicast
-  [42] [✓] cot-tcp        CoT → TAK Server TCP
+  [42] [✓] cot-bridge        CoT → TAK Server TCP
   [43] [ ] sitaware-hq-nvg EFDI tracks → SitaWare HQ pull feed   SITAWARE_HQ_NVG_ENABLE=0
 ```
 
@@ -334,7 +333,7 @@ not a command-line argument, and is never copied into launcher memory.
 
 ### TAK Server (cross-subnet / cross-VLAN)
 
-Set `TAK_HOST` and `TAK_PORT` in `.env`, then select `cot-tcp` instead of `cot-udp` in the launcher.
+Set `TAK_HOST` and `TAK_PORT` in `.env`, then select `cot-bridge` instead of `cot-udp` in the launcher.
 
 ### Direct WinTAK/ATAK UDP (no TAK Server)
 
@@ -468,8 +467,6 @@ The endpoint accepts GET/HEAD only. It requires Basic authentication by default,
 | `aisstream` | `bridges/aisstream_ws_bridge.py` | `…/sea/aisstream/ais/civ/vessel/tracks/v1` | Authenticated WSS stream |
 | `sitaware` | `bridges/sitaware_bridge.py` | `…/land/sitaware/rest/friendly/unit/tracks/v1` | Configurable REST poll |
 | `nffi` | `protocols/nffi.py` | `…/land/nato/nffi/friendly/unit/tracks/v1` | Complete XML documents under `…/raw/nffi/*` in Zenoh |
-| `cot-rx` | `bridges/cot_bridge.py` | `…/land/radar/cot/friendly/unit/tracks/v1` | TAK Server mTLS user-SA input |
-| `tak_bridge` | `bridges/tak_bridge.py` | `…/land/radar/cot/friendly/unit/tracks/v1` | TAK Server direct CoT input |
 | `link16` | `protocols/link16.py` | `…/air/link16/jreap/*/aircraft/tracks/v1` | Streaming UDP |
 | `mavlink` | `protocols/mavlink.py` | `…/air/mavlink/mav2/*/uav/tracks/v1` | Streaming UDP/TCP |
 | `mavlink-raw`, `link16-raw`, `vmf-raw`, `sapient-raw`, `stanag4586-raw` | `bridges/*_raw_bridge.py` | `…/raw/<protocol>/<source>` | Optional socket ingress; matching protocol runs with `*_ZENOH_RAW=1` |
@@ -479,7 +476,7 @@ The endpoint accepts GET/HEAD only. It requires Basic authentication by default,
 | `spectrum` / `sensor-health` / `mission-route` | Matching `protocols/*.py` | `…/land/spectrum/**`, `…/land/health/**`, `…/air/mission/**` | JSON on their `…/raw/**` topics |
 | `dji-cloud` | `bridges/dji_cloud_api_bridge.py` | `…/air/dji/cloud-api/friendly/uav/tracks/v1` | Source-specific authenticated DJI MQTT 5 bridge |
 | `cot-udp` | `layers/cot_layer.py` | Subscriber — all topics | Event-driven |
-| `cot-tcp` | `layers/cot_layer.py` | Subscriber — all topics | Event-driven |
+| `cot-bridge` | `bridges/cot_bridge.py` | Subscriber — all topics | Event-driven |
 | `sitaware-hq-nvg` | `bridges/nvg_bridge.py` | Subscriber — all track topics | Pull-based NVG snapshot |
 | `track-fusion` | `bridges/track_fusion_bridge.py` | CAT-48 + CAT-21 subscriber | Event-driven |
 
@@ -509,22 +506,6 @@ Zenoh subscribers. A partner publishes complete JSON/XML/NMEA payloads below
 the corresponding `raw/**` topic; no internet URL or receiver is embedded in
 the translator.
 
-`cot-rx` can connect to a TAK Server TLS input with a TAK-issued client
-certificate and import ground-user situational-awareness events:
-
-```dotenv
-COT_RX_HOST=<tak-server>:8089
-COT_RX_TLS=1
-COT_RX_SERVER_NAME=<DNS name in the TAK server certificate>
-COT_RX_TAK_USERS_ONLY=1
-# Defaults: $EFDI_CERT_DIR/tak/cert.pem, key.pem, and ca.pem
-```
-
-The certificate identity must share the required TAK IN/OUT groups with the
-users. Both iTAK and WinTAK must themselves connect to the same TAK Server and
-share compatible groups; receiving EFDI points over direct UDP is one-way and
-does not make WinTAK visible to iTAK.
-
 CoT and SitaWare HQ NVG outputs apply the same scenario affiliation policy:
 aircraft in the configured RU/BY ICAO address ranges and vessels with RU/BY
 MMSI MIDs are hostile; other public ADS-B/AIS contacts remain neutral. An
@@ -553,7 +534,7 @@ decide which partner routers can receive that namespace.
 
 ### 2. Zenoh → TAK Server
 
-Configure the TAK TCP destination and select `cot-tcp`:
+Configure the TAK TCP destination and select `cot-bridge`:
 
 ```dotenv
 TAK_HOST=<tak-server>
@@ -582,49 +563,10 @@ On the TAK Server side:
    operations in its [official API](https://docs.tak.gov/api/takserver); exact
    buttons differ between file-user, LDAP and external-identity deployments.
 5. Place the PEM files in a runtime-only directory on the EFDI host, enter their
-   paths above, select `cot-tcp` in `./start.sh`, and confirm the identity appears
+   paths above, select `cot-bridge` in `./start.sh`, and confirm the identity appears
    as connected in TAK Server.
 
-### 3. TAK Server → Zenoh
-
-Use a separate TAK client identity with the IN/OUT groups required to see the
-desired users, then select `cot-rx`:
-
-```dotenv
-COT_RX_HOST=<tak-server>:8089
-COT_RX_TLS=1
-COT_RX_SERVER_NAME=<DNS name in TAK certificate>
-COT_RX_CERT=/runtime/path/tak-client.pem
-COT_RX_KEY=/runtime/path/tak-client-key.pem
-COT_RX_CA=/runtime/path/tak-ca.pem
-COT_RX_TAK_USERS_ONLY=1
-COT_RX_INCLUDE_MARKERS=1
-```
-
-The recommended setting imports ground-user SA plus, when
-`COT_RX_INCLUDE_MARKERS=1`, normal TAK point map markers (`b-m-p-*`). Markers
-go to `…/land/c2/cot/unknown/unit/tracks/v1`, preserve their CoT type for TAK,
-and are represented as generic unknown C2 units for SitaWare NVG. Set
-`COT_RX_TAK_USERS_ONLY=0` only when the TAK group and mission policy is intended
-to expose other CoT map objects. `cot-rx` rejects returned `EFDI-*` UIDs and
-marks TAK ingress so the TAK TCP output does not send those records back.
-
-On the TAK Server side, create a second dedicated receive identity in **User
-Management**. Give it **OUT** membership for the groups whose SA EFDI may read;
-if the same identity must also publish, grant the corresponding IN membership
-explicitly. Issue its TAK client certificate and use those files in `COT_RX_*`.
-No new TAK data feed is entered: `cot-rx` is a normal mTLS TAK client connecting
-to the configured streaming input, normally port 8089. In ATAK/WinTAK, operators
-must connect to the same TAK Server and select/share compatible groups or
-channels; a client hidden by TAK group policy cannot appear in Zenoh.
-
-Verify the receive connection without exposing payloads or credentials:
-
-```bash
-tail -f "${POD_STATE_DIR:-compose/state}/logs/cot-rx.log"
-```
-
-### 4. Zenoh → SitaWare HQ
+### 3. Zenoh → SitaWare HQ
 
 Enable `sitaware-hq-nvg`, configure TLS and dedicated feed credentials, then
 create an HQ NVG Import Subscription pointing to the resulting
@@ -705,19 +647,14 @@ and `readonly` roles.
 
 | Persona | Test client and action | EFDI services | Expected result |
 | --- | --- | --- | --- |
-| C2 operator | A TAK/WinTAK/ATAK or SitaWare HQ operator account. Place a standard point marker and observe the common picture. | `cot-rx`, `cot-tcp` and/or `sitaware-hq-nvg`; set `COT_RX_TAK_USERS_ONLY=1` and `COT_RX_INCLUDE_MARKERS=1` for TAK. | The marker is published on `…/land/c2/cot/unknown/unit/tracks/v1`, appears on the other C2 output, and is not echoed back through the same TAK TCP connection. |
-| CoT user | A second, non-admin TAK account publishes its SA position. | `cot-rx` for TAK, plus the desired output layer. | Its position and safe CoT type reach the shared C2 picture. The user has no EFDI administration access. |
+| C2 operator | A TAK/WinTAK/ATAK or SitaWare HQ operator account observes the configured CoT output. | `cot-bridge` and/or `sitaware-hq-nvg`. | Normalized EFDI tracks appear in the authorized C2 system. |
 | Sensor publisher | A receiver/detection system attached to a local Zenoh router publishes complete frames/documents to that protocol's `…/raw/<protocol>/<source-id>` topic. For a lab publisher, an admin can generate a script in **Publish Script** after entering that publisher's current router endpoint. | The matching protocol translator and desired C2 output layers. | The translator creates normalized EFDI tracks; the C2 systems show derived markers, not the raw frame. |
 | Fabric admin | A separate Zenoh Admin panel account manages router/federation configuration only. | Infrastructure/admin UI; no sensor or C2 feed is required. | May perform its assigned panel actions but is not an operational TAK/SitaWare identity. |
 
-For a first exercise, create two ordinary TAK identities in the same mission
-groups: `c2-operator-test` and `frontline-test`; use a third TAK-issued service
-identity only for `cot-rx`. In the C2 operator client, use the normal map-tool
-**point marker** action—not route/drawing/chat tools—for this initial test.
-Confirm `cot-rx.log` shows the `b-m-p-*` event and its C2 Zenoh topic. Then
-confirm the TAK client sees the marker and the operator sees the TAK
-SA update. Keep raw sensor publication on a distinct sensor identity/topic; it
-must not impersonate either C2 user.
+For a first exercise, use a dedicated TAK-issued service identity for `cot-bridge`
+and confirm the authorized C2 system receives normalized EFDI tracks. Keep raw
+sensor publication on a distinct sensor identity/topic; it must not impersonate
+an operator identity.
 
 The current router ACL is namespace-scoped, not yet persona/certificate-scoped.
 The four test clients prove data flow and C2 behaviour; they do **not** prove
@@ -747,7 +684,7 @@ credentials and topic permissions.
 
 ```bash
 ./stop.sh              # Stop all bridge processes
-./stop.sh layers       # Stop output layers only (cot-udp, cot-tcp, track-fusion)
+./stop.sh layers       # Stop output layers only (cot-udp, cot-bridge, track-fusion)
 ```
 
 ### Log monitoring

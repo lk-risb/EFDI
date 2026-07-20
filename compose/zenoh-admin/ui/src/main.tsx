@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { RouterProvider, createRouter } from '@tanstack/react-router'
+import { ShellSession } from './components/ShellSession'
 import { routeTree } from './routeTree.gen'
 import { useBranding } from './store/branding'
 import { useAuth } from './store/auth'
@@ -19,6 +20,7 @@ useAuth.getState().restoreSession().finally(() => {
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
       <RouterProvider router={router} />
+      <ShellSession />
     </StrictMode>
   )
 })

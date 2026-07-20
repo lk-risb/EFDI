@@ -67,6 +67,7 @@ services:
     command: ["uvicorn", "api.main:app", "--host", "127.0.0.1", "--port", "8897"]
     environment:
       - EFDI_CERT_DIR=${EFDI_CERT_DIR:-/certs/efdi}
+      - EFDI_CERT_HOST_DIR=${BUNDLE_DIR:-}
       - PARTNER_NAMESPACE=${PARTNER_NAMESPACE_CHILD:?set PARTNER_NAMESPACE_CHILD}
       - ZENOH_LOCAL_ENDPOINT=tcp/127.0.0.1:${ZENOH_LOCAL_TCP_PORT_CHILD:-7458}
       - ZENOH_CONFIG_PATH=/zenoh-config/config.json5
@@ -84,12 +85,14 @@ services:
       # This pod's OWN router container (see child compose for rationale).
       - ZENOH_ROUTER_CONTAINER=efdi-gc-zenoh-router
       - DOCKER_HOST=tcp://127.0.0.1:2375
+      - EFDI_RUNTIME_LOG_DIR=/runtime-logs
     volumes:
       - ${BUNDLE_DIR:?set BUNDLE_DIR in shell env}:/certs:ro
       - ${POD_STATE_DIR}/zenoh:/zenoh-config
       - ../host/zenoh-router.json5.tmpl:/zenoh-config-template/zenoh-router.json5.tmpl:ro
       - ${POD_STATE_DIR}/zenoh-admin-data:/data
       - ${POD_STATE_DIR}/namespace-prefix:/namespace-prefix:rw
+      - ${POD_STATE_DIR}/logs:/runtime-logs:ro
     healthcheck:
       disable: true
 

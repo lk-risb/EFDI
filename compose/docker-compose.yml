@@ -80,12 +80,10 @@ services:
       timeout: 5s
       retries: 5
 
-  # Scoped Docker API access for zenoh-admin: CONTAINERS+POST only (needed for
-  # container.get()/.restart() on the zenoh-router container), everything else
-  # (IMAGES, NETWORKS, VOLUMES, EXEC, BUILD, SECRETS, SWARM, ...) denied — so a
-  # bug in the network-reachable admin API can't reach the full Docker Engine
-  # API (container-create with host binds, exec into other containers, etc)
-  # the way a raw /var/run/docker.sock mount would allow. Loopback-only.
+  # Scoped Docker API access for zenoh-admin: CONTAINERS+POST and the fixed
+  # router-container exec used by the superadmin break-glass shell. Everything
+  # else (IMAGES, NETWORKS, VOLUMES, BUILD, SECRETS, SWARM, ...) remains denied.
+  # The API never accepts a container name or command from the browser.
   docker-socket-proxy:
     image: tecnativa/docker-socket-proxy:0.3.0@sha256:9e4b9e7517a6b660f2cc903a19b257b1852d5b3344794e3ea334ff00ae677ac2
     container_name: efdi-pod-docker-socket-proxy
@@ -96,7 +94,7 @@ services:
       - IMAGES=0
       - NETWORKS=0
       - VOLUMES=0
-      - EXEC=0
+      - EXEC=1
       - BUILD=0
       - COMMIT=0
       - CONFIGS=0
@@ -134,6 +132,7 @@ services:
         condition: service_started
     environment:
       - EFDI_CERT_DIR=${EFDI_CERT_DIR:-/certs/efdi}
+      - EFDI_CERT_HOST_DIR=${BUNDLE_DIR:-}
       - PARTNER_NAMESPACE=${PARTNER_NAMESPACE}
       - DATA_NAMESPACE_PREFIX_FILE=/data-topic-prefix
       - ZENOH_LOCAL_ENDPOINT=${ZENOH_ADMIN_ZENOH_ENDPOINT:-tcp/127.0.0.1:7448}
@@ -165,6 +164,7 @@ services:
       - DOCKER_HOST=tcp://127.0.0.1:2375
       - EFDI_CONTROL_URL=${EFDI_CONTROL_URL:-http://127.0.0.1:18896}
       - EFDI_CONTROL_TOKEN=${EFDI_CONTROL_TOKEN:-}
+      - EFDI_RUNTIME_LOG_DIR=/runtime-logs
     volumes:
       - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}:/certs:ro
       - ${POD_STATE_DIR}/zenoh:/zenoh-config
@@ -172,6 +172,7 @@ services:
       - ${POD_STATE_DIR}/zenoh-admin-data:/data
       - ${POD_STATE_DIR}/namespace-prefix:/namespace-prefix:rw
       - ${POD_STATE_DIR}/data-topic-prefix:/data-topic-prefix:rw
+      - ${POD_STATE_DIR}/logs:/runtime-logs:ro
     healthcheck:
       disable: true
 

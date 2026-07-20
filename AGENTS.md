@@ -63,11 +63,10 @@ Read `CLAUDE.md` first; its project constraints apply to every agent and tool.
   selections and non-secret endpoints. The Zenoh Config route uses TAK's
   PageHeader/HUD card design while preserving EFDI transport, namespace,
   federation-target, and policy fields.
-- TAK Server user SA enters through the mTLS `cot-rx` instance using a
-  TAK-issued certificate, not the Zenoh certificate. `sitaware-cot-rx` is a
-  separate native instance for the licensed Edge/Frontline CoT Gateway. Preserve
-  original safe CoT types and both loop barriers: reject `EFDI-*` ingress UIDs
-  and never send `_ingress=tak_server` back through TAK TCP.
+- TAK Server output uses the mTLS `cot-bridge` service and the
+  `bridges/cot_bridge.py` entrypoint with a TAK-issued certificate, not the
+  Zenoh certificate. There is no EFDI-managed TAK/SitaWare CoT receive bridge
+  in the current runtime catalog.
 
 ## Installed agent skills
 

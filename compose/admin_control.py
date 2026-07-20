@@ -77,10 +77,9 @@ SERVICE_SPECS = [
     ("vmf-raw", "Raw ingress", "VMF raw socket"),
     ("sapient-raw", "Raw ingress", "SAPIENT raw socket"),
     ("stanag4586-raw", "Raw ingress", "STANAG 4586 raw socket"),
-    ("cot-rx", "C2 outputs", "TAK Server direct CoT receiver"),
     ("cot-udp", "C2 outputs", "CoT multicast"),
     ("cot-udp-tak", "C2 outputs", "CoT UDP client"),
-    ("cot-tcp", "C2 outputs", "TAK Server CoT TCP"),
+    ("cot-bridge", "C2 outputs", "TAK Server CoT TCP"),
     ("sitaware", "C2 outputs", "SitaWare HQ REST input"),
     ("sitaware-hq-nvg", "C2 outputs", "SitaWare HQ NVG feed"),
 ]
@@ -104,14 +103,12 @@ EDITABLE_EXACT = {
     "ASTERIX_MULTICAST_INTERFACE", "ASTERIX_ALLOW_SOURCE",
     "TAK_HOST", "TAK_HOST_FALLBACK", "TAK_PORT", "TAK_TLS", "TAK_CERT", "TAK_KEY", "TAK_CA",
     "TAK_UDP_HOST", "TAK_UDP_HOST_FALLBACK", "TAK_UDP_PORT",
-    "COT_RX_PORT", "COT_RX_HOST", "COT_RX_TLS", "COT_RX_CA", "COT_RX_CERT", "COT_RX_KEY",
-    "COT_RX_SERVER_NAME", "COT_RX_TAK_USERS_ONLY", "COT_RX_INCLUDE_MARKERS",
     "SITAWARE_URL", "SITAWARE_URL_FALLBACK", "SITAWARE_API_PATH", "SITAWARE_USER", "SITAWARE_PASS", "SITAWARE_POLL_S",
     "SITAWARE_TLS_VERIFY", "SITAWARE_DISCOVER",
     "SITAWARE_HQ_NVG_ENABLE", "SITAWARE_HQ_NVG_BIND", "SITAWARE_HQ_NVG_PORT", "SITAWARE_HQ_NVG_PATH",
     "SITAWARE_HQ_NVG_USER", "SITAWARE_HQ_NVG_PASS",
     "SITAWARE_HQ_NVG_TLS_CERT", "SITAWARE_HQ_NVG_TLS_KEY", "SITAWARE_HQ_NVG_ALLOW_ANONYMOUS",
-    "SITAWARE_HQ_NVG_ALLOW_INSECURE_HTTP",
+    "SITAWARE_HQ_NVG_ALLOW_INSECURE_HTTP", "SITAWARE_HQ_NVG_STALE_S", "SITAWARE_HQ_NVG_MAX_TRACKS",
     "UTM_ANS_API_URL", "UTM_ANS_API_TOKEN", "UTM_ANS_POLL_S", "UTM_ANS_TLS_VERIFY",
     "AISSTREAM_KEY", "APRSIS_HOST", "APRSIS_PORT", "APRSIS_FILTER",
     "DJI_MQTT_HOST", "DJI_MQTT_PORT", "DJI_MQTT_TOPIC", "DJI_MQTT_TLS",
@@ -346,7 +343,12 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def _body(self) -> dict:
-        length = min(int(self.headers.get("Content-Length", "0")), 128 * 1024)
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError as exc:
+            raise ValueError("invalid Content-Length") from exc
+        if length < 0 or length > 128 * 1024:
+            raise ValueError("request body too large")
         raw = self.rfile.read(length)
         value = json.loads(raw.decode("utf-8")) if raw else {}
         if not isinstance(value, dict):

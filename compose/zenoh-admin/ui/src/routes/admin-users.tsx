@@ -52,23 +52,23 @@ function NewAdminModal({ onClose, onCreated }: { onClose: () => void; onCreated:
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-      <div className="bg-zinc-100 dark:bg-[#111113] border border-zinc-300 dark:border-white/10 rounded-md p-6 w-full max-w-sm">
+      <div className="bg-zinc-100 dark:bg-[#0c0c0e] border border-zinc-300 dark:border-white/10 rounded-md p-6 w-full max-w-sm">
         <h2 className="text-lg font-semibold mb-4">New Admin User</h2>
         <form onSubmit={handleSubmit} className="space-y-3">
           <div className="space-y-1">
             <label className="text-sm text-zinc-700 dark:text-zinc-300">Username</label>
             <input type="text" value={username} onChange={e => setUsername(e.target.value)} required
-              className="w-full px-3 py-2 rounded-md bg-zinc-200 dark:bg-[#1a1a1d] border border-zinc-300 dark:border-white/10 text-zinc-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-accent-ring" />
+              className="w-full px-3 py-2 rounded-md bg-zinc-200 dark:bg-[#141416] border border-zinc-300 dark:border-white/10 text-zinc-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-accent-ring" />
           </div>
           <div className="space-y-1">
             <label className="text-sm text-zinc-700 dark:text-zinc-300">Password (min 12 chars)</label>
             <input type="password" value={password} onChange={e => setPassword(e.target.value)} required
-              className="w-full px-3 py-2 rounded-md bg-zinc-200 dark:bg-[#1a1a1d] border border-zinc-300 dark:border-white/10 text-zinc-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-accent-ring" />
+              className="w-full px-3 py-2 rounded-md bg-zinc-200 dark:bg-[#141416] border border-zinc-300 dark:border-white/10 text-zinc-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-accent-ring" />
           </div>
           <div className="space-y-1">
             <label className="text-sm text-zinc-700 dark:text-zinc-300">Role</label>
             <select value={role} onChange={e => setRole(e.target.value as 'admin' | 'superadmin' | 'readonly')}
-              className="w-full px-3 py-2 rounded-md bg-zinc-200 dark:bg-[#1a1a1d] border border-zinc-300 dark:border-white/10 text-zinc-900 dark:text-white text-sm focus:outline-none">
+              className="w-full px-3 py-2 rounded-md bg-zinc-200 dark:bg-[#141416] border border-zinc-300 dark:border-white/10 text-zinc-900 dark:text-white text-sm focus:outline-none">
               <option value="readonly">readonly</option>
               <option value="admin">admin</option>
               <option value="superadmin">superadmin</option>
@@ -138,7 +138,7 @@ function AdminUsersPage() {
           <HudCorners />
           <div className="rounded-md border border-zinc-200 dark:border-white/10 overflow-hidden">
           <table className="w-full text-sm">
-            <thead className="bg-zinc-100 dark:bg-[#111113] text-zinc-600 dark:text-zinc-400">
+            <thead className="bg-zinc-100 dark:bg-[#0c0c0e] text-zinc-600 dark:text-zinc-400">
               <tr>
                 <th className="px-4 py-3 text-left font-medium">Username</th>
                 <th className="px-4 py-3 text-left font-medium">Role</th>
