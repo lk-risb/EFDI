@@ -446,7 +446,7 @@ if [ "$INSTALL_MODE" = "testing" ]; then
     echo ""
     echo "  To deliver tracks to ATAK devices on your network, start.sh will:"
     echo "    • cot-udp  → UDP multicast 239.2.3.1:6969  (same-subnet ATAK)"
-    echo "    • cot-tcp  → TAK Server at TAK_HOST:TAK_PORT (if configured)"
+    echo "    • cot-bridge  → TAK Server at TAK_HOST:TAK_PORT (if configured)"
     echo ""
     echo -e "  ${YELLOW}[!]${NC} No EFDI fabric connectivity — local pub/sub only."
     echo "      All bridges, Zenoh, and CoT delivery are fully functional."

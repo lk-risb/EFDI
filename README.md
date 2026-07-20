@@ -86,7 +86,6 @@ consumers continue to decode `/v1` safely.
 | `sitaware_bridge` | SitaWare HQ friendly-force REST polling (inbound) |
 | `nffi` | NATO NFFI / ADatP-36 (STANAG 5527) XML translator for raw Zenoh publications |
 | `nvg_bridge` | Pull-based NVG 2.0.2 snapshot for SitaWare HQ Import Subscriptions (outbound) |
-| `tak_bridge` | Inbound plain CoT or TAK Server mTLS layer; can import loop-protected TAK ground-user SA positions |
 | `link16` | JREAP-C UDP; TCP requires a verified gateway framing ICD |
 | `mavlink` | MAVLink 2 UDP/TCP, including OPEN_DRONE_ID messages |
 | `mavlink_raw_bridge` / `link16_jreap_bridge` / `vmf_bridge` / `stanag4586_bridge` | Optional socket ingress only; publishes raw bytes to Zenoh |
@@ -114,31 +113,28 @@ Client onboarding is certificate-based: each pod gets a signed mTLS bundle issue
 
 ### SitaWare integration (bidirectional)
 
-Five independent paths are available; enable only interfaces documented and licensed in the target deployment. This setup is HQ-focused, so the adapters use disjoint environment-variable prefixes rather than sharing endpoints or credentials.
+Four independent paths are available; enable only interfaces documented and licensed in the target deployment. This setup is HQ-focused, so the adapters use disjoint environment-variable prefixes rather than sharing endpoints or credentials.
 
 | Direction | Bridge/layer | Path |
 |---|---|---|
 | Inbound | `sitaware_bridge.py` | SitaWare **HQ** REST API → EFDI (poll-based) |
 | Inbound | `nffi.py` | Raw NATO NFFI / ADatP-36 XML on Zenoh → normalized EFDI tracks |
-| Inbound | `tak_bridge.py` (`cot-rx`) | Licensed TAK Server CoT / user-SA stream → EFDI |
 | Outbound | `nvg_bridge.py` | EFDI tracks → pull-based NVG 2.0.2 feed for SitaWare **HQ** |
 
 **`sitaware_bridge.py` (inbound, HQ)** — polls an explicitly configured `SITAWARE_API_PATH` on a `SITAWARE_POLL_S`-second interval. There is no universal `/rest/v2/units` resource: HQ 6.22 may map a MIP4 servlet at `/rest/v2/*` while returning 404 for that guessed resource. Enable this adapter only after confirming the deployment's resource path, schema, and authentication method in its API/ICD. Primary and fallback base URLs remain supported for deployments that do expose a compatible JSON unit resource.
 
 **`nffi.py` (protocol translator)** — subscribes to complete NFFI XML documents already carried by Zenoh under `…/raw/nffi/{source-id}` and publishes normalized friendly-force tracks. It contains no receiver socket, endpoint, framing, or vendor connection logic. NFFI friendly-force interoperability is specified by ADatP-36 / STANAG 5527; STANAG 4677 is the separate dismounted-soldier interoperability family and requires its own exact JDSSDM/NFFI profile implementation.
 
-**`cot-rx` (inbound, TAK Server)** — runs the dedicated `tak_bridge.py` entrypoint for direct TAK Server user-situation-awareness feeds. Configure either `COT_RX_PORT` for a TAK-initiated TCP connection or `COT_RX_HOST` for an EFDI-initiated connection. If you are relaying TAK point markers, keep `COT_RX_INCLUDE_MARKERS=1`; otherwise the receiver stays focused on user-SA data.
-
 **`nvg_bridge.py` (outbound, HQ)** — maintains a bounded snapshot of live EFDI tracks and serves one NVG 2.0.2 document for HQ's **NVG Import Subscription** manager to poll. The endpoint supports GET/HEAD only, requires dedicated HTTP Basic credentials unless anonymous access is explicitly enabled, expires stale tracks, includes an NVG `TimeSpan` so HQ also hides expired objects if the feed goes offline, and attaches standard symbol modifiers plus bounded `ExtendedData`. Its Attributes view reuses the same domain-aware stat-card formatter as CoT/TAK, with clean Identity, IFF, Kinematics, Radar, Flight Plan, Status, Altitude, Guidance, and ADS-B Quality sections instead of raw Python keys. Aircraft include distinct barometric/geometric altitude readings, primary altitude in metres/feet/flight level, climb/descent rate, selected/target altitude, speed/heading, identity, route, emergency/autopilot state, ADS-B quality, and other safe scalar source fields available in the track. SitaWare uses the same RU/BY ICAO and MMSI hostile-affiliation classifiers as CoT rather than assigning every ADS-B/AIS topic one static affiliation. Because HQ 6.22 renders the standards-native METOC scheme as Unknown, weather stations use its supported neutral emplaced-sensor SIDC, distinct from the generic neutral sensor used by dronuradaras.lt. The dronuradaras bridge publishes only devices whose latest API status is `is_online=true`; an offline transition immediately removes that device from this snapshot and from the CoT caches. XML-illegal upstream characters are removed and a malformed cached record cannot break the complete feed. The endpoint refuses non-loopback cleartext HTTP unless the lab-only override is set. Prefer HTTPS with a certificate trusted by the HQ Windows host. This native Python service is enabled with `SITAWARE_HQ_NVG_ENABLE=1`; it does not add a bridge container.
 
 ADS-B emitter categories `C1` and `C2` are surface emergency/service vehicles, not aircraft. CoT and both SitaWare NVG paths classify them as neutral ground vehicles (`a-n-G-E-V` / `SNGPEV----*****`). The ordinary `on_ground` flag alone is not used for this decision because taxiing aircraft must remain aircraft.
 
-TAK and SitaWare inbound records are written under this pod's normal
+SitaWare inbound records are written under this pod's normal
 `{NAMESPACE_PREFIX}/{PARTNER_NAMESPACE}/...` namespace. They therefore become
 ordinary Zenoh data for authorized subscribers and federated partner routers;
 the Zenoh ACL and federation policy—not the C2 adapter—decide which other pods
 may receive them. Enabling an outbound TAK/NVG layer does not enable the reverse
-path: select and configure `cot-rx`, `sitaware`, or `sitaware-hq-nvg` separately.
+path: select and configure `sitaware` or `sitaware-hq-nvg` separately.
 
 `cot_bridge.py` is the Zenoh-side CoT entrypoint: it stays on the fabric and
 delegates to the CoT output layer instead of opening a direct TAK socket.
@@ -147,8 +143,7 @@ delegates to the CoT output layer instead of opening a direct TAK socket.
 
 | Direction | Select | Required runtime contract |
 |---|---|---|
-| Zenoh → TAK Server | `cot-tcp` | `TAK_HOST/PORT`; add `TAK_TLS=1` and TAK-issued client credentials for mTLS |
-| TAK Server → Zenoh | `cot-rx` | `COT_RX_HOST`, TAK mTLS credentials and matching TAK groups; normally `COT_RX_TAK_USERS_ONLY=1`; set `COT_RX_INCLUDE_MARKERS=1` to relay TAK point markers |
+| Zenoh → TAK Server | `cot-bridge` | `TAK_HOST/PORT`; add `TAK_TLS=1` and TAK-issued client credentials for mTLS |
 | Zenoh → SitaWare HQ | `sitaware-hq-nvg` | Enable the authenticated NVG feed and create an HQ NVG Import Subscription |
 | SitaWare HQ → Zenoh | `sitaware` | Deployment-documented REST resource, schema, URL and credentials |
 
@@ -157,21 +152,18 @@ must come from that deployment's licensed documentation; `/rest/v2/units` is
 not assumed. Full commands and verification steps are in
 [INSTALL.md](INSTALL.md#c2--zenoh-bidirectional-runbook).
 
-The operator-side setup is included there as well: TAK Server **User
-Management** group/certificate actions, the HQ **SitaWare Communication → NVG →
-NVG Import Subscriptions** fields, and the values to enter in a licensed
-SitaWare CoT Gateway. Where Systematic does not publish stable menu names, the
-guide explicitly requires the installed release's administration manual rather
-than guessing a screen.
+The operator-side setup is included there as well: the HQ **SitaWare
+Communication → NVG → NVG Import Subscriptions** fields and the values to enter
+in a licensed SitaWare integration. Where Systematic does not publish stable
+menu names, the guide explicitly requires the installed release's administration
+manual rather than guessing a screen.
 
 ### Test personas
 
-The current test exercise supports four distinct operational clients: a C2
-operator who places standard point markers, a frontline user who publishes SA,
-a sensor publisher that writes complete protocol data to a raw Zenoh topic, and
-a fabric admin who manages the EFDI panel only. The C2 marker route is opt-in:
-set `COT_RX_TAK_USERS_ONLY=1` plus `COT_RX_INCLUDE_MARKERS=1`; it accepts only
-`b-m-p-*` point markers alongside user SA and shares them with other C2 outputs.
+The current test exercise supports three distinct operational clients: a C2
+operator using the configured CoT output, a sensor publisher that writes complete
+protocol data to a raw Zenoh topic, and a fabric admin who manages the EFDI panel
+only.
 The full client setup and acceptance checks are in
 [INSTALL.md](INSTALL.md#8-operational-persona-test-exercise). These personas
 are not yet a Zenoh per-client permission boundary: the current router ACL is

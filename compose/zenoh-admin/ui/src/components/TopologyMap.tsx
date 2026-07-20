@@ -101,7 +101,7 @@ export function TopologyMap({
 
   return (
     <div
-      className="overflow-auto rounded-md border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#111113]"
+      className="overflow-auto rounded-md border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#0c0c0e]"
       style={{ maxHeight: compact ? 260 : 600 }}
     >
       <svg
@@ -155,7 +155,7 @@ export function TopologyMap({
                   width={NODE_W}
                   height={NODE_H}
                   rx={6}
-                  className={isSelected ? 'fill-teal-50 dark:fill-teal-950/50' : 'fill-zinc-100 dark:fill-[#1a1a1d]'}
+                  className={isSelected ? 'fill-teal-50 dark:fill-teal-950/50' : 'fill-zinc-100 dark:fill-[#141416]'}
                   stroke={statusColor(node)}
                   strokeWidth={isSelected ? 3 : 2}
                 />

@@ -55,7 +55,7 @@ function CertificatesPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {certs === null ? (
             Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="hud-frame relative rounded-md border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#111113] p-4 hud-card">
+              <div key={i} className="hud-frame relative rounded-md border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#0c0c0e] p-4 hud-card">
                 <HudCorners />
                 <Skeleton className="h-3 w-24 mb-3" />
                 <Skeleton className="h-4 w-32 mb-2" />
@@ -70,7 +70,7 @@ function CertificatesPage() {
               const textClass = state === 'critical' ? 'text-red-600 dark:text-red-400' : state === 'warn' ? 'text-yellow-600 dark:text-yellow-400' : 'text-green-600 dark:text-green-400'
               const badgeClass = state === 'critical' ? 'border-red-300 dark:border-red-800 bg-red-100 dark:bg-red-500/10' : state === 'warn' ? 'border-yellow-300 dark:border-yellow-800 bg-yellow-100 dark:bg-yellow-500/10' : 'border-green-300 dark:border-green-800 bg-green-100 dark:bg-green-500/10'
               return (
-                <div key={c.name} className="hud-frame relative rounded-md border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#111113] p-4 hud-card">
+                <div key={c.name} className="hud-frame relative rounded-md border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#0c0c0e] p-4 hud-card">
                   <HudCorners />
                   <span className="text-[10px] font-semibold tracking-wider text-zinc-500 uppercase">{c.name}</span>
                   <p className="font-mono text-sm text-zinc-800 dark:text-zinc-200 mt-2">{c.expires_at}</p>

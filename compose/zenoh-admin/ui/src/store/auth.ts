@@ -4,7 +4,8 @@ interface AuthState {
   token: string | null
   role: string | null
   username: string | null
-  setToken: (token: string, role: string, username: string) => void
+  authProvider: string | null
+  setToken: (token: string, role: string, username: string, authProvider?: string) => void
   clear: () => void
   restoreSession: () => Promise<string | null>
 }
@@ -19,15 +20,16 @@ export const useAuth = create<AuthState>()((set, get) => ({
   token: null,
   role: null,
   username: null,
-  setToken: (token, role, username) => set({ token, role, username }),
-  clear: () => set({ token: null, role: null, username: null }),
+  authProvider: null,
+  setToken: (token, role, username, authProvider = 'local') => set({ token, role, username, authProvider }),
+  clear: () => set({ token: null, role: null, username: null, authProvider: null }),
   restoreSession: async () => {
     try {
       const res = await fetch('/auth/refresh', { method: 'POST', credentials: 'include' })
       if (!res.ok) return null
       const data = await res.json()
       const payload = JSON.parse(atob(data.access_token.split('.')[1]))
-      get().setToken(data.access_token, payload.role, payload.username)
+      get().setToken(data.access_token, payload.role, payload.username, payload.auth_provider)
       return data.access_token
     } catch {
       return null

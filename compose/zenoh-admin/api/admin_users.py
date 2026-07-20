@@ -173,5 +173,10 @@ async def change_own_username(
         raise HTTPException(status_code=409, detail="Username already taken") from e
 
     await write_audit(db, actor.id, "change_own_username", f"{old_username} -> {actor.username}")
-    access_token = create_access_token({"sub": actor.id, "role": actor.role, "username": actor.username})
+    access_token = create_access_token({
+        "sub": actor.id,
+        "role": actor.role,
+        "username": actor.username,
+        "auth_provider": actor.auth_provider,
+    })
     return TokenResponse(access_token=access_token)

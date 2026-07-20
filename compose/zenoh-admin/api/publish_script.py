@@ -1,12 +1,14 @@
+import os
 import re
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .db import get_db
 from .deps import require_role, write_audit
+from .config import CONFIG_PATH, _TLS_PROFILES, _extract_fields
 
 router = APIRouter(prefix="/api/publish-script", tags=["publish-script"])
 
@@ -56,6 +58,8 @@ class PublishScriptRequest(BaseModel):
     router_endpoint: str
     client_cn: str
     cert_dir: str
+    tls_profile: str = "efdi"
+    verify_name_on_connect: bool = False
     rows: list[PublishRow]
 
     @field_validator("router_endpoint")
@@ -77,6 +81,13 @@ class PublishScriptRequest(BaseModel):
     def _check_cert_dir(cls, v: str) -> str:
         if not _SAFE_PATH_RE.match(v):
             raise ValueError("cert_dir: only letters, digits, '.', '_', '/', '-' are allowed")
+        return v
+
+    @field_validator("tls_profile")
+    @classmethod
+    def _check_tls_profile(cls, v: str) -> str:
+        if v not in _TLS_PROFILES:
+            raise ValueError(f"unknown TLS profile: {v}")
         return v
 
     @field_validator("rows")
@@ -103,6 +114,12 @@ import zenoh
 ROUTER_ENDPOINT = {router_endpoint!r}
 CLIENT_CN = {client_cn!r}
 CERT_DIR = {cert_dir!r}
+TLS_PROFILE = {tls_profile!r}
+CERT_SUBDIR = {cert_subdir!r}
+ROOT_CA_FILENAME = {root_ca_filename!r}
+CLIENT_CERT_FILENAME = {client_cert_filename!r}
+CLIENT_KEY_FILENAME = {client_key_filename!r}
+VERIFY_NAME_ON_CONNECT = {verify_name_on_connect!r}
 
 ROWS = {rows!r}
 
@@ -113,11 +130,11 @@ def make_config():
     conf.insert_json5("connect/endpoints", json.dumps([ROUTER_ENDPOINT]))
     if ROUTER_ENDPOINT.startswith("tls"):
         conf.insert_json5("transport/link/tls", json.dumps({{
-            "root_ca_certificate": CERT_DIR + "/efdi-ca-root.pem",
-            "connect_certificate": CERT_DIR + "/" + CLIENT_CN + "-cert.pem",
-            "connect_private_key": CERT_DIR + "/" + CLIENT_CN + "-key.pem",
+            "root_ca_certificate": CERT_DIR + "/" + CERT_SUBDIR + "/" + ROOT_CA_FILENAME,
+            "connect_certificate": CERT_DIR + "/" + CERT_SUBDIR + "/" + CLIENT_CERT_FILENAME,
+            "connect_private_key": CERT_DIR + "/" + CERT_SUBDIR + "/" + CLIENT_KEY_FILENAME,
             "enable_mtls": True,
-            "verify_name_on_connect": True,
+            "verify_name_on_connect": VERIFY_NAME_ON_CONNECT,
         }}))
     return conf
 
@@ -145,6 +162,46 @@ if __name__ == "__main__":
 '''
 
 
+def _profile_details(name: str, client_cn: str) -> dict[str, str]:
+    profile = _TLS_PROFILES[name]
+    return {
+        "id": name,
+        "label": profile["label"],
+        "cert_subdir": profile["publish_cert_dir"],
+        "root_ca_filename": profile["publish_root_ca"],
+        "client_cert_filename": profile["publish_client_cert"].format(client_cn=client_cn),
+        "client_key_filename": profile["publish_client_key"].format(client_cn=client_cn),
+        "router_connect_certificate": profile["connect_certificate"],
+        "router_connect_private_key": profile["connect_private_key"],
+        "router_root_ca": profile["root_ca"],
+    }
+
+
+@router.get("/defaults")
+async def get_publish_defaults(_=Depends(require_role("superadmin"))):
+    if not os.path.isfile(CONFIG_PATH):
+        raise HTTPException(status_code=404, detail=f"Config file not found at {CONFIG_PATH}")
+    try:
+        with open(CONFIG_PATH, encoding="utf-8") as handle:
+            fields = _extract_fields(handle.read())
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        raise HTTPException(status_code=500, detail=f"Could not parse current config: {exc}") from exc
+    client_cn = fields.partner_namespace or os.environ.get("PARTNER_NAMESPACE", "")
+    profile = _profile_details(fields.fabric_tls_profile, client_cn)
+    profiles = [_profile_details(name, client_cn) for name in _TLS_PROFILES]
+    return {
+        "current_endpoint": fields.fabric_endpoints[0] if fields.fabric_endpoints else fields.fabric_endpoint,
+        "endpoints": fields.fabric_endpoints,
+        "tls_profile": fields.fabric_tls_profile,
+        "verify_name_on_connect": fields.verify_name_on_connect,
+        "client_cn": client_cn,
+        "cert_dir": os.environ.get("EFDI_CERT_HOST_DIR", ""),
+        "profile": profile,
+        "profiles": profiles,
+        "config_path": CONFIG_PATH,
+    }
+
+
 @router.post("")
 async def generate_publish_script(
     req: PublishScriptRequest,
@@ -155,11 +212,18 @@ async def generate_publish_script(
         {"topic": r.topic, "message": r.message, "count": r.count, "interval_s": r.interval_s}
         for r in req.rows
     ]
+    profile = _profile_details(req.tls_profile, req.client_cn)
     script = _TEMPLATE.format(
         generated_at=datetime.now(timezone.utc).isoformat(),
         router_endpoint=req.router_endpoint,
         client_cn=req.client_cn,
         cert_dir=req.cert_dir,
+        tls_profile=req.tls_profile,
+        verify_name_on_connect=req.verify_name_on_connect,
+        cert_subdir=profile["cert_subdir"],
+        root_ca_filename=profile["root_ca_filename"],
+        client_cert_filename=profile["client_cert_filename"],
+        client_key_filename=profile["client_key_filename"],
         rows=rows_data,
     )
 

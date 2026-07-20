@@ -38,21 +38,20 @@ const FIELD_GROUPS: { title: string; description: string; fields: { key: string;
     { key: 'ZENOH_LOCAL_ENDPOINT', label: 'Local Zenoh endpoint', placeholder: 'tcp/127.0.0.1:7448' },
     { key: 'PARTNER_NAMESPACE', label: 'Partner namespace', placeholder: 'partner-a' },
   ] },
-  { title: 'TAK and CoT', description: 'Split the TAK paths by direction: server output, direct UDP output, and inbound CoT receiver.', fields: [
+  { title: 'TAK and CoT', description: 'Configure the active CoT bridge and TAK output paths.', fields: [
     { key: 'TAK_HOST', label: 'TAK Server host / IP', placeholder: '192.168.20.6' },
     { key: 'TAK_PORT', label: 'TAK Server TLS port', placeholder: '8087' },
     { key: 'TAK_TLS', label: 'TAK TLS enabled (1/0)', placeholder: '1' },
     { key: 'TAK_UDP_HOST', label: 'TAK UDP destination host / IP', placeholder: '239.2.3.1' },
     { key: 'TAK_UDP_PORT', label: 'TAK UDP destination port', placeholder: '6969' },
-    { key: 'COT_RX_HOST', label: 'CoT receiver peer host / IP', placeholder: '192.168.20.6' },
-    { key: 'COT_RX_PORT', label: 'CoT receiver listen port', placeholder: '8089' },
-    { key: 'COT_RX_TLS', label: 'CoT receiver TLS enabled (1/0)', placeholder: '1' },
   ] },
   { title: 'SitaWare and UTM', description: 'HTTPS endpoints and polling settings. Passwords and tokens are write-only.', fields: [
     { key: 'SITAWARE_URL', label: 'SitaWare HQ URL', placeholder: 'https://host.example' },
     { key: 'SITAWARE_API_PATH', label: 'SitaWare API path', placeholder: '/deployment-specific/path' },
     { key: 'SITAWARE_USER', label: 'SitaWare username' }, { key: 'SITAWARE_PASS', label: 'SitaWare password', secret: true },
     { key: 'SITAWARE_POLL_S', label: 'SitaWare poll seconds', placeholder: '10' },
+    { key: 'SITAWARE_HQ_NVG_STALE_S', label: 'SitaWare HQ NVG stale seconds', placeholder: '120' },
+    { key: 'SITAWARE_HQ_NVG_MAX_TRACKS', label: 'SitaWare HQ NVG maximum tracks', placeholder: '10000' },
     { key: 'UTM_ANS_API_URL', label: 'UTM JSON/GeoJSON URL', placeholder: 'https://authorized-feed.example' },
     { key: 'UTM_ANS_API_TOKEN', label: 'UTM API token', secret: true },
   ] },
@@ -70,7 +69,7 @@ const FIELD_GROUPS: { title: string; description: string; fields: { key: string;
 const KNOWN_KEYS = new Set(FIELD_GROUPS.flatMap(group => group.fields.map(field => field.key)))
 
 function Card({ children, className = '' }: { children: React.ReactNode; className?: string }) {
-  return <section className={`hud-frame relative rounded-md border border-zinc-200 bg-white p-5 dark:border-white/10 dark:bg-[#111113] ${className}`}><HudCorners />{children}</section>
+  return <section className={`hud-frame relative rounded-md border border-zinc-200 bg-white p-5 dark:border-white/10 dark:bg-[#0c0c0e] ${className}`}><HudCorners />{children}</section>
 }
 
 function RuntimePage() {
@@ -225,7 +224,7 @@ function RuntimePage() {
         value={values[key] ?? ''}
         onChange={e => setValue(key, e.target.value)}
         placeholder={secret && secrets[key] ? 'Leave blank to keep current value' : ''}
-        className="w-full rounded-md border border-zinc-300 bg-zinc-100 px-2.5 py-2 font-mono text-xs text-zinc-900 focus:outline-none focus:ring-2 focus:ring-accent-ring disabled:opacity-50 dark:border-white/10 dark:bg-[#1a1a1d] dark:text-white"
+        className="w-full rounded-md border border-zinc-300 bg-zinc-100 px-2.5 py-2 font-mono text-xs text-zinc-900 focus:outline-none focus:ring-2 focus:ring-accent-ring disabled:opacity-50 dark:border-white/10 dark:bg-[#141416] dark:text-white"
       />
     </label>
   }
@@ -239,11 +238,11 @@ function RuntimePage() {
         <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-5">
           {[['CONTROL AGENT', runtime ? `127.0.0.1:${runtime.control_port}` : 'offline'], ['RUNNING SERVICES', `${runningCount}/${runtime?.services.length ?? 0}`], ['SAVED SETTINGS', `${configuredCount}`], ['SAVED SELECTION', `${selectedList.length}`], ['CONFIG FILE', runtime?.env_file ?? '—']].map(([label, value]) => <Card key={label} className="p-4"><span className="hud-label text-[10px] text-zinc-500">{label}</span><p className="mt-2 truncate font-mono text-sm text-zinc-800 dark:text-zinc-200" title={value}>{value}</p></Card>)}
         </div>
-        {selectedList.length > 0 && <Card className="mb-5 p-4"><div className="mb-2 flex items-center justify-between"><span className="hud-label text-[11px] font-semibold text-zinc-600 dark:text-zinc-300">Saved selection</span><span className="text-[10px] text-zinc-500">Restored automatically on the next launcher run</span></div><div className="flex flex-wrap gap-2">{selectedList.map(name => <span key={name} className="rounded-full border border-zinc-300 bg-zinc-100 px-2.5 py-1 font-mono text-[10px] text-zinc-700 dark:border-white/10 dark:bg-[#1a1a1d] dark:text-zinc-300">{name}</span>)}</div></Card>}
+        {selectedList.length > 0 && <Card className="mb-5 p-4"><div className="mb-2 flex items-center justify-between"><span className="hud-label text-[11px] font-semibold text-zinc-600 dark:text-zinc-300">Saved selection</span><span className="text-[10px] text-zinc-500">Restored automatically on the next launcher run</span></div><div className="flex flex-wrap gap-2">{selectedList.map(name => <span key={name} className="rounded-full border border-zinc-300 bg-zinc-100 px-2.5 py-1 font-mono text-[10px] text-zinc-700 dark:border-white/10 dark:bg-[#141416] dark:text-zinc-300">{name}</span>)}</div></Card>}
 
         <div className="grid items-start gap-5 xl:grid-cols-[1.1fr_1fr]">
           <Card>
-            <div className="mb-4 flex items-start justify-between gap-3 border-b border-zinc-200 pb-4 dark:border-white/10"><div><h2 className="hud-label flex items-center gap-2 text-sm font-semibold"><Activity size={16} className="text-accent-ring" /> Bridge and layer control</h2><p className="mt-1 text-xs text-zinc-500">Start, stop, restart, and inspect every host-managed integration.</p></div><div className="relative"><Search size={14} className="absolute left-2.5 top-2.5 text-zinc-500" /><input value={filter} onChange={e => setFilter(e.target.value)} placeholder="Filter" className="w-32 rounded-md border border-zinc-300 bg-zinc-100 py-2 pl-8 pr-2 text-xs dark:border-white/10 dark:bg-[#1a1a1d]" /></div></div>
+            <div className="mb-4 flex items-start justify-between gap-3 border-b border-zinc-200 pb-4 dark:border-white/10"><div><h2 className="hud-label flex items-center gap-2 text-sm font-semibold"><Activity size={16} className="text-accent-ring" /> Bridge and layer control</h2><p className="mt-1 text-xs text-zinc-500">Start, stop, restart, and inspect every host-managed integration.</p></div><div className="relative"><Search size={14} className="absolute left-2.5 top-2.5 text-zinc-500" /><input value={filter} onChange={e => setFilter(e.target.value)} placeholder="Filter" className="w-32 rounded-md border border-zinc-300 bg-zinc-100 py-2 pl-8 pr-2 text-xs dark:border-white/10 dark:bg-[#141416]" /></div></div>
             <div className="mb-4 flex gap-1 overflow-x-auto pb-1">{groups.map(item => <button key={item} onClick={() => setGroup(item)} className={`whitespace-nowrap rounded-full border px-2.5 py-1 text-[10px] ${group === item ? 'border-accent-ring bg-accent-ring/10 text-accent-ring' : 'border-zinc-300 text-zinc-500 dark:border-zinc-700'}`}>{item}</button>)}</div>
             <div className={`max-h-[680px] space-y-1.5 overflow-auto pr-1 ${denseRows ? 'text-[11px]' : ''}`}>
               {filtered.map((item, index) => {
@@ -256,7 +255,7 @@ function RuntimePage() {
                 return (
                   <div
                     key={item.name}
-                    className={`hud-frame hud-card relative overflow-hidden rounded-md border border-zinc-200 bg-white px-3 ${denseRows ? 'py-2' : 'py-2.5'} transition duration-150 hover:-translate-y-px hover:border-accent-ring/30 dark:border-white/10 dark:bg-[#111113] ${rowAnimations ? 'hud-enter' : ''}`}
+                    className={`hud-frame hud-card relative overflow-hidden rounded-md border border-zinc-200 bg-white px-3 ${denseRows ? 'py-2' : 'py-2.5'} transition duration-150 hover:-translate-y-px hover:border-accent-ring/30 dark:border-white/10 dark:bg-[#0c0c0e] ${rowAnimations ? 'hud-enter' : ''}`}
                     style={{ animationDelay: rowAnimations ? `${Math.min(index, 16) * 18}ms` : undefined }}
                   >
                     {showCorners && <HudCorners />}
@@ -311,7 +310,7 @@ function RuntimePage() {
                             value={values[field.key] ?? ''}
                             onChange={e => setValue(field.key, e.target.value)}
                             placeholder={secret && secrets[field.key] ? 'Leave blank to keep current value' : field.placeholder}
-                            className="w-full rounded-md border border-zinc-300 bg-zinc-100 px-2.5 py-2 font-mono text-xs text-zinc-900 focus:outline-none focus:ring-2 focus:ring-accent-ring disabled:opacity-50 dark:border-white/10 dark:bg-[#1a1a1d] dark:text-white"
+                            className="w-full rounded-md border border-zinc-300 bg-zinc-100 px-2.5 py-2 font-mono text-xs text-zinc-900 focus:outline-none focus:ring-2 focus:ring-accent-ring disabled:opacity-50 dark:border-white/10 dark:bg-[#141416] dark:text-white"
                           />
                         </label>
                       )
@@ -320,7 +319,7 @@ function RuntimePage() {
                 </div>
               ))}
             </div>
-            <div className="mt-5 border-t border-zinc-200 pt-4 dark:border-white/10"><h3 className="hud-label flex items-center gap-2 text-[11px] font-semibold text-zinc-600 dark:text-zinc-300"><Wrench size={13} /> Advanced protocol setting</h3><p className="mb-2 mt-1 text-[11px] text-zinc-500">Use this for CATxx_TCP, raw ports, input topics, and other documented `.env` fields.</p><div className="flex gap-2"><input value={advancedKey} onChange={e => setAdvancedKey(e.target.value)} placeholder="CAT48_TCP" className="w-32 rounded-md border border-zinc-300 bg-zinc-100 px-2.5 py-2 font-mono text-xs dark:border-white/10 dark:bg-[#1a1a1d]" /><input value={advancedValue} onChange={e => setAdvancedValue(e.target.value)} placeholder="value" className="min-w-0 flex-1 rounded-md border border-zinc-300 bg-zinc-100 px-2.5 py-2 font-mono text-xs dark:border-white/10 dark:bg-[#1a1a1d]" /><button disabled={!canWrite} onClick={addAdvanced} className="rounded-md border border-accent-ring/50 px-3 text-xs text-accent-ring disabled:opacity-40">Add</button></div></div>
+            <div className="mt-5 border-t border-zinc-200 pt-4 dark:border-white/10"><h3 className="hud-label flex items-center gap-2 text-[11px] font-semibold text-zinc-600 dark:text-zinc-300"><Wrench size={13} /> Advanced protocol setting</h3><p className="mb-2 mt-1 text-[11px] text-zinc-500">Use this for CATxx_TCP, raw ports, input topics, and other documented `.env` fields.</p><div className="flex gap-2"><input value={advancedKey} onChange={e => setAdvancedKey(e.target.value)} placeholder="CAT48_TCP" className="w-32 rounded-md border border-zinc-300 bg-zinc-100 px-2.5 py-2 font-mono text-xs dark:border-white/10 dark:bg-[#141416]" /><input value={advancedValue} onChange={e => setAdvancedValue(e.target.value)} placeholder="value" className="min-w-0 flex-1 rounded-md border border-zinc-300 bg-zinc-100 px-2.5 py-2 font-mono text-xs dark:border-white/10 dark:bg-[#141416]" /><button disabled={!canWrite} onClick={addAdvanced} className="rounded-md border border-accent-ring/50 px-3 text-xs text-accent-ring disabled:opacity-40">Add</button></div></div>
             {configuredKeys.length > 0 && <div className="mt-5 border-t border-zinc-200 pt-4 dark:border-white/10"><h3 className="hud-label text-[11px] font-semibold text-zinc-600 dark:text-zinc-300">Additional deployment settings</h3><p className="mb-3 mt-1 text-[11px] text-zinc-500">These fields are present in the deployment environment but are not tied to a fixed partner form.</p><div className="grid gap-3 sm:grid-cols-2">{configuredKeys.map(renderSetting)}</div></div>}
             <div className="mt-5 rounded-md border border-amber-500/20 bg-amber-500/10 p-3 text-[11px] text-amber-700 dark:text-amber-300"><Terminal size={13} className="mb-1" />Saving changes updates the deployment environment. Restart only the affected service after checking its log; secrets are write-only and never displayed.</div>
           </Card>
