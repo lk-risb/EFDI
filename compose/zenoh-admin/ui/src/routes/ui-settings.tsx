@@ -18,7 +18,7 @@ export const Route = createFileRoute('/ui-settings')({
 
 function Card({ title, description, icon, children }: { title: string; description: string; icon: React.ReactNode; children: React.ReactNode }) {
   return (
-    <section className="hud-frame relative rounded-md border border-zinc-200 bg-white p-5 dark:border-white/10 dark:bg-[#111113]">
+    <section className="hud-frame relative rounded-md border border-zinc-200 bg-white p-5 dark:border-white/10 dark:bg-[#0c0c0e]">
       <HudCorners />
       <div className="mb-4 flex items-start gap-3 border-b border-zinc-200 pb-4 dark:border-white/10">
         <div className="rounded-md border border-accent-ring/30 bg-accent-ring/10 p-2 text-accent-ring">
@@ -105,7 +105,7 @@ function UiSettingsPage() {
                 <select
                   value={refreshIntervalMs}
                   onChange={e => setRefreshIntervalMs(Number(e.target.value))}
-                  className="w-full rounded-md border border-zinc-300 bg-zinc-100 px-3 py-2 text-sm dark:border-white/10 dark:bg-[#1a1a1d]"
+                  className="w-full rounded-md border border-zinc-300 bg-zinc-100 px-3 py-2 text-sm dark:border-white/10 dark:bg-[#141416]"
                 >
                   <option value={2000}>2 seconds</option>
                   <option value={5000}>5 seconds</option>
@@ -114,7 +114,7 @@ function UiSettingsPage() {
                 </select>
               </label>
 
-              <div className="rounded-md border border-zinc-200 bg-zinc-50 p-3 text-xs text-zinc-600 dark:border-white/10 dark:bg-[#1a1a1d] dark:text-zinc-400">
+              <div className="rounded-md border border-zinc-200 bg-zinc-50 p-3 text-xs text-zinc-600 dark:border-white/10 dark:bg-[#141416] dark:text-zinc-400">
                 <div className="flex items-center gap-2">
                   <MonitorCog size={14} className="text-accent-ring" />
                   Browser settings are saved locally on this device.

@@ -139,31 +139,11 @@ not silently enable the reverse path.
 
 ### TAK Server
 
-For Zenoh → TAK, configure `TAK_HOST/TAK_PORT` and select `cot-tcp`. For TAK →
-Zenoh, obtain a TAK-issued client certificate whose identity has the required
-IN/OUT group membership, then configure and select `cot-rx`:
-
-```dotenv
-COT_RX_HOST=tak.example:8089
-COT_RX_TLS=1
-COT_RX_SERVER_NAME=tak.example
-COT_RX_CERT=/runtime/path/tak-client.pem
-COT_RX_KEY=/runtime/path/tak-client-key.pem
-COT_RX_CA=/runtime/path/tak-ca.pem
-COT_RX_TAK_USERS_ONLY=1
-# Permit C2 operator point markers while retaining the user-SA filter.
-COT_RX_INCLUDE_MARKERS=1
-```
-
-`cot-rx` publishes normalized records under `…/{domain}/radar/cot/{affiliation}/
-{entity}/tracks/v1`; permitted point map markers use
-`…/land/c2/cot/unknown/unit/tracks/v1`. It rejects `EFDI-*` UIDs and TAK-origin
-records carry the loop marker used by TAK TCP output. With the usual
-`COT_RX_TAK_USERS_ONLY=1`, set `COT_RX_INCLUDE_MARKERS=1` to admit only ordinary
-`b-m-p-*` point markers as well as ground-user SA. Set `COT_RX_TAK_USERS_ONLY=0`
-only when the TAK groups and mission policy intentionally expose all other CoT
-objects; drawings, routes, chat and arbitrary XML are not a replacement for the
-point-marker path.
+For Zenoh → TAK, configure `TAK_HOST/TAK_PORT` and select `cot-bridge`. The active
+CoT bridge is `bridges/cot_bridge.py`; it subscribes to normalized Zenoh topics
+and emits CoT to the configured TAK endpoint. TAK-issued client credentials are
+required when `TAK_TLS=1`. There is no EFDI-managed TAK receive bridge in the
+current runtime catalog.
 
 ### SitaWare
 
@@ -184,20 +164,9 @@ SITAWARE_TLS_VERIFY=1
 Select `sitaware`; it publishes normalized units below
 `…/{domain}/sitaware/rest/{affiliation}/{entity}/tracks/v1`.
 
-For SitaWare Edge/Frontline → Zenoh, enable its licensed CoT Gateway and choose
-one direction:
-
-```dotenv
-SITAWARE_COT_RX_PORT=<efdi-listen-port>
-SITAWARE_COT_RX_BIND=<efdi-address>
-SITAWARE_COT_RX_ALLOW_PEER=<gateway-ip>
-# Or: SITAWARE_COT_RX_HOST=<gateway-ip>:<gateway-port>
-```
-
-Select `sitaware-cot-rx`. Exclude the EFDI Live Tracks source from the gateway's
-export rule to avoid returning NVG-imported tracks. If the deployment exports
-NFFI instead, publish complete NFFI XML documents under `…/raw/nffi/{source-id}`
-and run the independent `nffi` translator.
+The current runtime keeps the SitaWare HQ REST and NVG paths separate. If the
+deployment exports NFFI instead, publish complete NFFI XML documents under
+`…/raw/nffi/{source-id}` and run the independent `nffi` translator.
 
 All resulting records stay in the producing pod's namespace. Authorized
 federation routes may relay that namespace to other partner routers, whose TAK

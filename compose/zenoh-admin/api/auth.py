@@ -9,14 +9,19 @@ from sqlalchemy import select
 
 from .db import get_db, SessionLocal
 from .models import AdminUser, RefreshToken
-from .schemas import LoginRequest, TokenResponse
-from .deps import pwd_ctx, create_access_token, write_audit
+from .schemas import LoginRequest, ShellElevateRequest, ShellTicketResponse, TokenResponse, WsTicketResponse
+from .deps import get_current_user, pwd_ctx, create_access_token, write_audit
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 REFRESH_TOKEN_EXPIRE_DAYS = 7
 LOCKOUT_ATTEMPTS = 5
 LOCKOUT_MINUTES = 15
+SHELL_TICKET_EXPIRE_MINUTES = 5
+WS_TICKET_EXPIRE_SECONDS = 30
+
+_shell_tickets: dict[str, tuple[str, datetime]] = {}
+_ws_tickets: dict[str, tuple[str, str, datetime]] = {}
 
 # Fixed bcrypt hash with no matching password, verified against on an unknown
 # username so pwd_ctx.verify() always runs one bcrypt round regardless of
@@ -24,6 +29,23 @@ LOCKOUT_MINUTES = 15
 # bcrypt work while an unknown-user login returns immediately, letting an
 # attacker enumerate valid usernames by timing /auth/login responses.
 _DUMMY_HASH = "$2b$12$C6UzMDM.H6dfI/f/IKcEeO7oCe1cJXTh8g3wJHKfB8YkKuNAZbEUC"
+
+
+def _token_claims(user: AdminUser) -> dict[str, str]:
+    return {
+        "sub": user.id,
+        "role": user.role,
+        "username": user.username,
+        "auth_provider": user.auth_provider,
+    }
+
+
+def _purge_expired_tickets() -> None:
+    now = datetime.now(timezone.utc)
+    for store in (_shell_tickets, _ws_tickets):
+        for key, entry in list(store.items()):
+            if entry[-1] <= now:
+                store.pop(key, None)
 
 
 def create_refresh_token(user_id: str) -> tuple[RefreshToken, str]:
@@ -70,7 +92,7 @@ async def login(body: LoginRequest, response: Response, db: AsyncSession = Depen
     user.locked_until = None
     await db.commit()
 
-    access_token = create_access_token({"sub": user.id, "role": user.role, "username": user.username})
+    access_token = create_access_token(_token_claims(user))
 
     refresh_row, raw_refresh = create_refresh_token(user.id)
     db.add(refresh_row)
@@ -111,7 +133,7 @@ async def refresh(response: Response, refresh_token: str = Cookie(None), db: Asy
     await db.commit()
     set_refresh_cookie(response, raw_refresh)
 
-    access_token = create_access_token({"sub": user.id, "role": user.role, "username": user.username})
+    access_token = create_access_token(_token_claims(user))
     return TokenResponse(access_token=access_token)
 
 
@@ -126,6 +148,55 @@ async def logout(response: Response, refresh_token: str = Cookie(None), db: Asyn
             await db.commit()
     response.delete_cookie("refresh_token")
     return {"status": "logged out"}
+
+
+@router.post("/ws-ticket", response_model=WsTicketResponse)
+async def ws_ticket(user: AdminUser = Depends(get_current_user)):
+    if user.role not in {"admin", "superadmin"}:
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+    _purge_expired_tickets()
+    raw = secrets.token_urlsafe(32)
+    ticket_hash = hashlib.sha256(raw.encode()).hexdigest()
+    expires = datetime.now(timezone.utc) + timedelta(seconds=WS_TICKET_EXPIRE_SECONDS)
+    _ws_tickets[ticket_hash] = (user.id, user.role, expires)
+    return WsTicketResponse(ticket=raw, expires_at=expires)
+
+
+def consume_ws_ticket(ticket: str) -> tuple[str, str] | None:
+    ticket_hash = hashlib.sha256(ticket.encode()).hexdigest()
+    entry = _ws_tickets.pop(ticket_hash, None)
+    if not entry or entry[2] <= datetime.now(timezone.utc):
+        return None
+    return entry[0], entry[1]
+
+
+@router.post("/shell-elevate", response_model=ShellTicketResponse)
+async def shell_elevate(
+    body: ShellElevateRequest,
+    db: AsyncSession = Depends(get_db),
+    user: AdminUser = Depends(get_current_user),
+):
+    if user.role != "superadmin":
+        raise HTTPException(status_code=403, detail="Superadmin only")
+    if user.auth_provider != "local":
+        raise HTTPException(status_code=403, detail="Shell requires a local break-glass account")
+    if not pwd_ctx.verify(body.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid password")
+    _purge_expired_tickets()
+    raw = secrets.token_urlsafe(32)
+    ticket_hash = hashlib.sha256(raw.encode()).hexdigest()
+    expires = datetime.now(timezone.utc) + timedelta(minutes=SHELL_TICKET_EXPIRE_MINUTES)
+    _shell_tickets[ticket_hash] = (user.id, expires)
+    await write_audit(db, user.id, "shell_elevate")
+    return ShellTicketResponse(ticket=raw, expires_at=expires)
+
+
+def consume_shell_ticket(ticket: str) -> str | None:
+    ticket_hash = hashlib.sha256(ticket.encode()).hexdigest()
+    entry = _shell_tickets.pop(ticket_hash, None)
+    if not entry or entry[1] <= datetime.now(timezone.utc):
+        return None
+    return entry[0]
 
 
 async def _ensure_first_user():

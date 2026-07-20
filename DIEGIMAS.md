@@ -44,7 +44,7 @@ gyvas Remote ID srautas.
 | HTTPS | iš serverio | dronuradaras.lt API |
 | HTTPS | iš serverio | Autorizuotas `utm.ans.lt` JSON/GeoJSON eksportas (pasirinktinai) |
 
-ATAK įrenginiai turi būti tame pačiame L2 tinklo segmente kaip serveris (multicast neperžengia VLAN ribų be maršrutizatoriaus konfigūracijos). Tarpvietiniam diegimui naudokite TAK serverį ir `cot-tcp` paslaugą.
+ATAK įrenginiai turi būti tame pačiame L2 tinklo segmente kaip serveris (multicast neperžengia VLAN ribų be maršrutizatoriaus konfigūracijos). Tarpvietiniam diegimui naudokite TAK serverį ir `cot-bridge` paslaugą.
 
 ### Sertifikatai
 
@@ -182,7 +182,7 @@ python3 tools/asterix_probe.py --port 30001
 ### Pasirinktiniai laukai
 
 ```bash
-# ── TAK serveris (naudokite cot-tcp vietoj cot-udp) ─────────────────────────
+# ── TAK serveris (naudokite cot-bridge vietoj cot-udp) ─────────────────────────
 TAK_HOST=127.0.0.1
 TAK_PORT=8087
 
@@ -287,16 +287,11 @@ Interaktyvus paleidiklis rodo visas paslaugas su jų parengties būsena. Įjunki
   [36] [✓] sensor-health  Sensor health/heartbeat records         ready
   [37] [✓] mission-route  UAV routes and corridors                ready
 
-  TAK and SitaWare layers
-  ──────────────────────────────────────────────────────────
-  [38] [ ] cot-rx         Inbound CoT / TAK user positions       COT_RX_PORT/HOST not set
-  [39] [ ] sitaware-cot-rx SitaWare CoT Gateway input            HOST/listener not set
-
   Output layers
   ──────────────────────────────────────────────────────────
   [40] [✓] cot-udp        CoT → ATAK UDP multicast 239.2.3.1:6969
   [41] [ ] cot-udp-tak    CoT → WinTAK/ATAK UDP unicast
-  [42] [✓] cot-tcp        CoT → TAK Server TCP
+  [42] [✓] cot-bridge        CoT → TAK Server TCP
   [43] [ ] sitaware-nvg   EFDI tracks → legacy NVG push adapter  will prompt for address+login
   [44] [ ] sitaware-hq-nvg EFDI tracks → SitaWare HQ pull feed   SITAWARE_HQ_NVG_ENABLE=0
 ```
@@ -345,7 +340,7 @@ nerodomas proceso argumentuose ir neišsaugomas paleidiklio atmintyje.
 
 ### TAK serveris (skirtingi tinklai / VLAN)
 
-Nustatykite `TAK_HOST` ir `TAK_PORT` faile `.env`, tada paleidiklyje pasirinkite `cot-tcp` vietoj `cot-udp`.
+Nustatykite `TAK_HOST` ir `TAK_PORT` faile `.env`, tada paleidiklyje pasirinkite `cot-bridge` vietoj `cot-udp`.
 
 ### Tiesioginis WinTAK/ATAK UDP (be TAK serverio)
 
@@ -494,34 +489,22 @@ Adresas priima tik GET/HEAD, pagal nutylėjimą reikalauja Basic autentifikavimo
 | `aisstream` | `bridges/aisstream_ws_bridge.py` | `…/sea/aisstream/ais/civ/vessel/tracks/v1` | Autentifikuotas WSS srautas |
 | `sitaware` | `bridges/sitaware_bridge.py` | `…/land/sitaware/rest/friendly/unit/tracks/v1` | Konfigūruojama REST apklausa |
 | `nffi` | `protocols/nffi.py` | `…/land/nato/nffi/friendly/unit/tracks/v1` | Pilni XML dokumentai Zenoh temoje `…/raw/nffi/*` |
-| `cot-rx` | `layers/cot_receiver.py` | `…/land/radar/cot/friendly/unit/tracks/v1` | TAK Server mTLS naudotojų pozicijos |
-| `sitaware-cot-rx` | `layers/cot_receiver.py` | `…/land/radar/cot/*/unit/tracks/v1` | SitaWare CoT Gateway įvestis |
 | `link16` | `protocols/link16.py` | `…/air/link16/jreap/*/aircraft/tracks/v1` | Srautinis UDP |
 | `mavlink` | `protocols/mavlink.py` | `…/air/mavlink/mav2/*/uav/tracks/v1` | Srautinis UDP/TCP |
 | `dji-cloud` | `bridges/dji_cloud_api_bridge.py` | `…/air/dji/cloud-api/friendly/uav/tracks/v1` | DJI šaltiniui skirtas autentifikuotas MQTT 5 tiltas |
 | `cot-udp` | `layers/cot_layer.py` | Prenumeratorius — visos temos | Įvykio valdomas |
-| `cot-tcp` | `layers/cot_layer.py` | Prenumeratorius — visos temos | Įvykio valdomas |
+| `cot-bridge` | `layers/cot_layer.py` | Prenumeratorius — visos temos | Įvykio valdomas |
 | `sitaware-nvg` | `layers/nato_nvg_layer.py` | Prenumeratorius — visos takelių temos | Legacy NVG push adapteris |
 | `sitaware-hq-nvg` | `layers/sitaware_hq_nvg_feed.py` | Prenumeratorius — visos takelių temos | HQ periodiškai ima NVG būseną |
 | `track-fusion` | `bridges/track_fusion_bridge.py` | CAT-48 + CAT-21 prenumeratorius | Įvykio valdomas |
 
 ### TAK naudotojai ir SitaWare HQ technika
 
-`cot-rx` gali su TAK išduotu kliento sertifikatu prisijungti prie TAK Server
-TLS įvesties ir perduoti žemės naudotojų pozicijas į SitaWare. Sertifikato
-tapatybė turi priklausyti toms pačioms TAK IN/OUT grupėms kaip matomi naudotojai.
-Ir iTAK, ir WinTAK turi jungtis prie to paties TAK Server bei turėti suderinamas
-grupes; vienpusė EFDI UDP įvestis į WinTAK nepadaro jo matomo iTAK.
-
-Atvirkštinei krypčiai įjunkite licencijuotą SitaWare CoT Gateway
-ir nustatykite `SITAWARE_COT_RX_PORT`, `SITAWARE_COT_RX_BIND` bei leidžiamą
-`SITAWARE_COT_RX_ALLOW_PEER` šaltinio IP, arba
-`SITAWARE_COT_RX_HOST`. Atskiras `sitaware-cot-rx` Python procesas išsaugo
-originalų CoT tipą, todėl transporto priemonė TAK Server ir ATAK/WinTAK
-pasiekia su ta pačia priklausomybe bei karinio simbolio tipu. SitaWare
-eksportavimo taisyklėje neįtraukite EFDI Live Tracks šaltinio, kad NVG
-importuoti objektai nebūtų grąžinami atgal į EFDI. Jei konkretus
-diegimas vietoje CoT teikia NFFI, pilnus XML dokumentus skelbkite į
+Aktyvus CoT kelias yra `bridges/cot_bridge.py`: jis prenumeruoja normalizuotas
+Zenoh temas ir siunčia CoT į `cot-bridge` paskirties TAK Server. Naudokite TAK
+išduotą kliento sertifikatą, kai įjungtas `TAK_TLS=1`. Dabartiniame EFDI
+runtime nėra atskiro TAK arba SitaWare CoT priėmimo tilto. Jei konkretus
+diegimas teikia NFFI, pilnus XML dokumentus skelbkite į
 `…/raw/nffi/{source-id}` per prijungtą Zenoh mazgą.
 
 CoT ir abi SitaWare NVG išvestys naudoja tą pačią scenarijaus priklausomybės
@@ -568,37 +551,10 @@ TAK_KEY=/runtime/kelias/tak-client-key.pem
 TAK_CA=/runtime/kelias/tak-ca.pem
 ```
 
-`./start.sh` pasirinkite `cot-tcp`. Tai turi būti TAK, ne Zenoh, išduotas
+`./start.sh` pasirinkite `cot-bridge`. Tai turi būti TAK, ne Zenoh, išduotas
 sertifikatas.
 
-### 3. TAK Server → Zenoh
-
-**User Management** sukurkite atskirą gavimo tapatybę. Jai suteikite **OUT**
-narystę tik tose grupėse, kurių SA leidžiama skaityti. Išduokite jos TAK kliento
-sertifikatą ir nustatykite:
-
-```dotenv
-COT_RX_HOST=<tak-serveris>:8089
-COT_RX_TLS=1
-COT_RX_SERVER_NAME=<DNS vardas TAK sertifikate>
-COT_RX_CERT=/runtime/kelias/tak-rx.pem
-COT_RX_KEY=/runtime/kelias/tak-rx-key.pem
-COT_RX_CA=/runtime/kelias/tak-ca.pem
-COT_RX_TAK_USERS_ONLY=1
-COT_RX_INCLUDE_MARKERS=1
-```
-
-`./start.sh` pasirinkite `cot-rx`. Naujo TAK „data feed“ kurti nereikia — EFDI
-prisijungia kaip paprastas mTLS TAK klientas. ATAK/WinTAK operatoriai turi būti
-prisijungę prie to paties serverio ir bendrinti suderinamas grupes/kanalus.
-Įjungus `COT_RX_INCLUDE_MARKERS=1`, kartu su naudotojo SA priimami tik įprasti
-TAK taškiniai žymekliai (`b-m-p-*`). Jie publikuojami į
-`…/land/c2/cot/unknown/unit/tracks/v1`, TAK pusėje išlaiko CoT tipą, o SitaWare
-NVG rodomi kaip bendri nežinomi C2 vienetai. `COT_RX_TAK_USERS_ONLY=0`
-naudokite tik jei politika leidžia perduoti kitus CoT objektus. Grąžinti
-`EFDI-*` UID atmetami, o TAK įvestis negrąžinama atgal per TAK TCP išvestį.
-
-### 4. Zenoh → SitaWare HQ
+### 3. Zenoh → SitaWare HQ
 
 HQ administravime įjunkite licencijuotą NVG REST sąsają, sukurkite ne žmogaus
 integracijos paskyrą su tikslinio NVG šaltinio/sluosnio rašymo teise ir iš
@@ -652,26 +608,7 @@ Pasirinkite `sitaware`. Universalaus `/rest/v2/units` resurso nėra; jei
 administratorius negali parodyti tikro API ekrano/resurso, jo neatspėkite —
 naudokite konkretaus diegimo NFFI arba CoT Gateway.
 
-### 6. SitaWare CoT Gateway → Zenoh
-
-Licencijuotoje SitaWare CoT Gateway konfigūracijoje:
-
-1. Sukurkite eksporto profilį, pvz. `EFDI to Zenoh`.
-2. Pasirinkite nuolatinę **Cursor on Target / CoT XML** išvestį.
-3. Pasirinkite vieną TCP rolę: **client** ir įveskite EFDI adresą bei
-   `SITAWARE_COT_RX_PORT`, arba **server** ir jo adresą vėliau įrašykite kaip
-   `SITAWARE_COT_RX_HOST` EFDI pusėje.
-4. Pažymėkite tik leidžiamus own-force, transporto ir kitus sluoksnius.
-5. Iš eksporto aiškiai pašalinkite `efdi-live / EFDI Live Tracks`.
-6. Išsaugokite/pritaikykite profilį, paleiskite Gateway išvestį ir EFDI
-   pasirinkite `sitaware-cot-rx`.
-
-Gateway ekranų ir laukų pavadinimai priklauso nuo licencijos bei versijos; čia
-nurodytos įvedamos reikšmės. Tikslius mygtukus užrašykite iš įdiegto leidimo
-administravimo vadovo. Jei sistema teikia NFFI, pilnus XML dokumentus
-publikuokite į `…/raw/nffi/{source-id}` ir pasirinkite `nffi`.
-
-### 7. C2 duomenų perdavimas partneriams
+### 6. C2 duomenų perdavimas partneriams
 
 Nerašykite į kito partnerio vardų sritį. Leiskite pradinę vardų sritį
 maršrutizatoriaus/federacijos politikoje, o gavėjo pusėje prenumeruokite ją.
@@ -686,18 +623,12 @@ rolės, o ne Zenoh Admin panelės `superadmin`, `admin` ir `readonly` teisės.
 
 | Rolė | Testo klientas ir veiksmas | EFDI paslaugos | Laukiamas rezultatas |
 | --- | --- | --- | --- |
-| C2 operatorius | TAK/WinTAK/ATAK arba SitaWare naudotojas sukuria įprastą taškinį žymeklį. | `cot-rx`, `cot-tcp` ir/arba `sitaware-hq-nvg`; TAK atveju `COT_RX_TAK_USERS_ONLY=1`, `COT_RX_INCLUDE_MARKERS=1`. | Žymeklis patenka į `…/land/c2/cot/unknown/unit/tracks/v1`, pasirodo kitame C2 išvedime ir negrįžta tuo pačiu TAK TCP ryšiu. |
-| Priešakinės linijos naudotojas | Antra ne administratoriaus TAK tapatybė siunčia SA poziciją arba SitaWare CoT Gateway eksportuoja transporto žinutes. | TAK: `cot-rx`; CoT Gateway: `sitaware-cot-rx`; ir reikalingi išvedimo sluoksniai. | Pozicija bei saugus CoT tipas patenka į bendrą C2 vaizdą. EFDI administravimo prieigos nėra. |
+| C2 operatorius | TAK/WinTAK/ATAK arba SitaWare naudotojas stebi sukonfigūruotą CoT išvestį. | `cot-bridge` ir/arba `sitaware-hq-nvg`. | Normalizuoti EFDI takeliai pasiekia autorizuotą C2 sistemą. |
 | Sensoriaus leidėjas | Prie vietinio Zenoh router prijungtas imtuvas/aptikimo sistema publikuoja pilnus kadrus ar dokumentus į atitinkamą `…/raw/<protokolas>/<source-id>` temą. Laboratoriniam leidėjui administratorius **Publish Script** lange įrašo tuo metu galiojantį šio leidėjo router adresą ir sugeneruoja skriptą. | Atitinkamas protokolo vertėjas ir C2 išvedimo sluoksniai. | Vertėjas sukuria normalizuotus EFDI takelius; C2 sistemos rodo išvestus žymeklius, ne neapdorotą kadrą. |
 | Fabric administratorius | Atskira Zenoh Admin panelės paskyra administruoja tik router/federacijos nustatymus. | Infrastruktūra/Admin UI; sensoriaus ar C2 srautas nereikalingas. | Gali atlikti tik jai priskirtus panelės veiksmus; tai nėra TAK/SitaWare operacinė tapatybė. |
 
-Pirmajam bandymui tose pačiose misijos grupėse sukurkite dvi įprastas TAK
-tapatybes: `c2-operator-test` ir `frontline-test`; `cot-rx` naudokite tik trečią
-TAK išduotą tarnybinę tapatybę. C2 operatoriaus kliente pirmam bandymui naudokite
-įprastą žemėlapio **taškinio žymeklio** įrankį, ne maršrutų, brėžinių ar pokalbio
-įrankius. `cot-rx.log` turi parodyti `b-m-p-*` įvykį ir C2 Zenoh temą. Po to
-patikrinkite, kad TAK arba SitaWare klientas mato žymeklį, o operatorius —
-žemės naudotojo SA.
+Pirmajam bandymui naudokite TAK išduotą tarnybinę tapatybę `cot-bridge` išvesčiai
+ir patikrinkite, kad autorizuota C2 sistema gauna normalizuotus EFDI takelius.
 
 Dabartinė router ACL politika riboja vardų sritį, bet dar nėra susieta su
 konkrečiomis asmens rolėmis ar sertifikatų subjektais. Šie keturi klientai
@@ -726,7 +657,7 @@ rolių. Tam reikia atskiro vėlesnio sertifikatų subjektų ACL sprendimo.
 
 ```bash
 ./stop.sh              # Stabdo visus bridge procesus
-./stop.sh layers       # Stabdo tik išvesties sluoksnius (cot-udp, cot-tcp, track-fusion)
+./stop.sh layers       # Stabdo tik išvesties sluoksnius (cot-udp, cot-bridge, track-fusion)
 ```
 
 ### Žurnalų stebėjimas

@@ -75,8 +75,7 @@ SERVICES=(
     link16 mavlink opendroneid vmf nffi sapient stanag4586
     mavlink-raw link16-raw vmf-raw sapient-raw stanag4586-raw
     cap geojson ais-nmea spectrum sensor-health mission-route
-    cot-rx
-    cot-udp cot-udp-tak cot-tcp sitaware-hq-nvg
+    cot-udp cot-udp-tak cot-bridge sitaware-hq-nvg
 )
 
 # Restore only non-secret launcher choices. Explicit compose/.env values win;
@@ -97,7 +96,7 @@ load_launcher_state() {
                 REMEMBERED_SERVICES="$val"
                 ;;
             TAK_HOST|TAK_HOST_FALLBACK|TAK_UDP_HOST|TAK_UDP_HOST_FALLBACK|\
-            SITAWARE_URL|SITAWARE_URL_FALLBACK|COT_RX_HOST|\
+            SITAWARE_URL|SITAWARE_URL_FALLBACK|\
             SAPIENT_HOST|STANAG4586_HOST)
                 if [[ -z "${!key:-}" ]]; then
                     printf -v "$key" '%s' "$val"
@@ -122,7 +121,6 @@ save_launcher_state() {
         printf 'SELECTED_SERVICES=%s\n' "$selected"
         for key in TAK_HOST TAK_HOST_FALLBACK TAK_UDP_HOST TAK_UDP_HOST_FALLBACK \
                    SITAWARE_URL SITAWARE_URL_FALLBACK \
-                   COT_RX_HOST \
                    SAPIENT_HOST STANAG4586_HOST; do
             # A URL with user-info may contain credentials. Use it for this run,
             # but never copy it into persistent launcher memory.
@@ -156,7 +154,6 @@ declare -A SVC_CAT=(
     [stanag4586-raw]="Sensor bridges"
     [cap]="Protocols" [geojson]="Protocols" [ais-nmea]="Protocols"
     [spectrum]="Protocols" [sensor-health]="Protocols" [mission-route]="Protocols"
-    [cot-rx]="TAK and SitaWare layers"
     [cot-udp]="Output layers"   [cot-udp-tak]="Output layers"
     [sitaware-hq-nvg]="Output layers"
     [track-fusion]="Sensor bridges"
@@ -187,7 +184,6 @@ declare -A SVC_DESC=(
     [sitaware]="SitaWare HQ friendly force tracking (inbound REST)"
     [nffi]="Raw NFFI XML on Zenoh → normalized friendly-force tracks"
     [dronuradaras]="dronuradaras.lt drone detection network"
-    [cot-rx]="TAK Server direct CoT receiver"
     [sapient]="SAPIENT / BSI Flex 335 sensor feed"
     [stanag4586]="STANAG 4586 UAV feed"
     [mavlink-raw]="MAVLink UDP/TCP → Zenoh raw"
@@ -203,7 +199,7 @@ declare -A SVC_DESC=(
     [mission-route]="UAV routes and corridors on Zenoh"
     [cot-udp]="CoT → ATAK UDP multicast 239.2.3.1:6969 (same LAN only)"
     [cot-udp-tak]="CoT → WinTAK/ATAK UDP unicast (crosses LAN/VPN)"
-    [cot-tcp]="CoT → TAK Server TCP"
+    [cot-bridge]="CoT → TAK Server TCP"
     [sitaware-hq-nvg]="EFDI tracks → SitaWare HQ pull feed (outbound NVG)"
     [track-fusion]="Radar/ADS-B track correlation"
 )
@@ -223,7 +219,7 @@ asterix_category_uses_raw() {
 svc_ready() {
     case "$1" in
         zenoh|admin-control|airplaneslive|adsblol|aisstream|aprs|openmeteo|meteolt|\
-        dronuradaras|opendroneid|nffi|cot-udp|cot-udp-tak|cot-tcp|track-fusion|\
+        dronuradaras|opendroneid|nffi|cot-udp|cot-udp-tak|cot-bridge|track-fusion|\
         cap|geojson|ais-nmea|spectrum|sensor-health|mission-route)
             return 0 ;;
         asterix-udp) [[ "${ASTERIX_PORT:-}" ]] ;;
@@ -246,7 +242,6 @@ svc_ready() {
         sapient-raw)  [[ "${SAPIENT_RAW_PORT:-}" ]] ;;
         stanag4586-raw) [[ "${STANAG4586_RAW_PORT:-}" ]] ;;
         sitaware)     return 0 ;;  # always ready; prompts for server IP at launch if unset
-        cot-rx)       [[ "${COT_RX_PORT:-}${COT_RX_HOST:-}" ]] ;;
         sapient|stanag4586) return 0 ;;
         sitaware-hq-nvg) [[ "${SITAWARE_HQ_NVG_ENABLE:-}" == "1" ]] ;;
         *)        return 0 ;;
@@ -273,12 +268,6 @@ svc_hint() {
         vmf-raw) echo "VMF_RAW_PORT not set" ;;
         sapient-raw) echo "SAPIENT_RAW_PORT not set" ;;
         stanag4586-raw) echo "STANAG4586_RAW_PORT not set" ;;
-        cot-rx)
-            if [[ "${COT_RX_TLS:-}" == "1" ]]; then
-                echo "TAK mTLS ${COT_RX_HOST:-host not set}"
-            else
-                echo "COT_RX_PORT/HOST not set"
-            fi ;;
         sapient)
             if [[ "${SAPIENT_ZENOH_RAW:-}" == "1" ]]; then
                 _start sapient protocols/sapient_flex335.py --zenoh-raw --raw-topic "${SAPIENT_RAW_TOPIC:-}"
@@ -307,7 +296,7 @@ svc_hint() {
             else
                 echo "will prompt for address"
             fi ;;
-        cot-tcp)
+        cot-bridge)
             if [[ "${TAK_HOST:-}" ]]; then
                 [[ "${TAK_HOST_FALLBACK:-}" ]] && echo "${TAK_HOST}:${TAK_PORT:-8087} (+fallback)" || echo "${TAK_HOST}:${TAK_PORT:-8087}"
             else
@@ -326,14 +315,21 @@ svc_hint() {
 is_bridge_pid() {
     local pid="$1" expected_script="${2:-}" arg
     [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null && [[ -r "/proc/$pid/cmdline" ]] || return 1
+    local efdi_process=1
     while IFS= read -r -d '' arg; do
         if [[ -n "$expected_script" ]]; then
             [[ "$arg" == "$COMPOSE_DIR/$expected_script" ]] && return 0
         elif [[ "$arg" == "$COMPOSE_DIR/"* ]]; then
             return 0
         fi
+        [[ "$arg" == "$COMPOSE_DIR/"* ]] && efdi_process=0
     done < "/proc/$pid/cmdline"
-    return 1
+    # A service's implementation may change during an upgrade (for example,
+    # cot-bridge moved from layers/cot_layer.py to bridges/cot_bridge.py). Treat
+    # the PID-file's still-live EFDI process as running until an explicit stop
+    # or restart removes it; otherwise a normal launcher run can duplicate the
+    # same Zenoh subscriber.
+    [[ "$efdi_process" == "0" ]]
 }
 
 is_running() {
@@ -615,16 +611,6 @@ launch() {
             _start nffi protocols/nffi.py
             ;;
 
-        cot-rx)
-            if [[ "${COT_RX_PORT:-}" ]]; then
-                _start cot-rx bridges/tak_bridge.py --listen "$COT_RX_PORT" --source tak_rx
-            elif [[ "${COT_RX_HOST:-}" ]]; then
-                _start cot-rx bridges/tak_bridge.py --connect "$COT_RX_HOST" --source tak_rx
-            else
-                printf "  ${YELLOW}[skip]${R}  cot-rx            set COT_RX_PORT or COT_RX_HOST\n"
-            fi
-            ;;
-
         sapient)
             if [[ "${SAPIENT_LISTEN_PORT:-}" ]]; then
                 local sapient_args=(--listen "$SAPIENT_LISTEN_PORT" --bind "${SAPIENT_BIND:-127.0.0.1}")
@@ -695,13 +681,13 @@ launch() {
             _start cot-udp-tak layers/cot_layer.py --udp "${udp_hosts[@]}" --port "$tak_udp_port"
             ;;
 
-        cot-tcp)
+        cot-bridge)
             local tak_host="${TAK_HOST:-}"
             local tak_host2="${TAK_HOST_FALLBACK:-}"
             if [[ -z "$tak_host" && -z "$tak_host2" ]]; then
                 _prompt_address "TAK Server" tak_host
                 if [[ -z "$tak_host" ]]; then
-                    printf "  ${YELLOW}[skip]${R}  cot-tcp         no address entered\n"
+                    printf "  ${YELLOW}[skip]${R}  cot-bridge         no address entered\n"
                     return
                 fi
                 export TAK_HOST="$tak_host"
@@ -712,7 +698,7 @@ launch() {
             if [[ "${TAK_TLS:-}" == "1" ]]; then
                 tcp_args+=(--tls --cert "${TAK_CERT:-}" --key "${TAK_KEY:-}" --ca "${TAK_CA:-}")
             fi
-            _start cot-tcp layers/cot_layer.py "${tcp_args[@]}"
+            _start cot-bridge bridges/cot_bridge.py "${tcp_args[@]}"
             ;;
 
         sitaware-hq-nvg)
@@ -782,7 +768,7 @@ for svc in "${SERVICES[@]}"; do
     fi
 done
 if (( restored == 0 )); then
-    for svc in zenoh admin-control cot-udp cot-tcp track-fusion; do sel[$svc]=1; done
+    for svc in zenoh admin-control cot-udp cot-bridge track-fusion; do sel[$svc]=1; done
     svc_ready asterix-udp && sel[asterix-udp]=1 || true
     for svc in asterix-cat10 asterix-cat20 asterix-cat21 \
                asterix-cat34 asterix-cat48 asterix-cat62; do

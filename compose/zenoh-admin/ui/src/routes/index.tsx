@@ -82,7 +82,7 @@ function formatBytesPerSec(bytes: number | null): string {
 
 function StatCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="hud-frame rounded-md border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#111113] p-4 hud-card">
+    <div className="hud-frame rounded-md border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#0c0c0e] p-4 hud-card">
       <HudCorners />
       <span className="text-[10px] font-semibold tracking-wider text-zinc-500 uppercase">{label}</span>
       <p className="text-sm font-medium font-mono text-zinc-800 dark:text-zinc-200 mt-2">{value}</p>
@@ -96,7 +96,7 @@ const WHATAMI_LABEL: Record<string, string> = {
 
 function PeerList({ peers }: { peers: PeerInfo[] }) {
   return (
-    <div className="hud-frame rounded-md border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#111113] p-4 hud-card">
+    <div className="hud-frame rounded-md border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#0c0c0e] p-4 hud-card">
       <HudCorners />
       <span className="text-[10px] font-semibold tracking-wider text-zinc-500 uppercase">Connected routers</span>
       {peers.length === 0 ? (
@@ -165,7 +165,7 @@ function TopicTree({ label, items }: { label: string; items: string[] }) {
   }
 
   return (
-    <div className="hud-frame rounded-md border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#111113] p-4 hud-card">
+    <div className="hud-frame rounded-md border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#0c0c0e] p-4 hud-card">
       <HudCorners />
       <span className="text-[10px] font-semibold tracking-wider text-zinc-500 uppercase">{label}</span>
       {items.length === 0 ? (
@@ -203,7 +203,7 @@ function SystemStatCard({ icon: Icon, label, value, state = 'ok' }: { icon: Luci
   const badgeClass = state === 'critical' ? 'border-red-300 dark:border-red-800 bg-red-100 dark:bg-red-500/10' : state === 'warn' ? 'border-yellow-300 dark:border-yellow-800 bg-yellow-100 dark:bg-yellow-500/10' : 'border-zinc-300 dark:border-white/10 bg-zinc-200/50 dark:bg-white/[0.04]'
   const textClass = state === 'critical' ? 'text-red-600 dark:text-red-400' : state === 'warn' ? 'text-yellow-600 dark:text-yellow-400' : 'text-zinc-800 dark:text-zinc-200'
   return (
-    <div className="hud-frame rounded-md border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#111113] p-4 hud-card">
+    <div className="hud-frame rounded-md border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#0c0c0e] p-4 hud-card">
       <HudCorners />
       <div className="flex items-start justify-between mb-3">
         <span className="text-[10px] font-semibold tracking-wider text-zinc-500 uppercase">{label}</span>
@@ -219,7 +219,7 @@ function SystemStatCard({ icon: Icon, label, value, state = 'ok' }: { icon: Luci
 function ServiceCard({ service }: { service: ServiceState }) {
   const running = service.status === 'running'
   return (
-    <div className="hud-frame rounded-md border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#111113] p-4 hud-card">
+    <div className="hud-frame rounded-md border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#0c0c0e] p-4 hud-card">
       <HudCorners />
       <div className="flex items-start justify-between mb-3">
         <span className="text-[10px] font-semibold tracking-wider text-zinc-500 uppercase">Service</span>
@@ -292,7 +292,7 @@ function DashboardPage() {
             </>
           ) : (
             Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="hud-frame rounded-md border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#111113] p-4 hud-card">
+              <div key={i} className="hud-frame rounded-md border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#0c0c0e] p-4 hud-card">
                 <HudCorners />
                 <div className="flex items-start justify-between mb-3">
                   <Skeleton className="h-2.5 w-10" />
@@ -316,7 +316,7 @@ function DashboardPage() {
 
         <div className="hud-frame relative hud-enter hud-enter-delay-1 mb-6">
           <HudCorners />
-          <div className="rounded-md border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#111113] p-5">
+          <div className="rounded-md border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#0c0c0e] p-5">
             <div className="flex items-center justify-between mb-3">
               <h2 className="hud-label text-sm font-semibold text-zinc-600 dark:text-zinc-400">Federation topology</h2>
               <button
@@ -334,7 +334,7 @@ function DashboardPage() {
           <>
             <h2 className="hud-label text-sm font-semibold text-zinc-600 dark:text-zinc-400 mb-3">Zenoh</h2>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6 hud-enter hud-enter-delay-2">
-              <div className="hud-frame rounded-md border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#111113] p-4 hud-card">
+              <div className="hud-frame rounded-md border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#0c0c0e] p-4 hud-card">
                 <HudCorners />
                 <div className="flex items-start justify-between mb-3">
                   <span className="text-[10px] font-semibold tracking-wider text-zinc-500 uppercase">Router</span>

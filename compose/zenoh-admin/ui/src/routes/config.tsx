@@ -75,7 +75,7 @@ function ConfigSection({
   className?: string
 }) {
   return (
-    <section className={`hud-frame relative hud-enter rounded-md border border-zinc-200 bg-white p-5 dark:border-white/10 dark:bg-[#111113] ${className}`}>
+    <section className={`hud-frame relative hud-enter rounded-md border border-zinc-200 bg-white p-5 dark:border-white/10 dark:bg-[#0c0c0e] ${className}`}>
       <HudCorners />
       <div className="mb-5 flex items-start gap-3 border-b border-zinc-200 pb-4 dark:border-white/10">
         <div className="mt-0.5 rounded-md border border-accent-ring/30 bg-accent-ring/10 p-2 text-accent-ring">
@@ -235,7 +235,7 @@ function ConfigPage() {
     }
   }
 
-  const inputClass = "w-full px-3 py-2 rounded-md bg-zinc-200 dark:bg-[#1a1a1d] border border-zinc-300 dark:border-white/10 text-zinc-900 dark:text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-accent-ring disabled:opacity-50"
+  const inputClass = "w-full px-3 py-2 rounded-md bg-zinc-200 dark:bg-[#141416] border border-zinc-300 dark:border-white/10 text-zinc-900 dark:text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-accent-ring disabled:opacity-50"
 
   return (
     <Layout>
@@ -259,7 +259,7 @@ function ConfigPage() {
         />
 
         <div className="mb-6 grid gap-3 sm:grid-cols-2">
-          <div className="hud-frame relative flex min-h-20 items-center gap-3 rounded-md border border-zinc-200 bg-white px-4 py-3 dark:border-white/10 dark:bg-[#111113]">
+          <div className="hud-frame relative flex min-h-20 items-center gap-3 rounded-md border border-zinc-200 bg-white px-4 py-3 dark:border-white/10 dark:bg-[#0c0c0e]">
             <HudCorners />
             <FileCode2 size={18} className="shrink-0 text-zinc-500" />
             <div className="min-w-0">
@@ -270,7 +270,7 @@ function ConfigPage() {
             </div>
           </div>
 
-          <div className="hud-frame relative flex min-h-20 items-center gap-3 rounded-md border border-zinc-200 bg-white px-4 py-3 dark:border-white/10 dark:bg-[#111113]">
+          <div className="hud-frame relative flex min-h-20 items-center gap-3 rounded-md border border-zinc-200 bg-white px-4 py-3 dark:border-white/10 dark:bg-[#0c0c0e]">
             <HudCorners />
             <Waypoints size={18} className="shrink-0 text-zinc-500" />
             <div className="min-w-0 flex-1">
@@ -344,7 +344,7 @@ function ConfigPage() {
                     const parsed = parseFabricEndpoint(endpoint)
                     return (
                       <div key={index} className="flex gap-2">
-                        <div className="flex flex-1 items-center gap-2 rounded-md border border-zinc-300 bg-zinc-200 px-3 focus-within:ring-2 focus-within:ring-accent-ring dark:border-white/10 dark:bg-[#1a1a1d]">
+                        <div className="flex flex-1 items-center gap-2 rounded-md border border-zinc-300 bg-zinc-200 px-3 focus-within:ring-2 focus-within:ring-accent-ring dark:border-white/10 dark:bg-[#141416]">
                           <span className="shrink-0 text-sm text-zinc-500">tls://</span>
                           <input type="text" disabled={!canWrite} placeholder="host or NetBird name"
                             className="flex-1 bg-transparent py-2 font-mono text-sm text-zinc-900 focus:outline-none disabled:opacity-50 dark:text-white"

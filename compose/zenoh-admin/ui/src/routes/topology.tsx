@@ -52,7 +52,7 @@ function TopologyPage() {
           </button>
         </div>
 
-        <div className="hud-frame relative rounded-md border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#111113] p-4">
+        <div className="hud-frame relative rounded-md border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#0c0c0e] p-4">
           <HudCorners />
           {data === null ? (
             <p className="text-sm text-zinc-500">Loading…</p>

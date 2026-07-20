@@ -69,10 +69,14 @@ PYTHON="$VENV/bin/python3"
 is_bridge_pid() {
     local pid="$1" expected_script="$2" arg
     [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null && [[ -r "/proc/$pid/cmdline" ]] || return 1
+    local efdi_process=1
     while IFS= read -r -d '' arg; do
         [[ "$arg" == "$COMPOSE_DIR/$expected_script" ]] && return 0
+        [[ "$arg" == "$COMPOSE_DIR/"* ]] && efdi_process=0
     done < "/proc/$pid/cmdline"
-    return 1
+    # Keep a live PID-file process authoritative across implementation-path
+    # changes so run.sh cannot launch a second subscriber for the same service.
+    [[ "$efdi_process" == "0" ]]
 }
 
 start() {
@@ -343,9 +347,9 @@ start_layers() {
         if [[ "${TAK_TLS:-}" == "1" ]]; then
             _cot_args+=(--tls --cert "${TAK_CERT}" --key "${TAK_KEY}" --ca "${TAK_CA}")
         fi
-        start cot-tcp layers/cot_layer.py "${_cot_args[@]}"
+        start cot-bridge bridges/cot_bridge.py "${_cot_args[@]}"
     else
-        echo "  [skip] cot-tcp — TAK Server not reachable at ${TAK_HOST:-127.0.0.1}:${TAK_PORT:-8087}"
+        echo "  [skip] cot-bridge — TAK Server not reachable at ${TAK_HOST:-127.0.0.1}:${TAK_PORT:-8087}"
     fi
 
     # SitaWare HQ NVG Import Subscription pulls a complete NVG snapshot from
@@ -354,18 +358,6 @@ start_layers() {
         start sitaware-hq-nvg bridges/nvg_bridge.py
     else
         echo "  [skip] sitaware-hq-nvg — set SITAWARE_HQ_NVG_ENABLE=1 to enable"
-    fi
-
-    # TAK Server receiver — direct CoT user-SA stream over TCP/TLS.
-    # TLS credentials and TAK-user filtering are read from COT_RX_* environment variables.
-    # Set COT_RX_PORT to open a listener (they connect to us)
-    # Set COT_RX_HOST to connect outbound (we connect to them, format IP:PORT)
-    if [[ "${COT_RX_PORT:-}" ]]; then
-        start cot-rx bridges/tak_bridge.py --listen "$COT_RX_PORT" --source tak_rx
-    elif [[ "${COT_RX_HOST:-}" ]]; then
-        start cot-rx bridges/tak_bridge.py --connect "$COT_RX_HOST" --source tak_rx
-    else
-        echo "  [skip] cot-rx — set COT_RX_PORT or COT_RX_HOST in .env to enable"
     fi
 
 }
@@ -408,13 +400,6 @@ start_giraffe_bridges() {
         echo "  [skip] vmf — set VMF_PORT in .env to enable"
     fi
 
-    if [[ "${COT_RX_PORT:-}" ]]; then
-        start cot-rx bridges/tak_bridge.py --listen "$COT_RX_PORT" --source tak_rx
-    elif [[ "${COT_RX_HOST:-}" ]]; then
-        start cot-rx bridges/tak_bridge.py --connect "$COT_RX_HOST" --source tak_rx
-    else
-        echo "  [skip] cot-rx — set COT_RX_PORT or COT_RX_HOST in .env to enable"
-    fi
 }
 
 start_giraffe_layers() {
@@ -431,9 +416,9 @@ start_giraffe_layers() {
         if [[ "${TAK_TLS:-}" == "1" ]]; then
             _cot_args+=(--tls --cert "${TAK_CERT}" --key "${TAK_KEY}" --ca "${TAK_CA}")
         fi
-        start cot-tcp layers/cot_layer.py "${_cot_args[@]}"
+        start cot-bridge bridges/cot_bridge.py "${_cot_args[@]}"
     else
-        echo "  [skip] cot-tcp — TAK Server not reachable at ${TAK_HOST:-127.0.0.1}:${TAK_PORT:-8087}"
+        echo "  [skip] cot-bridge — TAK Server not reachable at ${TAK_HOST:-127.0.0.1}:${TAK_PORT:-8087}"
     fi
 
     # Track fusion — always start in giraffe mode (correlates radar + any ADS-B)

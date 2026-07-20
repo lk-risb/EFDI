@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "@xterm/xterm/css/xterm.css";
 @custom-variant dark (&:where(.dark, .dark *));
 
 /* Self-hosted (not Google Fonts CDN) — this panel needs to work in
@@ -97,8 +98,8 @@
      actual names. Dark-mode HUD surfaces only — the light theme keeps its
      existing zinc/white palette untouched. */
   --color-hud-0: #050506;
-  --color-hud-1: #111113;
-  --color-hud-2: #1a1a1d;
+  --color-hud-1: #0c0c0e;
+  --color-hud-2: #141416;
   --color-hud-3: #232326;
   --color-hud-4: #2b2b2f;
 
@@ -181,9 +182,10 @@
    app's black canvas. Dark mode only, applied to the app's root surface. */
 .dark .hud-grid-bg {
   background-image:
-    linear-gradient(to right, rgba(255, 255, 255, 0.035) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+    linear-gradient(to right, color-mix(in srgb, #ffffff 2%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in srgb, #ffffff 2%, transparent) 1px, transparent 1px);
   background-size: 32px 32px;
+  background-position: 0 24px;
 }
 
 /* Corner-bracket / reticle framing. Apply `hud-frame` (position: relative) to
@@ -191,12 +193,10 @@
    children (see HudCorners.tsx). */
 .hud-frame {
   position: relative;
-  isolation: isolate;
-  z-index: 0;
 }
 .hud-corner {
   position: absolute;
-  z-index: 20;
+  z-index: 1001;
   width: 14px;
   height: 14px;
   border-color: var(--color-accent-fill);

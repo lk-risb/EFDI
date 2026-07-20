@@ -23,6 +23,9 @@ from .publish_script import router as publish_script_router
 from .oidc import router as oidc_router, OIDC_ENABLED
 from .topology import router as topology_router, start_topology
 from .control import router as control_router
+from .audit import router as audit_router
+from .logs import router as logs_router
+from .shell import router as shell_router
 from .deps import SECRET_KEY
 
 
@@ -113,6 +116,9 @@ app.include_router(publish_script_router)
 app.include_router(oidc_router)
 app.include_router(topology_router)
 app.include_router(control_router)
+app.include_router(audit_router)
+app.include_router(logs_router)
+app.include_router(shell_router)
 
 
 class SPAStaticFiles(StaticFiles):

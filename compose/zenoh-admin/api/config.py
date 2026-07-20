@@ -39,6 +39,11 @@ ZENOH_ROUTER_SERVICE_LABEL = os.environ.get("ZENOH_ROUTER_CONTAINER", "efdi-pod-
 # router processes.
 _TLS_PROFILES = {
     "efdi": {
+        "label": "EFDI backbone (EFDI CA)",
+        "publish_cert_dir": "efdi",
+        "publish_root_ca": "efdi-ca-root.pem",
+        "publish_client_cert": "{client_cn}-cert.pem",
+        "publish_client_key": "{client_cn}-key.pem",
         "listen_certificate": "/etc/zenoh/tls/pod-cert.pem",
         "listen_private_key": "/etc/zenoh/tls/pod-key.pem",
         "connect_certificate": "/etc/zenoh/tls/pod-cert.pem",
@@ -46,6 +51,11 @@ _TLS_PROFILES = {
         "root_ca": "/etc/zenoh/tls/ca-roots.pem",
     },
     "sandbox": {
+        "label": "EFDI backbone sandbox (Desert Bread CA)",
+        "publish_cert_dir": "zenoh-sandbox",
+        "publish_root_ca": "ca-roots.pem",
+        "publish_client_cert": "cert.pem",
+        "publish_client_key": "key.pem",
         # The recovered hackathon identity is a client certificate. Keep the
         # EFDI server-capable identity on the local listener and use the
         # sandbox identity only when dialing the remote router.

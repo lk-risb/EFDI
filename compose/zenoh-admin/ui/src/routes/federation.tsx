@@ -47,7 +47,7 @@ function StatusBadge({ child }: { child: FederatedChild }) {
   )
 }
 
-const inputClass = "w-full px-3 py-2 rounded-md bg-zinc-200 dark:bg-[#1a1a1d] border border-zinc-300 dark:border-white/10 text-zinc-900 dark:text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-accent-ring"
+const inputClass = "w-full px-3 py-2 rounded-md bg-zinc-200 dark:bg-[#141416] border border-zinc-300 dark:border-white/10 text-zinc-900 dark:text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-accent-ring"
 
 function FederationPage() {
   const [children, setChildren] = useState<FederatedChild[] | null>(null)
@@ -144,7 +144,7 @@ function FederationPage() {
 
         <div className="hud-frame relative hud-enter mb-6">
           <HudCorners />
-          <div className="rounded-md border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#111113] p-4">
+          <div className="rounded-md border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#0c0c0e] p-4">
             <h2 className="hud-label text-sm font-semibold text-zinc-600 dark:text-zinc-400 mb-3">Topology</h2>
             <TopologyMap nodes={topology} transportEdges={transportEdges} selected={selectedNamespace} onSelect={setSelectedNamespace} />
           </div>
@@ -155,7 +155,7 @@ function FederationPage() {
           const child = children?.find(item => item.namespace === selectedNamespace)
           if (!node) return null
           return (
-            <div className="hud-frame relative mb-6 rounded-md border border-accent-ring/40 bg-white dark:bg-[#111113] p-4">
+            <div className="hud-frame relative mb-6 rounded-md border border-accent-ring/40 bg-white dark:bg-[#0c0c0e] p-4">
               <HudCorners />
               <div className="flex items-center justify-between mb-3">
                 <p className="text-sm font-mono text-zinc-800 dark:text-zinc-200">{node.namespace}</p>
@@ -186,7 +186,7 @@ function FederationPage() {
 
         <div className="hud-frame relative hud-enter mb-6">
           <HudCorners />
-          <form onSubmit={handleCreate} className="rounded-md border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#111113] p-5 space-y-4">
+          <form onSubmit={handleCreate} className="rounded-md border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#0c0c0e] p-5 space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1">
               <label className="text-sm text-zinc-700 dark:text-zinc-300">Name</label>
@@ -211,7 +211,7 @@ function FederationPage() {
             <p className="text-sm text-zinc-500">No federated children yet.</p>
           ) : (
             children.map(c => (
-              <div key={c.id} className="hud-frame relative hud-card flex items-center justify-between rounded-md border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#111113] p-4">
+              <div key={c.id} className="hud-frame relative hud-card flex items-center justify-between rounded-md border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#0c0c0e] p-4">
                 <HudCorners />
                 <div>
                   <p className="text-sm font-medium text-zinc-800 dark:text-zinc-200">{c.name}</p>
