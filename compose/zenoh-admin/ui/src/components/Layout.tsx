@@ -9,7 +9,7 @@ import { useBranding } from '@/store/branding'
 import { useTheme } from '@/store/theme'
 import { useNotifications } from '@/store/notifications'
 import {
-  LayoutDashboard, FileCog, ShieldUser, LogOut, Users, Sun, Moon, Bell, ShieldCheck, Radio, Network, Waypoints, SlidersHorizontal, Settings2, ScrollText, Terminal, History
+  LayoutDashboard, FileCog, ShieldUser, LogOut, Users, Sun, Moon, Bell, ShieldCheck, Radio, Network, SlidersHorizontal, Settings2, ScrollText, Terminal, History, GitPullRequestDraft
 } from 'lucide-react'
 
 // Three-bar icon that morphs into an X on open — plain CSS transitions on
@@ -35,19 +35,19 @@ function HamburgerIcon({ open }: { open: boolean }) {
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
+  { to: '/network', label: 'Network', icon: Network },
 ]
 
 const adminItems = [
   { to: '/config', label: 'Config', icon: FileCog },
   { to: '/runtime', label: 'Runtime Control', icon: SlidersHorizontal },
-  { to: '/topology', label: 'Topology', icon: Waypoints },
+  { to: '/changes', label: 'Changes', icon: GitPullRequestDraft },
 ]
 
 const superAdminItems = [
   { to: '/admin-users', label: 'Admin Users', icon: ShieldUser },
   { to: '/certificates', label: 'Certificates', icon: ShieldCheck },
   { to: '/publish-builder', label: 'Publish Script', icon: Radio },
-  { to: '/federation', label: 'Federation', icon: Network },
   { to: '/shell', label: 'Shell', icon: Terminal },
   { to: '/logs', label: 'Logs', icon: ScrollText },
   { to: '/audit-log', label: 'Audit Logs', icon: History },
@@ -266,7 +266,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             )}
           </button>
           {notifOpen && (
-            <div className="fixed top-14 left-4 right-4 w-auto md:absolute md:top-auto md:left-0 md:right-auto md:mt-2 md:w-72 rounded-md border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#0c0c0e] shadow-lg z-50 max-h-80 overflow-y-auto">
+            <div className="fixed top-14 left-4 right-4 w-auto md:absolute md:top-full md:left-auto md:right-0 md:mt-2 md:w-72 rounded-md border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#0c0c0e] shadow-lg z-50 max-h-80 overflow-y-auto">
               <div className="flex items-center justify-between px-3 py-2 border-b border-zinc-200 dark:border-white/10">
                 <span className="hud-label text-xs font-semibold text-zinc-600 dark:text-zinc-400">Notifications</span>
                 <button onClick={clearNotifications} className="text-xs text-accent-ring hover:underline">Clear all</button>

@@ -1,17 +1,23 @@
+import asyncio
+import hashlib
 import os
 import re
 import stat
 import tempfile
+import threading
+import time
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
 import json5
 import docker
+import zenoh
 from docker.errors import DockerException, NotFound
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .db import get_db
 from .deps import require_role, write_audit
 from .control import _control
+from .config_revisions import create_revision, set_revision_state
 
 router = APIRouter(prefix="/api/config", tags=["config"])
 
@@ -81,6 +87,11 @@ _MAX_FABRIC_ENDPOINTS = 16
 _PREFIX_FILE = os.environ.get("NAMESPACE_PREFIX_FILE", "/namespace-prefix")
 _DEFAULT_PREFIX = "LTU/CISB"
 _DATA_PREFIX_FILE = os.environ.get("DATA_NAMESPACE_PREFIX_FILE", "/data-topic-prefix")
+_CONFIG_APPLY_LOCK = threading.RLock()
+_LAST_KNOWN_GOOD_PATH = CONFIG_PATH + ".last-known-good"
+_HEALTH_CHECK_TIMEOUT_S = 30
+_HEALTH_CHECK_INTERVAL_S = 2
+_MANAGEMENT_LINK_TIMEOUT_S = 20
 
 
 def _read_prefix_file() -> str:
@@ -95,10 +106,7 @@ def _read_prefix_file() -> str:
 
 
 def _write_prefix_file(value: str) -> None:
-    with open(_PREFIX_FILE, "w") as f:
-        f.write(value + "\n")
-        f.flush()
-        os.fsync(f.fileno())
+    atomic_write(_PREFIX_FILE, value + "\n")
 
 
 def _read_data_prefix_file() -> str:
@@ -113,10 +121,7 @@ def _read_data_prefix_file() -> str:
 
 
 def _write_data_prefix_file(value: str) -> None:
-    with open(_DATA_PREFIX_FILE, "w") as f:
-        f.write(value + "\n")
-        f.flush()
-        os.fsync(f.fileno())
+    atomic_write(_DATA_PREFIX_FILE, value + "\n")
 
 
 def _data_topic_root(prefix: str, partner_namespace: str) -> str:
@@ -351,6 +356,195 @@ def restart_router_container() -> tuple[bool, str | None]:
         return False, str(exc)
 
 
+def router_is_healthy() -> bool:
+    """Return true only when the managed router is running and healthy."""
+    try:
+        client = docker.from_env()
+        container = client.containers.get(ZENOH_ROUTER_SERVICE_LABEL)
+        container.reload()
+        state = container.attrs.get("State", {})
+        if state.get("Status") != "running":
+            return False
+        health = state.get("Health", {}).get("Status")
+        return health == "healthy" if health is not None else True
+    except (NotFound, DockerException):
+        return False
+
+
+def wait_for_router_health(timeout_s: int = _HEALTH_CHECK_TIMEOUT_S) -> bool:
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        if router_is_healthy():
+            return True
+        time.sleep(_HEALTH_CHECK_INTERVAL_S)
+    return False
+
+
+def router_has_remote_router_link(fields: ConfigFields) -> bool:
+    """Prove that the restarted router still has at least one router link.
+
+    Container health alone only proves that Zenoh parsed and started. A child
+    could be healthy while disconnected from its parent. Query the local
+    router's own admin record and require a live router/peer session before a
+    federated activation is committed.
+    """
+    conf = zenoh.Config()
+    conf.insert_json5("mode", '"client"')
+    conf.insert_json5("connect/endpoints", json5.dumps([f"tcp/127.0.0.1:{fields.local_tcp_port}"]))
+    session = None
+    try:
+        session = zenoh.open(conf)
+        zids = list(session.info.routers_zid())
+        if not zids:
+            return False
+        replies = list(session.get(f"@/{zids[0]}/router", target=zenoh.QueryTarget.ALL, timeout=3))
+        for reply in replies:
+            if not reply.ok:
+                continue
+            payload = json5.loads(bytes(reply.ok.payload).decode("utf-8"))
+            sessions = payload.get("sessions", []) if isinstance(payload, dict) else []
+            if any(
+                isinstance(item, dict) and item.get("whatami") in {"router", "peer"}
+                for item in sessions
+            ):
+                return True
+    except Exception:
+        return False
+    finally:
+        if session is not None:
+            session.close()
+    return False
+
+
+def wait_for_remote_router_link(
+    fields: ConfigFields,
+    timeout_s: int = _MANAGEMENT_LINK_TIMEOUT_S,
+) -> bool:
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        if router_has_remote_router_link(fields):
+            return True
+        time.sleep(_HEALTH_CHECK_INTERVAL_S)
+    return False
+
+
+def validate_rendered_config(rendered: str) -> tuple[bool, str]:
+    """Run the pinned Zenoh binary against a disconnected candidate config."""
+    try:
+        result = _control("/v1/router/validate-config", method="POST", body={"config": rendered})
+    except HTTPException as exc:
+        return False, str(exc.detail)
+    ok = result.get("ok") is True
+    detail = result.get("output")
+    if not isinstance(detail, str):
+        detail = "Zenoh config preflight returned an invalid response"
+    return ok, detail[:8000]
+
+
+def apply_rendered_config(
+    rendered: str,
+    fields: ConfigFields,
+    *,
+    restart_native: bool,
+    preserve_management: bool = False,
+) -> dict:
+    """Validate, atomically activate, health-check, and roll back a config.
+
+    This is the one local activation path used by the WebUI and federation
+    subscriber. The previous config and both namespace state files remain
+    available until the new router is proven healthy. A child therefore never
+    loses its last-known-good local configuration merely because its parent
+    sent an invalid or non-starting candidate.
+    """
+    with _CONFIG_APPLY_LOCK:
+        valid, validation_detail = validate_rendered_config(rendered)
+        if not valid:
+            return {
+                "status": "rejected",
+                "restarted": False,
+                "rolled_back": False,
+                "error": validation_detail,
+                "native_process_restart_required": False,
+                "native_process_restart_failures": [],
+            }
+
+        try:
+            with open(CONFIG_PATH) as handle:
+                previous_config = handle.read()
+        except OSError as exc:
+            return {
+                "status": "rejected",
+                "restarted": False,
+                "rolled_back": False,
+                "error": f"could not read current config: {exc}",
+                "native_process_restart_required": False,
+                "native_process_restart_failures": [],
+            }
+        previous_prefix = _read_prefix_file()
+        previous_publish_prefix = _read_data_prefix_file()
+        native_restart_required = (
+            fields.namespace_prefix != previous_prefix
+            or fields.publish_prefix != previous_publish_prefix
+        )
+
+        atomic_write(_LAST_KNOWN_GOOD_PATH, previous_config)
+        try:
+            write_config_to_disk(rendered)
+            _write_prefix_file(fields.namespace_prefix)
+            _write_data_prefix_file(fields.publish_prefix)
+        except OSError as exc:
+            atomic_write(CONFIG_PATH, previous_config)
+            _write_prefix_file(previous_prefix)
+            _write_data_prefix_file(previous_publish_prefix)
+            return {
+                "status": "rejected",
+                "restarted": False,
+                "rolled_back": True,
+                "error": f"candidate write failed: {exc}",
+                "native_process_restart_required": False,
+                "native_process_restart_failures": [],
+            }
+
+        restarted, restart_error = restart_router_container()
+        healthy = restarted and wait_for_router_health()
+        management_connected = (
+            not preserve_management
+            or (healthy and wait_for_remote_router_link(fields))
+        )
+        if not healthy or not management_connected:
+            atomic_write(CONFIG_PATH, previous_config)
+            _write_prefix_file(previous_prefix)
+            _write_data_prefix_file(previous_publish_prefix)
+            rollback_restarted, rollback_error = restart_router_container()
+            rollback_healthy = rollback_restarted and wait_for_router_health()
+            reason = restart_error or (
+                "router did not re-establish a remote management link after restart"
+                if healthy and not management_connected
+                else "router did not become healthy after restart"
+            )
+            if not rollback_healthy:
+                reason += f"; rollback restart failed: {rollback_error or 'router unhealthy'}"
+            return {
+                "status": "rolled_back" if rollback_healthy else "failed",
+                "restarted": False,
+                "rolled_back": rollback_healthy,
+                "error": reason,
+                "native_process_restart_required": False,
+                "native_process_restart_failures": [],
+            }
+
+        native_failures = restart_native_processes() if restart_native and native_restart_required else []
+        return {
+            "status": "applied",
+            "restarted": True,
+            "rolled_back": False,
+            "error": None,
+            "validation": validation_detail,
+            "native_process_restart_required": native_restart_required,
+            "native_process_restart_failures": native_failures,
+        }
+
+
 def restart_native_processes() -> list[str]:
     """Restart every currently running host process after a topic-root change."""
     try:
@@ -385,33 +579,59 @@ async def get_config(_=Depends(require_role("admin", "superadmin"))):
     return {"fields": fields, "path": CONFIG_PATH}
 
 
+@router.post("/validate")
+async def validate_config(
+    fields: ConfigFields,
+    _=Depends(require_role("superadmin")),
+):
+    rendered = _render_config(fields)
+    valid, detail = validate_rendered_config(rendered)
+    if not valid:
+        raise HTTPException(status_code=422, detail=detail)
+    return {"valid": True, "detail": detail}
+
+
 @router.put("")
 async def put_config(
     fields: ConfigFields,
     db: AsyncSession = Depends(get_db),
     actor=Depends(require_role("superadmin")),
 ):
-    previous_prefix = _read_prefix_file()
-    previous_publish_prefix = _read_data_prefix_file()
     rendered = _render_config(fields)
-    write_config_to_disk(rendered)
-    _write_prefix_file(fields.namespace_prefix)
-    _write_data_prefix_file(fields.publish_prefix)
-    restarted, restart_error = restart_router_container()
-    native_restart_required = (
-        fields.namespace_prefix != previous_prefix
-        or fields.publish_prefix != previous_publish_prefix
+    version = int(time.time() * 1000)
+    revision = await create_revision(
+        db,
+        target_namespace=fields.partner_namespace,
+        version=version,
+        source="local",
+        state="validating",
+        config_sha256=hashlib.sha256(rendered.encode()).hexdigest(),
+        created_by=actor.id,
     )
-    native_restart_failures = restart_native_processes() if native_restart_required else []
+    try:
+        result = await asyncio.to_thread(
+            apply_rendered_config,
+            rendered,
+            fields,
+            restart_native=True,
+        )
+    except Exception as exc:
+        await set_revision_state(db, revision, "failed", str(exc))
+        raise
+    await set_revision_state(db, revision, result["status"], result.get("error"))
 
-    await write_audit(db, actor.id, "update_zenoh_config",
-                       ("restarted" if restarted else f"write ok, restart failed: {restart_error}")
-                       + (", native processes restarted"
-                          if native_restart_required and not native_restart_failures
-                          else ", native process restart failures: " + "; ".join(native_restart_failures)
-                          if native_restart_failures else ""))
+    await write_audit(
+        db,
+        actor.id,
+        "update_zenoh_config",
+        f"status={result['status']}"
+        + (f", error={result['error']}" if result.get("error") else "")
+        + (", native processes restarted"
+           if result["native_process_restart_required"] and not result["native_process_restart_failures"]
+           else ", native process restart failures: " + "; ".join(result["native_process_restart_failures"])
+           if result["native_process_restart_failures"] else ""),
+    )
 
-    return {"status": "written", "restarted": restarted,
-            "restart_error": restart_error,
-            "native_process_restart_required": native_restart_required,
-            "native_process_restart_failures": native_restart_failures}
+    if result["status"] in {"rejected", "failed"}:
+        raise HTTPException(status_code=422 if result["status"] == "rejected" else 500, detail=result["error"])
+    return {**result, "version": version, "revision_id": revision.id}

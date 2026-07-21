@@ -23,9 +23,12 @@ import urllib.error
 import urllib.request
 
 import zenoh
+from zenoh_auth import apply_zenoh_auth
 
 from http_json import read_json_response
 from namespace_prefix import topic_root
+from protocols.adsblol_track_pb2 import AdsbLolTrack
+from protocols.protobuf_codec import source_track_to_message
 
 ORG = os.environ.get("PARTNER_NAMESPACE", "")
 TOPIC_ROOT = topic_root()
@@ -51,6 +54,7 @@ def make_config() -> "zenoh.Config":
     conf = zenoh.Config()
     conf.insert_json5("mode", '"client"')
     conf.insert_json5("connect/endpoints", json.dumps([_ENDPOINT]))
+    apply_zenoh_auth(conf)
     if _ENDPOINT.startswith("tls"):
         conf.insert_json5("transport/link/tls", json.dumps({
             "root_ca_certificate": os.path.join(_CERT_DIR, "efdi-ca-root.pem"),
@@ -217,6 +221,12 @@ def run(args) -> None:
     military = session.declare_publisher(
         "{}/air/adsblol/adsb/mil/aircraft/tracks/v1".format(TOPIC_ROOT)
     )
+    civil_v2 = session.declare_publisher(
+        "{}/air/adsblol/adsb/civ/aircraft/tracks/v2".format(TOPIC_ROOT)
+    )
+    military_v2 = session.declare_publisher(
+        "{}/air/adsblol/adsb/mil/aircraft/tracks/v2".format(TOPIC_ROOT)
+    )
     print(
         "ADSB.lol: {} centers radius={}nm interval={}s".format(
             len(POLL_CENTERS), args.radius, args.interval
@@ -243,6 +253,11 @@ def run(args) -> None:
                         json.dumps(track, separators=(",", ":")).encode(),
                         encoding=zenoh.Encoding.APPLICATION_JSON,
                     )
+                    publisher_v2 = military_v2 if track["is_military"] else civil_v2
+                    publisher_v2.put(
+                        source_track_to_message(AdsbLolTrack, track).SerializeToString(),
+                        encoding=zenoh.Encoding.APPLICATION_PROTOBUF,
+                    )
                     published += 1
             print("ADSB.lol tracks published: {}".format(published), flush=True)
             time.sleep(args.interval)
@@ -251,6 +266,8 @@ def run(args) -> None:
     finally:
         civil.undeclare()
         military.undeclare()
+        civil_v2.undeclare()
+        military_v2.undeclare()
         session.close()
 
 

@@ -15,6 +15,7 @@ import socket
 import time
 
 import zenoh
+from zenoh_auth import apply_zenoh_auth
 
 from namespace_prefix import topic_root
 
@@ -26,6 +27,7 @@ def make_config() -> "zenoh.Config":
     config = zenoh.Config()
     config.insert_json5("mode", '"client"')
     config.insert_json5("connect/endpoints", json.dumps([endpoint]))
+    apply_zenoh_auth(config)
     if endpoint.startswith("tls"):
         config.insert_json5("transport/link/tls", json.dumps({
             "root_ca_certificate": os.path.join(cert_dir, "efdi-ca-root.pem"),

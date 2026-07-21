@@ -28,8 +28,11 @@ import urllib.error
 import urllib.request
 
 import zenoh
+from zenoh_auth import apply_zenoh_auth
 from http_json import read_json_response
 from namespace_prefix import topic_root
+from protocols.airplaneslive_track_pb2 import AirplanesLiveTrack
+from protocols.protobuf_codec import source_track_to_message
 
 ORG       = os.environ.get("PARTNER_NAMESPACE", "")
 TOPIC_ROOT = topic_root()
@@ -61,6 +64,7 @@ def make_config() -> "zenoh.Config":
     conf = zenoh.Config()
     conf.insert_json5("mode", '"client"')
     conf.insert_json5("connect/endpoints", json.dumps([_ENDPOINT]))
+    apply_zenoh_auth(conf)
     if _ENDPOINT.startswith("tls"):
         conf.insert_json5("transport/link/tls", json.dumps({
             "root_ca_certificate": os.path.join(_CERT_DIR, "efdi-ca-root.pem"),
@@ -223,6 +227,8 @@ def run(args):
     session = zenoh.open(make_config())
     pub_tracks = session.declare_publisher("{}/air/airplaneslive/adsb/civ/aircraft/tracks/v1".format(TOPIC_ROOT))
     pub_mil    = session.declare_publisher("{}/air/airplaneslive/adsb/mil/aircraft/tracks/v1".format(TOPIC_ROOT))
+    pub_tracks_v2 = session.declare_publisher("{}/air/airplaneslive/adsb/civ/aircraft/tracks/v2".format(TOPIC_ROOT))
+    pub_mil_v2 = session.declare_publisher("{}/air/airplaneslive/adsb/mil/aircraft/tracks/v2".format(TOPIC_ROOT))
 
     url_mil = "{}/mil".format(BASE_URL)
     print("airplanes.live: {} centers radius={}nm  poll={}s".format(
@@ -244,6 +250,10 @@ def run(args):
                     if track is None:
                         continue
                     pub_tracks.put(json.dumps(track).encode(), encoding=zenoh.Encoding.APPLICATION_JSON)
+                    pub_tracks_v2.put(
+                        source_track_to_message(AirplanesLiveTrack, track).SerializeToString(),
+                        encoding=zenoh.Encoding.APPLICATION_PROTOBUF,
+                    )
                     count += 1
             print("airplaneslive tracks: {} ({} centers)".format(count, len(POLL_CENTERS)), flush=True)
 
@@ -255,6 +265,10 @@ def run(args):
                     if track is None:
                         continue
                     pub_mil.put(json.dumps(track).encode(), encoding=zenoh.Encoding.APPLICATION_JSON)
+                    pub_mil_v2.put(
+                        source_track_to_message(AirplanesLiveTrack, track).SerializeToString(),
+                        encoding=zenoh.Encoding.APPLICATION_PROTOBUF,
+                    )
                     mil_count += 1
                 print("airplaneslive mil: {}".format(mil_count), flush=True)
                 last_mil = now
@@ -265,6 +279,8 @@ def run(args):
     finally:
         pub_tracks.undeclare()
         pub_mil.undeclare()
+        pub_tracks_v2.undeclare()
+        pub_mil_v2.undeclare()
         session.close()
 
 

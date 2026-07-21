@@ -2,6 +2,7 @@
 """Focused unit tests for the SitaWare HQ pull-based NVG feed."""
 
 import base64
+import json
 import pathlib
 import sys
 import threading
@@ -410,6 +411,23 @@ class HTTPFeedTests(unittest.TestCase):
             self.assertEqual(response.headers.get_content_type(), "application/xml")
             points = ET.fromstring(response.read()).findall("{%s}point" % NVG_NS)
         self.assertEqual([point.attrib["uri"] for point in points], ["urn:efdi:EFDI-UID-HTTP"])
+
+        with self.request(path="/healthz") as response:
+            health = json.load(response)
+        self.assertEqual(health["status"], "ok")
+        self.assertEqual(health["tracks"], 1)
+        self.assertEqual(health["feed_requests"]["successful_requests"], 1)
+        self.assertEqual(health["feed_requests"]["unauthorized_requests"], 1)
+        self.assertIsNotNone(health["feed_requests"]["last_successful_request"])
+        self.assertIsNotNone(health["feed_requests"]["last_unauthorized_request"])
+        self.assertIsInstance(
+            health["feed_requests"]["seconds_since_last_success"], float
+        )
+
+        with self.request(path="/healthz") as response:
+            second_health = json.load(response)
+        self.assertEqual(second_health["feed_requests"]["successful_requests"], 1)
+        self.assertEqual(second_health["feed_requests"]["unauthorized_requests"], 1)
 
     def test_writes_are_rejected(self):
         with self.assertRaises(urllib.error.HTTPError) as caught:

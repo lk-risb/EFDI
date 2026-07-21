@@ -1,31 +1,28 @@
 import asyncio
 import json
 import os
-import shutil
 import time
 
 import zenoh
 
-from .config import CONFIG_PATH, _extract_fields, atomic_write, write_config_to_disk, restart_router_container
+from .config import CONFIG_PATH, _extract_fields, apply_rendered_config, atomic_write
 from .db import SessionLocal
 from .deps import write_audit
+from .federation_crypto import sign_payload
 from .federation_crypto import verify_envelope, FederationVerifyError
+from .local_zenoh import config_fingerprint, open_local_session
 
-_TRUSTED_PARENT_CERT_PATH = os.environ.get("ZENOH_ADMIN_TRUSTED_PARENT_CERT_PATH", "")
-_TRUSTED_PARENT_CN = os.environ.get("ZENOH_ADMIN_TRUSTED_PARENT_CN", "")
-# Root/HQ signers: PLURAL by design — a deep tree (HQ -> child -> grandchild
-# -> ...) needs pushes from HQ to reach any descendant directly, and "HQ" may
-# itself be multiple active HA replicas (e.g. behind a cloud LB), not one
-# pinned box/cert. Comma-separated, parallel order (paths[i] pairs with cns[i]).
-_TRUSTED_ROOT_CERT_PATHS = [p.strip() for p in os.environ.get("ZENOH_ADMIN_TRUSTED_ROOT_CERT_PATHS", "").split(",") if p.strip()]
-_TRUSTED_ROOT_CNS = [c.strip() for c in os.environ.get("ZENOH_ADMIN_TRUSTED_ROOT_CNS", "").split(",") if c.strip()]
-if len(_TRUSTED_ROOT_CERT_PATHS) != len(_TRUSTED_ROOT_CNS):
-    print(f"[federation] ZENOH_ADMIN_TRUSTED_ROOT_CERT_PATHS ({len(_TRUSTED_ROOT_CERT_PATHS)} entries) and "
-          f"ZENOH_ADMIN_TRUSTED_ROOT_CNS ({len(_TRUSTED_ROOT_CNS)} entries) have mismatched lengths — "
-          "ignoring root trust entirely (immediate-parent trust, if configured, is unaffected)", flush=True)
-    _TRUSTED_ROOT_CERT_PATHS, _TRUSTED_ROOT_CNS = [], []
+_TRUSTED_PARENT_CERT_PATH = os.environ.get(
+    "EFDI_TRUSTED_PARENT_POLICY_CERT_PATH", "/certs/efdi/trust/trusted-parent-policy.pem"
+)
 _OWN_NAMESPACE = os.environ.get("PARTNER_NAMESPACE", "")
 _PREFIX_FILE = os.environ.get("NAMESPACE_PREFIX_FILE", "/namespace-prefix")
+_POLICY_SIGNER_KEY_PATH = os.environ.get(
+    "EFDI_POLICY_SIGNER_KEY_PATH", "/certs/policy-signer-key.pem"
+)
+_TRUST_BOOTSTRAP_PATH = os.environ.get(
+    "EFDI_TRUST_BOOTSTRAP_PATH", "/certs/efdi/trust/managed-bootstrap.json"
+)
 
 
 def _prefix() -> str:
@@ -39,17 +36,11 @@ def _prefix() -> str:
     return os.environ.get("NAMESPACE_PREFIX", "LTU/CISB")
 
 
-def _trusted_signers() -> list[tuple[str, str]]:
-    """(cert_path, expected_cn) pairs this pod accepts a config push signature
-    from — its immediate parent plus every currently-active root/HQ signer."""
-    signers = []
-    if _TRUSTED_PARENT_CERT_PATH and _TRUSTED_PARENT_CN:
-        signers.append((_TRUSTED_PARENT_CERT_PATH, _TRUSTED_PARENT_CN))
-    signers.extend(zip(_TRUSTED_ROOT_CERT_PATHS, _TRUSTED_ROOT_CNS))
-    return signers
+def _trusted_parent() -> str | None:
+    """The only identity allowed to authorize this router: its direct parent."""
+    return _TRUSTED_PARENT_CERT_PATH if os.path.isfile(_TRUSTED_PARENT_CERT_PATH) else None
 
 
-_LAST_KNOWN_GOOD_PATH = CONFIG_PATH + ".last-known-good"
 _LAST_SEEN_VERSION_PATH = CONFIG_PATH + ".last-seen-version"
 
 
@@ -68,13 +59,6 @@ def _read_last_seen_version() -> int:
 
 def _write_last_seen_version(version: int) -> None:
     atomic_write(_LAST_SEEN_VERSION_PATH, str(version))
-
-# How long to wait for the router to come back healthy after a restart before
-# rolling back. Matches the dashboard's own existing health-check cadence
-# (compose/zenoh-admin/ui/src/routes/index.tsx polls /api/health every 5s) —
-# 30s gives 6 poll-equivalent chances, generous for a container restart.
-_HEALTH_CHECK_TIMEOUT_S = 30
-_HEALTH_CHECK_INTERVAL_S = 2
 
 # A post-restart status ("ok"/"rolled_back") is published right after this pod
 # restarts its OWN router. The local router is reachable again within a second
@@ -102,27 +86,55 @@ def _open_local_session() -> "zenoh.Session":
     config as start_federation_subscriber()'s long-lived session — factored
     out so a post-restart status publish can use a FRESH one (see
     _publish_status_fresh)."""
-    endpoint = os.environ.get("ZENOH_LOCAL_ENDPOINT", "tcp/127.0.0.1:7448")
-    cert_dir = os.environ.get("EFDI_CERT_DIR", "")
-    conf = zenoh.Config()
-    conf.insert_json5("mode", '"client"')
-    conf.insert_json5("connect/endpoints", json.dumps([endpoint]))
-    if endpoint.startswith("tls"):
-        conf.insert_json5("transport/link/tls", json.dumps({
-            "root_ca_certificate": os.path.join(cert_dir, "efdi-ca-root.pem"),
-            "connect_certificate": os.path.join(cert_dir, _OWN_NAMESPACE + "-cert.pem"),
-            "connect_private_key": os.path.join(cert_dir, _OWN_NAMESPACE + "-key.pem"),
-            "enable_mtls": True,
-            "verify_name_on_connect": True,
-        }))
-    return zenoh.open(conf)
+    return open_local_session()
+
+
+def _federated_candidate_error(fields) -> str | None:
+    """Protect identity and the live management seam from remote overwrite."""
+    if fields.partner_namespace != _OWN_NAMESPACE:
+        return "signed config cannot change this router's partner namespace"
+    try:
+        with open(CONFIG_PATH) as handle:
+            current = _extract_fields(handle.read())
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        return f"could not read current protected settings: {exc}"
+
+    protected = (
+        ("organization namespace prefix", fields.namespace_prefix, current.namespace_prefix),
+        ("local mTLS listener port", fields.mtls_port, current.mtls_port),
+        ("local management listener port", fields.local_tcp_port, current.local_tcp_port),
+        ("fabric TLS identity profile", fields.fabric_tls_profile, current.fabric_tls_profile),
+        ("fabric certificate-name verification policy", fields.verify_name_on_connect, current.verify_name_on_connect),
+    )
+    for label, candidate, active in protected:
+        if candidate != active:
+            return f"{label} is local-only and cannot be changed by a parent push"
+
+    active_endpoints = set(current.fabric_endpoints)
+    candidate_endpoints = set(fields.fabric_endpoints)
+    if active_endpoints and not active_endpoints.intersection(candidate_endpoints):
+        return (
+            "fabric endpoint replacement must be staged: add the new endpoint while retaining "
+            "an active endpoint, verify it, then remove the old endpoint"
+        )
+    return None
 
 
 def _status_payload(version: int, health: str, error: str | None) -> bytes:
     body = {"version": version, "applied_at": time.time(), "health": health}
     if error:
         body["error"] = error
-    return json.dumps(body).encode()
+    try:
+        with open(_TRUST_BOOTSTRAP_PATH, encoding="utf-8") as handle:
+            bootstrap = json.load(handle)
+        trust_chain = bootstrap.get("trust_chain")
+        if isinstance(trust_chain, dict):
+            body["trust_chain"] = trust_chain
+    except (OSError, ValueError, TypeError):
+        pass
+    with open(_POLICY_SIGNER_KEY_PATH, "rb") as handle:
+        signature = sign_payload(body, handle.read(), purpose="status")
+    return json.dumps({"payload": body, "signature": signature}, separators=(",", ":")).encode()
 
 
 def _publish_status(session: "zenoh.Session", version: int, health: str, error: str | None = None):
@@ -156,25 +168,6 @@ def _publish_status_fresh(version: int, health: str, error: str | None = None):
         print(f"[federation] failed to publish post-restart {health!r} status: {exc}", flush=True)
 
 
-def _router_is_healthy() -> bool:
-    """Best-effort local check: is the zenoh-router container up right now?
-    Uses the same Docker client pattern as restart_router_container()."""
-    import docker
-    from docker.errors import DockerException, NotFound
-    from .config import ZENOH_ROUTER_SERVICE_LABEL
-    try:
-        client = docker.from_env()
-        container = client.containers.get(ZENOH_ROUTER_SERVICE_LABEL)
-        container.reload()
-        state = container.attrs.get("State", {})
-        if state.get("Status") != "running":
-            return False
-        health = state.get("Health", {}).get("Status")
-        return health == "healthy" if health is not None else True
-    except (NotFound, DockerException):
-        return False
-
-
 async def _record_audit(action: str, detail: str):
     async with SessionLocal() as db:
         await write_audit(db, None, action, detail)
@@ -198,57 +191,6 @@ def _payload_version(envelope) -> int:
     return raw_payload.get("version", -1) if isinstance(raw_payload, dict) else -1
 
 
-def _restore_last_known_good() -> tuple[bool, str | None]:
-    """Attempt to restore CONFIG_PATH from the last-known-good backup and
-    restart. Returns (restored, error):
-    - (False, None) — there's no backup to restore (e.g. this was the pod's
-      first-ever push) — the bad config is left in place, nothing to do.
-    - (False, "restored backup but restart failed: ...") — backup was
-      restored to disk but the router restart on the restored config itself
-      failed — the router may still be down even after this call.
-    - (True, None) — backup restored and the router restarted successfully.
-    Callers must use `restored` (not merely "we attempted a rollback") to
-    decide whether to report health="rolled_back" — reporting a rollback
-    that didn't actually happen tells operators recovery occurred when the
-    bad config is still live."""
-    if not os.path.isfile(_LAST_KNOWN_GOOD_PATH):
-        return False, None
-    shutil.copyfile(_LAST_KNOWN_GOOD_PATH, CONFIG_PATH)
-    restarted, restart_error = restart_router_container()
-    if not restarted:
-        return False, f"restored backup but restart failed: {restart_error}"
-    return True, None
-
-
-def _fail_and_maybe_rollback(loop: asyncio.AbstractEventLoop, version: int, reason: str):
-    """Something went wrong after the new config was already written to
-    disk (the write itself failed, the restart on the new config failed, or
-    the post-restart health check timed out). Attempt to restore the last-
-    known-good config; report health="rolled_back" ONLY if a restore
-    actually happened. Otherwise report "rejected" — a bad config with no
-    backup available is left in place on disk, and that must never be
-    reported as a successful rollback.
-
-    Status is published on a fresh session (not the shared subscriber one):
-    this path always runs after at least one restart_router_container() call
-    — either the caller's or _restore_last_known_good()'s own — so the shared
-    session's link is unreliable here."""
-    restored, restore_error = _restore_last_known_good()
-    if restored:
-        health, detail = "rolled_back", reason
-    else:
-        health = "rejected"
-        detail = reason + (f"; {restore_error}" if restore_error else "; no backup to restore, bad config left in place")
-    _publish_status_fresh(version, health, detail)
-    asyncio.run_coroutine_threadsafe(
-        _record_audit(
-            "federation_config_rollback" if restored else "federation_config_rejected",
-            f"version={version}, {detail}",
-        ),
-        loop,
-    )
-
-
 def _handle_config_push(session: "zenoh.Session", loop: asyncio.AbstractEventLoop, sample):
     """Runs on zenoh's own callback thread — schedules the audit-log write
     (async/DB) onto the FastAPI event loop via run_coroutine_threadsafe."""
@@ -262,27 +204,18 @@ def _handle_config_push(session: "zenoh.Session", loop: asyncio.AbstractEventLoo
         )
         return
 
-    signers = _trusted_signers()
-    if not signers:
-        print("[federation] received a config push but no trusted signers are configured "
-              "(ZENOH_ADMIN_TRUSTED_PARENT_CERT_PATH/_CN, ZENOH_ADMIN_TRUSTED_ROOT_CERT_PATHS/_CNS) "
-              "— rejecting (this instance accepts no federated pushes)", flush=True)
+    parent = _trusted_parent()
+    if parent is None:
+        print("[federation] received a config push but no trusted parent is configured — rejecting", flush=True)
         return
 
-    payload = None
-    errors = []
-    for cert_path, expected_cn in signers:
-        try:
-            with open(cert_path, "rb") as f:
-                trusted_cert_pem = f.read()
-            payload = verify_envelope(envelope, trusted_cert_pem, expected_cn)
-            break
-        except (FederationVerifyError, OSError) as exc:
-            errors.append(f"{expected_cn} ({cert_path}): {exc}")
-
-    if payload is None:
+    try:
+        with open(parent, "rb") as f:
+            trusted_cert_pem = f.read()
+        payload = verify_envelope(envelope, trusted_cert_pem, purpose="config")
+    except (FederationVerifyError, OSError) as exc:
         version = _payload_version(envelope)
-        detail = f"no trusted signer matched ({len(signers)} checked): " + "; ".join(errors)
+        detail = f"trusted parent verification failed: {exc}"
         _publish_status(session, version, "rejected", detail)
         asyncio.run_coroutine_threadsafe(
             _record_audit("federation_config_rejected", f"version={version}, error={detail}"), loop,
@@ -318,7 +251,7 @@ def _handle_config_push(session: "zenoh.Session", loop: asyncio.AbstractEventLoo
     # editor's PUT route does today (compose/zenoh-admin/api/config.py's
     # put_config, via the same _extract_fields used by its GET route).
     try:
-        _extract_fields(rendered)
+        fields = _extract_fields(rendered)
     except (ValueError, KeyError, TypeError) as exc:
         _publish_status(session, version, "rejected", f"invalid config shape: {exc}")
         asyncio.run_coroutine_threadsafe(
@@ -326,52 +259,86 @@ def _handle_config_push(session: "zenoh.Session", loop: asyncio.AbstractEventLoo
         )
         return
 
-    # Back up current config before writing the new one — must happen before
-    # write_config_to_disk() so the backup can never itself be the new
-    # (possibly bad) config.
-    if os.path.isfile(CONFIG_PATH):
-        shutil.copyfile(CONFIG_PATH, _LAST_KNOWN_GOOD_PATH)
-
-    try:
-        write_config_to_disk(rendered)
-    except OSError as exc:
-        _fail_and_maybe_rollback(loop, version, f"write failed: {exc}")
+    protected_error = _federated_candidate_error(fields)
+    if protected_error:
+        _publish_status(session, version, "rejected", protected_error)
+        asyncio.run_coroutine_threadsafe(
+            _record_audit("federation_config_rejected", f"version={version}, {protected_error}"), loop,
+        )
         return
 
-    restarted, restart_error = restart_router_container()
-    if not restarted:
-        _fail_and_maybe_rollback(loop, version, f"restart failed: {restart_error}")
-        return
-
-    deadline = time.monotonic() + _HEALTH_CHECK_TIMEOUT_S
-    healthy = False
-    while time.monotonic() < deadline:
-        if _router_is_healthy():
-            healthy = True
-            break
-        time.sleep(_HEALTH_CHECK_INTERVAL_S)
-
-    if healthy:
+    result = apply_rendered_config(
+        rendered,
+        fields,
+        restart_native=True,
+        preserve_management=True,
+    )
+    if result["status"] == "applied":
         _publish_status_fresh(version, "ok")
         asyncio.run_coroutine_threadsafe(
             _record_audit("federation_config_applied", f"version={version}"), loop,
         )
     else:
-        _fail_and_maybe_rollback(loop, version, "router did not become healthy after restart")
+        health = "rolled_back" if result["status"] == "rolled_back" else "rejected"
+        detail = str(result.get("error") or result["status"])
+        _publish_status_fresh(version, health, detail)
+        asyncio.run_coroutine_threadsafe(
+            _record_audit(
+                "federation_config_rollback" if health == "rolled_back" else "federation_config_rejected",
+                f"version={version}, {detail}",
+            ),
+            loop,
+        )
 
 
-def start_federation_subscriber(loop: asyncio.AbstractEventLoop) -> "zenoh.Session | None":
-    signers = _trusted_signers()
-    if not signers:
-        print("[federation] no trusted signers configured (parent or root) — "
-              "federation subscriber not started, this instance accepts no pushes", flush=True)
-        return None
+_federation_session: "zenoh.Session | None" = None
+
+
+def _subscribe(loop: asyncio.AbstractEventLoop) -> "zenoh.Session":
+    session = _open_local_session()
+    topic = _config_topic()
+    session.declare_subscriber(topic, lambda sample, current=session: _handle_config_push(current, loop, sample))
+    print(f"[federation] subscribed on {topic}", flush=True)
+    return session
+
+
+async def _watch_federation_session(loop: asyncio.AbstractEventLoop):
+    global _federation_session
+    fingerprint = config_fingerprint()
+    try:
+        while True:
+            await asyncio.sleep(2)
+            new_fingerprint = config_fingerprint()
+            if new_fingerprint == fingerprint:
+                continue
+            try:
+                replacement = _subscribe(loop)
+            except Exception as exc:
+                print(f"[federation] session reload failed: {exc}", flush=True)
+                continue
+            old_session = _federation_session
+            _federation_session = replacement
+            fingerprint = new_fingerprint
+            if old_session is not None:
+                old_session.close()
+            print("[federation] reloaded local session after config change", flush=True)
+    finally:
+        if _federation_session is not None:
+            _federation_session.close()
+            _federation_session = None
+
+
+def start_federation_subscriber(loop: asyncio.AbstractEventLoop) -> "tuple[zenoh.Session | None, asyncio.Task | None]":
+    global _federation_session
+    parent = _trusted_parent()
+    if parent is None:
+        print("[federation] no trusted parent configured — federation subscriber not started", flush=True)
+        return None, None
     if not _OWN_NAMESPACE:
         print("[federation] PARTNER_NAMESPACE unset — cannot determine own config topic, "
               "federation subscriber not started", flush=True)
-        return None
+        return None, None
 
-    session = _open_local_session()
-    session.declare_subscriber(_config_topic(), lambda sample: _handle_config_push(session, loop, sample))
-    print(f"[federation] subscribed on {_config_topic()}, trusted signer CNs={[cn for _, cn in signers]!r}", flush=True)
-    return session
+    _federation_session = _subscribe(loop)
+    print("[federation] trusted managed-parent policy signer configured", flush=True)
+    return _federation_session, loop.create_task(_watch_federation_session(loop))

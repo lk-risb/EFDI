@@ -207,3 +207,49 @@
 .hud-corner-tr { top: -1px; right: -1px; border-top: 2px solid; border-right: 2px solid; }
 .hud-corner-bl { bottom: -1px; left: -1px; border-bottom: 2px solid; border-left: 2px solid; }
 .hud-corner-br { bottom: -1px; right: -1px; border-bottom: 2px solid; border-right: 2px solid; }
+
+/* Dense management-console primitives used by router hierarchy and PKI views. */
+.enterprise-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid rgb(212 212 216);
+  border-radius: 9999px;
+  background: rgb(244 244 245);
+  padding: 0.3rem 0.65rem;
+  color: rgb(82 82 91);
+  font-family: var(--font-display);
+  font-weight: 500;
+}
+.enterprise-chip-ok { border-color: rgb(134 239 172); background: rgb(240 253 244); color: rgb(21 128 61); }
+.enterprise-chip-warn { border-color: rgb(253 230 138); background: rgb(255 251 235); color: rgb(180 83 9); }
+.enterprise-panel {
+  border: 1px solid rgb(228 228 231);
+  border-radius: 0.5rem;
+  background: rgb(250 250 250);
+  padding: 1.1rem;
+}
+.enterprise-panel-title,
+.enterprise-section-title {
+  margin-bottom: 0.9rem;
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: 0.035em;
+  color: rgb(39 39 42);
+}
+.enterprise-section-title { margin-top: 1.5rem; }
+.enterprise-kv {
+  display: grid;
+  grid-template-columns: minmax(7.5rem, 0.65fr) minmax(0, 1fr);
+  gap: 0.55rem 1rem;
+  font-size: 0.8rem;
+}
+.enterprise-kv dt { color: rgb(113 113 122); }
+.enterprise-kv dd { color: rgb(39 39 42); }
+.dark .enterprise-chip { border-color: rgb(255 255 255 / 0.1); background: rgb(255 255 255 / 0.04); color: rgb(161 161 170); }
+.dark .enterprise-chip-ok { border-color: rgb(34 197 94 / 0.35); background: rgb(34 197 94 / 0.1); color: rgb(74 222 128); }
+.dark .enterprise-chip-warn { border-color: rgb(245 158 11 / 0.35); background: rgb(245 158 11 / 0.1); color: rgb(251 191 36); }
+.dark .enterprise-panel { border-color: rgb(255 255 255 / 0.1); background: rgb(20 20 22); }
+.dark .enterprise-panel-title,
+.dark .enterprise-section-title,
+.dark .enterprise-kv dd { color: rgb(228 228 231); }

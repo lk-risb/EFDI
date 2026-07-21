@@ -38,5 +38,17 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          const marker = '/node_modules/'
+          const index = id.lastIndexOf(marker)
+          if (index < 0) return undefined
+          const parts = id.slice(index + marker.length).split('/')
+          const packageName = parts[0].startsWith('@') ? `${parts[0]}-${parts[1]}` : parts[0]
+          return `vendor-${packageName.replace(/[^a-zA-Z0-9_-]/g, '-')}`
+        },
+      },
+    },
   },
 })

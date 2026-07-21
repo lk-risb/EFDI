@@ -1,44 +1,13 @@
 import asyncio
 import json
-import os
 import re
 from fastapi import APIRouter, Depends
 import zenoh
 
 from .deps import require_role
+from .local_zenoh import local_connection_details, open_local_session
 
 router = APIRouter(prefix="/api/status", tags=["status"])
-
-_ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", "tcp/127.0.0.1:7448")
-_CERT_DIR = os.environ.get("EFDI_CERT_DIR", "")
-_ORG = os.environ.get("PARTNER_NAMESPACE", "")
-
-# One persistent session for the lifetime of the process — same pattern every
-# bridge in this repo already uses, just held open here instead of per-request.
-_session: "zenoh.Session | None" = None
-
-
-def _make_config() -> "zenoh.Config":
-    conf = zenoh.Config()
-    conf.insert_json5("mode", '"client"')
-    conf.insert_json5("connect/endpoints", json.dumps([_ENDPOINT]))
-    if _ENDPOINT.startswith("tls"):
-        conf.insert_json5("transport/link/tls", json.dumps({
-            "root_ca_certificate": os.path.join(_CERT_DIR, "efdi-ca-root.pem"),
-            "connect_certificate": os.path.join(_CERT_DIR, _ORG + "-cert.pem"),
-            "connect_private_key": os.path.join(_CERT_DIR, _ORG + "-key.pem"),
-            "enable_mtls": True,
-            "verify_name_on_connect": True,
-        }))
-    return conf
-
-
-def _get_session() -> "zenoh.Session":
-    global _session
-    if _session is None:
-        _session = zenoh.open(_make_config())
-    return _session
-
 
 # Parses "@/<zid>/router/subscriber/<key-expr>" → the key-expr part.
 _SUBSCRIBER_RE = re.compile(r"^@/[^/]+/router/subscriber/(.+)$")
@@ -55,7 +24,8 @@ def _query_router_admin_space() -> dict:
     see host/zenoh-router.json5.tmpl). Returns whatever the router actually
     exposes — connection health always works, the subscriber/queryable/storage
     breakdown depends on the ACL rule being present."""
-    session = _get_session()
+    session = open_local_session()
+    endpoint, _ = local_connection_details()
     connected = False
     router_zid = None
     try:
@@ -115,19 +85,22 @@ def _query_router_admin_space() -> dict:
         except Exception:
             pass
 
-    return {
-        "connected": connected,
-        "router_zid": router_zid,
-        "endpoint": _ENDPOINT,
-        "admin_space_reachable": admin_space_reachable,
-        "subscriber_count": len(subscribers),
-        "subscribers": sorted(set(subscribers)),
-        "queryable_count": len(queryables),
-        "queryables": sorted(set(queryables)),
-        "storages": sorted(set(storages)),
-        "peer_count": len(peers),
-        "peers": sorted(peers.values(), key=lambda p: p["zid"]),
-    }
+    try:
+        return {
+            "connected": connected,
+            "router_zid": router_zid,
+            "endpoint": endpoint,
+            "admin_space_reachable": admin_space_reachable,
+            "subscriber_count": len(subscribers),
+            "subscribers": sorted(set(subscribers)),
+            "queryable_count": len(queryables),
+            "queryables": sorted(set(queryables)),
+            "storages": sorted(set(storages)),
+            "peer_count": len(peers),
+            "peers": sorted(peers.values(), key=lambda p: p["zid"]),
+        }
+    finally:
+        session.close()
 
 
 @router.get("")

@@ -40,6 +40,7 @@ import time
 import urllib.parse
 import xml.etree.ElementTree as ET
 from collections.abc import Callable
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import zenoh
@@ -59,6 +60,7 @@ _TOPIC_STALE_S = {
     "env/weather/station/**": 7200.0,
 }
 _HQ_SYMBOL_SCHEME = "2525b"
+_ACCESS_LOG_INTERVAL_S = 60.0
 
 
 def _env_true(name: str) -> bool:
@@ -173,7 +175,61 @@ class NVGFeedServer(ThreadingHTTPServer):
         self.password = password
         self.allow_anonymous = allow_anonymous
         self.verbose = verbose
+        self._request_lock = threading.Lock()
+        self._successful_requests = 0
+        self._unauthorized_requests = 0
+        self._last_successful_request: float | None = None
+        self._last_unauthorized_request: float | None = None
+        self._last_access_log = {"successful": 0.0, "unauthorized": 0.0}
         super().__init__(address, NVGFeedHandler)
+
+    @staticmethod
+    def _timestamp(value: float | None) -> str | None:
+        if value is None:
+            return None
+        return datetime.fromtimestamp(value, timezone.utc).isoformat(timespec="seconds").replace(
+            "+00:00", "Z"
+        )
+
+    def record_feed_request(self, authorized: bool) -> bool:
+        """Record one feed request and return whether it should be logged."""
+        now = time.time()
+        monotonic_now = time.monotonic()
+        outcome = "successful" if authorized else "unauthorized"
+        with self._request_lock:
+            if authorized:
+                self._successful_requests += 1
+                self._last_successful_request = now
+                count = self._successful_requests
+            else:
+                self._unauthorized_requests += 1
+                self._last_unauthorized_request = now
+                count = self._unauthorized_requests
+            should_log = (
+                count == 1
+                or monotonic_now - self._last_access_log[outcome] >= _ACCESS_LOG_INTERVAL_S
+            )
+            if should_log:
+                self._last_access_log[outcome] = monotonic_now
+            return should_log
+
+    def request_stats(self) -> dict[str, int | float | str | None]:
+        now = time.time()
+        with self._request_lock:
+            last_success = self._last_successful_request
+            return {
+                "successful_requests": self._successful_requests,
+                "unauthorized_requests": self._unauthorized_requests,
+                "last_successful_request": self._timestamp(last_success),
+                "last_unauthorized_request": self._timestamp(
+                    self._last_unauthorized_request
+                ),
+                "seconds_since_last_success": (
+                    round(max(0.0, now - last_success), 1)
+                    if last_success is not None
+                    else None
+                ),
+            }
 
 
 class NVGFeedHandler(BaseHTTPRequestHandler):
@@ -216,16 +272,38 @@ class NVGFeedHandler(BaseHTTPRequestHandler):
             if include_body:
                 self.wfile.write(body)
             return
-        if not self._authorized():
+        authorized = self._authorized()
+        if not authorized:
+            if path == self.server.feed_path and self.server.record_feed_request(False):
+                print(
+                    "NVG feed rejected unauthorized request from {}".format(
+                        self.client_address[0]
+                    ),
+                    flush=True,
+                )
             self._reject_unauthorized()
             return
 
         if path == "/healthz":
             _, count = self.server.cache.document()
-            body = json.dumps({"status": "ok", "tracks": count}, separators=(",", ":")).encode()
+            body = json.dumps(
+                {
+                    "status": "ok",
+                    "tracks": count,
+                    "feed_requests": self.server.request_stats(),
+                },
+                separators=(",", ":"),
+            ).encode()
             content_type = "application/json; charset=utf-8"
         else:
-            body, _ = self.server.cache.document()
+            body, count = self.server.cache.document()
+            if self.server.record_feed_request(True):
+                print(
+                    "NVG feed served {} tracks to {}".format(
+                        count, self.client_address[0]
+                    ),
+                    flush=True,
+                )
             content_type = "application/xml; charset=utf-8"
         etag = '"' + hashlib.sha256(body).hexdigest() + '"'
         self.send_response(200)
