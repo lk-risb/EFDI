@@ -320,13 +320,13 @@ function DashboardPage() {
             <div className="flex items-center justify-between mb-3">
               <h2 className="hud-label text-sm font-semibold text-zinc-600 dark:text-zinc-400">Federation topology</h2>
               <button
-                onClick={() => navigate({ to: '/topology' })}
+                onClick={() => navigate({ to: '/network' })}
                 className="text-xs text-teal-600 dark:text-teal-400 hover:underline"
               >
                 Open topology →
               </button>
             </div>
-            <TopologyMap nodes={topology?.nodes ?? []} transportEdges={topology?.transport_edges} compact onSelect={() => navigate({ to: '/topology' })} />
+            <TopologyMap nodes={topology?.nodes ?? []} transportEdges={topology?.transport_edges} compact onSelect={() => navigate({ to: '/network' })} />
           </div>
         </div>
 

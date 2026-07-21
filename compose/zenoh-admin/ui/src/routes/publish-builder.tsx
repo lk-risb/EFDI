@@ -156,8 +156,9 @@ function PublishBuilderPage() {
       <div className="p-6 max-w-4xl">
         <PageHeader title="Publish Script Builder" />
         <p className="text-sm text-zinc-500 mb-6">
-          Add rows, then generate a ready-to-run publish script. Nothing is sent from here —
-          the script only ever downloads. Message boxes accept multi-line content (JSON, XML,
+          Add rows, then generate a ready-to-run publish script. Nothing is published while you
+          edit this page; the downloaded script connects and sends the messages when you run it.
+          Message boxes accept multi-line content (JSON, XML,
           any structured payload).
         </p>
 

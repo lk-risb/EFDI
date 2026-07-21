@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import urllib.error
 import urllib.request
@@ -17,7 +18,12 @@ from .deps import require_role, write_audit
 
 router = APIRouter(prefix="/api/runtime", tags=["runtime"])
 _CONTROL_URL = os.environ.get("EFDI_CONTROL_URL", "http://127.0.0.1:18896").rstrip("/")
-_CONTROL_TOKEN = os.environ.get("EFDI_CONTROL_TOKEN", "")
+_EXPLICIT_CONTROL_TOKEN = os.environ.get("EFDI_CONTROL_TOKEN", "")
+_ADMIN_SECRET = os.environ.get("ZENOH_ADMIN_SECRET_KEY", "")
+_CONTROL_TOKEN = _EXPLICIT_CONTROL_TOKEN or (
+    hashlib.sha256(f"efdi-control-v1:{_ADMIN_SECRET}".encode()).hexdigest()
+    if _ADMIN_SECRET else ""
+)
 
 
 class RuntimeConfigRequest(BaseModel):

@@ -115,8 +115,9 @@
         key_exprs: ["@/**"],
       },
       {
-        // Router federation (config push/pull + status reporting + topology
-        // autodiscovery) rides @config/v1 + @config/status/v1 + @topology/v1
+        // Router federation (config push/pull + hop-by-hop relay + status
+        // reporting + topology autodiscovery) rides @config/v1 +
+        // @config/relay/v1 + @config/status/v1 + @topology/v1
         // under EVERY pod's namespace, mesh-wide — a deliberate wildcard
         // covering all descendants, not just direct children. Reason:
         // federation trees run thousands of routers deep
@@ -137,10 +138,9 @@
         // only restores TRANSPORT reachability for that sub-tree — it does
         // not grant authority to apply anything: the receiving pod's
         // federation_apply.py independently verifies every envelope's
-        // signature against its own configured trusted signers (its
-        // immediate parent, ZENOH_ADMIN_TRUSTED_PARENT_CERT_PATH/_CN, plus
-        // any currently-active HQ/root signers,
-        // ZENOH_ADMIN_TRUSTED_ROOT_CERT_PATHS/_CNS) before acting on it,
+        // signature against its configured immediate parent
+        // (ZENOH_ADMIN_TRUSTED_PARENT_CERT_PATH/_CN) before acting on it;
+        // deeper authority is re-signed by each registered parent hop,
         // exactly like pod-firstparty already relies on payload-level trust
         // rather than ACL identity for everything else it covers. Every
         // participant able to reach this rule at all is already an mTLS peer
@@ -159,7 +159,7 @@
         messages: ["put", "declare_subscriber"],
         flows: ["egress", "ingress"],
         permission: "allow",
-        key_exprs: ["${NAMESPACE_ROOT}/**/@config/v1", "${NAMESPACE_ROOT}/**/@config/status/v1", "${NAMESPACE_ROOT}/**/@topology/v1"],
+        key_exprs: ["${NAMESPACE_ROOT}/**/@config/v1", "${NAMESPACE_ROOT}/**/@config/relay/v1", "${NAMESPACE_ROOT}/**/@config/status/v1", "${NAMESPACE_ROOT}/**/@topology/v1"],
       },
     ],
     subjects: [

@@ -6,17 +6,25 @@ Proves the v0 core: data moves **both directions** securely through the pod.
 
 ### 1. Self-contained loopback (CI — no fabric needed)
 
-Stand up the pod's `zenoh-router` plus a **stub remote Zenoh** in one compose, both mTLS, and
-assert:
+`loopback.sh` starts a disposable pinned Zenoh 1.9 router and authenticated
+clients, then asserts:
 
 - **Outbound:** publish on `${PARTNER_NAMESPACE}/test/ping` at the pod side → received at the
   stub-remote side.
 - **Inbound:** publish on `${INBOUND_NAMESPACE}/test/pong` at the stub-remote side → received via
   a Zenoh subscriber (e.g. `clients/examples/modern/python/subscribe.py`) at the pod side.
 - **ACL negative:** publish outside `${PARTNER_NAMESPACE}/**` → **denied** (default-deny holds).
-- **Audit:** both deliveries appear as append-only NDJSON lines in `${POD_STATE_DIR}/audit/`.
+- certificate CN and username are enforced together;
+- quarantine deny overrides allow; and
+- an active link closes when its short-lived certificate expires.
 
-This is the gate that runs in CI. TODO: implement `loopback.sh` + a stub-remote compose overlay.
+This is the gate that runs in CI and uses only disposable keys below `mktemp`.
+
+`managed-three-router.sh` is the second CI gate. It starts disposable root,
+child, and grandchild Zenoh 1.9 routers with identity-bound direct-link ACLs and
+asserts that scoped grandchild data reaches root, namespace escape is denied,
+the branch continues while root is offline, and the chain recovers when root
+returns.
 
 ### 2. Live EFDI-sandbox validation (slow step, on the validation host)
 
@@ -31,7 +39,7 @@ sandbox fabric** (sandbox router directly; no partner-net, no release-bridge), t
   publishes).
 - Audit NDJSON accumulates on the LUKS volume.
 
-TODO: capture this as `live-efdi.md` runbook once `first-boot.sh` is wired.
+Follow `live-efdi.md` for the deployment-only validation that CI cannot perform.
 
 ## Identity-bound ACL compatibility gate
 

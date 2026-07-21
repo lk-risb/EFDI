@@ -10,10 +10,26 @@ export interface TopologyNode {
   online: boolean
   last_seen_seconds: number
   reported?: boolean
+  verified?: boolean
   neighbors: TopologyNeighbor[]
   config_status: string | null
   config_status_version: number | null
   config_status_at: string | null
+  config_fields: TopologyConfigFields | null
+}
+
+export interface TopologyConfigFields {
+  mtls_port: number
+  local_tcp_port: number
+  fabric_endpoint: string
+  partner_namespace: string
+  inbound_namespace: string
+  namespace_prefix: string
+  publish_prefix: string
+  verify_name_on_connect: boolean
+  plugins_loading_enabled: boolean
+  fabric_endpoints: string[]
+  fabric_tls_profile: string
 }
 
 export interface TopologyNeighbor {

@@ -1,4 +1,4 @@
-# EFDI — throwaway SECOND pod ("child") for testing router federation against
+# EFDI — throwaway THIRD pod ("grandchild") for testing a two-hop hierarchy
 # the primary pod defined in docker-compose.yml, on this SAME host. Not part
 # of the normal deployment — only zenoh-router + zenoh-admin + its own DB are
 # stood up (no bridges, no Caddy — hit zenoh-admin's port directly for testing).
@@ -35,14 +35,14 @@ services:
     restart: unless-stopped
     command: ["postgres", "-c", "listen_addresses=127.0.0.1"]
     environment:
-      - POSTGRES_USER=${ZENOH_ADMIN_DB_USER_CHILD:?set ZENOH_ADMIN_DB_USER_CHILD}
-      - POSTGRES_PASSWORD=${ZENOH_ADMIN_DB_PASSWORD_CHILD:?set ZENOH_ADMIN_DB_PASSWORD_CHILD}
+      - POSTGRES_USER=${ZENOH_ADMIN_DB_USER_GRANDCHILD:?set ZENOH_ADMIN_DB_USER_GRANDCHILD}
+      - POSTGRES_PASSWORD=${ZENOH_ADMIN_DB_PASSWORD_GRANDCHILD:?set ZENOH_ADMIN_DB_PASSWORD_GRANDCHILD}
       - POSTGRES_DB=admin
-      - PGPORT=${ZENOH_ADMIN_DB_PORT_CHILD:-5434}
+      - PGPORT=${ZENOH_ADMIN_DB_PORT_GRANDCHILD:-5435}
     volumes:
       - ${POD_STATE_DIR}/zenoh-admin/pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${ZENOH_ADMIN_DB_USER_CHILD} -p ${ZENOH_ADMIN_DB_PORT_CHILD:-5434}"]
+      test: ["CMD-SHELL", "pg_isready -U ${ZENOH_ADMIN_DB_USER_GRANDCHILD} -p ${ZENOH_ADMIN_DB_PORT_GRANDCHILD:-5435}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -68,26 +68,36 @@ services:
     environment:
       - EFDI_CERT_DIR=${EFDI_CERT_DIR:-/certs/efdi}
       - EFDI_CERT_HOST_DIR=${BUNDLE_DIR:-}
-      - PARTNER_NAMESPACE=${PARTNER_NAMESPACE_CHILD:?set PARTNER_NAMESPACE_CHILD}
-      - ZENOH_LOCAL_ENDPOINT=tcp/127.0.0.1:${ZENOH_LOCAL_TCP_PORT_CHILD:-7458}
+      - PARTNER_NAMESPACE=${PARTNER_NAMESPACE_GRANDCHILD:?set PARTNER_NAMESPACE_GRANDCHILD}
+      - EFDI_TRUST_DOMAIN=${EFDI_TRUST_DOMAIN:-efdi.global}
+      - NAMESPACE_PREFIX_FILE=/namespace-prefix
+      - ZENOH_LOCAL_ENDPOINT=tcp/127.0.0.1:${ZENOH_LOCAL_TCP_PORT_GRANDCHILD:-7468}
       - ZENOH_CONFIG_PATH=/zenoh-config/config.json5
       - ZENOH_TEMPLATE_PATH=/zenoh-config-template/zenoh-router.json5.tmpl
-      - ZENOH_ADMIN_DB_USER=${ZENOH_ADMIN_DB_USER_CHILD:?set ZENOH_ADMIN_DB_USER_CHILD}
-      - ZENOH_ADMIN_DB_PASSWORD=${ZENOH_ADMIN_DB_PASSWORD_CHILD:?set ZENOH_ADMIN_DB_PASSWORD_CHILD}
-      - ZENOH_ADMIN_DB_ADDRESS=127.0.0.1:${ZENOH_ADMIN_DB_PORT_CHILD:-5434}
-      - ZENOH_ADMIN_SECRET_KEY=${ZENOH_ADMIN_SECRET_KEY_CHILD:?set ZENOH_ADMIN_SECRET_KEY_CHILD}
-      - ZENOH_ADMIN_FIRST_USER=${ZENOH_ADMIN_FIRST_USER_CHILD:-admin}
-      - ZENOH_ADMIN_FIRST_PASS=${ZENOH_ADMIN_FIRST_PASS_CHILD:-}
-      - ZENOH_ADMIN_TRUSTED_PARENT_CERT_PATH=${ZENOH_ADMIN_TRUSTED_PARENT_CERT_PATH_CHILD}
-      - ZENOH_ADMIN_TRUSTED_PARENT_CN=${ZENOH_ADMIN_TRUSTED_PARENT_CN_CHILD}
-      - ZENOH_ADMIN_TRUSTED_ROOT_CERT_PATHS=${ZENOH_ADMIN_TRUSTED_ROOT_CERT_PATHS_CHILD:-}
-      - ZENOH_ADMIN_TRUSTED_ROOT_CNS=${ZENOH_ADMIN_TRUSTED_ROOT_CNS_CHILD:-}
+      - ZENOH_ADMIN_DB_USER=${ZENOH_ADMIN_DB_USER_GRANDCHILD:?set ZENOH_ADMIN_DB_USER_GRANDCHILD}
+      - ZENOH_ADMIN_DB_PASSWORD=${ZENOH_ADMIN_DB_PASSWORD_GRANDCHILD:?set ZENOH_ADMIN_DB_PASSWORD_GRANDCHILD}
+      - ZENOH_ADMIN_DB_ADDRESS=127.0.0.1:${ZENOH_ADMIN_DB_PORT_GRANDCHILD:-5435}
+      - ZENOH_ADMIN_SECRET_KEY=${ZENOH_ADMIN_SECRET_KEY_GRANDCHILD:?set ZENOH_ADMIN_SECRET_KEY_GRANDCHILD}
+      - ZENOH_ADMIN_FIRST_USER=${ZENOH_ADMIN_FIRST_USER_GRANDCHILD:-admin}
+      - ZENOH_ADMIN_FIRST_PASS=${ZENOH_ADMIN_FIRST_PASS_GRANDCHILD:-}
+      - ZENOH_ADMIN_TRUSTED_PARENT_CERT_PATH=${ZENOH_ADMIN_TRUSTED_PARENT_CERT_PATH_GRANDCHILD:-/dev/null}
+      - ZENOH_ADMIN_TRUSTED_PARENT_CN=${ZENOH_ADMIN_TRUSTED_PARENT_CN_GRANDCHILD:-}
+      - EFDI_PARENT_NAMESPACE=${EFDI_PARENT_NAMESPACE_GRANDCHILD:-}
+      - EFDI_ROUTER_CA_PUBLIC_PATH=/certs/router-ca-cert.pem
+      - EFDI_POLICY_SIGNER_CERT_PATH=/certs/policy-signer-cert.pem
+      - EFDI_POLICY_SIGNER_KEY_PATH=/certs/policy-signer-key.pem
+      - EFDI_LINK_SECRET_PATH=/zenoh-config/link-credentials.json
+      - EFDI_TRUST_BOOTSTRAP_PATH=/certs/efdi/trust/managed-bootstrap.json
       # This pod's OWN router container (see child compose for rationale).
       - ZENOH_ROUTER_CONTAINER=efdi-gc-zenoh-router
       - DOCKER_HOST=tcp://127.0.0.1:2375
+      - EFDI_SHELL_ENABLED=false
       - EFDI_RUNTIME_LOG_DIR=/runtime-logs
     volumes:
       - ${BUNDLE_DIR:?set BUNDLE_DIR in shell env}:/certs:ro
+      - ${EFDI_ROUTER_CA_CERT_PATH_GRANDCHILD:-/dev/null}:/certs/router-ca-cert.pem:ro
+      - ${EFDI_POLICY_SIGNER_CERT_PATH_GRANDCHILD:-/dev/null}:/certs/policy-signer-cert.pem:ro
+      - ${EFDI_POLICY_SIGNER_KEY_PATH_GRANDCHILD:-/dev/null}:/certs/policy-signer-key.pem:ro
       - ${POD_STATE_DIR}/zenoh:/zenoh-config
       - ../host/zenoh-router.json5.tmpl:/zenoh-config-template/zenoh-router.json5.tmpl:ro
       - ${POD_STATE_DIR}/zenoh-admin-data:/data

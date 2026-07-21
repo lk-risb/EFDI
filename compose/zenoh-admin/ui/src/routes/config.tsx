@@ -5,8 +5,9 @@ import { PageHeader } from '@/components/PageHeader'
 import { apiJson, apiFetch, errorMessage } from '@/lib/api'
 import { useAuth } from '@/store/auth'
 import { notify } from '@/lib/notify'
-import { FileCode2, Network, Plus, RotateCw, Save, ShieldCheck, Trash2, Waypoints } from 'lucide-react'
+import { CheckCircle2, FileCode2, Network, Plus, RotateCw, Save, ShieldCheck, Trash2, Waypoints } from 'lucide-react'
 import { HudCorners } from '@/components/HudCorners'
+import { fetchTopology } from '@/lib/topology'
 
 export const Route = createFileRoute('/config')({
   beforeLoad: () => {
@@ -49,6 +50,13 @@ interface FederatedChild {
   id: string
   name: string
   namespace: string
+}
+
+interface ManagedTarget {
+  namespace: string
+  label: string
+  direct: boolean
+  fields: ConfigFields | null
 }
 
 function Field({ label, help, children }: { label: string; help?: string; children: React.ReactNode }) {
@@ -133,22 +141,26 @@ function ConfigPage() {
   const [path, setPath] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [validating, setValidating] = useState(false)
   const canWrite = role === 'superadmin'
-  const [children, setChildren] = useState<FederatedChild[]>([])
+  const [targets, setTargets] = useState<ManagedTarget[]>([])
   const [target, setTarget] = useState<string>('local')
+  const [localFields, setLocalFields] = useState<ConfigFields>(EMPTY_FIELDS)
 
   async function load() {
     setLoading(true)
     try {
       const data = await apiJson<{ fields: ConfigFields; path: string }>('/api/config')
-      setFields({
+      const normalized = {
         ...data.fields,
         // Keep the new UI compatible with an older admin API during a rolling
         // rebuild; older responses expose only the primary endpoint.
         fabric_endpoints: data.fields.fabric_endpoints ?? (data.fields.fabric_endpoint ? [data.fields.fabric_endpoint] : []),
         fabric_tls_profile: data.fields.fabric_tls_profile ?? 'efdi',
         publish_prefix: data.fields.publish_prefix ?? data.fields.namespace_prefix ?? '',
-      })
+      }
+      setLocalFields(normalized)
+      if (target === 'local') setFields(normalized)
       setPath(data.path)
     } catch (e) {
       notify.error(errorMessage(e))
@@ -160,8 +172,66 @@ function ConfigPage() {
   useEffect(() => { load() }, [])
 
   useEffect(() => {
-    apiJson<FederatedChild[]>('/api/federation').then(setChildren).catch(() => {})
-  }, [])
+    Promise.all([
+      apiJson<FederatedChild[]>('/api/federation'),
+      fetchTopology(),
+    ]).then(([children, topology]) => {
+      const direct = new Map(children.map(child => [child.namespace, child.name]))
+      const nodes = new Map(topology.nodes.map(node => [node.namespace, node]))
+      const parents = new Map(topology.nodes.map(node => [node.namespace, node.parent_namespace]))
+      const isDescendant = (namespace: string) => {
+        if (direct.has(namespace)) return true
+        let current: string | null | undefined = namespace
+        const seen = new Set<string>()
+        while (current && !seen.has(current)) {
+          seen.add(current)
+          const parent = parents.get(current)
+          if (parent === localFields.partner_namespace) return true
+          current = parent
+        }
+        return false
+      }
+      const candidates = new Set([
+        ...children.map(child => child.namespace),
+        ...topology.nodes
+          .filter(node => node.reported !== false && node.role !== 'peer' && isDescendant(node.namespace))
+          .map(node => node.namespace),
+      ])
+      const discovered = [...candidates]
+        .filter(namespace => namespace !== localFields.partner_namespace)
+        .map(namespace => ({
+          namespace,
+          label: direct.has(namespace) ? `${direct.get(namespace)} (${namespace})` : namespace,
+          direct: direct.has(namespace),
+          fields: nodes.get(namespace)?.config_fields ?? null,
+        }))
+        .sort((a, b) => Number(b.direct) - Number(a.direct) || a.namespace.localeCompare(b.namespace))
+      setTargets(discovered)
+      const requested = sessionStorage.getItem('efdi-config-target')
+      const requestedTarget = requested ? discovered.find(item => item.namespace === requested) : undefined
+      if (requestedTarget?.fields) {
+        setTarget(requested)
+        setFields({ ...requestedTarget.fields, partner_namespace: requested })
+        sessionStorage.removeItem('efdi-config-target')
+      }
+    }).catch(() => {})
+  }, [localFields.partner_namespace])
+
+  function selectTarget(next: string) {
+    setTarget(next)
+    if (next === 'local') {
+      setFields(localFields)
+    } else {
+      const managed = targets.find(item => item.namespace === next)
+      if (!managed?.fields) {
+        notify.error('That router has not reported a current config snapshot yet')
+        setTarget('local')
+        setFields(localFields)
+        return
+      }
+      setFields({ ...managed.fields, partner_namespace: next })
+    }
+  }
 
   function set<K extends keyof ConfigFields>(key: K, value: ConfigFields[K]) {
     setFields(f => ({ ...f, [key]: value }))
@@ -213,25 +283,44 @@ function ConfigPage() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(fields),
           })
-        : await apiFetch(`/api/federation/${target}/push-config`, {
+        : await apiFetch('/api/federation/push-config', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(fields),
+            body: JSON.stringify({ target_namespace: target, fields }),
           })
       const body = await res.json().catch(() => ({ detail: res.statusText }))
       if (!res.ok) throw new Error(body.detail ?? res.statusText)
       if (target === 'local') {
-        const result = body.restarted ? 'Config written, zenoh-router restarted' : `Config written, restart failed: ${body.restart_error}`
+        const result = body.restarted ? 'Config validated, applied, and router restarted' : `Config activation status: ${body.status}`
         notify.success(body.native_process_restart_required
           ? `${result}. Restart native bridge scripts to apply the new namespace prefix.`
           : result)
       } else {
-        notify.success(`Config pushed to child (version ${body.version})`)
+        notify.success(`Validated config sent via ${body.delivery} path (version ${body.version})`)
       }
     } catch (e) {
       notify.error(errorMessage(e))
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function handleValidate() {
+    if (!canWrite) return
+    setValidating(true)
+    try {
+      const res = await apiFetch('/api/config/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(fields),
+      })
+      const body = await res.json().catch(() => ({ detail: res.statusText }))
+      if (!res.ok) throw new Error(body.detail ?? res.statusText)
+      notify.success(body.detail ?? 'Zenoh accepted the candidate configuration')
+    } catch (e) {
+      notify.error(errorMessage(e))
+    } finally {
+      setValidating(false)
     }
   }
 
@@ -248,6 +337,12 @@ function ConfigPage() {
               className="flex items-center gap-2 px-3 py-2 rounded-md text-sm text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-200/50 dark:hover:bg-white/[0.05] transition-colors disabled:opacity-50">
               <RotateCw size={14} /> Reload
             </button>
+            {canWrite && (
+              <button onClick={handleValidate} disabled={validating || loading}
+                className="flex items-center gap-2 rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-700 transition-colors hover:border-accent-ring hover:text-zinc-900 disabled:opacity-50 dark:border-white/10 dark:text-zinc-300 dark:hover:text-white">
+                <CheckCircle2 size={14} /> {validating ? 'Validating…' : 'Validate'}
+              </button>
+            )}
             {canWrite && (
               <button onClick={handleSave} disabled={saving || loading}
                 className="flex items-center gap-2 px-4 py-2 bg-accent-fill hover:bg-accent-fill-hover text-accent-text text-sm rounded-md transition-colors disabled:opacity-50">
@@ -275,11 +370,11 @@ function ConfigPage() {
             <Waypoints size={18} className="shrink-0 text-zinc-500" />
             <div className="min-w-0 flex-1">
               <label className="hud-label text-[11px] text-zinc-500" htmlFor="config-target">Apply target</label>
-              {children.length > 0 ? (
-                <select id="config-target" value={target} onChange={e => setTarget(e.target.value)}
+              {targets.length > 0 ? (
+                <select id="config-target" value={target} onChange={e => selectTarget(e.target.value)}
                   className="mt-1 w-full bg-transparent text-sm text-zinc-800 focus:outline-none focus:ring-2 focus:ring-accent-ring dark:text-zinc-200">
                   <option value="local">This pod</option>
-                  {children.map(c => <option key={c.id} value={c.id}>{c.name} ({c.namespace})</option>)}
+                  {targets.map(item => <option key={item.namespace} value={item.namespace} disabled={!item.fields}>{item.direct ? 'Direct · ' : 'Descendant · '}{item.label}{item.fields ? '' : ' · awaiting snapshot'}</option>)}
                 </select>
               ) : (
                 <p className="mt-1 text-sm text-zinc-700 dark:text-zinc-300">This pod</p>
@@ -291,6 +386,12 @@ function ConfigPage() {
         {!canWrite && (
           <div className="mb-4 rounded-md border border-yellow-500/30 bg-yellow-500/10 px-4 py-3 text-xs text-yellow-700 dark:text-yellow-300">
             Your role can inspect this configuration but only a superadmin can change or push it.
+          </div>
+        )}
+
+        {target !== 'local' && (
+          <div className="mb-4 rounded-md border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-700 dark:text-amber-300">
+            Editing the last config snapshot reported by <span className="font-mono">{target}</span>. Identity, listener ports, CA profile, name-verification policy, and org control prefix are local-only. Endpoint replacement must retain an existing endpoint for a staged migration; the target rolls back unless both router health and a remote router link recover.
           </div>
         )}
 
@@ -386,7 +487,7 @@ function ConfigPage() {
                   value={fields.namespace_prefix} onChange={e => set('namespace_prefix', e.target.value)} />
               </Field>
               <Field label="Partner namespace" help="This pod's first-party publish and subscribe slot.">
-                <input type="text" disabled={!canWrite} className={inputClass}
+                <input type="text" disabled={!canWrite || target !== 'local'} className={inputClass}
                   value={fields.partner_namespace} onChange={e => set('partner_namespace', e.target.value)} />
               </Field>
               <Field label="Inbound namespace" help="Bilateral prefix that the fabric publishes toward this pod.">

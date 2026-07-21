@@ -42,7 +42,7 @@ export POD_STATE_DIR="${POD_STATE_DIR:-$SCRIPT_DIR/compose/state}"
 # Host-launched bridges read the same prefix state file the admin writes.
 export NAMESPACE_PREFIX_FILE="${POD_STATE_DIR}/namespace-prefix"
 export DATA_NAMESPACE_PREFIX_FILE="${POD_STATE_DIR}/data-topic-prefix"
-export PYTHONPATH="$COMPOSE_DIR${PYTHONPATH:+:$PYTHONPATH}"
+export PYTHONPATH="$COMPOSE_DIR/generated:$COMPOSE_DIR/generated/protocols:$COMPOSE_DIR${PYTHONPATH:+:$PYTHONPATH}"
 LOG_DIR="$POD_STATE_DIR/logs"
 PID_DIR="$POD_STATE_DIR/.pids"
 LAUNCHER_STATE_FILE="$POD_STATE_DIR/launcher-state.env"
@@ -56,6 +56,10 @@ if [[ ! -x "$VENV/bin/python3" ]]; then
     echo "Venv ready."
 fi
 PYTHON="$VENV/bin/python3"
+if ! "$PYTHON" -c 'import grpc_tools.protoc, google.protobuf, zenoh, defusedxml' 2>/dev/null; then
+    "$PYTHON" -m pip install --quiet -r "$COMPOSE_DIR/requirements.txt"
+fi
+EFDI_PROTOC_PYTHON="$PYTHON" "$SCRIPT_DIR/scripts/generate-protobuf.sh" >/dev/null
 
 # ── ANSI colors (only when stdout is a terminal) ───────────────────────────
 if [[ -t 1 ]]; then
@@ -69,6 +73,7 @@ fi
 SERVICES=(
     zenoh
     admin-control
+    cert-renewer
     airplaneslive adsblol aisstream aprs openmeteo meteolt
     sitaware dronuradaras dji-cloud utm-ans asterix-udp track-fusion
     asterix-cat10 asterix-cat20 asterix-cat21 asterix-cat34 asterix-cat48 asterix-cat62
@@ -136,6 +141,7 @@ load_launcher_state
 declare -A SVC_CAT=(
     [zenoh]="Infrastructure"
     [admin-control]="Infrastructure"
+    [cert-renewer]="Infrastructure"
     [airplaneslive]="Open-data bridges" [adsblol]="Open-data bridges"
     [aisstream]="Open-data bridges" [aprs]="Open-data bridges"
     [openmeteo]="Open-data bridges"
@@ -162,6 +168,7 @@ declare -A SVC_CAT=(
 declare -A SVC_DESC=(
     [zenoh]="Zenoh message router (Docker)"
     [admin-control]="Web UI host control agent"
+    [cert-renewer]="Automatic short-lived transport certificate renewal"
     [airplaneslive]="Airplanes.live ADS-B aircraft"
     [adsblol]="ADSB.lol open-data aircraft"
     [aisstream]="AISstream live vessel positions"
@@ -218,10 +225,16 @@ asterix_category_uses_raw() {
 # ── Ready check — 0=can start, 1=missing config ───────────────────────────
 svc_ready() {
     case "$1" in
-        zenoh|admin-control|airplaneslive|adsblol|aisstream|aprs|openmeteo|meteolt|\
+        zenoh|airplaneslive|adsblol|aisstream|aprs|openmeteo|meteolt|\
         dronuradaras|opendroneid|nffi|cot-udp|cot-udp-tak|cot-bridge|track-fusion|\
         cap|geojson|ais-nmea|spectrum|sensor-health|mission-route)
             return 0 ;;
+        admin-control) [[ -n "${ZENOH_ADMIN_SECRET_KEY:-}" || -n "${EFDI_CONTROL_TOKEN:-}" ]] ;;
+        cert-renewer)
+            [[ -n "${EFDI_STEP_CA_URL:-}" &&
+               -f "${EFDI_STEP_RENEW_CERT_PATH:-${EFDI_CERT_DIR}/${PARTNER_NAMESPACE}-cert.pem}" &&
+               -f "${EFDI_STEP_RENEW_KEY_PATH:-${EFDI_CERT_DIR}/${PARTNER_NAMESPACE}-key.pem}" ]]
+            ;;
         asterix-udp) [[ "${ASTERIX_PORT:-}" ]] ;;
         asterix-cat10) asterix_category_uses_raw 10 || [[ "${CAT10_PORT:-}" ]] ;;
         asterix-cat20) asterix_category_uses_raw 20 || [[ "${CAT20_PORT:-}" ]] ;;
@@ -318,7 +331,7 @@ is_bridge_pid() {
     local efdi_process=1
     while IFS= read -r -d '' arg; do
         if [[ -n "$expected_script" ]]; then
-            [[ "$arg" == "$COMPOSE_DIR/$expected_script" ]] && return 0
+            [[ "$arg" == "$COMPOSE_DIR/$expected_script" || "$arg" == "$SCRIPT_DIR/$expected_script" ]] && return 0
         elif [[ "$arg" == "$COMPOSE_DIR/"* ]]; then
             return 0
         fi
@@ -402,6 +415,14 @@ launch() {
     case "$name" in
 
         zenoh)
+            if [[ -f "${POD_STATE_DIR}/pki/step-ca/config/ca.json" ]]; then
+                mesh_ip=$(netbird status 2>/dev/null | sed -n 's/.*NetBird IP:[[:space:]]*\([0-9.]*\).*/\1/p' | head -1 || true)
+                if [[ "$mesh_ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+                    "$SCRIPT_DIR/scripts/pki/configure-step-ca-names.sh" \
+                        "${POD_STATE_DIR}/pki/step-ca" "$mesh_ip" >/dev/null
+                fi
+                docker compose -f "$SCRIPT_DIR/compose/docker-compose.yml" --profile managed-ca up -d step-ca
+            fi
             if docker compose -f "$SCRIPT_DIR/compose/docker-compose.yml" ps zenoh-router \
                     --format "{{.Status}}" 2>/dev/null | grep -q "healthy\|Up"; then
                 printf "  ${DIM}[skip]${R}  zenoh-router already running\n"
@@ -422,6 +443,10 @@ launch() {
             ;;
 
         admin-control)
+            if [[ -z "${ZENOH_ADMIN_SECRET_KEY:-}" && -z "${EFDI_CONTROL_TOKEN:-}" ]]; then
+                printf "  ${YELLOW}[skip]${R}  admin-control requires ZENOH_ADMIN_SECRET_KEY or EFDI_CONTROL_TOKEN\n"
+                return 1
+            fi
             if is_running "admin-control" "admin_control.py"; then
                 printf "  ${DIM}[skip]${R}  %-16s already running (pid %s)\n" "admin-control" "$(cat "$PID_DIR/admin-control.pid")"
                 return
@@ -431,6 +456,24 @@ launch() {
                 >> "$LOG_DIR/admin-control.log" 2>&1 ) &
             echo $! > "$PID_DIR/admin-control.pid"
             printf "  ${GREEN}[start]${R} %-16s pid %s\n" "admin-control" "$!"
+            ;;
+
+        cert-renewer)
+            local renew_cert renew_key renew_root renew_url
+            renew_cert="${EFDI_STEP_RENEW_CERT_PATH:-${EFDI_CERT_DIR}/${PARTNER_NAMESPACE}-cert.pem}"
+            renew_key="${EFDI_STEP_RENEW_KEY_PATH:-${EFDI_CERT_DIR}/${PARTNER_NAMESPACE}-key.pem}"
+            renew_root="${EFDI_STEP_RENEW_ROOT_PATH:-${POD_STATE_DIR}/pki/step-ca/certs/root_ca.crt}"
+            renew_url="$EFDI_STEP_CA_URL"
+            export EFDI_STEP_RENEW_RUNTIME_CERT_PATH="${EFDI_STEP_RENEW_RUNTIME_CERT_PATH:-${POD_STATE_DIR}/zenoh/tls/pod-cert.pem}"
+            if is_running "cert-renewer" "scripts/pki/renew-step-identities.sh"; then
+                printf "  ${DIM}[skip]${R}  %-16s already running (pid %s)\n" "cert-renewer" "$(cat "$PID_DIR/cert-renewer.pid")"
+                return
+            fi
+            ( exec setsid "$SCRIPT_DIR/scripts/pki/renew-step-identities.sh" --daemon \
+                "$renew_url" "$renew_root" "$renew_cert:$renew_key" \
+                >> "$LOG_DIR/cert-renewer.log" 2>&1 ) &
+            echo $! > "$PID_DIR/cert-renewer.pid"
+            printf "  ${GREEN}[start]${R} %-16s pid %s\n" "cert-renewer" "$!"
             ;;
 
         airplaneslive)
@@ -778,6 +821,7 @@ fi
 # The web UI's native-process control plane is always kept selected so an old
 # launcher-state file cannot leave Runtime Control disconnected after upgrade.
 sel[admin-control]=1
+svc_ready cert-renewer && sel[cert-renewer]=1 || true
 
 draw_menu() {
     clear

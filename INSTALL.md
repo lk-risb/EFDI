@@ -46,9 +46,13 @@ ATAK devices must be on the same L2 segment as the server for multicast delivery
 
 ### Certificates
 
-Zenoh mTLS certs are self-issued — no external CA or vendor bundle. `scripts/gen-certs.sh <namespace>` generates (once) an EFDI root CA under `compose/certs/efdi/`, then signs a leaf cert+key for the given namespace, reusing the same root CA for every namespace after the first run.
+For a standalone/development pod, Zenoh mTLS certs can be self-issued without
+an external vendor bundle. `scripts/gen-certs.sh <namespace>` generates (once)
+an EFDI development root CA under `compose/certs/efdi/`, then signs a leaf
+cert+key for the given namespace. Do not distribute that development root key
+to managed routers.
 
-The generated material (`efdi-ca-root.pem`, `<NAMESPACE>-cert.pem`, `<NAMESPACE>-key.pem`) lives at `compose/certs/efdi/` — gitignored, never committed. The ignored bundle directory also keeps `tak/`, `sitaware/`, `tests/`, and `zenoh-sandbox/` identities separate. Default path is set by `start.sh`; override with `BUNDLE_DIR` in `compose/.env` if you'd rather keep it outside the repo entirely.
+The generated material (`efdi-ca-root.pem`, `<NAMESPACE>-cert.pem`, `<NAMESPACE>-key.pem`) lives at `compose/certs/efdi/` — gitignored, never committed. The ignored bundle directory also keeps `tak/`, `sitaware/`, `tests/`, and `zenoh-sandbox/` identities separate. Default path is set by `start.sh`; override with `BUNDLE_DIR` in `compose/.env` if you'd rather keep it outside the repo entirely. Managed deployments use the delegated-CA workflow in section 10 and keep CA private keys under a separate mode-700 runtime directory.
 
 ---
 
@@ -434,7 +438,28 @@ Authentication:            enabled, using the dedicated feed credentials
 Pause Subscription:        no
 ```
 
-The endpoint accepts GET/HEAD only. It requires Basic authentication by default, bounds the cache, removes tracks not refreshed within `SITAWARE_HQ_NVG_STALE_S`, and gives each NVG object a matching `TimeSpan` expiry so HQ hides stale objects even when the feed goes offline. When present in the source, standard NVG modifiers and bounded `ExtendedData` carry callsign, registration/ICAO, aircraft or vessel type, squawk, route, source, APRS path/comment, vessel IDs, sensor identity, and other safe scalar fields. The Attributes view reuses the CoT/TAK domain formatter, presenting clean sections rather than raw Python field names. Aircraft expose separate barometric and geometric altitude, primary altitude in metres/feet/flight level, climb/descent rate, selected/target altitude, speed/heading, emergency/autopilot state, and ADS-B quality. Fixed APRS points and dronuradaras.lt detections use the HQ-supported generic neutral equipment-sensor symbol; weather observations use the distinct neutral emplaced-sensor symbol because HQ 6.22 renders standards-native METOC symbols as Unknown. Neither is classified as a military-intelligence unit. It refuses cleartext HTTP on a non-loopback address unless `SITAWARE_HQ_NVG_ALLOW_INSECURE_HTTP=1` is explicitly set for an isolated lab. Do not use a Keycloak account or password for this feed.
+The endpoint accepts GET/HEAD only. It requires Basic authentication by default, bounds the cache, removes tracks not refreshed within `SITAWARE_HQ_NVG_STALE_S`, and gives each published NVG object a matching `TimeSpan` expiry. When present in the source, standard NVG modifiers and bounded `ExtendedData` carry callsign, registration/ICAO, aircraft or vessel type, squawk, route, source, APRS path/comment, vessel IDs, sensor identity, and other safe scalar fields. The Attributes view reuses the CoT/TAK domain formatter, presenting clean sections rather than raw Python field names. Aircraft expose separate barometric and geometric altitude, primary altitude in metres/feet/flight level, climb/descent rate, selected/target altitude, speed/heading, emergency/autopilot state, and ADS-B quality. Fixed APRS points and dronuradaras.lt detections use the HQ-supported generic neutral equipment-sensor symbol; weather observations use the distinct neutral emplaced-sensor symbol because HQ 6.22 renders standards-native METOC symbols as Unknown. Neither is classified as a military-intelligence unit. It refuses cleartext HTTP on a non-loopback address unless `SITAWARE_HQ_NVG_ALLOW_INSECURE_HTTP=1` is explicitly set for an isolated lab. Do not use a Keycloak account or password for this feed.
+
+#### One-time cleanup of legacy HQ objects
+
+An NVG 2.0.2 data document has no per-object delete operation. Removing a
+track from the EFDI snapshot therefore does not delete a copy that HQ already
+imported. Current EFDI objects carry `TimeSpan/end`, but objects imported by an
+older feed without that element can remain indefinitely and cannot be repaired
+after EFDI has forgotten their URIs.
+
+To remove those legacy objects without mixing them with live tracks:
+
+1. Confirm the EFDI feed returns HTTP 200 and contains current objects.
+2. Pause the existing import subscription.
+3. Create a fresh NVG layer with **Persist tracks** set to **off**.
+4. Retarget or recreate the subscription against that fresh layer and resume
+   polling.
+5. Confirm current EFDI objects appear and carry recent timestamps, then delete
+   the old layer containing the legacy objects.
+
+Do not clear a shared operational layer, and do not point the SitaWare Edge
+per-item push adapter at an HQ endpoint to work around this limitation.
 
 ### Icon reference
 
@@ -798,6 +823,30 @@ curl -u "$SITAWARE_HQ_NVG_USER:$SITAWARE_HQ_NVG_PASS" \
 
 Expected status is `200 application/xml`. In the HQ NVG manager, verify the subscription is unpaused, connected, polling the EFDI host address (not the HQ address), and targets `efdi-live / EFDI Live Tracks`. If TLS is configured, omit `-k` after the issuing CA is trusted. A local `200` plus an HQ connection failure indicates routing, Windows firewall, Linux firewall, or certificate trust—not an NVG conversion failure.
 
+The **Latest replication** timestamp must advance. If it remains old and
+**Reload** reports an unknown error, test the same URL from PowerShell on the HQ
+host. A connection failure is routing/firewall; HTTP 401 is missing or stale
+subscription credentials; success only with `-k` means the feed CA is not
+trusted by the account/service performing the import. Fix replication before
+replacing a legacy layer, otherwise the replacement layer will remain empty.
+
+The authenticated health endpoint provides server-side evidence without
+logging credentials or NVG payloads:
+
+```bash
+curl -ksS -u "$SITAWARE_HQ_NVG_USER:$SITAWARE_HQ_NVG_PASS" \
+  "https://127.0.0.1:${SITAWARE_HQ_NVG_PORT:-8088}/healthz" | python3 -m json.tool
+```
+
+- `successful_requests` remains zero: HQ has not reached the feed.
+- `unauthorized_requests` increases: HQ reached it with missing/stale Basic
+  credentials.
+- `successful_requests` increases while HQ remains Pending: investigate NVG
+  parsing or the selected target layer rather than routing or authentication.
+
+Feed access logs contain only the outcome, track count, and client address and
+are rate-limited to one line per minute for successful and unauthorized pulls.
+
 ### Duplicate process instances
 
 Caused by running `start.sh` twice without stopping:
@@ -956,6 +1005,116 @@ For `./dev.sh up`, the disposable control agent automatically moves to port
 18896 when the development/default 8896 is already occupied, and the dev API is
 pointed at that selected port.
 
+### Managed router hierarchy and delegated CA
+
+Initialize the first managed router's bounded subordinate CA during an offline
+ceremony. The parent/global CA private key is read for this command only and is
+not copied into router state:
+
+```bash
+scripts/pki/init-router-ca.sh \
+  <this-router-namespace> \
+  /offline/efdi-global-root.pem \
+  /offline/efdi-global-root-key.pem \
+  "${POD_STATE_DIR}/pki"
+```
+
+Move the global root key back offline immediately. Create the router's non-CA
+policy signer, then initialize the optional online leaf issuer beneath the
+bounded router CA:
+
+```bash
+scripts/pki/init-policy-signer.sh \
+  <namespace-prefix>/<this-router-namespace> \
+  "${POD_STATE_DIR}/pki/router-ca-cert.pem" \
+  "${POD_STATE_DIR}/pki/router-ca-key.pem" \
+  "${POD_STATE_DIR}/pki"
+
+scripts/pki/init-step-ca.sh \
+  "${POD_STATE_DIR}/pki/router-ca-cert.pem" \
+  "${POD_STATE_DIR}/pki/router-ca-key.pem" \
+  "${POD_STATE_DIR}/pki/step-ca" \
+  <vpn-dns-name-or-ip>
+```
+
+The policy key signs delegation and management envelopes but cannot issue
+certificates. step-ca receives a generated online intermediate and never keeps
+the bounded router-CA key. Set the host paths in `compose/.env`, then restart
+`admin-control`:
+
+```bash
+EFDI_ROUTER_CA_CERT_PATH=/absolute/runtime/pki/router-ca-cert.pem
+EFDI_ROUTER_CA_KEY_PATH=/absolute/runtime/pki/router-ca-key.pem
+EFDI_ROUTER_CA_CHAIN_PATH=/absolute/runtime/pki/router-ca-chain.pem
+EFDI_POLICY_SIGNER_CERT_PATH=/absolute/runtime/pki/policy-signer-cert.pem
+EFDI_POLICY_SIGNER_KEY_PATH=/absolute/runtime/pki/policy-signer-key.pem
+EFDI_STEP_CA_STATE_PATH=/absolute/runtime/pki/step-ca
+./stop.sh admin-control
+./start.sh --service admin-control
+```
+
+In **Certificate Authority**, create a single-use invitation for the child
+namespace and choose how many further CA levels that child may delegate. The UI
+derives the maximum from the issuer certificate; every child depth must be
+strictly lower than its parent's X.509 path-length constraint.
+
+On the child, generate and enroll all three identities locally:
+
+```bash
+scripts/pki/enroll-router.sh \
+  https://<parent-management-host>:8890 \
+  <child-namespace> \
+  "${BUNDLE_DIR}/efdi" \
+  "${POD_STATE_DIR}/pki"
+```
+
+The script prompts for the invitation token without placing it in argv and
+sends only router-CA, transport, and policy-signer CSRs. The response contains
+the complete signed delegation chain, public parent trust, and a one-time link
+credential; private keys never leave the child. Configure the printed paths
+and run the normal first-boot/rebuild flow. CA private keys remain behind the
+localhost host-control boundary.
+
+When the parent has step-ca initialized, enrollment receives a renewable
+24-hour transport certificate. On the child, set `EFDI_STEP_CA_URL` to the
+parent's VPN URL and optionally override `EFDI_STEP_RENEW_*_PATH`. `start.sh`
+and `run.sh` then keep the PID-managed `cert-renewer` running. It checks every
+15 minutes, renews within the eight-hour window configured by
+`EFDI_STEP_RENEW_BEFORE_SECONDS`, updates the active router certificate,
+and restarts the router and admin certificate consumers. Router-CA and policy
+authority rotation remains an explicit re-enrollment operation rather than an
+automatic online privilege escalation.
+
+Each router can then manage its own direct children. **Zenoh Config** can target
+any proven descendant, but the command is signed and forwarded one parent/child
+hop at a time. The receiver validates the complete rendered file by starting
+the pinned Zenoh binary with networking disabled, atomically activates it,
+waits for health, and restores the last-known-good file on failure. **Changes**
+shows the revision path and terminal status. Loss of the parent link stops new
+upstream commands but does not stop the branch's existing data plane, local
+WebUI, or management of its own subnet.
+
+The remote editor always starts from that router's latest reported structured
+snapshot. A parent push cannot change the child's identity, listener ports,
+fabric CA profile, certificate-name verification policy, or organization
+control prefix. Uplink replacement is deliberately two-stage: add the new
+endpoint while retaining an existing one, verify the change, then remove the
+old endpoint. The child restores its prior config if no remote router session
+returns after restart.
+
+Topology and status facts include the complete bounded public delegation proof.
+A root verifies every CA signature, policy signer, namespace narrowing, depth,
+lifetime, and revocation before displaying a descendant as verified. Generated
+ACL activation is deliberately rejected when a root still has an unmanaged
+fabric uplink; enroll or migrate that peer before applying managed ACLs.
+
+Run both disposable runtime gates before deployment:
+
+```bash
+tests/smoke/loopback.sh
+tests/smoke/managed-three-router.sh
+```
+
 ### Roles
 
 | Role | Dashboard | Config (view) | Config (edit + restart router) | Admin Users |
@@ -964,7 +1123,11 @@ pointed at that selected port.
 | `admin` | ✓ | ✓ | | |
 | `superadmin` | ✓ | ✓ | ✓ | ✓ |
 
-Saving a config edit validates it as JSON5 first, writes it to the mounted `${POD_STATE_DIR}/zenoh/config.json5`, then restarts the `zenoh-router` container — a syntax error is rejected before anything touches disk.
+Saving a config edit first renders the structured fields and validates the full
+candidate with the same pinned Zenoh binary used at runtime, with listeners,
+connectors, scouting, and plugins disabled for the probe. Only an accepted
+candidate is written atomically. The router is restarted and health-checked;
+failure restores the last-known-good config and restarts the previous state.
 
 ### Config tab fields
 
