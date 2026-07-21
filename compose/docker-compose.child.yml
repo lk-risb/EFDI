@@ -69,6 +69,8 @@ services:
       - EFDI_CERT_DIR=${EFDI_CERT_DIR:-/certs/efdi}
       - EFDI_CERT_HOST_DIR=${BUNDLE_DIR:-}
       - PARTNER_NAMESPACE=${PARTNER_NAMESPACE_CHILD:?set PARTNER_NAMESPACE_CHILD}
+      - EFDI_TRUST_DOMAIN=${EFDI_TRUST_DOMAIN:-efdi.global}
+      - NAMESPACE_PREFIX_FILE=/namespace-prefix
       - ZENOH_LOCAL_ENDPOINT=tcp/127.0.0.1:${ZENOH_LOCAL_TCP_PORT_CHILD:-7458}
       - ZENOH_CONFIG_PATH=/zenoh-config/config.json5
       - ZENOH_TEMPLATE_PATH=/zenoh-config-template/zenoh-router.json5.tmpl
@@ -80,15 +82,23 @@ services:
       - ZENOH_ADMIN_FIRST_PASS=${ZENOH_ADMIN_FIRST_PASS_CHILD:-}
       - ZENOH_ADMIN_TRUSTED_PARENT_CERT_PATH=${ZENOH_ADMIN_TRUSTED_PARENT_CERT_PATH_CHILD}
       - ZENOH_ADMIN_TRUSTED_PARENT_CN=${ZENOH_ADMIN_TRUSTED_PARENT_CN_CHILD}
-      - ZENOH_ADMIN_TRUSTED_ROOT_CERT_PATHS=${ZENOH_ADMIN_TRUSTED_ROOT_CERT_PATHS_CHILD:-}
-      - ZENOH_ADMIN_TRUSTED_ROOT_CNS=${ZENOH_ADMIN_TRUSTED_ROOT_CNS_CHILD:-}
+      - EFDI_PARENT_NAMESPACE=${EFDI_PARENT_NAMESPACE_CHILD:-}
+      - EFDI_ROUTER_CA_PUBLIC_PATH=/certs/router-ca-cert.pem
+      - EFDI_POLICY_SIGNER_CERT_PATH=/certs/policy-signer-cert.pem
+      - EFDI_POLICY_SIGNER_KEY_PATH=/certs/policy-signer-key.pem
+      - EFDI_LINK_SECRET_PATH=/zenoh-config/link-credentials.json
+      - EFDI_TRUST_BOOTSTRAP_PATH=/certs/efdi/trust/managed-bootstrap.json
       # This pod's OWN router container — so this admin restarts efdi-child-zenoh-router,
       # not the primary pod's efdi-pod-zenoh-router (they share one Docker daemon here).
       - ZENOH_ROUTER_CONTAINER=efdi-child-zenoh-router
       - DOCKER_HOST=tcp://127.0.0.1:2375
+      - EFDI_SHELL_ENABLED=false
       - EFDI_RUNTIME_LOG_DIR=/runtime-logs
     volumes:
       - ${BUNDLE_DIR:?set BUNDLE_DIR in shell env}:/certs:ro
+      - ${EFDI_ROUTER_CA_CERT_PATH_CHILD:-/dev/null}:/certs/router-ca-cert.pem:ro
+      - ${EFDI_POLICY_SIGNER_CERT_PATH_CHILD:-/dev/null}:/certs/policy-signer-cert.pem:ro
+      - ${EFDI_POLICY_SIGNER_KEY_PATH_CHILD:-/dev/null}:/certs/policy-signer-key.pem:ro
       - ${POD_STATE_DIR}/zenoh:/zenoh-config
       - ../host/zenoh-router.json5.tmpl:/zenoh-config-template/zenoh-router.json5.tmpl:ro
       - ${POD_STATE_DIR}/zenoh-admin-data:/data

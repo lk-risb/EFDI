@@ -18,6 +18,7 @@ from .health import router as health_router
 from .branding import router as branding_router
 from .federation_apply import start_federation_subscriber
 from .federation_status import start_federation_status_subscriber
+from .federation_relay import start_relay_subscriber
 from .federation import router as federation_router
 from .publish_script import router as publish_script_router
 from .oidc import router as oidc_router, OIDC_ENABLED
@@ -26,6 +27,10 @@ from .control import router as control_router
 from .audit import router as audit_router
 from .logs import router as logs_router
 from .shell import router as shell_router
+from .config_revisions import router as config_revisions_router
+from .pki import router as pki_router
+from .managed_acl import router as managed_acl_router
+from .trust_api import router as trust_router
 from .deps import SECRET_KEY
 
 
@@ -56,13 +61,31 @@ async def lifespan(app: FastAPI):
         ))
         await conn.execute(text(
             "ALTER TABLE federated_children "
-            "ALTER COLUMN last_status_version TYPE BIGINT"
+            "ALTER COLUMN last_status_version TYPE BIGINT, "
+            "ADD COLUMN IF NOT EXISTS transport_cert_pem TEXT, "
+            "ADD COLUMN IF NOT EXISTS cert_sha256 VARCHAR(64), "
+            "ADD COLUMN IF NOT EXISTS max_delegation_depth INTEGER NOT NULL DEFAULT 0"
+        ))
+        await conn.execute(text(
+            "ALTER TABLE pki_invitations "
+            "ADD COLUMN IF NOT EXISTS policy_csr_sha256 VARCHAR(64), "
+            "ADD COLUMN IF NOT EXISTS policy_cert_pem TEXT, "
+            "ADD COLUMN IF NOT EXISTS transport_chain_pem TEXT, "
+            "ADD COLUMN IF NOT EXISTS grant_envelope_json TEXT, "
+            "ADD COLUMN IF NOT EXISTS link_username VARCHAR(128), "
+            "ADD COLUMN IF NOT EXISTS link_password_hash VARCHAR(255), "
+            "ADD COLUMN IF NOT EXISTS authority_id UUID"
+        ))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_pki_invitations_authority_id "
+            "ON pki_invitations (authority_id)"
         ))
     await _ensure_first_user()
 
     loop = asyncio.get_running_loop()
-    federation_session = start_federation_subscriber(loop)
-    federation_status_session = start_federation_status_subscriber(loop)
+    _, federation_task = start_federation_subscriber(loop)
+    _, federation_status_task = start_federation_status_subscriber(loop)
+    _, federation_relay_task = start_relay_subscriber(loop)
     topology_session, topology_task = start_topology(loop)
 
     yield
@@ -73,12 +96,17 @@ async def lifespan(app: FastAPI):
             await topology_task
         except asyncio.CancelledError:
             pass
+    for task in (federation_task, federation_status_task, federation_relay_task):
+        if task is not None:
+            task.cancel()
+    for task in (federation_task, federation_status_task, federation_relay_task):
+        if task is not None:
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
     if topology_session is not None:
         topology_session.close()
-    if federation_session is not None:
-        federation_session.close()
-    if federation_status_session is not None:
-        federation_status_session.close()
 
 
 app = FastAPI(title="Zenoh Admin API", version="1.0.0", lifespan=lifespan)
@@ -119,6 +147,10 @@ app.include_router(control_router)
 app.include_router(audit_router)
 app.include_router(logs_router)
 app.include_router(shell_router)
+app.include_router(config_revisions_router)
+app.include_router(pki_router)
+app.include_router(managed_acl_router)
+app.include_router(trust_router)
 
 
 class SPAStaticFiles(StaticFiles):

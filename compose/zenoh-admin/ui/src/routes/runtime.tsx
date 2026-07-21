@@ -30,8 +30,48 @@ type RuntimeData = {
   env_file: string
   control_port: number
 }
-type ServiceState = { name: string; running: boolean; status: string; pid: number | null }
+type ServiceDetails = {
+  tracks?: number
+  successful_requests?: number
+  unauthorized_requests?: number
+  last_successful_request?: string | null
+  last_unauthorized_request?: string | null
+  seconds_since_last_success?: number | null
+}
+type ServiceState = {
+  name: string
+  running: boolean
+  status: string
+  pid: number | null
+  details?: ServiceDetails
+}
 type CatalogItem = { name: string; group: string; description: string }
+
+function servicePresentation(state: ServiceState | undefined, selected: boolean) {
+  if (state?.status === 'auth-failed') return { label: 'HQ auth failed', text: 'text-red-500', dot: 'bg-red-500' }
+  if (state?.status === 'client-stale') return { label: 'HQ pull stale', text: 'text-red-500', dot: 'bg-red-500' }
+  if (state?.status === 'waiting-for-client') return { label: 'no HQ pulls', text: 'text-amber-500', dot: 'bg-amber-400' }
+  if (state?.status === 'health-unavailable') return { label: 'health unavailable', text: 'text-amber-500', dot: 'bg-amber-400' }
+  if (state?.status === 'client-connected') return { label: 'HQ connected', text: 'text-emerald-500', dot: 'bg-emerald-400 hud-live-dot' }
+  if (state?.running) return { label: 'running', text: 'text-emerald-500', dot: 'bg-emerald-400 hud-live-dot' }
+  if (state?.status === 'needs-config') return { label: 'needs config', text: 'text-amber-500', dot: 'bg-amber-400' }
+  if (state?.status === 'crashed') return { label: 'crashed', text: 'text-red-500', dot: 'bg-red-500' }
+  if (selected) return { label: 'stopped', text: 'text-amber-500', dot: 'bg-amber-400' }
+  return { label: 'not selected', text: 'text-zinc-500', dot: 'bg-zinc-400 dark:bg-zinc-700' }
+}
+
+function serviceTelemetry(state: ServiceState | undefined) {
+  const details = state?.details
+  if (!details) return ''
+  const parts: string[] = []
+  if (details.tracks !== undefined) parts.push(`${details.tracks} tracks`)
+  if (state?.status === 'waiting-for-client') parts.push('no successful HQ pulls')
+  if (state?.status === 'auth-failed') parts.push(`${details.unauthorized_requests ?? 0} rejected pulls`)
+  if ((state?.status === 'client-connected' || state?.status === 'client-stale') && details.seconds_since_last_success != null) {
+    parts.push(`last HQ pull ${Math.round(details.seconds_since_last_success)}s ago`)
+  }
+  return parts.length ? ` · ${parts.join(' · ')}` : ''
+}
 
 const FIELD_GROUPS: { title: string; description: string; fields: { key: string; label: string; secret?: boolean; placeholder?: string }[] }[] = [
   { title: 'Router and namespace', description: 'Native-process endpoint and namespace defaults. Use Zenoh Config for live router listener changes.', fields: [
@@ -249,9 +289,7 @@ function RuntimePage() {
                 const state = runtime?.services.find(service => service.name === item.name)
                 const action = busy?.startsWith(`${item.name}:`) ? busy.split(':')[1] : null
                 const selected = selectedServices.has(item.name)
-                const statusLabel = state?.running ? 'running' : state?.status === 'needs-config' ? 'needs config' : state?.status === 'crashed' ? 'crashed' : selected ? 'stopped' : 'not selected'
-                const statusClass = state?.running ? 'text-emerald-500' : state?.status === 'needs-config' ? 'text-amber-500' : state?.status === 'crashed' ? 'text-red-500' : selected ? 'text-amber-500' : 'text-zinc-500'
-                const dotClass = state?.running ? 'bg-emerald-400 hud-live-dot' : state?.status === 'needs-config' ? 'bg-amber-400' : state?.status === 'crashed' ? 'bg-red-500' : selected ? 'bg-amber-400' : 'bg-zinc-400 dark:bg-zinc-700'
+                const presentation = servicePresentation(state, selected)
                 return (
                   <div
                     key={item.name}
@@ -267,14 +305,14 @@ function RuntimePage() {
                         onChange={e => updateSelection(item.name, e.target.checked)}
                         className="h-4 w-4 rounded border-zinc-400 bg-transparent accent-accent-fill focus:ring-accent-ring disabled:opacity-30 dark:border-zinc-600"
                       />
-                      <span className={`h-2 w-2 shrink-0 rounded-full ${dotClass}`} />
+                      <span className={`h-2 w-2 shrink-0 rounded-full ${presentation.dot}`} />
                       <div className="min-w-0 flex-1">
                         <p className="truncate font-mono text-xs text-zinc-800 dark:text-zinc-200">{item.name}</p>
                         <p className="truncate text-[10px] text-zinc-500">
-                          {item.description}{state?.pid ? ` · PID ${state.pid}` : ''}
+                          {item.description}{state?.pid ? ` · PID ${state.pid}` : ''}{serviceTelemetry(state)}
                         </p>
                       </div>
-                      <span className={`hidden text-[10px] uppercase tracking-[0.18em] sm:inline ${statusClass}`}>{statusLabel}</span>
+                      <span className={`hidden text-[10px] uppercase tracking-[0.18em] sm:inline ${presentation.text}`}>{presentation.label}</span>
                       <button title="Start" disabled={!canWrite || !!action || state?.running} onClick={() => serviceAction(item.name, 'start')} className="rounded p-1.5 text-zinc-500 transition hover:bg-emerald-500/10 hover:text-emerald-500 disabled:opacity-30"><Play size={13} /></button>
                       <button title="Stop" disabled={!canWrite || !!action || !state?.running || item.name === 'zenoh'} onClick={() => serviceAction(item.name, 'stop')} className="rounded p-1.5 text-zinc-500 transition hover:bg-red-500/10 hover:text-red-500 disabled:opacity-30"><Square size={12} /></button>
                       <button title="Restart" disabled={!canWrite || !!action || item.name === 'admin-control'} onClick={() => serviceAction(item.name, 'restart')} className="rounded p-1.5 text-zinc-500 transition hover:bg-accent-ring/10 hover:text-accent-ring disabled:opacity-30"><RefreshCw size={13} className={action === 'restart' ? 'animate-spin' : ''} /></button>

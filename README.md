@@ -125,7 +125,7 @@ Four independent paths are available; enable only interfaces documented and lice
 
 **`nffi.py` (protocol translator)** — subscribes to complete NFFI XML documents already carried by Zenoh under `…/raw/nffi/{source-id}` and publishes normalized friendly-force tracks. It contains no receiver socket, endpoint, framing, or vendor connection logic. NFFI friendly-force interoperability is specified by ADatP-36 / STANAG 5527; STANAG 4677 is the separate dismounted-soldier interoperability family and requires its own exact JDSSDM/NFFI profile implementation.
 
-**`nvg_bridge.py` (outbound, HQ)** — maintains a bounded snapshot of live EFDI tracks and serves one NVG 2.0.2 document for HQ's **NVG Import Subscription** manager to poll. The endpoint supports GET/HEAD only, requires dedicated HTTP Basic credentials unless anonymous access is explicitly enabled, expires stale tracks, includes an NVG `TimeSpan` so HQ also hides expired objects if the feed goes offline, and attaches standard symbol modifiers plus bounded `ExtendedData`. Its Attributes view reuses the same domain-aware stat-card formatter as CoT/TAK, with clean Identity, IFF, Kinematics, Radar, Flight Plan, Status, Altitude, Guidance, and ADS-B Quality sections instead of raw Python keys. Aircraft include distinct barometric/geometric altitude readings, primary altitude in metres/feet/flight level, climb/descent rate, selected/target altitude, speed/heading, identity, route, emergency/autopilot state, ADS-B quality, and other safe scalar source fields available in the track. SitaWare uses the same RU/BY ICAO and MMSI hostile-affiliation classifiers as CoT rather than assigning every ADS-B/AIS topic one static affiliation. Because HQ 6.22 renders the standards-native METOC scheme as Unknown, weather stations use its supported neutral emplaced-sensor SIDC, distinct from the generic neutral sensor used by dronuradaras.lt. The dronuradaras bridge publishes only devices whose latest API status is `is_online=true`; an offline transition immediately removes that device from this snapshot and from the CoT caches. XML-illegal upstream characters are removed and a malformed cached record cannot break the complete feed. The endpoint refuses non-loopback cleartext HTTP unless the lab-only override is set. Prefer HTTPS with a certificate trusted by the HQ Windows host. This native Python service is enabled with `SITAWARE_HQ_NVG_ENABLE=1`; it does not add a bridge container.
+**`nvg_bridge.py` (outbound, HQ)** — maintains a bounded snapshot of live EFDI tracks and serves one NVG 2.0.2 document for HQ's **NVG Import Subscription** manager to poll. The endpoint supports GET/HEAD only, requires dedicated HTTP Basic credentials unless anonymous access is explicitly enabled, expires stale tracks from its snapshot, includes an NVG `TimeSpan` on every published object, and attaches standard symbol modifiers plus bounded `ExtendedData`. Its authenticated `/healthz` response records bounded successful/unauthorized pull counters and timestamps without retaining credentials or payloads. NVG data documents do not carry a per-object delete operation, so omission from a later snapshot does not remove an object that HQ already imported. Objects imported before EFDI began publishing `TimeSpan/end` require a one-time replacement of the target NVG layer; see `INSTALL.md`. Its Attributes view reuses the same domain-aware stat-card formatter as CoT/TAK, with clean Identity, IFF, Kinematics, Radar, Flight Plan, Status, Altitude, Guidance, and ADS-B Quality sections instead of raw Python keys. Aircraft include distinct barometric/geometric altitude readings, primary altitude in metres/feet/flight level, climb/descent rate, selected/target altitude, speed/heading, identity, route, emergency/autopilot state, ADS-B quality, and other safe scalar source fields available in the track. SitaWare uses the same RU/BY ICAO and MMSI hostile-affiliation classifiers as CoT rather than assigning every ADS-B/AIS topic one static affiliation. Because HQ 6.22 renders the standards-native METOC scheme as Unknown, weather stations use its supported neutral emplaced-sensor SIDC, distinct from the generic neutral sensor used by dronuradaras.lt. The dronuradaras bridge publishes only devices whose latest API status is `is_online=true`; an offline transition immediately removes that device from this snapshot and from the CoT caches. XML-illegal upstream characters are removed and a malformed cached record cannot break the complete feed. The endpoint refuses non-loopback cleartext HTTP unless the lab-only override is set. Prefer HTTPS with a certificate trusted by the HQ Windows host. This native Python service is enabled with `SITAWARE_HQ_NVG_ENABLE=1`; it does not add a bridge container.
 
 ADS-B emitter categories `C1` and `C2` are surface emergency/service vehicles, not aircraft. CoT and both SitaWare NVG paths classify them as neutral ground vehicles (`a-n-G-E-V` / `SNGPEV----*****`). The ordinary `on_ground` flag alone is not used for this decision because taxiing aircraft must remain aircraft.
 
@@ -269,8 +269,37 @@ The admin panel's **Runtime Control** page can start, stop, restart, and inspect
 logs for those host-managed processes. `start.sh` and `run.sh all` keep a
 localhost `admin-control` process available on port 18896; the panel uses it to
 update the deployment `.env` as data and delegate lifecycle actions to the same
-launcher scripts used from a terminal. Secret values are write-only. Set
-`EFDI_CONTROL_TOKEN` in `compose/.env` for an additional local bearer token.
+launcher scripts used from a terminal. Secret values are write-only. Setting
+`EFDI_CONTROL_TOKEN` is recommended in `compose/.env`; it authenticates both
+the localhost control API and the fixed-target Zenoh-router shell helper. If it
+is left empty, both sides derive a local token from the required admin secret.
+
+The panel also provides managed-router operation for a hierarchy of HQ and
+branch routers:
+
+- **Network** shows direct children and observed descendants, link freshness,
+  management authority, and last-known state. A branch keeps its local router,
+  database, WebUI, and child-management capability when its parent is offline.
+- **Zenoh Config** validates a candidate with the pinned Zenoh binary before it
+  touches the active file. Activation waits for router health and restores the
+  last-known-good configuration automatically if restart or health checks fail.
+  Remote editing starts from the selected router's reported snapshot; identity,
+  listener, CA-profile, and control-prefix fields remain local-only, and a
+  branch push is rolled back unless a remote router link also recovers.
+- **Changes** records local and relayed revisions, target, hash, and final
+  applied/rejected/rolled-back state without storing configuration bodies.
+- **Certificate Authority** creates single-use child invitations. The child
+  generates router-CA, transport, and non-CA policy-signer keys locally,
+  submits only CSRs, and receives a cryptographically bounded delegation chain.
+  An optional step-ca intermediate issues and renews short-lived transport
+  certificates without exposing a router-CA key to the WebUI.
+
+Parent-to-descendant changes travel one authenticated hop at a time: each
+router accepts control only from its configured parent and re-signs a bounded
+relay for a direct child. A root router therefore does not need every
+descendant's private identity or direct endpoint. Signed topology and status
+facts carry the public delegation proof, allowing the root to independently
+verify grandchildren and deeper descendants after restart.
 
 ---
 

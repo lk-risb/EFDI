@@ -1,19 +1,23 @@
+import hashlib
 import json
 import os
 import re
 import time
 
 import zenoh
+from .zenoh_auth import apply_zenoh_auth
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, field_validator
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .config import ConfigFields, _render_config
 from .db import get_db
 from .deps import require_role, write_audit
 from .federation_crypto import sign_payload
+from .federation_paths import path_to
+from .federation_relay import config_topic, relay_topic
+from .config_revisions import create_revision, set_revision_state
 from .models import FederatedChild
 
 router = APIRouter(prefix="/api/federation", tags=["federation"])
@@ -64,9 +68,23 @@ class FederatedChildOut(BaseModel):
     last_status_version: int | None = None
     last_status_at: str | None = None
     last_status_error: str | None = None
+    cert_sha256: str | None = None
+    max_delegation_depth: int = 0
 
     class Config:
         from_attributes = True
+
+
+class FederatedTargetPush(BaseModel):
+    target_namespace: str
+    fields: ConfigFields
+
+    @field_validator("target_namespace")
+    @classmethod
+    def _check_target_namespace(cls, value: str) -> str:
+        if not _SAFE_NAMESPACE_RE.fullmatch(value):
+            raise ValueError("target namespace contains unsupported characters")
+        return value
 
 
 def _child_out(c: FederatedChild) -> FederatedChildOut:
@@ -76,11 +94,13 @@ def _child_out(c: FederatedChild) -> FederatedChildOut:
         last_status=c.last_status, last_status_version=c.last_status_version,
         last_status_at=c.last_status_at.isoformat() if c.last_status_at else None,
         last_status_error=c.last_status_error,
+        cert_sha256=c.cert_sha256,
+        max_delegation_depth=c.max_delegation_depth,
     )
 
 
 def _own_signing_key_path() -> str:
-    return os.path.join(_OWN_CERT_DIR, f"{_OWN_NAMESPACE}-key.pem")
+    return os.environ.get("EFDI_POLICY_SIGNER_KEY_PATH", "/certs/policy-signer-key.pem")
 
 
 def _publish_endpoint() -> str:
@@ -96,6 +116,7 @@ def _open_publish_session() -> "zenoh.Session":
     conf = zenoh.Config()
     conf.insert_json5("mode", '"client"')
     conf.insert_json5("connect/endpoints", json.dumps([endpoint]))
+    apply_zenoh_auth(conf)
     if endpoint.startswith("tls"):
         conf.insert_json5("transport/link/tls", json.dumps({
             "root_ca_certificate": os.path.join(_OWN_CERT_DIR, "efdi-ca-root.pem"),
@@ -122,29 +143,10 @@ async def create_child(
     db: AsyncSession = Depends(get_db),
     actor=Depends(require_role("superadmin")),
 ):
-    child = FederatedChild(name=child_in.name, namespace=child_in.namespace, created_by=actor.id)
-    db.add(child)
-    try:
-        await db.commit()
-    except IntegrityError:
-        # namespace is UNIQUE — a duplicate would otherwise surface as a raw
-        # 500, and the operator sees a generic failure with no clue the row
-        # already exists (a #76 "child never appears" failure mode). Give a
-        # clear 409 instead.
-        await db.rollback()
-        raise HTTPException(
-            status_code=409,
-            detail=f"A federated child with namespace '{child_in.namespace}' already exists",
-        )
-    await db.refresh(child)
-
-    # No ACL refresh needed — pod-federation-config is a mesh-wide
-    # {root}/**/@config/** wildcard (see host/zenoh-router.json5.tmpl),
-    # so every namespace is already transport-reachable. This row is pure
-    # bookkeeping for the UI dropdown and for push-config's topic lookup.
-    await write_audit(db, actor.id, "federation_child_created",
-                       f"name={child.name}, namespace={child.namespace}")
-    return _child_out(child)
+    raise HTTPException(
+        status_code=410,
+        detail="manual federation rows are disabled; enroll the child through Certificate Authority",
+    )
 
 
 @router.delete("/{child_id}")
@@ -153,18 +155,10 @@ async def delete_child(
     db: AsyncSession = Depends(get_db),
     actor=Depends(require_role("superadmin")),
 ):
-    child = await db.get(FederatedChild, child_id)
-    if not child:
-        raise HTTPException(status_code=404, detail="Federated child not found")
-    name, namespace = child.name, child.namespace
-    await db.delete(child)
-    await db.commit()
-
-    # No ACL narrowing needed — see create_child: the wildcard doesn't
-    # change based on which children are registered.
-    await write_audit(db, actor.id, "federation_child_deleted",
-                       f"name={name}, namespace={namespace}")
-    return {"status": "deleted"}
+    raise HTTPException(
+        status_code=410,
+        detail="deletion is disabled; quarantine or decommission the managed authority",
+    )
 
 
 @router.post("/{child_id}/push-config")
@@ -177,15 +171,84 @@ async def push_config(
     child = await db.get(FederatedChild, child_id)
     if not child:
         raise HTTPException(status_code=404, detail="Federated child not found")
+    return await _push_to_target(child.namespace, fields, db, actor.id)
+
+
+@router.post("/push-config")
+async def push_target_config(
+    request: FederatedTargetPush,
+    db: AsyncSession = Depends(get_db),
+    actor=Depends(require_role("superadmin")),
+):
+    """Push to any proven descendant through direct-child re-signing hops."""
+    return await _push_to_target(request.target_namespace, request.fields, db, actor.id)
+
+
+async def _push_to_target(
+    target_namespace: str,
+    fields: ConfigFields,
+    db: AsyncSession,
+    actor_id: str,
+) -> dict:
+    if fields.partner_namespace != target_namespace:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Remote config partner_namespace must equal the selected target namespace; "
+                "refusing a candidate that could overwrite the child's identity"
+            ),
+        )
+
+    direct_result = await db.execute(
+        select(FederatedChild).where(FederatedChild.namespace == target_namespace)
+    )
+    direct_target = direct_result.scalar_one_or_none()
+    path = [target_namespace] if direct_target is not None else path_to(target_namespace)
+    if not path:
+        raise HTTPException(status_code=409, detail="Target is not a proven descendant in the live topology")
+    first_hop_result = await db.execute(
+        select(FederatedChild).where(FederatedChild.namespace == path[0])
+    )
+    first_hop = first_hop_result.scalar_one_or_none()
+    if first_hop is None:
+        raise HTTPException(
+            status_code=403,
+            detail="Topology path does not begin with a locally registered direct child",
+        )
 
     # version is assigned before the try block so it's always available for
     # the failure-path audit entry below, even if rendering itself fails.
     # Milliseconds avoid same-second collisions while remaining exactly
     # representable by JavaScript and safely inside PostgreSQL BIGINT.
     version = int(time.time() * 1000)
+    revision = None
     try:
         rendered = _render_config(fields)
-        payload = {"config": rendered, "version": version, "signed_at": time.time()}
+        if len(rendered.encode("utf-8")) > 256 * 1024:
+            raise HTTPException(status_code=422, detail="Rendered config exceeds the 256 KiB relay limit")
+        if len(path) == 1:
+            payload = {"config": rendered, "version": version, "signed_at": time.time()}
+            topic = config_topic(target_namespace)
+            delivery = "direct"
+        else:
+            payload = {
+                "path": path,
+                "config": rendered,
+                "version": version,
+                "signed_at": time.time(),
+            }
+            topic = relay_topic(path[0])
+            delivery = "relay"
+
+        revision = await create_revision(
+            db,
+            target_namespace=target_namespace,
+            version=version,
+            source=delivery,
+            state="validating",
+            config_sha256=hashlib.sha256(rendered.encode()).hexdigest(),
+            created_by=actor_id,
+        )
 
         key_path = _own_signing_key_path()
         if not os.path.isfile(key_path):
@@ -193,10 +256,9 @@ async def push_config(
         with open(key_path, "rb") as f:
             key_pem = f.read()
 
-        signature = sign_payload(payload, key_pem)
+        signature = sign_payload(payload, key_pem, purpose="config" if delivery == "direct" else "relay")
         envelope = {"payload": payload, "signature": signature}
 
-        topic = f"{_prefix()}/{child.namespace}/@config/v1"
         session = _open_publish_session()
         try:
             session.put(topic, json.dumps(envelope).encode())
@@ -209,11 +271,30 @@ async def push_config(
         # leave no trace at all, unlike the receiving side (federation_apply.py)
         # which deliberately audits every one of its own failure branches.
         detail = exc.detail if isinstance(exc, HTTPException) else str(exc)
-        await write_audit(db, actor.id, "federation_config_push_failed",
-                           f"child={child.name} ({child.namespace}), version={version}, error={detail}")
+        if revision is not None:
+            await set_revision_state(db, revision, "failed", detail)
+        await write_audit(
+            db,
+            actor_id,
+            "federation_config_push_failed",
+            f"target={target_namespace}, version={version}, error={detail}",
+        )
         raise
 
-    await write_audit(db, actor.id, "federation_config_pushed",
-                       f"child={child.name} ({child.namespace}), version={version}")
+    await set_revision_state(db, revision, "pending")
 
-    return {"status": "pushed", "version": version, "topic": topic}
+    await write_audit(
+        db,
+        actor_id,
+        "federation_config_pushed",
+        f"target={target_namespace}, first_hop={path[0]}, hops={len(path)}, version={version}",
+    )
+
+    return {
+        "status": "pushed",
+        "version": version,
+        "topic": topic,
+        "delivery": delivery,
+        "path": path,
+        "revision_id": revision.id,
+    }

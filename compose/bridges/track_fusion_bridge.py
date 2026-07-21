@@ -70,7 +70,14 @@ import threading
 import time
 
 import zenoh
+from google.protobuf.message import DecodeError
+from zenoh_auth import apply_zenoh_auth
 from namespace_prefix import topic_root
+from protocols.adsblol_track_pb2 import AdsbLolTrack
+from protocols.airplaneslive_track_pb2 import AirplanesLiveTrack
+from protocols.protobuf_codec import source_message_to_track
+from protocols.normalized_track_pb2 import NormalizedTrack
+from protocols.protobuf_codec import normalized_track_message
 
 ORG       = os.environ.get("PARTNER_NAMESPACE", "")
 TOPIC_ROOT = topic_root()
@@ -81,12 +88,14 @@ _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", "tcp/127.0.0.1:7448")
 _SPATIAL_NM      = float(os.environ.get("FUSION_SPATIAL_NM",  "2.0"))
 _MAX_AGE_S       = float(os.environ.get("FUSION_MAX_AGE_S",   "60"))
 _RADAR_PREF      = os.environ.get("FUSION_RADAR_PREF", "1") != "0"
+_PROTOBUF_V2_CONSUME = os.environ.get("EFDI_PROTOBUF_V2_CONSUME", "1") != "0"
 
 # Cross-radar handoff — PSR-only targets seen by multiple radars simultaneously
 _HANDOFF_NM      = float(os.environ.get("FUSION_HANDOFF_NM",  "2.0"))  # spatial tolerance
 _HANDOFF_HDG_TOL = 45.0   # heading difference tolerance in degrees
 
 TOPIC_FUSED  = "{}/air/fused/{}/aircraft/tracks/v1"
+TOPIC_FUSED_V2 = "{}/air/fused/{}/aircraft/tracks/v2"
 
 # Topics we subscribe to as radar sources (primary: positional authority)
 _RADAR_TOPICS = [
@@ -98,11 +107,17 @@ _RADAR_TOPICS = [
 ]
 
 # Topics we subscribe to as identity enrichment sources
-_ADSB_TOPICS = [
-    "{}/air/asterix/cat21/**".format(TOPIC_ROOT),
-    "{}/air/airplaneslive/**".format(TOPIC_ROOT),
-    "{}/air/adsblol/**".format(TOPIC_ROOT),
-]
+_ADSB_TOPICS = ["{}/air/asterix/cat21/**".format(TOPIC_ROOT)]
+if _PROTOBUF_V2_CONSUME:
+    _ADSB_TOPICS.extend([
+        "{}/air/airplaneslive/adsb/*/aircraft/tracks/v2".format(TOPIC_ROOT),
+        "{}/air/adsblol/adsb/*/aircraft/tracks/v2".format(TOPIC_ROOT),
+    ])
+else:
+    _ADSB_TOPICS.extend([
+        "{}/air/airplaneslive/adsb/*/aircraft/tracks/v1".format(TOPIC_ROOT),
+        "{}/air/adsblol/adsb/*/aircraft/tracks/v1".format(TOPIC_ROOT),
+    ])
 
 # Fields that carry identity (we prefer ADS-B values for these)
 _ID_FIELDS = ("callsign", "registration", "aircraft_type", "icao24",
@@ -122,6 +137,7 @@ def make_config() -> "zenoh.Config":
     conf = zenoh.Config()
     conf.insert_json5("mode", '"client"')
     conf.insert_json5("connect/endpoints", json.dumps([_ENDPOINT]))
+    apply_zenoh_auth(conf)
     if _ENDPOINT.startswith("tls"):
         conf.insert_json5("transport/link/tls", json.dumps({
             "root_ca_certificate": os.path.join(_CERT_DIR, "efdi-ca-root.pem"),
@@ -204,7 +220,7 @@ class TrackFuser:
     def on_radar(self, sample):
         try:
             track = json.loads(bytes(sample.payload).decode())
-        except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
+        except (json.JSONDecodeError, UnicodeDecodeError, ValueError, DecodeError):
             return
         topic = str(sample.key_expr)
         self._age_out()
@@ -315,10 +331,15 @@ class TrackFuser:
 
     def on_adsb(self, sample):
         try:
-            track = json.loads(bytes(sample.payload).decode())
-        except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
+            topic = str(sample.key_expr)
+            if topic.endswith("/v2"):
+                message = AirplanesLiveTrack() if "/airplaneslive/" in topic else AdsbLolTrack()
+                message.ParseFromString(bytes(sample.payload))
+                track = source_message_to_track(message)
+            else:
+                track = json.loads(bytes(sample.payload).decode())
+        except (json.JSONDecodeError, UnicodeDecodeError, ValueError, DecodeError):
             return
-        topic = str(sample.key_expr)
         self._age_out()   # clean stale radar entries before checking coverage
         radar_covers = False
         with self._lock:
@@ -342,6 +363,11 @@ class TrackFuser:
             pub_topic = TOPIC_FUSED.format(TOPIC_ROOT, affiliation)
             self._session.put(pub_topic, json.dumps(track).encode(),
                               encoding=zenoh.Encoding.APPLICATION_JSON)
+            self._session.put(
+                TOPIC_FUSED_V2.format(TOPIC_ROOT, affiliation),
+                normalized_track_message(NormalizedTrack, track, affiliation).SerializeToString(),
+                encoding=zenoh.Encoding.APPLICATION_PROTOBUF,
+            )
             if self._verbose:
                 ident = track.get("callsign") or track.get("icao24") or "?"
                 print("ADSB fallback [no radar] {}".format(ident), flush=True)
@@ -367,6 +393,11 @@ class TrackFuser:
         topic = TOPIC_FUSED.format(TOPIC_ROOT, aff_slot)
         self._session.put(topic, json.dumps(fused).encode(),
                           encoding=zenoh.Encoding.APPLICATION_JSON)
+        self._session.put(
+            TOPIC_FUSED_V2.format(TOPIC_ROOT, aff_slot),
+            normalized_track_message(NormalizedTrack, fused, aff_slot).SerializeToString(),
+            encoding=zenoh.Encoding.APPLICATION_PROTOBUF,
+        )
         if self._verbose:
             ident = (fused.get("callsign") or fused.get("icao24") or
                      fused.get("radar_id") or "?")

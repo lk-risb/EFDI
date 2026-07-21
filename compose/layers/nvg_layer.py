@@ -40,6 +40,7 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 
 import zenoh
+from zenoh_auth import apply_zenoh_auth
 from layers.cot_layer import (
     _build_remarks,
     _callsign as _cot_callsign,
@@ -150,6 +151,7 @@ def make_config() -> "zenoh.Config":
     conf = zenoh.Config()
     conf.insert_json5("mode", '"client"')
     conf.insert_json5("connect/endpoints", json.dumps([_ENDPOINT]))
+    apply_zenoh_auth(conf)
     if _ENDPOINT.startswith("tls"):
         conf.insert_json5("transport/link/tls", json.dumps({
         "root_ca_certificate": os.path.join(_CERT_DIR, "efdi-ca-root.pem"),

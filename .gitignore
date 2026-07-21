@@ -12,6 +12,7 @@ node_modules/
 __pycache__/
 compose/zenoh-admin/ui/dist/
 compose/zenoh-admin/ui/src/routeTree.gen.ts
+compose/generated/
 docs/
 
 # Local dev environment (dev.sh) — zenoh-admin panel preview only

@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import String, Boolean, DateTime, ForeignKey, Text, BigInteger
+from sqlalchemy import String, Boolean, DateTime, ForeignKey, Text, BigInteger, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
 from .db import Base
@@ -79,3 +79,143 @@ class FederatedChild(Base):
     last_status_version: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     last_status_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_status_error: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    transport_cert_pem: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cert_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    max_delegation_depth: Mapped[int] = mapped_column(default=0, nullable=False)
+
+
+class ConfigRevision(Base):
+    __tablename__ = "config_revisions"
+
+    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=_uuid)
+    target_namespace: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    version: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    source: Mapped[str] = mapped_column(String(32), nullable=False)
+    state: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    config_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    detail: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    created_by: Mapped[str | None] = mapped_column(ForeignKey("admin_users.id"), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class PkiInvitation(Base):
+    __tablename__ = "pki_invitations"
+
+    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=_uuid)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
+    child_name: Mapped[str] = mapped_column(String(64), nullable=False)
+    namespace: Mapped[str] = mapped_column(String(255), nullable=False)
+    max_delegation_depth: Mapped[int] = mapped_column(nullable=False, default=0)
+    created_by: Mapped[str] = mapped_column(ForeignKey("admin_users.id"), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    ca_csr_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    transport_csr_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    policy_csr_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    ca_cert_pem: Mapped[str | None] = mapped_column(Text, nullable=True)
+    transport_cert_pem: Mapped[str | None] = mapped_column(Text, nullable=True)
+    policy_cert_pem: Mapped[str | None] = mapped_column(Text, nullable=True)
+    chain_pem: Mapped[str | None] = mapped_column(Text, nullable=True)
+    transport_chain_pem: Mapped[str | None] = mapped_column(Text, nullable=True)
+    issued_serials: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    grant_envelope_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    link_username: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    link_password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    authority_id: Mapped[str | None] = mapped_column(ForeignKey("trust_authorities.id"), nullable=True, index=True)
+
+
+class TrustAuthority(Base):
+    __tablename__ = "trust_authorities"
+
+    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=_uuid)
+    identity_uri: Mapped[str] = mapped_column(String(768), unique=True, nullable=False, index=True)
+    namespace_scope: Mapped[str] = mapped_column(String(1024), nullable=False)
+    ca_fingerprint: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
+    ca_cert_pem: Mapped[str] = mapped_column(Text, nullable=False)
+    policy_signer_fingerprint: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)
+    policy_signer_cert_pem: Mapped[str | None] = mapped_column(Text, nullable=True)
+    parent_id: Mapped[str | None] = mapped_column(ForeignKey("trust_authorities.id"), nullable=True, index=True)
+    max_delegation_depth: Mapped[int] = mapped_column(nullable=False, default=0)
+    state: Mapped[str] = mapped_column(String(32), nullable=False, default="active", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    not_after: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class Delegation(Base):
+    __tablename__ = "delegations"
+    __table_args__ = (
+        UniqueConstraint("issuer_authority_id", "sequence", name="uq_delegation_issuer_sequence"),
+    )
+
+    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=_uuid)
+    grant_id: Mapped[str] = mapped_column(UUID(as_uuid=False), unique=True, nullable=False, index=True)
+    issuer_authority_id: Mapped[str] = mapped_column(ForeignKey("trust_authorities.id"), nullable=False, index=True)
+    subject_authority_id: Mapped[str] = mapped_column(ForeignKey("trust_authorities.id"), nullable=False, index=True)
+    sequence: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    envelope_json: Mapped[str] = mapped_column(Text, nullable=False)
+    grant_sha256: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    state: Mapped[str] = mapped_column(String(32), nullable=False, default="active", index=True)
+    not_before: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    not_after: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    accepted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+
+class IssuedIdentity(Base):
+    __tablename__ = "issued_identities"
+
+    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=_uuid)
+    authority_id: Mapped[str] = mapped_column(ForeignKey("trust_authorities.id"), nullable=False, index=True)
+    identity_uri: Mapped[str] = mapped_column(String(768), nullable=False, index=True)
+    profile: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    serial: Mapped[str] = mapped_column(String(128), unique=True, nullable=False, index=True)
+    cert_sha256: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
+    certificate_pem: Mapped[str] = mapped_column(Text, nullable=False)
+    state: Mapped[str] = mapped_column(String(32), nullable=False, default="active", index=True)
+    issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    not_after: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    replaced_by_id: Mapped[str | None] = mapped_column(ForeignKey("issued_identities.id"), nullable=True)
+
+
+class Revocation(Base):
+    __tablename__ = "revocations"
+    __table_args__ = (
+        UniqueConstraint("target_type", "target_reference", name="uq_revocation_target"),
+    )
+
+    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=_uuid)
+    target_type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    target_reference: Mapped[str] = mapped_column(String(768), nullable=False, index=True)
+    reason: Mapped[str] = mapped_column(String(512), nullable=False)
+    sequence: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    state: Mapped[str] = mapped_column(String(32), nullable=False, default="active")
+    created_by: Mapped[str | None] = mapped_column(ForeignKey("admin_users.id"), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+
+class LinkCredential(Base):
+    __tablename__ = "link_credentials"
+
+    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=_uuid)
+    authority_id: Mapped[str] = mapped_column(ForeignKey("trust_authorities.id"), nullable=False, index=True)
+    username: Mapped[str] = mapped_column(String(128), unique=True, nullable=False, index=True)
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    state: Mapped[str] = mapped_column(String(32), nullable=False, default="active", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    rotated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class AclRevision(Base):
+    __tablename__ = "acl_revisions"
+
+    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=_uuid)
+    sequence: Mapped[int] = mapped_column(BigInteger, unique=True, nullable=False, index=True)
+    policy_sha256: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    policy_json: Mapped[str] = mapped_column(Text, nullable=False)
+    state: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    detail: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    created_by: Mapped[str | None] = mapped_column(ForeignKey("admin_users.id"), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    applied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

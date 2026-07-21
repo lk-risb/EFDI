@@ -47,7 +47,7 @@ export EFDI_CERT_DIR="${EFDI_CERT_DIR:-$BUNDLE_DIR/efdi}"
 export POD_STATE_DIR="${POD_STATE_DIR:-$SCRIPT_DIR/compose/state}"
 export NAMESPACE_PREFIX_FILE="${POD_STATE_DIR}/namespace-prefix"
 export DATA_NAMESPACE_PREFIX_FILE="${POD_STATE_DIR}/data-topic-prefix"
-export PYTHONPATH="$COMPOSE_DIR${PYTHONPATH:+:$PYTHONPATH}"
+export PYTHONPATH="$COMPOSE_DIR/generated:$COMPOSE_DIR/generated/protocols:$COMPOSE_DIR${PYTHONPATH:+:$PYTHONPATH}"
 LOG_DIR="$POD_STATE_DIR/logs"
 PID_DIR="$POD_STATE_DIR/.pids"
 mkdir -p "$LOG_DIR" "$PID_DIR"
@@ -62,6 +62,10 @@ if [[ ! -x "$VENV/bin/python3" ]]; then
     echo "Venv ready."
 fi
 PYTHON="$VENV/bin/python3"
+if ! "$PYTHON" -c 'import grpc_tools.protoc, google.protobuf, zenoh, defusedxml' 2>/dev/null; then
+    "$PYTHON" -m pip install --quiet -r "$COMPOSE_DIR/requirements.txt"
+fi
+EFDI_PROTOC_PYTHON="$PYTHON" "$SCRIPT_DIR/scripts/generate-protobuf.sh" >/dev/null
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -71,7 +75,7 @@ is_bridge_pid() {
     [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null && [[ -r "/proc/$pid/cmdline" ]] || return 1
     local efdi_process=1
     while IFS= read -r -d '' arg; do
-        [[ "$arg" == "$COMPOSE_DIR/$expected_script" ]] && return 0
+        [[ "$arg" == "$COMPOSE_DIR/$expected_script" || "$arg" == "$SCRIPT_DIR/$expected_script" ]] && return 0
         [[ "$arg" == "$COMPOSE_DIR/"* ]] && efdi_process=0
     done < "/proc/$pid/cmdline"
     # Keep a live PID-file process authoritative across implementation-path
@@ -94,6 +98,10 @@ start() {
     fi
 
     if [[ "$name" == "admin-control" ]]; then
+        if [[ -z "${ZENOH_ADMIN_SECRET_KEY:-}" && -z "${EFDI_CONTROL_TOKEN:-}" ]]; then
+            echo "  [skip] admin-control requires ZENOH_ADMIN_SECRET_KEY or EFDI_CONTROL_TOKEN"
+            return 1
+        fi
         ( exec setsid "$PYTHON" "$COMPOSE_DIR/$script" "$@" \
             >> "$LOG_DIR/$name.log" 2>&1 ) &
     else
@@ -132,6 +140,14 @@ start_asterix_udp_bridge() {
 # Zenoh router — one Docker container, everything else is native
 # ---------------------------------------------------------------------------
 start_zenoh() {
+    if [[ -f "${POD_STATE_DIR}/pki/step-ca/config/ca.json" ]]; then
+        mesh_ip=$(netbird status 2>/dev/null | sed -n 's/.*NetBird IP:[[:space:]]*\([0-9.]*\).*/\1/p' | head -1 || true)
+        if [[ "$mesh_ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            "$SCRIPT_DIR/scripts/pki/configure-step-ca-names.sh" \
+                "${POD_STATE_DIR}/pki/step-ca" "$mesh_ip" >/dev/null
+        fi
+        docker compose -f "$SCRIPT_DIR/compose/docker-compose.yml" --profile managed-ca up -d step-ca
+    fi
     if docker compose -f "$SCRIPT_DIR/compose/docker-compose.yml" ps zenoh-router \
             --format "{{.Status}}" 2>/dev/null | grep -q "healthy\|Up"; then
         echo "  [skip] zenoh-router already running"
@@ -151,6 +167,21 @@ start_zenoh() {
         echo " timeout — continuing anyway"
     fi
     start admin-control admin_control.py
+    if [[ -n "${EFDI_STEP_CA_URL:-}" ]]; then
+        renew_cert="${EFDI_STEP_RENEW_CERT_PATH:-${EFDI_CERT_DIR}/${PARTNER_NAMESPACE}-cert.pem}"
+        renew_key="${EFDI_STEP_RENEW_KEY_PATH:-${EFDI_CERT_DIR}/${PARTNER_NAMESPACE}-key.pem}"
+        renew_root="${EFDI_STEP_RENEW_ROOT_PATH:-${EFDI_CERT_DIR}/efdi-ca-root.pem}"
+        if [[ -f "$renew_cert" && -f "$renew_key" && -f "$renew_root" ]]; then
+            export EFDI_STEP_RENEW_RUNTIME_CERT_PATH="${EFDI_STEP_RENEW_RUNTIME_CERT_PATH:-${POD_STATE_DIR}/zenoh/tls/pod-cert.pem}"
+            if [[ ! -f "$PID_DIR/cert-renewer.pid" ]] || ! is_bridge_pid "$(cat "$PID_DIR/cert-renewer.pid" 2>/dev/null)" "scripts/pki/renew-step-identities.sh"; then
+                ( exec setsid "$SCRIPT_DIR/scripts/pki/renew-step-identities.sh" --daemon \
+                    "$EFDI_STEP_CA_URL" "$renew_root" "$renew_cert:$renew_key" \
+                    >> "$LOG_DIR/cert-renewer.log" 2>&1 ) &
+                echo $! > "$PID_DIR/cert-renewer.pid"
+                echo "  [start] cert-renewer  (pid $!)"
+            fi
+        fi
+    fi
 }
 
 start_asterix_protocols() {
