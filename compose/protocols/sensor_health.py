@@ -9,7 +9,9 @@ import time
 
 import zenoh
 
-from translation_common import TOPIC_ROOT, make_config, payload_json, put_json
+from protocols.protobuf_codec import publish_dual
+from protocols.sensor_health_pb2 import SensorHealth
+from translation_common import TOPIC_ROOT, make_config, payload_json
 
 
 INPUT_TOPIC = os.environ.get("SENSOR_HEALTH_INPUT_TOPIC") or TOPIC_ROOT + "/raw/health/**"
@@ -27,6 +29,7 @@ def normalize(value: dict, now: float | None = None) -> dict | None:
     status = str(value.get("status") or value.get("state") or "unknown").lower()[:64]
     record = {"_ts": now, "_src": "sensor_health", "uid": "HEALTH-{}".format(str(sensor_id)[:120]),
               "sensor_id": str(sensor_id)[:160], "health_status": status,
+              "status": status,
               "source_kind": "sensor_health"}
     for output, keys in {
         "lat_deg": ("lat_deg", "latitude", "lat"),
@@ -46,6 +49,10 @@ def normalize(value: dict, now: float | None = None) -> dict | None:
             if isinstance(item, (str, int, float)):
                 record[output] = str(item)[:512]
                 break
+    if "last_detection_ts" in record:
+        record["last_detection_timestamp"] = record["last_detection_ts"]
+    if "health_detail" in record:
+        record["detail"] = record["health_detail"]
     return record
 
 
@@ -60,7 +67,7 @@ def run() -> None:
             for item in values:
                 record = normalize(item)
                 if record:
-                    put_json(publisher, record)
+                    publish_dual(publisher, OUTPUT_TOPIC, record, SensorHealth, zenoh)
         except Exception as exc:
             print("sensor health decode error:", exc, flush=True)
 

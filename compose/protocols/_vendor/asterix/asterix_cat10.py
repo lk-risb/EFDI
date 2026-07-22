@@ -24,6 +24,8 @@ import zenoh
 from zenoh_auth import apply_zenoh_auth
 
 from namespace_prefix import topic_root
+from protocols.asterix_cat10_pb2 import AsterixCat10SensorStatus, AsterixCat10Track
+from protocols.protobuf_codec import publish_dual
 
 
 ORG       = os.environ.get("PARTNER_NAMESPACE", "")
@@ -446,10 +448,7 @@ def _make_cat010_handler(session, site, site_name):
                     continue
                 ground = track.get("target_type") == "ground_vehicle" or "vehicle_fleet" in track
                 topic = TOPIC_010_GROUND if ground else TOPIC_010_AIR
-                session.put(
-                    topic, json.dumps(track).encode(),
-                    encoding=zenoh.Encoding.APPLICATION_JSON,
-                )
+                publish_dual(session, topic, track, AsterixCat10Track, zenoh)
                 if verbose:
                     print("cat10 {} -> {}".format(track.get("track_num", "target"), topic), flush=True)
             elif track.get("msg_type") in ("start_update_cycle", "periodic_status", "event_status"):
@@ -465,9 +464,13 @@ def _make_cat010_handler(session, site, site_name):
                         "lon_deg": site[1],
                     }
                 )
-                session.put(
-                    TOPIC_010_SENSOR, json.dumps(status).encode(),
-                    encoding=zenoh.Encoding.APPLICATION_JSON,
+                publish_dual(
+                    session,
+                    TOPIC_010_SENSOR,
+                    status,
+                    AsterixCat10SensorStatus,
+                    zenoh,
+                    wrapper_field="sensor",
                 )
     return _h
 

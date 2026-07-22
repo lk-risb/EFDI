@@ -12,10 +12,10 @@ Read `CLAUDE.md` first; its project constraints apply to every agent and tool.
 
 ## Runtime architecture
 
-- `zenoh-router`, PostgreSQL, socket proxy, `zenoh-admin`, and its Caddy proxy are Docker infrastructure.
+- `zenoh-router`, MariaDB, socket proxy, `zenoh-admin`, and its Caddy proxy are Docker infrastructure.
 - Sensor bridges and output layers are ordinary Python processes launched by `start.sh` or `run.sh`. Their logs and PID files live under `${POD_STATE_DIR}/logs` and `${POD_STATE_DIR}/.pids`. Do not reintroduce one Docker container per bridge/layer.
 - `stop.sh` stops those PID-managed processes. `compose/rebuild.sh` rebuilds infrastructure only.
-- The admin backend is FastAPI + async SQLAlchemy/PostgreSQL; the UI is React/Vite/TanStack Router/Tailwind.
+- The admin backend is FastAPI + async SQLAlchemy/MariaDB; the UI is React/Vite/TanStack Router/Tailwind.
 - Data flows external sensor/protocol → Python bridge → local Zenoh router → output layer (CoT/TAK/SitaWare/etc.). Namespace shape is `{NAMESPACE_PREFIX}/{PARTNER_NAMESPACE}/...`.
 
 ## Authoritative handoff material
@@ -70,4 +70,4 @@ Read `CLAUDE.md` first; its project constraints apply to every agent and tool.
 
 ## Installed agent skills
 
-The repository-local `.agents/skills/` contains Supabase and Supabase Postgres guidance installed for agent use. EFDI itself currently uses ordinary PostgreSQL through SQLAlchemy, not Supabase; do not migrate or introduce Supabase merely because those skills are installed.
+The repository-local `.agents/skills/` contains Supabase and Supabase Postgres guidance installed for agent use. EFDI itself uses ordinary MariaDB through SQLAlchemy, not Supabase; do not migrate or introduce Supabase merely because those skills are installed.

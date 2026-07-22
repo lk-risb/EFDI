@@ -77,20 +77,27 @@ services:
       retries: 12
 
   zenoh-admin-db:
-    image: postgres:16-alpine3.24@sha256:57c72fd2a128e416c7fcc499958864df5301e940bca0a56f58fddf30ffc07777
+    image: mariadb:11.4.12-noble@sha256:a794d9eb009e20de605858a11f32f63b4075cbd197c650436f0e3b457e4caed7
     container_name: efdi-pod-zenoh-admin-db
     network_mode: host
     restart: unless-stopped
-    command: ["postgres", "-c", "listen_addresses=127.0.0.1"]
+    command:
+      - --bind-address=127.0.0.1
+      - --port=${ZENOH_ADMIN_DB_PORT:-3307}
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_bin
+      - --default-time-zone=+00:00
+      - --transaction-isolation=READ-COMMITTED
     environment:
-      - POSTGRES_USER=${ZENOH_ADMIN_DB_USER:?set ZENOH_ADMIN_DB_USER in .env}
-      - POSTGRES_PASSWORD=${ZENOH_ADMIN_DB_PASSWORD:?set ZENOH_ADMIN_DB_PASSWORD in .env}
-      - POSTGRES_DB=admin
-      - PGPORT=${ZENOH_ADMIN_DB_PORT:-5433}
+      - MARIADB_ROOT_PASSWORD=${ZENOH_ADMIN_DB_ROOT_PASSWORD:?set ZENOH_ADMIN_DB_ROOT_PASSWORD in .env}
+      - MARIADB_ROOT_HOST=localhost
+      - MARIADB_DATABASE=admin
+      - MARIADB_USER=${ZENOH_ADMIN_DB_USER:?set ZENOH_ADMIN_DB_USER in .env}
+      - MARIADB_PASSWORD=${ZENOH_ADMIN_DB_PASSWORD:?set ZENOH_ADMIN_DB_PASSWORD in .env}
     volumes:
-      - ${POD_STATE_DIR}/zenoh-admin/pgdata:/var/lib/postgresql/data
+      - ${POD_STATE_DIR}/zenoh-admin/mariadb:/var/lib/mysql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${ZENOH_ADMIN_DB_USER:-zenoh_admin} -p ${ZENOH_ADMIN_DB_PORT:-5433}"]
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -135,6 +142,7 @@ services:
   zenoh-admin:
     build:
       context: ./zenoh-admin
+      target: runtime
     container_name: efdi-pod-zenoh-admin
     network_mode: host
     restart: unless-stopped
@@ -157,7 +165,7 @@ services:
       - ZENOH_TEMPLATE_PATH=/zenoh-config-template/zenoh-router.json5.tmpl
       - ZENOH_ADMIN_DB_USER=${ZENOH_ADMIN_DB_USER:?set ZENOH_ADMIN_DB_USER in .env}
       - ZENOH_ADMIN_DB_PASSWORD=${ZENOH_ADMIN_DB_PASSWORD:?set ZENOH_ADMIN_DB_PASSWORD in .env}
-      - ZENOH_ADMIN_DB_ADDRESS=127.0.0.1:${ZENOH_ADMIN_DB_PORT:-5433}
+      - ZENOH_ADMIN_DB_ADDRESS=127.0.0.1:${ZENOH_ADMIN_DB_PORT:-3307}
       - ZENOH_ADMIN_SECRET_KEY=${ZENOH_ADMIN_SECRET_KEY:?set ZENOH_ADMIN_SECRET_KEY in .env}
       - ZENOH_ADMIN_FIRST_USER=${ZENOH_ADMIN_FIRST_USER:-admin}
       - ZENOH_ADMIN_FIRST_PASS=${ZENOH_ADMIN_FIRST_PASS:-}

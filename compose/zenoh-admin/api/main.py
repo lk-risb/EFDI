@@ -6,9 +6,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.types import Scope
-from sqlalchemy import text
-
-from .db import engine, Base, ensure_database
+from .db import engine, Base
 from . import models  # noqa: F401 — ensures models register with Base
 from .auth import router as auth_router, _ensure_first_user
 from .admin_users import router as admin_users_router
@@ -36,50 +34,8 @@ from .deps import SECRET_KEY
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await ensure_database()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-        # Idempotent column-add for the OIDC linkage fields — create_all only
-        # creates missing tables, never alters an existing admin_users, so a
-        # pod upgraded from a pre-OIDC schema needs this explicit migration.
-        await conn.execute(text(
-            "ALTER TABLE admin_users "
-            "ADD COLUMN IF NOT EXISTS auth_provider VARCHAR(16) NOT NULL DEFAULT 'local', "
-            "ADD COLUMN IF NOT EXISTS oidc_subject VARCHAR(255)"
-        ))
-        await conn.execute(text(
-            "CREATE UNIQUE INDEX IF NOT EXISTS ix_admin_users_oidc_subject "
-            "ON admin_users (oidc_subject)"
-        ))
-        await conn.execute(text(
-            "CREATE INDEX IF NOT EXISTS ix_refresh_tokens_user_id "
-            "ON refresh_tokens (user_id)"
-        ))
-        await conn.execute(text(
-            "CREATE INDEX IF NOT EXISTS ix_federated_children_created_by "
-            "ON federated_children (created_by)"
-        ))
-        await conn.execute(text(
-            "ALTER TABLE federated_children "
-            "ALTER COLUMN last_status_version TYPE BIGINT, "
-            "ADD COLUMN IF NOT EXISTS transport_cert_pem TEXT, "
-            "ADD COLUMN IF NOT EXISTS cert_sha256 VARCHAR(64), "
-            "ADD COLUMN IF NOT EXISTS max_delegation_depth INTEGER NOT NULL DEFAULT 0"
-        ))
-        await conn.execute(text(
-            "ALTER TABLE pki_invitations "
-            "ADD COLUMN IF NOT EXISTS policy_csr_sha256 VARCHAR(64), "
-            "ADD COLUMN IF NOT EXISTS policy_cert_pem TEXT, "
-            "ADD COLUMN IF NOT EXISTS transport_chain_pem TEXT, "
-            "ADD COLUMN IF NOT EXISTS grant_envelope_json TEXT, "
-            "ADD COLUMN IF NOT EXISTS link_username VARCHAR(128), "
-            "ADD COLUMN IF NOT EXISTS link_password_hash VARCHAR(255), "
-            "ADD COLUMN IF NOT EXISTS authority_id UUID"
-        ))
-        await conn.execute(text(
-            "CREATE INDEX IF NOT EXISTS ix_pki_invitations_authority_id "
-            "ON pki_invitations (authority_id)"
-        ))
     await _ensure_first_user()
 
     loop = asyncio.get_running_loop()

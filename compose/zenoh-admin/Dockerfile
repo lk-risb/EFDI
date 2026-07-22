@@ -9,7 +9,7 @@ RUN pnpm install
 COPY ui/ .
 RUN pnpm build
 
-FROM python:3.11-slim@sha256:db3ff2e1800a8581e2c48a27c3995339d47bdf046da21c7627accd3d51053a93
+FROM python:3.11-slim@sha256:db3ff2e1800a8581e2c48a27c3995339d47bdf046da21c7627accd3d51053a93 AS runtime
 WORKDIR /app
 RUN apt-get update \
     && apt-get upgrade -y \
@@ -32,3 +32,10 @@ EXPOSE 8895
 # docker-entrypoint.sh.
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["uvicorn", "api.main:app", "--host", "127.0.0.1", "--port", "8895"]
+
+FROM runtime AS postgres-migration
+COPY requirements-migration.txt .
+RUN pip install --no-cache-dir -r requirements-migration.txt
+
+# Keep a plain `docker build compose/zenoh-admin` on the MariaDB-only runtime.
+FROM runtime AS production

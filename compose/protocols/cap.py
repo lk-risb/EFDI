@@ -20,7 +20,9 @@ from defusedxml import ElementTree as ET
 import zenoh
 
 from namespace_prefix import prefix
-from translation_common import TOPIC_ROOT, make_config, payload_bytes, put_json
+from protocols.cap_pb2 import CapAlert
+from protocols.protobuf_codec import publish_dual
+from translation_common import TOPIC_ROOT, make_config, payload_bytes
 
 
 INPUT_TOPIC = os.environ.get("CAP_INPUT_TOPIC") or TOPIC_ROOT + "/raw/cap/**"
@@ -158,6 +160,16 @@ def parse_cap(xml: bytes, now: float | None = None) -> list[dict]:
                 record["geometry"] = geometry
                 if geometry.get("type") == "Circle":
                     record["radius_km"] = geometry["radius_km"]
+                record["geometry_json"] = json.dumps(geometry, separators=(",", ":"))
+            record["identifier"] = record["cap_identifier"]
+            record["status"] = record["cap_status"]
+            record["severity"] = record["cap_severity"]
+            record["event"] = record["cap_event"]
+            record["headline"] = record["cap_headline"]
+            record["description"] = record["cap_description"]
+            record["effective"] = record["cap_effective"]
+            if expires is not None:
+                record["expires"] = expires
             records.append(record)
     return records
 
@@ -171,7 +183,7 @@ def run(args) -> None:
             for record in parse_cap(payload_bytes(sample)):
                 if args.active_only and not record.get("cap_active"):
                     continue
-                put_json(publisher, record)
+                publish_dual(publisher, OUTPUT_TOPIC, record, CapAlert, zenoh)
         except Exception as exc:  # malformed partner data must not kill the translator
             print("CAP decode error:", exc, flush=True)
 

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 
 def source_track_to_message(message_class, track: dict):
     message = message_class()
@@ -10,8 +12,93 @@ def source_track_to_message(message_class, track: dict):
         name = "timestamp" if key == "_ts" else "source" if key == "_src" else key
         if name not in fields or value is None:
             continue
-        setattr(message, name, value)
+        try:
+            setattr(message, name, value)
+        except (TypeError, ValueError):
+            # Decoders emit richer values than the flat contract models (nested
+            # dicts, lists, out-of-range numbers). Skip those rather than fail
+            # the whole message — the JSON view still carries them.
+            continue
     return message
+
+
+def dual_topic(topic: str) -> str:
+    """Protobuf sibling of a JSON topic (.../v1 -> .../v2)."""
+    if topic.endswith("/v1"):
+        return topic[: -len("/v1")] + "/v2"
+    return topic + "/v2"
+
+
+def wrapped_track_message(
+    message_class,
+    track: dict,
+    affiliation: str = "unknown",
+    wrapper_field: str = "track",
+):
+    """Build a protocol wrapper message with a nested NormalizedTrack and the
+    protocol-specific scalar fields alongside it.
+
+    Every per-protocol contract in compose/protocols/*.proto follows this shape
+    (see mavlink.proto, vmf.proto, sapient_flex335.proto). Some contracts use
+    a different nested field name such as `sensor` or `normalized`; callers can
+    override `wrapper_field` for those cases.
+    """
+    from protocols.normalized_track_pb2 import NormalizedTrack
+
+    message = message_class()
+    getattr(message, wrapper_field).CopyFrom(
+        normalized_track_message(NormalizedTrack, track, affiliation)
+    )
+    fields = message.DESCRIPTOR.fields_by_name
+    for key, value in track.items():
+        if key == wrapper_field or key not in fields or value is None:
+            continue
+        try:
+            setattr(message, key, value)
+        except (TypeError, ValueError):
+            continue
+    return message
+
+
+def publish_dual(
+    session,
+    topic: str,
+    track: dict,
+    message_class,
+    zenoh,
+    wrapper_field: str = "track",
+) -> None:
+    """Publish the flattened JSON view and the protobuf view side by side.
+
+    JSON stays on the existing /v1 topic so current consumers are untouched;
+    the protobuf sample goes to the /v2 sibling. Transitional — JSON is meant
+    to be retired once consumers have moved to /v2.
+
+    The protobuf leg is deliberately best-effort: a schema/among-field mismatch
+    must never stop an already-working JSON publisher from delivering during
+    the migration. Failures are printed, not raised.
+    """
+    session.put(
+        topic,
+        json.dumps(track, separators=(",", ":")).encode(),
+        encoding=zenoh.Encoding.APPLICATION_JSON,
+    )
+    try:
+        fields = message_class.DESCRIPTOR.fields_by_name
+        if wrapper_field in fields and fields[wrapper_field].message_type is not None:
+            message = wrapped_track_message(
+                message_class,
+                track,
+                str(track.get("affiliation", "unknown")),
+                wrapper_field=wrapper_field,
+            )
+        else:
+            message = source_track_to_message(message_class, track)
+        payload = message.SerializeToString()
+    except Exception as exc:  # noqa: BLE001 — never break the JSON path
+        print("protobuf encode failed for {}: {}".format(topic, exc), flush=True)
+        return
+    session.put(dual_topic(topic), payload, encoding=zenoh.Encoding.APPLICATION_PROTOBUF)
 
 
 def source_message_to_track(message) -> dict:
