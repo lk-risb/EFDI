@@ -10,16 +10,35 @@ jobs:
   python-tests:
     name: Python tests and compile checks
     runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:11.4.12-noble@sha256:a794d9eb009e20de605858a11f32f63b4075cbd197c650436f0e3b457e4caed7
+        env:
+          MARIADB_ROOT_PASSWORD: test-root-password
+          MARIADB_DATABASE: admin
+          MARIADB_USER: test
+          MARIADB_PASSWORD: test-password
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=12
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - name: Install runtime dependencies
-        run: python -m pip install -r compose/requirements.txt pytest
+        run: python -m pip install -r compose/requirements.txt -r compose/zenoh-admin/requirements.txt pytest
       - name: Run tests
         env:
           PYTHONPATH: compose/generated:compose/generated/protocols:compose
+          EFDI_TEST_MARIADB: "1"
+          ZENOH_ADMIN_DB_ADDRESS: 127.0.0.1:3306
+          ZENOH_ADMIN_DB_USER: test
+          ZENOH_ADMIN_DB_PASSWORD: test-password
         run: |
           EFDI_PROTOC_PYTHON=python scripts/generate-protobuf.sh
           python -m pytest -q tests

@@ -1,0 +1,67 @@
+# Swarm overlay: declare the three router services up front so a stack deploy
+# brings up the full router hierarchy immediately. This file intentionally
+# covers routers only; the admin/database stacks remain in the existing pod-
+# specific compose files.
+
+x-router-common: &router-common
+  image: eclipse/zenoh:1.9.0@sha256:157965d71e0bfd0a044d76a985ff0e5c306ad3968929168fb9678cd2a7fec23f
+  network_mode: host
+  environment:
+    - RUST_LOG=${ZENOH_LOG:-info}
+  command: ["-c", "/etc/zenoh/config.json5"]
+  deploy:
+    restart_policy:
+      condition: any
+      delay: 5s
+      max_attempts: 0
+  healthcheck:
+    test: ["CMD-SHELL", "nc -z 127.0.0.1 ${ZENOH_LOCAL_TCP_PORT:-7448}"]
+    interval: 5s
+    timeout: 5s
+    retries: 12
+
+services:
+  zenoh-router:
+    <<: *router-common
+    volumes:
+      - ${POD_STATE_DIR:?set POD_STATE_DIR in .env}/zenoh/config.json5:/etc/zenoh/config.json5:ro
+      - ${POD_STATE_DIR}/zenoh/tls:/etc/zenoh/tls:ro
+      - ${POD_STATE_DIR}/zenoh/rocksdb:/var/lib/zenoh/rocksdb
+
+  zenoh-router-child:
+    <<: *router-common
+    environment:
+      - RUST_LOG=${ZENOH_LOG:-info}
+    volumes:
+      - ${POD_STATE_DIR_CHILD:?set POD_STATE_DIR_CHILD in .env}/zenoh/config.json5:/etc/zenoh/config.json5:ro
+      - ${POD_STATE_DIR_CHILD}/zenoh/tls:/etc/zenoh/tls:ro
+      - ${POD_STATE_DIR_CHILD}/zenoh/rocksdb:/var/lib/zenoh/rocksdb
+    deploy:
+      restart_policy:
+        condition: any
+        delay: 5s
+        max_attempts: 0
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 ${ZENOH_LOCAL_TCP_PORT_CHILD:-7458}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  zenoh-router-grandchild:
+    <<: *router-common
+    environment:
+      - RUST_LOG=${ZENOH_LOG:-info}
+    volumes:
+      - ${POD_STATE_DIR_GRANDCHILD:?set POD_STATE_DIR_GRANDCHILD in .env}/zenoh/config.json5:/etc/zenoh/config.json5:ro
+      - ${POD_STATE_DIR_GRANDCHILD}/zenoh/tls:/etc/zenoh/tls:ro
+      - ${POD_STATE_DIR_GRANDCHILD}/zenoh/rocksdb:/var/lib/zenoh/rocksdb
+    deploy:
+      restart_policy:
+        condition: any
+        delay: 5s
+        max_attempts: 0
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 ${ZENOH_LOCAL_TCP_PORT_GRANDCHILD:-7468}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12

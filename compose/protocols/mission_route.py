@@ -10,7 +10,9 @@ import time
 
 import zenoh
 
-from translation_common import TOPIC_ROOT, make_config, payload_json, put_json
+from protocols.mission_route_pb2 import MissionRoute
+from protocols.protobuf_codec import publish_dual
+from translation_common import TOPIC_ROOT, make_config, payload_json
 
 
 INPUT_TOPIC = os.environ.get("MISSION_ROUTE_INPUT_TOPIC") or TOPIC_ROOT + "/raw/routes/**"
@@ -67,6 +69,19 @@ def normalize(value: dict, now: float | None = None) -> dict | None:
     if not point:
         return None
     record.update(lat_deg=point[0], lon_deg=point[1])
+    flat_coordinates: list[float] = []
+    for item in coordinates:
+        if isinstance(item, list):
+            stack = [item]
+            while stack:
+                value = stack.pop(0)
+                if isinstance(value, list) and len(value) >= 2 and all(isinstance(x, (int, float)) for x in value[:2]):
+                    flat_coordinates.extend([float(value[0]), float(value[1])])
+                elif isinstance(value, list):
+                    stack[:0] = list(value)
+    if flat_coordinates:
+        record["coordinates"] = flat_coordinates
+    record["properties_json"] = json.dumps(record["route_properties"], separators=(",", ":"))
     return record
 
 
@@ -81,7 +96,7 @@ def run() -> None:
             for item in values:
                 record = normalize(item)
                 if record:
-                    put_json(publisher, record)
+                    publish_dual(publisher, OUTPUT_TOPIC, record, MissionRoute, zenoh)
         except Exception as exc:
             print("mission route decode error:", exc, flush=True)
 

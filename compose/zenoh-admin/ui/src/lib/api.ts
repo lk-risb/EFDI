@@ -1,4 +1,4 @@
-import { useAuth } from '@/store/auth'
+import {useAuth} from '@/store/auth'
 
 const BASE = ''  // same origin in prod; Vite proxy in dev
 
@@ -39,7 +39,8 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
 }
 
 export function errorMessage(e: unknown): string {
-  return e instanceof Error ? e.message : String(e)
+  const message = e instanceof Error ? e.message : String(e)
+  return message.trim() ? message : 'Operation failed'
 }
 
 export async function apiJson<T>(path: string, init: RequestInit = {}): Promise<T> {

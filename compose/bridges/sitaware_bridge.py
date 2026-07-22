@@ -367,7 +367,13 @@ def run(args):
 
     api_path = _API_PATH
     if args.discover:
-        api_path = _discover_api_path()
+        while True:
+            try:
+                api_path = _discover_api_path()
+                break
+            except Exception as exc:
+                print("SitaWare API discovery failed: {} — retry in {}s".format(exc, ZENOH_RETRY_S), flush=True)
+                time.sleep(ZENOH_RETRY_S)
     elif not api_path:
         print(
             "ERROR: SITAWARE_API_PATH is not set. Configure the documented "
@@ -381,7 +387,7 @@ def run(args):
         try:
             session = zenoh.open(make_config())
             break
-        except zenoh.ZError as exc:
+        except Exception as exc:
             print("SitaWare Zenoh connect failed: {} — retry in {}s".format(exc, ZENOH_RETRY_S), flush=True)
             time.sleep(ZENOH_RETRY_S)
     print("SitaWare bridge started", flush=True)

@@ -12,7 +12,9 @@ import time
 import zenoh
 
 from namespace_prefix import prefix
-from translation_common import TOPIC_ROOT, make_config, payload_json, put_json
+from protocols.geojson_features_pb2 import GeoFeature
+from protocols.protobuf_codec import publish_dual
+from translation_common import TOPIC_ROOT, make_config, payload_json
 
 
 INPUT_TOPIC = os.environ.get("GEOJSON_INPUT_TOPIC") or TOPIC_ROOT + "/raw/geojson/**"
@@ -82,6 +84,12 @@ def normalize(feature: dict, now: float | None = None) -> dict | None:
         "feature_properties": {str(k): v for k, v in list(properties.items())[:64]
                                 if isinstance(v, (str, int, float, bool))},
     }
+    flat_coordinates: list[float] = []
+    for lat, lon in points:
+        flat_coordinates.extend([lon, lat])
+    if flat_coordinates:
+        record["coordinates"] = flat_coordinates
+    record["properties_json"] = json.dumps(record["feature_properties"], separators=(",", ":"))
     for target, key in (("name", "name"), ("zone_id", "zone_id"), ("description", "description"),
                         ("valid_from", "valid_from"), ("valid_until", "valid_until")):
         if key in properties and isinstance(properties[key], (str, int, float)):
@@ -99,7 +107,7 @@ def run() -> None:
             for feature in _features(payload):
                 record = normalize(feature)
                 if record:
-                    put_json(publisher, record)
+                    publish_dual(publisher, OUTPUT_TOPIC, record, GeoFeature, zenoh)
         except Exception as exc:
             print("GeoJSON decode error:", exc, flush=True)
 

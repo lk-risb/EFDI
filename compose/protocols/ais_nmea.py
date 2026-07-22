@@ -12,7 +12,9 @@ import time
 import zenoh
 
 from namespace_prefix import prefix
-from translation_common import TOPIC_ROOT, make_config, payload_bytes, put_json
+from protocols.ais_nmea_pb2 import AisNmeaTrack
+from protocols.protobuf_codec import publish_dual
+from translation_common import TOPIC_ROOT, make_config, payload_bytes
 
 
 INPUT_TOPIC = os.environ.get("AIS_NMEA_INPUT_TOPIC") or TOPIC_ROOT + "/raw/ais/**"
@@ -64,7 +66,7 @@ def decode_payload(payload: str, fill: int = 0, now: float | None = None) -> dic
     if mmsi <= 0:
         return None
     result = {"_ts": time.time() if now is None else float(now), "_src": "ais_nmea",
-              "uid": "AIS-{}".format(mmsi), "mmsi": str(mmsi),
+              "uid": "AIS-{}".format(mmsi), "mmsi": mmsi,
               "ais_message_type": message_type, "source_kind": "ais_nmea"}
     if message_type in (1, 2, 3):
         result["nav_status"] = _u(bits, 38, 4)
@@ -77,8 +79,10 @@ def decode_payload(payload: str, fill: int = 0, now: float | None = None) -> dic
             result.update(lat_deg=round(lat, 7), lon_deg=round(lon, 7))
         if sog < 1023:
             result["speed_ms"] = round(sog / 10.0 * 0.514444, 2)
+            result["speed_knots"] = round(sog / 10.0, 2)
         if cog < 3600:
             result["heading_deg"] = round(cog / 10.0, 1)
+            result["course_deg"] = round(cog / 10.0, 1)
         if heading < 511:
             result["ais_true_heading_deg"] = heading
     elif message_type == 18:
@@ -137,7 +141,7 @@ def run() -> None:
                         elif "lat_deg" in record:
                             record.update({k: v for k, v in static.get(mmsi, {}).items()
                                             if k not in record})
-                            put_json(publisher, record)
+                            publish_dual(publisher, OUTPUT_TOPIC, record, AisNmeaTrack, zenoh)
                     continue
                 key = (fields["sequence"] or "_", fields["channel"] or "_")
                 state = fragments.setdefault(key, {"total": total, "fill": fields["fill"], "parts": {}})
@@ -153,7 +157,7 @@ def run() -> None:
                         elif "lat_deg" in record:
                             record.update({k: v for k, v in static.get(mmsi, {}).items()
                                             if k not in record})
-                            put_json(publisher, record)
+                            publish_dual(publisher, OUTPUT_TOPIC, record, AisNmeaTrack, zenoh)
         except Exception as exc:
             print("AIS NMEA decode error:", exc, flush=True)
 

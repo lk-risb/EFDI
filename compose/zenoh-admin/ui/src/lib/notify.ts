@@ -1,13 +1,15 @@
-import { toast } from 'sonner'
-import { useNotifications } from '@/store/notifications'
+import {toast} from 'sonner'
+import {useNotifications} from '@/store/notifications'
 
 export const notify = {
   success: (message: string) => {
-    toast.success(message)
-    useNotifications.getState().push('success', message)
+    const text = message.trim() || 'Operation succeeded'
+    toast.success(text)
+    useNotifications.getState().push('success', text)
   },
   error: (message: string) => {
-    toast.error(message)
-    useNotifications.getState().push('error', message)
+    const text = message.trim() || 'Operation failed'
+    toast.error(text)
+    useNotifications.getState().push('error', text)
   },
 }

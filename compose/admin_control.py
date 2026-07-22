@@ -92,21 +92,15 @@ SERVICE_SPECS = [
     ("dronuradaras", "Sensor bridges", "dronuradaras.lt sensors"),
     ("dji-cloud", "Sensor bridges", "DJI Cloud MQTT"),
     ("utm-ans", "Open-data bridges", "Oro navigacija UTM"),
-    ("asterix-udp", "Sensor bridges", "Mixed ASTERIX UDP ingress"),
+    ("asterix", "Sensor bridges", "ASTERIX family bundle"),
     ("track-fusion", "Sensor bridges", "Track correlation"),
-    ("asterix-cat10", "Protocols", "ASTERIX CAT-010"),
-    ("asterix-cat20", "Protocols", "ASTERIX CAT-020"),
-    ("asterix-cat21", "Protocols", "ASTERIX CAT-021"),
-    ("asterix-cat34", "Protocols", "ASTERIX CAT-034"),
-    ("asterix-cat48", "Protocols", "ASTERIX CAT-048"),
-    ("asterix-cat62", "Protocols", "ASTERIX CAT-062"),
     ("link16", "Protocols", "Link-16 JREAP-C"),
     ("mavlink", "Protocols", "MAVLink / Remote ID"),
     ("opendroneid", "Protocols", "OpenDroneID translator"),
     ("vmf", "Protocols", "VMF MIL-STD-47001C"),
     ("nffi", "Protocols", "NFFI / STANAG 4677"),
     ("sapient", "Protocols", "SAPIENT / FLEX 335"),
-    ("stanag4586", "Protocols", "STANAG 4586"),
+    ("stanag", "Protocols", "STANAG family bundle"),
     ("cap", "Protocols", "CAP 1.2 alerts"),
     ("geojson", "Protocols", "GeoJSON / OGC Features"),
     ("ais-nmea", "Protocols", "AIS NMEA"),
@@ -121,6 +115,7 @@ SERVICE_SPECS = [
     ("cot-udp", "C2 outputs", "CoT multicast"),
     ("cot-udp-tak", "C2 outputs", "CoT UDP client"),
     ("cot-bridge", "C2 outputs", "TAK Server CoT TCP"),
+    ("tak-bridge", "C2 inputs", "TAK Server CoT ingress"),
     ("sitaware", "C2 outputs", "SitaWare HQ REST input"),
     ("sitaware-hq-nvg", "C2 outputs", "SitaWare HQ NVG feed"),
 ]
@@ -160,6 +155,7 @@ EDITABLE_EXACT = {
     "DJI_MQTT_HOST", "DJI_MQTT_PORT", "DJI_MQTT_TOPIC", "DJI_MQTT_TLS",
     "DJI_MQTT_USERNAME", "DJI_MQTT_PASSWORD", "DJI_MQTT_CA", "DJI_MQTT_CERT", "DJI_MQTT_KEY", "DJI_MQTT_CLIENT_ID",
     "OPENDRONEID_INPUT_TOPIC", "OPENDRONEID_FRIENDLY_IDS", "OPENDRONEID_STALE_S",
+    "STANAG4609_SRT_URL", "STANAG4609_SOURCE",
     "CAP_INPUT_TOPIC", "CAP_ACTIVE_ONLY", "GEOJSON_INPUT_TOPIC", "AIS_NMEA_INPUT_TOPIC",
     "SPECTRUM_INPUT_TOPIC", "SENSOR_HEALTH_INPUT_TOPIC", "MISSION_ROUTE_INPUT_TOPIC",
     "MAVLINK_PORT", "MAVLINK_TCP", "MAVLINK_ZENOH_RAW", "MAVLINK_RAW_PORT", "MAVLINK_RAW_TOPIC",
@@ -782,7 +778,9 @@ class Handler(BaseHTTPRequestHandler):
         if not CONTROL_TOKEN:
             return False
         header = self.headers.get("Authorization", "")
-        return header == f"Bearer {CONTROL_TOKEN}"
+        # Constant-time compare, matching the shell listener's check below: a
+        # plain `==` leaks how many leading bytes of the bearer token matched.
+        return hmac.compare_digest(header, f"Bearer {CONTROL_TOKEN}")
 
     def _json(self, status: int, payload: object) -> None:
         body = json.dumps(payload, separators=(",", ":")).encode()

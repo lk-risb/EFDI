@@ -38,6 +38,8 @@ import time
 import zenoh
 from zenoh_auth import apply_zenoh_auth
 from namespace_prefix import topic_root
+from protocols.vmf_pb2 import VmfTrack
+from protocols.protobuf_codec import publish_dual
 
 ORG       = os.environ.get("PARTNER_NAMESPACE", "")
 TOPIC_ROOT = topic_root()
@@ -300,8 +302,7 @@ def run(args):
                             track = _decode_vmf(frame)
                             if track:
                                 topic = _topic(track)
-                                session.put(topic, json.dumps(track).encode(),
-                                            encoding=zenoh.Encoding.APPLICATION_JSON)
+                                publish_dual(session, topic, track, VmfTrack, zenoh)
                                 if args.verbose:
                                     print("VMF {} lat={} lon={}".format(
                                         track.get("uid", "?")[:20],
@@ -321,8 +322,7 @@ def run(args):
                     track = _decode_vmf(data)
                     if track:
                         topic = _topic(track)
-                        session.put(topic, json.dumps(track).encode(),
-                                    encoding=zenoh.Encoding.APPLICATION_JSON)
+                        publish_dual(session, topic, track, VmfTrack, zenoh)
                         if args.verbose:
                             print("VMF {} lat={} lon={}".format(
                                 track.get("uid", "?")[:20],
@@ -345,8 +345,7 @@ def run_zenoh_raw(args):
             data = sample.payload.to_bytes() if hasattr(sample.payload, "to_bytes") else bytes(sample.payload)
             track = _decode_vmf(data)
             if track:
-                session.put(_topic(track), json.dumps(track).encode(),
-                            encoding=zenoh.Encoding.APPLICATION_JSON)
+                publish_dual(session, _topic(track), track, VmfTrack, zenoh)
         except Exception as exc:
             print("VMF raw decode error:", exc, flush=True)
 

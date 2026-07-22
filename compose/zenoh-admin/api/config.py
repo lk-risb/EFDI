@@ -194,6 +194,10 @@ class ConfigFields(BaseModel):
         return v
 
 
+class RenderedConfigRequest(BaseModel):
+    rendered: str = Field(min_length=1, max_length=512_000)
+
+
 def _extract_fields(raw: str) -> ConfigFields:
     data = json5.loads(raw)
 
@@ -318,7 +322,20 @@ def _render_config(fields: ConfigFields) -> str:
 def atomic_write(path: str, content: str) -> None:
     """Durably replace a state file without exposing readers to partial data."""
     directory = os.path.dirname(path) or "."
-    fd, temporary_path = tempfile.mkstemp(prefix=f".{os.path.basename(path)}.", dir=directory)
+    try:
+        fd, temporary_path = tempfile.mkstemp(prefix=f".{os.path.basename(path)}.", dir=directory)
+    except PermissionError:
+        # Some mounted state files live at the filesystem root (for compatibility
+        # with older deployments), but the container user cannot create temp files
+        # in "/". Fall back to an in-place write when the target file already
+        # exists and is writable.
+        if not os.path.exists(path):
+            raise
+        with open(path, "w") as f:
+            f.write(content)
+            f.flush()
+            os.fsync(f.fileno())
+        return
     try:
         if os.path.exists(path):
             os.fchmod(fd, stat.S_IMODE(os.stat(path).st_mode))
@@ -579,6 +596,24 @@ async def get_config(_=Depends(require_role("admin", "superadmin"))):
     return {"fields": fields, "path": CONFIG_PATH}
 
 
+@router.get("/rendered")
+async def get_rendered_config(_=Depends(require_role("admin", "superadmin"))):
+    if not os.path.isfile(CONFIG_PATH):
+        raise HTTPException(status_code=404, detail=f"Config file not found at {CONFIG_PATH}")
+    try:
+        with open(CONFIG_PATH, "r", encoding="utf-8") as handle:
+            rendered = handle.read()
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"Could not read current config: {exc}") from exc
+    return {"rendered": rendered, "path": CONFIG_PATH}
+
+
+@router.post("/render")
+async def render_config(fields: ConfigFields, _=Depends(require_role("admin", "superadmin"))):
+    rendered = _render_config(fields)
+    return {"rendered": rendered}
+
+
 @router.post("/validate")
 async def validate_config(
     fields: ConfigFields,
@@ -624,6 +659,56 @@ async def put_config(
         db,
         actor.id,
         "update_zenoh_config",
+        f"status={result['status']}"
+        + (f", error={result['error']}" if result.get("error") else "")
+        + (", native processes restarted"
+           if result["native_process_restart_required"] and not result["native_process_restart_failures"]
+           else ", native process restart failures: " + "; ".join(result["native_process_restart_failures"])
+           if result["native_process_restart_failures"] else ""),
+    )
+
+    if result["status"] in {"rejected", "failed"}:
+        raise HTTPException(status_code=422 if result["status"] == "rejected" else 500, detail=result["error"])
+    return {**result, "version": version, "revision_id": revision.id}
+
+
+@router.put("/rendered")
+async def put_rendered_config(
+    body: RenderedConfigRequest,
+    db: AsyncSession = Depends(get_db),
+    actor=Depends(require_role("superadmin")),
+):
+    try:
+        fields = _extract_fields(body.rendered)
+    except (ValueError, KeyError, TypeError) as exc:
+        raise HTTPException(status_code=400, detail=f"Could not parse rendered config: {exc}") from exc
+
+    version = int(time.time() * 1000)
+    revision = await create_revision(
+        db,
+        target_namespace=fields.partner_namespace,
+        version=version,
+        source="raw",
+        state="validating",
+        config_sha256=hashlib.sha256(body.rendered.encode()).hexdigest(),
+        created_by=actor.id,
+    )
+    try:
+        result = await asyncio.to_thread(
+            apply_rendered_config,
+            body.rendered,
+            fields,
+            restart_native=True,
+        )
+    except Exception as exc:
+        await set_revision_state(db, revision, "failed", str(exc))
+        raise
+    await set_revision_state(db, revision, result["status"], result.get("error"))
+
+    await write_audit(
+        db,
+        actor.id,
+        "update_zenoh_config_raw",
         f"status={result['status']}"
         + (f", error={result['error']}" if result.get("error") else "")
         + (", native processes restarted"

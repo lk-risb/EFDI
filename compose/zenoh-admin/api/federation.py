@@ -219,7 +219,7 @@ async def _push_to_target(
     # version is assigned before the try block so it's always available for
     # the failure-path audit entry below, even if rendering itself fails.
     # Milliseconds avoid same-second collisions while remaining exactly
-    # representable by JavaScript and safely inside PostgreSQL BIGINT.
+    # representable by JavaScript and safely inside SQL BIGINT.
     version = int(time.time() * 1000)
     revision = None
     try:

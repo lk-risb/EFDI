@@ -43,6 +43,8 @@ import time
 import zenoh
 from zenoh_auth import apply_zenoh_auth
 from namespace_prefix import topic_root
+from protocols.stanag4586_pb2 import Stanag4586Track
+from protocols.protobuf_codec import publish_dual
 
 ORG       = os.environ.get("PARTNER_NAMESPACE", "")
 TOPIC_ROOT = topic_root()
@@ -203,8 +205,7 @@ def _run_session(host: str, port: int, session: "zenoh.Session", verbose: bool):
             elif msg_type == MSG_VEHICLE_STATE:
                 track = _decode_vehicle_state(body, instance)
                 if track:
-                    session.put(TOPIC_UAV_OUT, json.dumps(track).encode(),
-                                encoding=zenoh.Encoding.APPLICATION_JSON)
+                    publish_dual(session, TOPIC_UAV_OUT, track, Stanag4586Track, zenoh)
                     if verbose:
                         print("STANAG4586 UAV{} lat={} lon={} alt={:.0f}m spd={:.1f}m/s".format(
                             instance,
@@ -276,8 +277,7 @@ def run_zenoh_raw(args):
                 if msg_type == MSG_VEHICLE_STATE:
                     track = _decode_vehicle_state(body, _instance)
                     if track:
-                        session.put(TOPIC_UAV_OUT, json.dumps(track).encode(),
-                                    encoding=zenoh.Encoding.APPLICATION_JSON)
+                        publish_dual(session, TOPIC_UAV_OUT, track, Stanag4586Track, zenoh)
         except Exception as exc:
             print("STANAG4586 raw decode error:", exc, flush=True)
 

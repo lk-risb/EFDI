@@ -77,7 +77,7 @@ consumers continue to decode `/v1` safely.
 |---|---|
 | `zenoh-router` | Local pub/sub fabric — mTLS to the fabric, plaintext TCP for local bridges/GUI |
 | `asterix_udp_bridge` | Optional mixed-category UDP ingress; validates and demultiplexes complete ASTERIX frames onto raw Zenoh topics |
-| `asterix_cat10/20/21/34/48/62` | Independent, edition-scoped ASTERIX input protocols |
+| `asterix` | ASTERIX family bundle with CAT-010/020/021/034/048/062 translators |
 | `dronuradaras_bridge` | REST polling, currently-online acoustic sensors + drone detection events; offline markers are actively evicted |
 | `adsblol_bridge` | Free/open-data ADS-B API → normalized regional civil/military aircraft tracks |
 | `utm_ans_bridge` | Authorized Oro navigacija UTM JSON/GeoJSON export → declared civilian UAV tracks; not a national Remote ID feed |
@@ -88,6 +88,8 @@ consumers continue to decode `/v1` safely.
 | `nvg_bridge` | Pull-based NVG 2.0.2 snapshot for SitaWare HQ Import Subscriptions (outbound) |
 | `link16` | JREAP-C UDP; TCP requires a verified gateway framing ICD |
 | `mavlink` | MAVLink 2 UDP/TCP, including OPEN_DRONE_ID messages |
+| `asterix` | ASTERIX family bundle: mixed UDP ingress plus CAT-010/020/021/034/048/062 translators |
+| `stanag` | STANAG family bundle: 4586 feed plus 4609 SRT transport and KLV decode |
 | `mavlink_raw_bridge` / `link16_jreap_bridge` / `vmf_bridge` / `stanag4586_bridge` | Optional socket ingress only; publishes raw bytes to Zenoh |
 | `cap` | CAP 1.2 XML → time-bounded alerts and areas |
 | `geojson_features` | GeoJSON/OGC Features → zones and overlays |
@@ -96,6 +98,7 @@ consumers continue to decode `/v1` safely.
 | `mission_route` | GeoJSON/JSON UAV routes and corridors |
 | `dji_cloud_api_bridge` | Source-specific DJI Cloud API MQTT 5 aircraft telemetry bridge |
 | `cot_layer` | CoT XML output — UDP multicast + TAK Server TCP |
+| `tak_bridge` | TAK Server / CoT ingress — normalized CoT back into Zenoh |
 | `track_fusion_bridge` | ASTERIX CAT-48 / CAT-21 correlation |
 | `zenoh-admin` | FastAPI + React panel — router status, config, bridge/protocol/layer lifecycle, endpoints, and write-only credentials |
 
@@ -235,7 +238,7 @@ EFDI/
 ├── docs/                         (gitignored) design specs, working notes
 ├── start.sh                      interactive service launcher
 ├── stop.sh                       service teardown
-└── dev.sh                        disposable local Postgres + API for zenoh-admin UI preview
+└── dev.sh                        disposable local MariaDB + API for zenoh-admin UI preview
 ```
 
 ---
@@ -251,7 +254,7 @@ See **[INSTALL.md](INSTALL.md)** for the full English deployment guide, or **[DI
 ```bash
 ./start.sh              # interactive launcher — pick services, prompts for missing config
 ./stop.sh                # tear down running services
-./dev.sh up              # live zenoh-admin preview — disposable Postgres + API + Vite UI, no router/certs
+./dev.sh up              # live zenoh-admin preview — disposable MariaDB + API + Vite UI, no router/certs
 ./dev.sh down             # tear down the dev preview stack and Vite process
 docker compose logs -f zenoh-router   # follow the router's logs
 ```
@@ -279,7 +282,7 @@ branch routers:
 
 - **Network** shows direct children and observed descendants, link freshness,
   management authority, and last-known state. A branch keeps its local router,
-  database, WebUI, and child-management capability when its parent is offline.
+  MariaDB, WebUI, and child-management capability when its parent is offline.
 - **Zenoh Config** validates a candidate with the pinned Zenoh binary before it
   touches the active file. Activation waits for router health and restores the
   last-known-good configuration automatically if restart or health checks fail.
