@@ -149,15 +149,23 @@ class OpenDroneIDProtocolTests(unittest.TestCase):
         class Session:
             def __init__(self):
                 self.publications = []
+                self.protobuf = []
 
             def put(self, topic, payload, **_kwargs):
-                self.publications.append((topic, json.loads(payload)))
+                # Dual publish: /v1 carries JSON, /v2 the protobuf sibling.
+                if topic.endswith("/v2"):
+                    self.protobuf.append((topic, payload))
+                else:
+                    self.publications.append((topic, json.loads(payload)))
 
         session = Session()
         make_opendroneid_handler(RemoteIDTracker(), session)(Sample())
 
         self.assertEqual(len(session.publications), 1)
+        self.assertEqual(len(session.protobuf), 1)
+        self.assertGreater(len(session.protobuf[0][1]), 0)
         topic, track = session.publications[0]
+        self.assertEqual(session.protobuf[0][0], topic[: -len("/v1")] + "/v2")
         self.assertTrue(topic.endswith("/air/opendroneid/astm-f3411/unknown/uav/tracks/v1"))
         self.assertEqual(track["remote_id_receiver"], "sensor-7")
         self.assertEqual(track["remote_id_transmitter"], "aa:bb:cc:dd:ee:ff")

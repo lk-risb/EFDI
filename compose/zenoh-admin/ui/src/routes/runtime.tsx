@@ -1,15 +1,24 @@
-import { createFileRoute, redirect } from '@tanstack/react-router'
-import { useEffect, useMemo, useState } from 'react'
-import { Layout } from '@/components/Layout'
-import { PageHeader } from '@/components/PageHeader'
-import { HudCorners } from '@/components/HudCorners'
-import { apiJson, errorMessage } from '@/lib/api'
-import { notify } from '@/lib/notify'
-import { useAuth } from '@/store/auth'
-import { useUiSettings } from '@/store/ui'
+import {createFileRoute, redirect} from '@tanstack/react-router'
+import {useEffect, useMemo, useState} from 'react'
+import {Layout} from '@/components/Layout'
+import {PageHeader} from '@/components/PageHeader'
+import {HudCorners} from '@/components/HudCorners'
+import {apiJson, errorMessage} from '@/lib/api'
+import {notify} from '@/lib/notify'
+import {useAuth} from '@/store/auth'
+import {useUiSettings} from '@/store/ui'
 import {
-  Activity, FileText, KeyRound, Play, RefreshCw,
-  Save, Search, Settings2, Square, Terminal, Wrench,
+    Activity,
+    FileText,
+    KeyRound,
+    Play,
+    RefreshCw,
+    Save,
+    Search,
+    Settings2,
+    Square,
+    Terminal,
+    Wrench,
 } from 'lucide-react'
 
 export const Route = createFileRoute('/runtime')({
@@ -94,6 +103,10 @@ const FIELD_GROUPS: { title: string; description: string; fields: { key: string;
     { key: 'SITAWARE_HQ_NVG_MAX_TRACKS', label: 'SitaWare HQ NVG maximum tracks', placeholder: '10000' },
     { key: 'UTM_ANS_API_URL', label: 'UTM JSON/GeoJSON URL', placeholder: 'https://authorized-feed.example' },
     { key: 'UTM_ANS_API_TOKEN', label: 'UTM API token', secret: true },
+  ] },
+  { title: 'Video and metadata ingest', description: 'SRT/KLV sources and source naming for the STANAG 4609 bridge.', fields: [
+    { key: 'STANAG4609_SRT_URL', label: 'STANAG 4609 SRT URL', placeholder: 'srt://host:port?mode=listener' },
+    { key: 'STANAG4609_SOURCE', label: 'STANAG 4609 source label', placeholder: 'stanag4609' },
   ] },
   { title: 'Sensors and data sources', description: 'Common partner endpoints. Protocol-specific CAT and raw-port settings are available under Advanced.', fields: [
     { key: 'ASTERIX_PORT', label: 'Mixed ASTERIX UDP port', placeholder: '50000' }, { key: 'ASTERIX_CATEGORIES', label: 'ASTERIX categories', placeholder: '34,48' },

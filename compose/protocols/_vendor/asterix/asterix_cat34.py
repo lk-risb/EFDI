@@ -24,6 +24,8 @@ import zenoh
 from zenoh_auth import apply_zenoh_auth
 
 from namespace_prefix import topic_root
+from protocols.asterix_cat34_pb2 import AsterixCat34Status
+from protocols.protobuf_codec import publish_dual
 
 
 ORG       = os.environ.get("PARTNER_NAMESPACE", "")
@@ -300,8 +302,14 @@ def _make_cat034_handler(pub_sensor, site, radar_name):
                 return
             payload = dict(status)
             payload["_ts"] = time.time()
-            pub_sensor.put(json.dumps(payload).encode(),
-                           encoding=zenoh.Encoding.APPLICATION_JSON)
+            publish_dual(
+                pub_sensor,
+                TOPIC_SENSOR,
+                payload,
+                AsterixCat34Status,
+                zenoh,
+                wrapper_field="sensor",
+            )
 
     def _sweep_thread(key: str):
         """Publish radar beam CoT at 5 Hz using dead-reckoned antenna azimuth."""
@@ -321,8 +329,14 @@ def _make_cat034_handler(pub_sensor, site, radar_name):
             payload = dict(s["status"])
             payload["sweep_azimuth_deg"] = round(az, 1)
             payload["_ts"] = time.time()
-            pub_sensor.put(json.dumps(payload).encode(),
-                           encoding=zenoh.Encoding.APPLICATION_JSON)
+            publish_dual(
+                pub_sensor,
+                TOPIC_SENSOR,
+                payload,
+                AsterixCat34Status,
+                zenoh,
+                wrapper_field="sensor",
+            )
 
     def _h(data: bytes, verbose: bool):
         msg = decode_cat034(data)
@@ -409,8 +423,14 @@ def _make_cat034_handler(pub_sensor, site, radar_name):
                 _keepalive_active.add(key)
 
             # Publish the full status update (no sweep azimuth — just the site marker)
-            pub_sensor.put(json.dumps(status).encode(),
-                           encoding=zenoh.Encoding.APPLICATION_JSON)
+            publish_dual(
+                pub_sensor,
+                TOPIC_SENSOR,
+                status,
+                AsterixCat34Status,
+                zenoh,
+                wrapper_field="sensor",
+            )
 
             if start_thread:
                 threading.Thread(target=_sweep_thread, args=(key,),

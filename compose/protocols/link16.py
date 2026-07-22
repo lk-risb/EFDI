@@ -56,6 +56,8 @@ import time
 import zenoh
 from zenoh_auth import apply_zenoh_auth
 from namespace_prefix import topic_root
+from protocols.link16_pb2 import Link16Track
+from protocols.protobuf_codec import publish_dual
 
 ORG       = os.environ.get("PARTNER_NAMESPACE", "")
 TOPIC_ROOT = topic_root()
@@ -500,8 +502,7 @@ def process_packet(data: bytes, pub: "zenoh.Session", verbose: bool):
             track = decoder(words[i:i + needed])
             if track:
                 topic = _topic_for(track, msg_type)
-                pub.put(topic, json.dumps(track).encode(),
-                        encoding=zenoh.Encoding.APPLICATION_JSON)
+                publish_dual(pub, topic, track, Link16Track, zenoh)
                 if verbose:
                     print("PUB link16 {} aff={} lat={} lon={} alt={}ft".format(
                         msg_type,

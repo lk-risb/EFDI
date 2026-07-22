@@ -408,6 +408,20 @@ def topic_for_track(topic_root: str, track: dict) -> str:
     return "{}/{}/sapient/flex335/unknown/{}/tracks/v1".format(topic_root, domain, entity)
 
 
+def topic_for_frame(track_topic: str) -> str:
+    """Native-protobuf egress topic paired with a JSON track topic.
+
+    The /v1 topics carry the flattened JSON view (lossy: only the fields this
+    module models). The /v2 sibling carries the original BSI Flex 335 v2
+    SapientMessage bytes verbatim, so fabric consumers get full fidelity —
+    including fields EFDI does not decode. JSON is published alongside during
+    the transition and is intended to be retired once consumers move to /v2.
+    """
+    if track_topic.endswith("/v1"):
+        return track_topic[: -len("/v1")] + "/v2"
+    return track_topic + "/v2"
+
+
 class SapientDecoder:
     def __init__(self):
         self.nodes: dict[str, NodeState] = {}
@@ -761,6 +775,16 @@ def _publish(session, decoder: SapientDecoder, frame: bytes, verbose: bool, sock
         topic,
         json.dumps(event.track, separators=(",", ":")).encode("utf-8"),
         encoding=zenoh.Encoding.APPLICATION_JSON,
+    )
+    # Native BSI Flex 335 v2 egress. `frame` is the bare SapientMessage — both
+    # ingress paths strip the 32-bit little-endian length prefix before this
+    # point (iter_frames, and the --zenoh-raw reassembler), so the bytes are a
+    # complete protobuf message. Republished verbatim: no re-encode, no field
+    # loss, and no dependency on a locally-modelled schema.
+    session.put(
+        topic_for_frame(topic),
+        frame,
+        encoding=zenoh.Encoding.APPLICATION_PROTOBUF,
     )
     if verbose:
         print(

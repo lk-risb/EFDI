@@ -24,6 +24,8 @@ import zenoh
 from zenoh_auth import apply_zenoh_auth
 
 from namespace_prefix import topic_root
+from protocols.asterix_cat62_pb2 import Cat62Track
+from protocols.protobuf_codec import publish_dual
 
 
 ORG       = os.environ.get("PARTNER_NAMESPACE", "")
@@ -666,7 +668,14 @@ def decode_cat62_record(data: bytes, pos: int):
 def _pub(pub, track: dict, label: str, verbose: bool):
     if "lat_deg" not in track or "lon_deg" not in track:
         return
-    pub.put(json.dumps(track).encode(), encoding=zenoh.Encoding.APPLICATION_JSON)
+    publish_dual(
+        pub,
+        TOPIC_062,
+        track,
+        Cat62Track,
+        zenoh,
+        wrapper_field="normalized",
+    )
     if verbose:
         ident = (track.get("icao24") or track.get("callsign") or
                  track.get("radar_id") or track.get("track_num") or "?")

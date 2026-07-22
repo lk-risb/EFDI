@@ -1,0 +1,13 @@
+feat: collapse vendor protocol surfaces and keep launcher bundle-level
+
+- migrate zenoh-admin persistence to MariaDB and keep the one-time importer fail-closed and row-verified
+- preserve the existing launcher/runtime architecture: Python bridges and layers stay PID-managed host processes, Zenoh/router/admin stay containerized infrastructure
+- keep the bidirectional TAK path intact with cot-bridge as the outbound mTLS writer and tak-bridge as the inbound CoT reader with loop suppression
+- keep the SitaWare HQ integration hardened for retry/discovery and retain the documented HQ/NVG pull paths and endpoint fallbacks
+- continue dual-publishing the fabric-side translators to JSON + protobuf while keeping `/v1` JSON-compatible
+- add the new `protocols/asterix.py` and `protocols/stanag.py` vendor wrappers as the only top-level runtime protocol entrypoints
+- move the split ASTERIX category implementations and STANAG 4586/4609 implementation files under `protocols/_vendor/` so the visible protocol surface stays slim
+- keep ASTERIX decoding for the C2-relevant categories that are actually useful in SW/TAK: CAT-010, CAT-020, CAT-021, CAT-034, CAT-048, and CAT-062
+- keep STANAG 4586 and STANAG 4609 available through the vendor bundle without exposing the split transport/KLV launcher entries
+- update the launcher, admin catalog, and docs to match the collapsed vendor-level surface
+- update the commit note workflow without ever using git add, git commit, or git push

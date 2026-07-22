@@ -890,13 +890,29 @@ Pridėkite į `compose/.env` (pilną bloką žr. `compose/.env.example`):
 ```bash
 ZENOH_ADMIN_DB_USER=zenoh_admin
 ZENOH_ADMIN_DB_PASSWORD=<atsitiktinis>
-ZENOH_ADMIN_DB_PORT=5433                # ne numatytasis: nesikerta su kitu Postgres serveriu hoste
+ZENOH_ADMIN_DB_ROOT_PASSWORD=<kita-atsitiktine-reiksme>
+ZENOH_ADMIN_DB_PORT=3307                # ne numatytasis: nesikerta su MariaDB/MySQL 3306 prievadu
 ZENOH_ADMIN_SECRET_KEY=<openssl rand -hex 32>
 ZENOH_ADMIN_FIRST_USER=admin
 ZENOH_ADMIN_FIRST_PASS=<nustatykite vieną kartą, po pirmo prisijungimo galite ištrinti>
 ```
 
-`ZENOH_ADMIN_FIRST_PASS` sukuria pirmą `superadmin` paskyrą tik jei ji dar neegzistuoja — po pirmo prisijungimo šį kintamąjį saugu vėl palikti tuščią (paskyra išlieka Postgres duomenų bazėje).
+`ZENOH_ADMIN_FIRST_PASS` sukuria pirmą `superadmin` paskyrą tik jei ji dar neegzistuoja — po pirmo prisijungimo šį kintamąjį saugu vėl palikti tuščią (paskyra išlieka MariaDB duomenų bazėje).
+
+#### Vienkartinis perkėlimas iš PostgreSQL
+
+Atnaujinimas palieka seną `${POD_STATE_DIR}/zenoh-admin/pgdata` katalogą ir
+MariaDB duomenis kuria `${POD_STATE_DIR}/zenoh-admin/mariadb` kataloge. Sustabdyk
+`zenoh-admin` ir seną `zenoh-admin-db`, pasidaryk pod būsenos bei `compose/.env`
+atsarginę kopiją,
+įrašyk `ZENOH_ADMIN_DB_ROOT_PASSWORD`, o seną `ZENOH_ADMIN_DB_PORT=5433` pakeisk
+į `ZENOH_ADMIN_DB_PORT=3307`. Perkėlimo metu senoji PostgreSQL bazė laikinai
+naudoja 55433 prievadą. Tada paleisk `INSTALL.md` skyriuje „One-time PostgreSQL
+migration“ pateiktą importavimo komandą. Importuotojas atsisako dirbti
+su netuščia MariaDB, kopijuoja lenteles viena transakcija ir prieš patvirtindamas
+patikrina eilučių skaičius. `pgdata` netrink, kol nepatikrinai prisijungimo,
+pasitikėjimo, federacijos, išvaizdos ir audito istorijos. Tai vieno mazgo MariaDB
+perkėlimas; Galera klasteris diegiamas atskirai.
 
 ### Paleidimas
 

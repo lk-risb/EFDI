@@ -91,8 +91,12 @@ class MAVLinkRemoteIDTests(unittest.TestCase):
         session = FakeSession()
         remote_ids = {}
         mav._dispatch(messages, {}, remote_ids, session, False)
-        self.assertEqual(len(session.messages), 1)
+        # Dual publish: JSON on /v1 plus the protobuf sibling on /v2.
+        self.assertEqual(len(session.messages), 2)
         topic, payload, _ = session.messages[0]
+        pb_topic, pb_payload, _ = session.messages[1]
+        self.assertEqual(pb_topic, topic[: -len("/v1")] + "/v2")
+        self.assertGreater(len(pb_payload), 0)
         track = __import__("json").loads(payload)
         self.assertTrue(topic.endswith("/air/mavlink/remote-id/unknown/uav/tracks/v1"))
         self.assertEqual(track["callsign"], "LT-REMOTE-123")

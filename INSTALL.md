@@ -172,10 +172,10 @@ CAT48_RADAR_NAME=Giraffe AMB   # Callsign displayed in ATAK
 > the ICD.
 
 For a combined stream, set `ASTERIX_PORT` to its actual destination port. The
-`asterix-udp` process receives the socket once and republishes intact frames to
-`…/raw/asterix/cat34` and `…/raw/asterix/cat48`; the independent translators
-decode only their category. When `ASTERIX_PORT` is set, it takes precedence only
-for categories named in `ASTERIX_CATEGORIES`. Inspect an unknown feed first:
+`asterix` bundle receives the socket once and republishes intact frames to
+`…/raw/asterix/cat34` and `…/raw/asterix/cat48`; the per-category translators
+decode only their category. When `ASTERIX_PORT` is set, it takes precedence
+only for categories named in `ASTERIX_CATEGORIES`. Inspect an unknown feed first:
 
 ```bash
 python3 tools/asterix_probe.py --port 30001
@@ -250,55 +250,50 @@ The interactive launcher displays all services with their readiness state. Toggl
   [ 9] [ ] sitaware       SitaWare HQ documented JSON resource   will prompt for address+login
   [10] [✓] dronuradaras   dronuradaras.lt drone detection        ready
   [11] [ ] dji-cloud      DJI Cloud API aircraft                 DJI_MQTT_HOST not set
-  [12] [ ] asterix-udp    Mixed ASTERIX UDP → raw topics         ASTERIX_PORT not set
+  [12] [✓] asterix        ASTERIX family bundle                 ready
   [13] [✓] track-fusion   Radar/ADS-B track correlation          ready
 
   Protocols
   ──────────────────────────────────────────────────────────
-  [14] [✓] asterix-cat10  ASTERIX CAT-010 airport surface        UDP 50010
-  [15] [✓] asterix-cat20  ASTERIX CAT-020 legacy MLAT            UDP 50020
-  [16] [✓] asterix-cat21  ASTERIX CAT-021 legacy ADS-B           UDP 50021
-  [17] [✓] asterix-cat34  ASTERIX CAT-034 radar service          UDP 50034
-  [18] [✓] asterix-cat48  ASTERIX CAT-048 radar targets          UDP 50048
-  [19] [✓] asterix-cat62  ASTERIX CAT-062 system tracks          UDP 50062
-  [20] [ ] link16         Link-16 JREAP-C datalink               LINK16_PORT not set
-  [21] [ ] mavlink        MAVLink UAV telemetry                  MAVLINK_PORT not set
-  [22] [✓] opendroneid    Raw Open Drone ID Zenoh translator     ready
-  [23] [ ] vmf            VMF MIL-STD-47001C messages            VMF_PORT not set
-  [24] [✓] nffi           NATO NFFI XML Zenoh translator         ready
-  [25] [ ] sapient        SAPIENT / BSI Flex 335                 will prompt for address
-  [26] [ ] stanag4586     STANAG 4586 UAV feed                   will prompt for address
-  [27] [ ] mavlink-raw    MAVLink socket → Zenoh raw             MAVLINK_RAW_PORT not set
-  [28] [ ] link16-raw     Link-16 socket → Zenoh raw             LINK16_RAW_PORT not set
-  [29] [ ] vmf-raw        VMF socket → Zenoh raw                 VMF_RAW_PORT not set
-  [30] [ ] sapient-raw    SAPIENT socket → Zenoh raw             SAPIENT_RAW_PORT not set
-  [31] [ ] stanag4586-raw STANAG 4586 socket → Zenoh raw         STANAG4586_RAW_PORT not set
+  [14] [ ] link16         Link-16 JREAP-C datalink               LINK16_PORT not set
+  [15] [ ] mavlink        MAVLink UAV telemetry                  MAVLINK_PORT not set
+  [16] [✓] opendroneid    Raw Open Drone ID Zenoh translator     ready
+  [17] [ ] vmf            VMF MIL-STD-47001C messages            VMF_PORT not set
+  [18] [✓] nffi           NATO NFFI XML Zenoh translator         ready
+  [19] [ ] sapient        SAPIENT / BSI Flex 335                 will prompt for address
+  [20] [✓] stanag         STANAG family bundle                   ready
+  [21] [ ] mavlink-raw    MAVLink socket → Zenoh raw             MAVLINK_RAW_PORT not set
+  [22] [ ] link16-raw     Link-16 socket → Zenoh raw             LINK16_RAW_PORT not set
+  [23] [ ] vmf-raw        VMF socket → Zenoh raw                 VMF_RAW_PORT not set
+  [24] [ ] sapient-raw    SAPIENT socket → Zenoh raw             SAPIENT_RAW_PORT not set
+  [25] [ ] stanag4586-raw STANAG 4586 socket → Zenoh raw         STANAG4586_RAW_PORT not set
 
   Zenoh-native translators
   ──────────────────────────────────────────────────────────
-  [32] [✓] cap            CAP 1.2 XML → alerts                   ready
-  [33] [✓] geojson        GeoJSON/OGC Features → areas           ready
-  [34] [✓] ais-nmea       AIS NMEA → vessel tracks               ready
-  [35] [✓] spectrum       RF spectrum observations               ready
-  [36] [✓] sensor-health  Sensor health/heartbeat records         ready
-  [37] [✓] mission-route  UAV routes and corridors                ready
+  [28] [✓] cap            CAP 1.2 XML → alerts                   ready
+  [29] [✓] geojson        GeoJSON/OGC Features → areas           ready
+  [30] [✓] ais-nmea       AIS NMEA → vessel tracks               ready
+  [31] [✓] spectrum       RF spectrum observations               ready
+  [32] [✓] sensor-health  Sensor health/heartbeat records       ready
+  [33] [✓] mission-route  UAV routes and corridors              ready
 
   TAK and SitaWare layers
   ──────────────────────────────────────────────────────────
 
   Output layers
   ──────────────────────────────────────────────────────────
-  [40] [✓] cot-udp        CoT → ATAK UDP multicast 239.2.3.1:6969
-  [41] [ ] cot-udp-tak    CoT → WinTAK/ATAK UDP unicast
-  [42] [✓] cot-bridge        CoT → TAK Server TCP
-  [43] [ ] sitaware-hq-nvg EFDI tracks → SitaWare HQ pull feed   SITAWARE_HQ_NVG_ENABLE=0
+  [34] [✓] cot-udp        CoT → ATAK UDP multicast 239.2.3.1:6969
+  [35] [ ] cot-udp-tak    CoT → WinTAK/ATAK UDP unicast
+  [36] [✓] cot-bridge     CoT → TAK Server TCP
+  [37] [ ] tak-bridge     TAK Server CoT ingress               will prompt for address
+  [38] [ ] sitaware-hq-nvg EFDI tracks → SitaWare HQ pull feed   SITAWARE_HQ_NVG_ENABLE=0
 ```
 
 **Launcher controls:**
 
 | Input | Action |
 | --- | --- |
-| `1`–`44` | Toggle individual service (space-separated for multiple) |
+| `1`–`38` | Toggle individual service (space-separated for multiple) |
 | `a` | Select all ready services |
 | `n` | Deselect all |
 | Enter | Launch selected services |
@@ -308,19 +303,19 @@ The interactive launcher displays all services with their readiness state. Toggl
 
 | Scenario | Selection |
 | --- | --- |
-| Giraffe CAT-34/48 + ATAK multicast | `1 17 18 29` |
-| Giraffe + drone detection + ATAK | `1 10 17 18 29` |
-| Giraffe + SitaWare + ATAK multicast | `1 9 17 18 29` |
-| AIS vessels polled by SitaWare HQ | `1 4 33` |
-| EFDI tracks polled by SitaWare HQ | `1 33` |
-| All ready inputs + TAK Server | `a`, then deselect `29` (cot-udp) |
-| Radar only, no TAK output (debug) | `1 12 17 18` |
+| Giraffe ASTERIX + ATAK multicast | `zenoh asterix cot-udp` |
+| Giraffe + drone detection + ATAK | `zenoh dronuradaras asterix cot-udp` |
+| Giraffe + SitaWare + ATAK multicast | `zenoh sitaware asterix cot-udp` |
+| AIS vessels polled by SitaWare HQ | `zenoh aisstream` |
+| EFDI tracks polled by SitaWare HQ | `zenoh mission-route` |
+| All ready inputs + TAK Server | `a`, then deselect `cot-udp` |
+| Radar only, no TAK output (debug) | `zenoh asterix` |
 
 Processes are tracked via PID files in `$POD_STATE_DIR/.pids/` and log to `$POD_STATE_DIR/logs/<service>.log`.
 
 After a successful launch, `start.sh` remembers the selected services and the last TAK/SitaWare endpoint addresses in `$POD_STATE_DIR/launcher-state.env` (mode 600). It also merges any currently running PID-managed services into that selection. On the next interactive launch it displays the complete restored selection and auto-starts it after five seconds; press `c` during the countdown to change it. It never stores passwords, API keys, or certificate material there. Explicit values in `compose/.env` take precedence over remembered addresses.
 
-`aisstream` requires an AISstream API key. Select service 4 and enter the key
+`aisstream` requires an AISstream API key. Select the `aisstream` service and enter the key
 at its hidden prompt for a one-run secret, or set `AISSTREAM_KEY` only in the
 ignored runtime file `compose/.env`. The key is passed through the environment,
 not a command-line argument, and is never copied into launcher memory.
@@ -404,7 +399,7 @@ Configure the feed in `compose/.env`:
 
 ```bash
 SITAWARE_HQ_NVG_ENABLE=1
-SITAWARE_HQ_NVG_BIND=0.0.0.0
+SITAWARE_HQ_NVG_BIND=0.0.0.0   # or the EFDI LAN/Tailscale IP if you prefer a pinned listener
 SITAWARE_HQ_NVG_PORT=8088
 SITAWARE_HQ_NVG_PATH=/nvg
 SITAWARE_HQ_NVG_USER=<dedicated-feed-user>
@@ -420,7 +415,7 @@ Start `sitaware-hq-nvg` from `./start.sh`, or use `./run.sh all`. Test from the 
 ```powershell
 curl.exe -k -u "<feed-user>:<feed-password>" -sS -o NUL `
   -w "HTTP %{http_code} %{content_type}`n" `
-  https://<efdi-linux-ip>:8088/nvg
+  https://<efdi-linux-ip-or-tailscale-ip>:8088/nvg
 ```
 
 Use `-k` only for the initial connectivity check. Install the feed certificate's issuing CA in the HQ Windows trust store before normal operation.
@@ -429,7 +424,7 @@ Create the HQ import subscription:
 
 ```text
 Subscription Name:         EFDI Live Tracks
-Remote Endpoint:           https://<efdi-linux-ip>:8088/nvg
+Remote Endpoint:           https://<efdi-linux-ip-or-tailscale-ip>:8088/nvg
 Target Layer:              efdi-live / EFDI Live Tracks
 Request NVG periodically:  yes
 Polling Interval:          10 seconds
@@ -484,8 +479,7 @@ per-item push adapter at an HQ endpoint to work around this limitation.
 
 | Service | Script | Zenoh topic (abbreviated) | Trigger |
 | --- | --- | --- | --- |
-| `asterix-udp` | `bridges/asterix_udp_bridge.py` | `…/raw/asterix/catNN` | One mixed unicast/multicast UDP stream |
-| `asterix-cat10/20/21/34/48/62` | `protocols/asterix_catNN.py` | Category-specific normalized ASTERIX topics | Direct UDP/TCP or one category-specific raw Zenoh topic per process |
+| `asterix` | `protocols/asterix.py` | `…/raw/asterix/catNN` and category-specific normalized ASTERIX topics | Family bundle: mixed UDP ingress plus per-category translators |
 | `dronuradaras` | `bridges/dronuradaras_bridge.py` | `…/land/dronuradaras/acoustic/neutral/sensor/status/v1` | 60 s online-only device poll with offline eviction / 10 s detection poll |
 | `utm-ans` | `bridges/utm_ans_bridge.py` | `…/air/utm_ans/utm/unknown/uav/tracks/v1` | Authorized JSON/GeoJSON declared-flight poll; requires `UTM_ANS_API_URL` |
 | `opendroneid` | `protocols/opendroneid.py` | `…/air/opendroneid/astm-f3411/*/uav/tracks/v1` | Raw receiver publications under `…/raw/opendroneid/**`; no radio on the router host |
@@ -494,6 +488,7 @@ per-item push adapter at an HQ endpoint to work around this limitation.
 | `nffi` | `protocols/nffi.py` | `…/land/nato/nffi/friendly/unit/tracks/v1` | Complete XML documents under `…/raw/nffi/*` in Zenoh |
 | `link16` | `protocols/link16.py` | `…/air/link16/jreap/*/aircraft/tracks/v1` | Streaming UDP |
 | `mavlink` | `protocols/mavlink.py` | `…/air/mavlink/mav2/*/uav/tracks/v1` | Streaming UDP/TCP |
+| `stanag` | `protocols/stanag.py` | `…/raw/stanag4609/klv`, `…/air/stanag4609/unknown/uav/tracks/v1`, and STANAG 4586 track topics | Family bundle: 4586 feed plus 4609 SRT/KLV |
 | `mavlink-raw`, `link16-raw`, `vmf-raw`, `sapient-raw`, `stanag4586-raw` | `bridges/*_raw_bridge.py` | `…/raw/<protocol>/<source>` | Optional socket ingress; matching protocol runs with `*_ZENOH_RAW=1` |
 | `cap` | `protocols/cap.py` | `…/land/cap/neutral/sensor/alerts/v1` | Complete CAP 1.2 XML on `…/raw/cap/**` |
 | `geojson` | `protocols/geojson_features.py` | `…/land/ogc/neutral/zone/features/v1` | GeoJSON/OGC Features on `…/raw/geojson/**` |
@@ -502,6 +497,7 @@ per-item push adapter at an HQ endpoint to work around this limitation.
 | `dji-cloud` | `bridges/dji_cloud_api_bridge.py` | `…/air/dji/cloud-api/friendly/uav/tracks/v1` | Source-specific authenticated DJI MQTT 5 bridge |
 | `cot-udp` | `layers/cot_layer.py` | Subscriber — all topics | Event-driven |
 | `cot-bridge` | `bridges/cot_bridge.py` | Subscriber — all topics | Event-driven |
+| `tak-bridge` | `bridges/tak_bridge.py` | Subscriber — all topics | TAK-visible CoT ingress |
 | `sitaware-hq-nvg` | `bridges/nvg_bridge.py` | Subscriber — all track topics | Pull-based NVG snapshot |
 | `track-fusion` | `bridges/track_fusion_bridge.py` | CAT-48 + CAT-21 subscriber | Event-driven |
 
@@ -536,6 +532,11 @@ aircraft in the configured RU/BY ICAO address ranges and vessels with RU/BY
 MMSI MIDs are hostile; other public ADS-B/AIS contacts remain neutral. An
 origin-country label alone does not override an invalid or missing transponder
 identifier.
+
+`tak-bridge` is the inverse CoT path: it connects to a TAK-visible CoT feed
+over the documented TCP/TLS session, extracts complete `<event>...</event>`
+frames, and republishes normalized JSON into Zenoh. It does not replace the
+CoT output layer and it does not use Zenoh as the TAK wire transport.
 
 ## C2 ↔ Zenoh bidirectional runbook
 
@@ -580,8 +581,10 @@ On the TAK Server side:
 1. Sign in to the TAK Server administration UI with an administrator identity.
 2. Open **User Management** and create a dedicated EFDI client identity; do not
    reuse a human operator account.
-3. Assign only the mission groups EFDI must publish to. The identity needs the
-   appropriate **IN** membership for traffic it sends into TAK Server.
+3. Assign the mission groups EFDI must publish to and the mission groups it
+   must observe. For the `efdi-bridge` client identity, give the broadest
+   authorized visibility the deployment allows so the same CoT session can both
+   publish and receive server-visible markers.
 4. Use the deployment's certificate/enrollment workflow to issue a client
    certificate for that identity and export its certificate, private key and
    TAK CA chain. Current TAK Server exposes user/group and certificate-manager
@@ -590,6 +593,27 @@ On the TAK Server side:
 5. Place the PEM files in a runtime-only directory on the EFDI host, enter their
    paths above, select `cot-bridge` in `./start.sh`, and confirm the identity appears
    as connected in TAK Server.
+
+### 2b. TAK Server → Zenoh
+
+Use the same TAK-issued client identity for the reverse CoT feed, typically the
+dedicated `efdi-bridge` account/certificate. Select `tak-bridge` and point it
+at the TAK Server CoT endpoint:
+
+```dotenv
+TAK_HOST=<tak-server>
+TAK_PORT=8089
+TAK_TLS=1
+TAK_CERT=/runtime/path/efdi-bridge.pem
+TAK_KEY=/runtime/path/efdi-bridge-key.pem
+TAK_CA=/runtime/path/tak-ca.pem
+```
+
+The bridge uses the same TAK session model as a normal client: if the server
+authorizes the identity for both directions, it can publish into TAK and
+subscribe to server-visible CoT at the same time. The bridge republishes the
+received `<event>...</event>` frames into Zenoh and marks them as TAK ingress so
+the outbound CoT layer does not loop them straight back into the server.
 
 ### 3. Zenoh → SitaWare HQ
 
@@ -613,7 +637,7 @@ Subscriptions**, create a subscription, and enter:
 
 ```text
 Subscription Name:         EFDI Live Tracks
-Remote Endpoint:           https://<efdi-address>:8088/nvg
+Remote Endpoint:           https://<efdi-address-or-tailscale-ip>:8088/nvg
 Target Layer:              efdi-live / EFDI Live Tracks
 Request NVG periodically:  yes
 Polling Interval:          10 seconds
@@ -966,13 +990,46 @@ Add to `compose/.env` (see `compose/.env.example` for the full block):
 ```bash
 ZENOH_ADMIN_DB_USER=zenoh_admin
 ZENOH_ADMIN_DB_PASSWORD=<random>
-ZENOH_ADMIN_DB_PORT=5433                # non-default: avoids clashing with any other Postgres on the host
+ZENOH_ADMIN_DB_ROOT_PASSWORD=<different-random-value>
+ZENOH_ADMIN_DB_PORT=3307                # non-default: avoids clashing with MariaDB/MySQL on 3306
 ZENOH_ADMIN_SECRET_KEY=<openssl rand -hex 32>
 ZENOH_ADMIN_FIRST_USER=admin
 ZENOH_ADMIN_FIRST_PASS=<set once, then blank it out after first login>
 ```
 
-`ZENOH_ADMIN_FIRST_PASS` only creates the first `superadmin` account if it doesn't already exist — it is safe to blank it out again after the first login (the account persists in Postgres).
+`ZENOH_ADMIN_FIRST_PASS` only creates the first `superadmin` account if it doesn't already exist — it is safe to blank it out again after the first login (the account persists in MariaDB).
+
+#### One-time PostgreSQL migration
+
+Upgrades preserve the old `${POD_STATE_DIR}/zenoh-admin/pgdata` directory and
+create MariaDB in `${POD_STATE_DIR}/zenoh-admin/mariadb`. Stop the admin service,
+back up both the pod state and `compose/.env`, add
+`ZENOH_ADMIN_DB_ROOT_PASSWORD`, and change an existing
+`ZENOH_ADMIN_DB_PORT=5433` to `ZENOH_ADMIN_DB_PORT=3307`. The legacy PostgreSQL
+container uses temporary port 55433 during this procedure. Then run the
+fail-closed importer:
+
+```bash
+cd compose
+docker compose stop zenoh-admin zenoh-admin-db
+docker compose \
+  -f docker-compose.yml \
+  -f docker-compose.postgres-migration.yml \
+  --profile postgres-migration \
+  up --build --abort-on-container-exit --exit-code-from zenoh-admin-db-import \
+  zenoh-admin-db zenoh-admin-db-postgres-migration zenoh-admin-db-import
+docker compose \
+  -f docker-compose.yml \
+  -f docker-compose.postgres-migration.yml \
+  --profile postgres-migration down
+docker compose up -d zenoh-admin-db zenoh-admin zenoh-admin-proxy
+```
+
+The importer refuses a non-empty MariaDB target, copies every table in one
+transaction, preserves self-references, and verifies row counts before commit.
+Do not delete `pgdata` until login, trust inventory, federation, branding, and
+audit history have been checked in the rebuilt admin UI. This is a single-node
+MariaDB migration; Galera clustering is a separate deployment step.
 
 ### Launching
 
@@ -1144,6 +1201,59 @@ The Config tab exposes structured fields, not raw JSON5 — each save re-renders
 | Storage plugin loading | Off means new subscribers no longer get a last-known value via `get()` — publish/subscribe still works |
 
 Three deliberately **not** exposed in the GUI (too easy to lock out every client, including the GUI itself, if misconfigured): `access_control.enabled`, `default_permission`, `enable_mtls`. Edit those directly in `zenoh/config.json5` if ever needed.
+
+#### Endpoint helper usage
+
+The Config page's `Fabric endpoints` section is the helper shown in the screenshot:
+
+- enter a host and port,
+- click `Add direct link` to append another `connect.endpoints` entry,
+- pick `Root / no upstream` to clear the list, or one of the presets to seed a known endpoint,
+- save the config to render the `connect.endpoints` array back into `config.json5`.
+
+The publish-builder has the same shortcut at the raw-config level: `Add to connect.endpoints` inserts a candidate endpoint into the current router config text.
+
+#### Three-router mesh example
+
+For the `zenoh1` / `zenoh2` / `zenoh3` cluster, the consistent pattern is:
+
+```json5
+zenoh1: {
+  mode: "router",
+  listen: { endpoints: ["tls/0.0.0.0:7447"] },
+  connect: { endpoints: ["tls/zenoh2.efdi.ltu:7447", "tls/zenoh3.efdi.ltu:7447"] },
+  transport: { link: { tls: { root_ca_certificate: "/root/.zenoh/certs/efdi_ca.crt", listen_certificate: "/root/.zenoh/certs/zenoh1.pem", listen_private_key: "/root/.zenoh/certs/zenoh1.key", connect_certificate: "/root/.zenoh/certs/zenoh1.pem", connect_private_key: "/root/.zenoh/certs/zenoh1.key", enable_mtls: true, verify_name_on_connect: true } } },
+  plugins: { rest: { http_port: 8000 } },
+  plugins_loading: { enabled: true },
+  access_control: { enabled: true, default_permission: "allow", rules: [], subjects: [], policies: [] }
+}
+```
+
+```json5
+zenoh2: {
+  mode: "router",
+  listen: { endpoints: ["tls/0.0.0.0:7447"] },
+  connect: { endpoints: ["tls/zenoh1.efdi.ltu:7447", "tls/zenoh3.efdi.ltu:7447"] },
+  transport: { link: { tls: { root_ca_certificate: "/root/.zenoh/certs/efdi_ca.crt", listen_certificate: "/root/.zenoh/certs/zenoh2.pem", listen_private_key: "/root/.zenoh/certs/zenoh2.key", connect_certificate: "/root/.zenoh/certs/zenoh2.pem", connect_private_key: "/root/.zenoh/certs/zenoh2.key", enable_mtls: true, verify_name_on_connect: true } } },
+  plugins: { rest: { http_port: 8000 } },
+  plugins_loading: { enabled: true },
+  access_control: { enabled: true, default_permission: "allow", rules: [], subjects: [], policies: [] }
+}
+```
+
+```json5
+zenoh3: {
+  mode: "router",
+  listen: { endpoints: ["tls/0.0.0.0:7447"] },
+  connect: { endpoints: ["tls/zenoh1.efdi.ltu:7447", "tls/zenoh2.efdi.ltu:7447"] },
+  transport: { link: { tls: { root_ca_certificate: "/root/.zenoh/certs/efdi_ca.crt", listen_certificate: "/root/.zenoh/certs/zenoh3.pem", listen_private_key: "/root/.zenoh/certs/zenoh3.key", connect_certificate: "/root/.zenoh/certs/zenoh3.pem", connect_private_key: "/root/.zenoh/certs/zenoh3.key", enable_mtls: true, verify_name_on_connect: true } } },
+  plugins: { rest: { http_port: 8000 } },
+  plugins_loading: { enabled: true },
+  access_control: { enabled: true, default_permission: "allow", rules: [], subjects: [], policies: [] }
+}
+```
+
+If you want a fourth router to join that cluster, add its DNS name or IP to all three `connect.endpoints` lists and make sure the certificate SAN matches the name you dial.
 
 ### Isolated test router
 

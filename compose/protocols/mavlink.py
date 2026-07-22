@@ -31,6 +31,8 @@ import time
 import zenoh
 from zenoh_auth import apply_zenoh_auth
 from namespace_prefix import topic_root
+from protocols.mavlink_pb2 import MavlinkTrack
+from protocols.protobuf_codec import publish_dual
 
 ORG       = os.environ.get("PARTNER_NAMESPACE", "")
 TOPIC_ROOT = topic_root()
@@ -398,10 +400,7 @@ def _dispatch(msgs, vehicles: dict, remote_ids: dict, session: "zenoh.Session", 
             elif msgid == MSG_ODID_OPERATOR_ID:
                 rid.apply_operator_id(payload)
             if publish:
-                session.put(
-                    rid.topic(), json.dumps(rid.track).encode(),
-                    encoding=zenoh.Encoding.APPLICATION_JSON,
-                )
+                publish_dual(session, rid.topic(), rid.track, MavlinkTrack, zenoh)
                 if verbose:
                     print(
                         "Remote ID {} lat={} lon={}".format(
@@ -422,8 +421,7 @@ def _dispatch(msgs, vehicles: dict, remote_ids: dict, session: "zenoh.Session", 
         elif msgid == MSG_GLOBAL_POSITION:
             if v.apply_global_pos(payload):
                 topic = v.topic()
-                session.put(topic, json.dumps(v.track).encode(),
-                            encoding=zenoh.Encoding.APPLICATION_JSON)
+                publish_dual(session, topic, v.track, MavlinkTrack, zenoh)
                 if verbose:
                     t = v.track
                     print("MAV sysid={} {} lat={} lon={} alt={:.0f}m spd={:.1f}m/s".format(

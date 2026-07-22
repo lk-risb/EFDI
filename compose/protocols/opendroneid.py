@@ -29,6 +29,8 @@ import time
 import zenoh
 from zenoh_auth import apply_zenoh_auth
 from namespace_prefix import topic_root
+from protocols.opendroneid_pb2 import OpenDroneIdTrack
+from protocols.protobuf_codec import publish_dual
 
 
 MESSAGE_SIZE = 25
@@ -458,11 +460,7 @@ def _publish_track(session, track: dict) -> None:
     topic = "{}/air/opendroneid/astm-f3411/{}/uav/tracks/v1".format(
         TOPIC_ROOT, affiliation
     )
-    session.put(
-        topic,
-        json.dumps(track, separators=(",", ":")).encode(),
-        encoding=zenoh.Encoding.APPLICATION_JSON,
-    )
+    publish_dual(session, topic, track, OpenDroneIdTrack, zenoh)
 
 
 def make_handler(tracker: RemoteIDTracker, session, verbose: bool = False, lock=None):

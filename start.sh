@@ -23,6 +23,11 @@ if [[ -f "$ENV_FILE" ]]; then
     done < "$ENV_FILE"
 fi
 
+if [[ -z "${EFDI_CONTROL_TOKEN:-}" && -n "${ZENOH_ADMIN_SECRET_KEY:-}" ]]; then
+    EFDI_CONTROL_TOKEN="$(printf 'efdi-control-v1:%s' "$ZENOH_ADMIN_SECRET_KEY" | sha256sum | awk '{print $1}')"
+    export EFDI_CONTROL_TOKEN
+fi
+
 export ZENOH_LOCAL_ENDPOINT="${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}"
 # Exported (not just used to derive EFDI_CERT_DIR) so native Python bridges and
 # the containerized admin can share the same certificate location. Defaults
@@ -75,12 +80,11 @@ SERVICES=(
     admin-control
     cert-renewer
     airplaneslive adsblol aisstream aprs openmeteo meteolt
-    sitaware dronuradaras dji-cloud utm-ans asterix-udp track-fusion
-    asterix-cat10 asterix-cat20 asterix-cat21 asterix-cat34 asterix-cat48 asterix-cat62
-    link16 mavlink opendroneid vmf nffi sapient stanag4586
+    sitaware dronuradaras dji-cloud utm-ans asterix track-fusion
+    link16 mavlink opendroneid vmf nffi sapient stanag
     mavlink-raw link16-raw vmf-raw sapient-raw stanag4586-raw
     cap geojson ais-nmea spectrum sensor-health mission-route
-    cot-udp cot-udp-tak cot-bridge sitaware-hq-nvg
+    cot-udp cot-udp-tak cot-bridge tak-bridge sitaware-hq-nvg
 )
 
 # Restore only non-secret launcher choices. Explicit compose/.env values win;
@@ -101,7 +105,7 @@ load_launcher_state() {
                 REMEMBERED_SERVICES="$val"
                 ;;
             TAK_HOST|TAK_HOST_FALLBACK|TAK_UDP_HOST|TAK_UDP_HOST_FALLBACK|\
-            SITAWARE_URL|SITAWARE_URL_FALLBACK|\
+            SITAWARE_URL|SITAWARE_URL_FALLBACK|STANAG4609_SRT_URL|STANAG4609_SOURCE|\
             SAPIENT_HOST|STANAG4586_HOST)
                 if [[ -z "${!key:-}" ]]; then
                     printf -v "$key" '%s' "$val"
@@ -125,7 +129,7 @@ save_launcher_state() {
         printf '# EFDI launcher memory: selections and endpoint addresses only.\n'
         printf 'SELECTED_SERVICES=%s\n' "$selected"
         for key in TAK_HOST TAK_HOST_FALLBACK TAK_UDP_HOST TAK_UDP_HOST_FALLBACK \
-                   SITAWARE_URL SITAWARE_URL_FALLBACK \
+                   SITAWARE_URL SITAWARE_URL_FALLBACK STANAG4609_SRT_URL STANAG4609_SOURCE \
                    SAPIENT_HOST STANAG4586_HOST; do
             # A URL with user-info may contain credentials. Use it for this run,
             # but never copy it into persistent launcher memory.
@@ -146,15 +150,13 @@ declare -A SVC_CAT=(
     [aisstream]="Open-data bridges" [aprs]="Open-data bridges"
     [openmeteo]="Open-data bridges"
     [meteolt]="Open-data bridges"
-    [asterix-udp]="Sensor bridges"
-    [asterix-cat10]="Protocols" [asterix-cat20]="Protocols"
-    [asterix-cat21]="Protocols" [asterix-cat34]="Protocols"
-    [asterix-cat48]="Protocols" [asterix-cat62]="Protocols"
+    [asterix]="Sensor bridges"
     [link16]="Protocols" [mavlink]="Protocols" [vmf]="Protocols"
     [opendroneid]="Protocols" [nffi]="Protocols"
     [sitaware]="Sensor bridges" [dronuradaras]="Sensor bridges" [dji-cloud]="Sensor bridges"
     [utm-ans]="Open-data bridges"
-    [sapient]="Protocols" [stanag4586]="Protocols"
+    [sapient]="Protocols" [stanag]="Protocols"
+    [tak-bridge]="C2 inputs"
     [mavlink-raw]="Sensor bridges" [link16-raw]="Sensor bridges"
     [vmf-raw]="Sensor bridges" [sapient-raw]="Sensor bridges"
     [stanag4586-raw]="Sensor bridges"
@@ -175,13 +177,7 @@ declare -A SVC_DESC=(
     [aprs]="APRS-IS stations, vehicles, and vessels"
     [openmeteo]="Open-Meteo weather stations"
     [meteolt]="meteo.lt weather stations"
-    [asterix-udp]="Mixed ASTERIX UDP → raw category topics"
-    [asterix-cat10]="ASTERIX CAT-010 Ed.1.1 airport surface"
-    [asterix-cat20]="ASTERIX CAT-020 legacy MLAT profile"
-    [asterix-cat21]="ASTERIX CAT-021 legacy ADS-B profile"
-    [asterix-cat34]="ASTERIX CAT-034 Ed.1.29 radar service"
-    [asterix-cat48]="ASTERIX CAT-048 Ed.1.32 radar targets"
-    [asterix-cat62]="ASTERIX CAT-062 legacy system tracks"
+    [asterix]="ASTERIX family bundle: UDP ingress + CAT-010/020/021/034/048/062 translators"
     [link16]="Link-16 JREAP-C datalink"
     [mavlink]="MAVLink UAV telemetry"
     [opendroneid]="Raw Open Drone ID on Zenoh → normalized UAV tracks"
@@ -192,7 +188,7 @@ declare -A SVC_DESC=(
     [nffi]="Raw NFFI XML on Zenoh → normalized friendly-force tracks"
     [dronuradaras]="dronuradaras.lt drone detection network"
     [sapient]="SAPIENT / BSI Flex 335 sensor feed"
-    [stanag4586]="STANAG 4586 UAV feed"
+    [stanag]="STANAG family bundle: 4586 feed + 4609 SRT/KLV"
     [mavlink-raw]="MAVLink UDP/TCP → Zenoh raw"
     [link16-raw]="Link-16/JREAP-C UDP/TCP → Zenoh raw"
     [vmf-raw]="VMF UDP/TCP → Zenoh raw"
@@ -207,43 +203,26 @@ declare -A SVC_DESC=(
     [cot-udp]="CoT → ATAK UDP multicast 239.2.3.1:6969 (same LAN only)"
     [cot-udp-tak]="CoT → WinTAK/ATAK UDP unicast (crosses LAN/VPN)"
     [cot-bridge]="CoT → TAK Server TCP"
+    [tak-bridge]="TAK Server CoT ingress"
     [sitaware-hq-nvg]="EFDI tracks → SitaWare HQ pull feed (outbound NVG)"
     [track-fusion]="Radar/ADS-B track correlation"
 )
-
-asterix_category_uses_raw() {
-    local wanted="$1" item
-    [[ -n "${ASTERIX_PORT:-}" ]] || return 1
-    IFS=',' read -r -a _asterix_categories <<< "${ASTERIX_CATEGORIES:-34,48}"
-    for item in "${_asterix_categories[@]}"; do
-        item="${item//[[:space:]]/}"
-        [[ "$item" == "$wanted" ]] && return 0
-    done
-    return 1
-}
 
 # ── Ready check — 0=can start, 1=missing config ───────────────────────────
 svc_ready() {
     case "$1" in
         zenoh|airplaneslive|adsblol|aisstream|aprs|openmeteo|meteolt|\
-        dronuradaras|opendroneid|nffi|cot-udp|cot-udp-tak|cot-bridge|track-fusion|\
+        dronuradaras|opendroneid|nffi|cot-udp|cot-udp-tak|cot-bridge|tak-bridge|track-fusion|\
         cap|geojson|ais-nmea|spectrum|sensor-health|mission-route)
             return 0 ;;
         admin-control) [[ -n "${ZENOH_ADMIN_SECRET_KEY:-}" || -n "${EFDI_CONTROL_TOKEN:-}" ]] ;;
         cert-renewer)
             [[ -n "${EFDI_STEP_CA_URL:-}" &&
+               "${EFDI_STEP_CA_URL}" == https://* &&
                -f "${EFDI_STEP_RENEW_CERT_PATH:-${EFDI_CERT_DIR}/${PARTNER_NAMESPACE}-cert.pem}" &&
                -f "${EFDI_STEP_RENEW_KEY_PATH:-${EFDI_CERT_DIR}/${PARTNER_NAMESPACE}-key.pem}" ]]
             ;;
-        asterix-udp) [[ "${ASTERIX_PORT:-}" ]] ;;
-        asterix-cat10) asterix_category_uses_raw 10 || [[ "${CAT10_PORT:-}" ]] ;;
-        asterix-cat20) asterix_category_uses_raw 20 || [[ "${CAT20_PORT:-}" ]] ;;
-        asterix-cat21) asterix_category_uses_raw 21 || [[ "${CAT21_PORT:-}" ]] ;;
-        asterix-cat34) asterix_category_uses_raw 34 || [[ "${CAT34_PORT:-}" ]] ;;
-        asterix-cat48) asterix_category_uses_raw 48 || [[ "${CAT48_PORT:-}" ]] ;;
-        asterix-cat62)
-            asterix_category_uses_raw 62 ||
-                [[ "${CAT62_HOST:-${RADAR_HOST:-}}" || "${CAT62_UDP:-}" == "1" ]] ;;
+        asterix|stanag) return 0 ;;
         link16)   [[ "${LINK16_ZENOH_RAW:-}" == "1" || "${LINK16_PORT:-}" ]] ;;
         mavlink)  [[ "${MAVLINK_ZENOH_RAW:-}" == "1" || "${MAVLINK_PORT:-}" ]] ;;
         dji-cloud) [[ "${DJI_MQTT_HOST:-}" ]] ;;
@@ -255,6 +234,7 @@ svc_ready() {
         sapient-raw)  [[ "${SAPIENT_RAW_PORT:-}" ]] ;;
         stanag4586-raw) [[ "${STANAG4586_RAW_PORT:-}" ]] ;;
         sitaware)     return 0 ;;  # always ready; prompts for server IP at launch if unset
+        tak-bridge)   [[ "${TAK_HOST:-}" || "${TAK_HOST_FALLBACK:-}" ]] ;;
         sapient|stanag4586) return 0 ;;
         sitaware-hq-nvg) [[ "${SITAWARE_HQ_NVG_ENABLE:-}" == "1" ]] ;;
         *)        return 0 ;;
@@ -264,13 +244,7 @@ svc_ready() {
 # Short config note shown in status column when not ready
 svc_hint() {
     case "$1" in
-        asterix-udp) echo "ASTERIX_PORT not set" ;;
-        asterix-cat10) echo "CAT10_PORT not set" ;;
-        asterix-cat20) echo "CAT20_PORT not set" ;;
-        asterix-cat21) echo "CAT21_PORT not set" ;;
-        asterix-cat34) echo "CAT34_PORT not set" ;;
-        asterix-cat48) echo "CAT48_PORT not set" ;;
-        asterix-cat62) echo "CAT62_HOST/UDP not set" ;;
+        asterix) echo "ASTERIX family bundle" ;;
         link16)   echo "set LINK16_PORT or LINK16_ZENOH_RAW=1" ;;
         mavlink)  echo "set MAVLINK_PORT or MAVLINK_ZENOH_RAW=1" ;;
         dji-cloud) echo "DJI_MQTT_HOST not set" ;;
@@ -293,8 +267,7 @@ svc_hint() {
             else
                 echo "will prompt for address"
             fi ;;
-        stanag4586)
-            [[ "${STANAG4586_HOST:-}" ]] && echo "${STANAG4586_HOST}:${STANAG4586_PORT:-4586}" || echo "will prompt for address" ;;
+        stanag) echo "STANAG family bundle" ;;
         aisstream)
             [[ "${AISSTREAM_KEY:-}" ]] && echo "API key configured" || echo "will prompt for API key" ;;
         sitaware-hq-nvg)
@@ -309,7 +282,19 @@ svc_hint() {
             else
                 echo "will prompt for address"
             fi ;;
+        tak-bridge)
+            if [[ "${TAK_HOST:-}" ]]; then
+                [[ "${TAK_HOST_FALLBACK:-}" ]] && echo "${TAK_HOST}:${TAK_PORT:-8087} (+fallback)" || echo "${TAK_HOST}:${TAK_PORT:-8087}"
+            else
+                echo "will prompt for address"
+            fi ;;
         cot-bridge)
+            if [[ "${TAK_HOST:-}" ]]; then
+                [[ "${TAK_HOST_FALLBACK:-}" ]] && echo "${TAK_HOST}:${TAK_PORT:-8087} (+fallback)" || echo "${TAK_HOST}:${TAK_PORT:-8087}"
+            else
+                echo "will prompt for address"
+            fi ;;
+        tak-bridge)
             if [[ "${TAK_HOST:-}" ]]; then
                 [[ "${TAK_HOST_FALLBACK:-}" ]] && echo "${TAK_HOST}:${TAK_PORT:-8087} (+fallback)" || echo "${TAK_HOST}:${TAK_PORT:-8087}"
             else
@@ -346,10 +331,22 @@ is_bridge_pid() {
 }
 
 is_running() {
-    local f="$PID_DIR/$1.pid" pid
-    [[ -f "$f" ]] || return 1
-    IFS= read -r pid < "$f"
-    is_bridge_pid "$pid" "${2:-}"
+    local f="$PID_DIR/$1.pid" pid cmd live_pid
+    if [[ -f "$f" ]]; then
+        IFS= read -r pid < "$f"
+        if is_bridge_pid "$pid" "${2:-}"; then
+            return 0
+        fi
+    fi
+    cmd="${2:-}"
+    [[ -n "$cmd" ]] || return 1
+    while IFS= read -r live_pid; do
+        if is_bridge_pid "$live_pid" "$cmd"; then
+            printf '%s\n' "$live_pid" > "$f"
+            return 0
+        fi
+    done < <(pgrep -f "$cmd" 2>/dev/null || true)
+    return 1
 }
 
 # Prompt for a single server address (blank to skip). One flat network routed
@@ -464,6 +461,10 @@ launch() {
             renew_key="${EFDI_STEP_RENEW_KEY_PATH:-${EFDI_CERT_DIR}/${PARTNER_NAMESPACE}-key.pem}"
             renew_root="${EFDI_STEP_RENEW_ROOT_PATH:-${POD_STATE_DIR}/pki/step-ca/certs/root_ca.crt}"
             renew_url="$EFDI_STEP_CA_URL"
+            if [[ -z "$renew_url" || "$renew_url" != https://* ]]; then
+                printf "  ${YELLOW}[skip]${R}  cert-renewer requires an https:// EFDI_STEP_CA_URL\n"
+                return 1
+            fi
             export EFDI_STEP_RENEW_RUNTIME_CERT_PATH="${EFDI_STEP_RENEW_RUNTIME_CERT_PATH:-${POD_STATE_DIR}/zenoh/tls/pod-cert.pem}"
             if is_running "cert-renewer" "scripts/pki/renew-step-identities.sh"; then
                 printf "  ${DIM}[skip]${R}  %-16s already running (pid %s)\n" "cert-renewer" "$(cat "$PID_DIR/cert-renewer.pid")"
@@ -509,35 +510,8 @@ launch() {
             _start meteolt bridges/meteolt_forecast_bridge.py
             ;;
 
-        asterix-udp)
-            _start asterix-udp bridges/asterix_udp_bridge.py
-            ;;
-
-        asterix-cat10|asterix-cat20|asterix-cat21|asterix-cat34|asterix-cat48)
-            local cat_num="${name#asterix-cat}"
-            local port_var="CAT${cat_num}_PORT" tcp_var="CAT${cat_num}_TCP"
-            local ast_args=()
-            if asterix_category_uses_raw "$cat_num"; then
-                ast_args=(--zenoh-raw)
-            else
-                ast_args=(--port "${!port_var}")
-                [[ "${!tcp_var:-}" == "1" ]] && ast_args+=(--tcp)
-            fi
-            _start "$name" "protocols/asterix_cat${cat_num}.py" "${ast_args[@]}"
-            ;;
-
-        asterix-cat62)
-            if asterix_category_uses_raw 62; then
-                _start asterix-cat62 protocols/asterix_cat62.py --zenoh-raw
-            elif [[ "${CAT62_UDP:-}" == "1" ]]; then
-                _start asterix-cat62 protocols/asterix_cat62.py --udp --port "${CAT62_PORT:-50062}"
-            elif [[ "${CAT62_HOST:-${RADAR_HOST:-}}" ]]; then
-                _start asterix-cat62 protocols/asterix_cat62.py \
-                    --host "${CAT62_HOST:-${RADAR_HOST:-}}" \
-                    --port "${CAT62_PORT:-${RADAR_PORT:-50062}}"
-            else
-                _start asterix-cat62 protocols/asterix_cat62.py --zenoh-raw
-            fi
+        asterix)
+            _start asterix protocols/asterix.py
             ;;
 
         link16)
@@ -677,26 +651,8 @@ launch() {
             _start sapient protocols/sapient_flex335.py --host "$SAPIENT_HOST" --port "${SAPIENT_PORT:-7001}"
             ;;
 
-        stanag4586)
-            if [[ "${STANAG4586_ZENOH_RAW:-}" == "1" ]]; then
-                _start stanag4586 protocols/stanag4586.py --zenoh-raw --raw-topic "${STANAG4586_RAW_TOPIC:-}"
-                return
-            fi
-            if [[ -z "${STANAG4586_HOST:-}" ]]; then
-                if [[ "${EFDI_NONINTERACTIVE:-}" == "1" ]]; then
-                    _start stanag4586 protocols/stanag4586.py --zenoh-raw --raw-topic "${STANAG4586_RAW_TOPIC:-}"
-                    return
-                fi
-                local stanag_host
-                _prompt_address "STANAG 4586 source" stanag_host
-                if [[ -z "$stanag_host" ]]; then
-                    printf "  ${YELLOW}[skip]${R}  stanag4586        no address entered\n"
-                    return
-                fi
-                export STANAG4586_HOST="$stanag_host"
-            fi
-            _start stanag4586 protocols/stanag4586.py \
-                --host "$STANAG4586_HOST" --port "${STANAG4586_PORT:-4586}"
+        stanag)
+            _start stanag protocols/stanag.py
             ;;
 
         dronuradaras)
@@ -742,6 +698,26 @@ launch() {
                 tcp_args+=(--tls --cert "${TAK_CERT:-}" --key "${TAK_KEY:-}" --ca "${TAK_CA:-}")
             fi
             _start cot-bridge bridges/cot_bridge.py "${tcp_args[@]}"
+            ;;
+
+        tak-bridge)
+            local tak_ingest_host="${TAK_HOST:-}"
+            local tak_ingest_host2="${TAK_HOST_FALLBACK:-}"
+            if [[ -z "$tak_ingest_host" && -z "$tak_ingest_host2" ]]; then
+                _prompt_address "TAK Server CoT feed" tak_ingest_host
+                if [[ -z "$tak_ingest_host" ]]; then
+                    printf "  ${YELLOW}[skip]${R}  tak-bridge       no address entered\n"
+                    return
+                fi
+                export TAK_HOST="$tak_ingest_host"
+            fi
+            local tak_ingest_args=()
+            [[ -n "$tak_ingest_host"  ]] && tak_ingest_args+=(--host "$tak_ingest_host")
+            [[ -n "$tak_ingest_host2" ]] && tak_ingest_args+=(--host "$tak_ingest_host2")
+            if [[ "${TAK_TLS:-}" == "1" ]]; then
+                tak_ingest_args+=(--tls --cert "${TAK_CERT:-}" --key "${TAK_KEY:-}" --ca "${TAK_CA:-}")
+            fi
+            _start tak-bridge bridges/tak_bridge.py "${tak_ingest_args[@]}"
             ;;
 
         sitaware-hq-nvg)
@@ -811,11 +787,8 @@ for svc in "${SERVICES[@]}"; do
     fi
 done
 if (( restored == 0 )); then
-    for svc in zenoh admin-control cot-udp cot-bridge track-fusion; do sel[$svc]=1; done
-    svc_ready asterix-udp && sel[asterix-udp]=1 || true
-    for svc in asterix-cat10 asterix-cat20 asterix-cat21 \
-               asterix-cat34 asterix-cat48 asterix-cat62; do
-        svc_ready "$svc" && sel[$svc]=1 || true
+    for svc in zenoh admin-control cot-udp cot-bridge track-fusion asterix stanag; do
+        sel[$svc]=1
     done
 fi
 # The web UI's native-process control plane is always kept selected so an old

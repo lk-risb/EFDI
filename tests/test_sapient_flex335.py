@@ -15,10 +15,16 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, os.fspath(ROOT / "compose" / "protocols"))
 sys.path.insert(0, os.fspath(ROOT / "compose"))
 
+import json  # noqa: E402
+
+import zenoh  # noqa: E402
+
 from sapient_flex335 import (  # noqa: E402
     SapientDecoder,
+    _publish,
     iter_frames,
     registration_ack,
+    topic_for_frame,
     topic_for_track,
 )
 
@@ -209,6 +215,58 @@ class SapientFramingTests(unittest.TestCase):
     def test_rejects_truncated_protobuf(self):
         with self.assertRaisesRegex(ValueError, "truncated"):
             SapientDecoder().decode(b"\x3a\x05abc")
+
+
+class RecordingSession:
+    """Minimal stand-in for a Zenoh session that records published samples."""
+
+    def __init__(self):
+        self.puts = []
+
+    def put(self, topic, payload, encoding=None):
+        self.puts.append((topic, payload, encoding))
+
+
+class NativeProtobufEgressTests(unittest.TestCase):
+    """Fabric egress must carry the original BSI Flex 335 v2 bytes, with the
+    flattened JSON view published alongside during the transition."""
+
+    def test_topic_for_frame_pairs_v1_with_v2(self):
+        self.assertEqual(topic_for_frame("root/air/tracks/v1"), "root/air/tracks/v2")
+        self.assertEqual(
+            topic_for_frame("root/land/sapient/flex335/neutral/sensor/status/v1"),
+            "root/land/sapient/flex335/neutral/sensor/status/v2",
+        )
+        # No /v1 suffix to swap — still gets a distinct protobuf topic.
+        self.assertEqual(topic_for_frame("root/other"), "root/other/v2")
+
+    def test_publish_emits_json_and_verbatim_protobuf(self):
+        detection = b"".join(
+            (
+                field_text(1, "01HREPORT"),
+                field_text(2, "01HOBJECT"),
+                field_bytes(6, location(54.6872, 25.2797, 145.0)),
+                field_float(7, 0.97),
+                field_text(23, "RID-DRONE-7"),
+            )
+        )
+        frame = envelope(7, detection)
+        session = RecordingSession()
+        _publish(session, SapientDecoder(), frame, verbose=False)
+
+        self.assertEqual(len(session.puts), 2)
+        (json_topic, json_payload, json_encoding), (pb_topic, pb_payload, pb_encoding) = session.puts
+
+        self.assertTrue(json_topic.endswith("/v1"))
+        self.assertEqual(pb_topic, topic_for_frame(json_topic))
+
+        # The protobuf sample is the untouched SapientMessage — no re-encode,
+        # so nothing the decoder does not model can be lost on the way out.
+        self.assertEqual(pb_payload, frame)
+        json.loads(json_payload.decode("utf-8"))
+
+        self.assertEqual(json_encoding, zenoh.Encoding.APPLICATION_JSON)
+        self.assertEqual(pb_encoding, zenoh.Encoding.APPLICATION_PROTOBUF)
 
 
 if __name__ == "__main__":

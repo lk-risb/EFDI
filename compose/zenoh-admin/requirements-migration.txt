@@ -1,0 +1,2 @@
+# Used only by the one-time PostgreSQL-to-MariaDB import image target.
+asyncpg==0.29.0

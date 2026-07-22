@@ -23,6 +23,8 @@ import defusedxml.ElementTree as ET
 import zenoh
 from zenoh_auth import apply_zenoh_auth
 from namespace_prefix import topic_root
+from protocols.nffi_pb2 import NffiTrack
+from protocols.protobuf_codec import publish_dual
 
 ORG       = os.environ.get("PARTNER_NAMESPACE", "")
 TOPIC_ROOT = topic_root()
@@ -180,10 +182,7 @@ def make_handler(publisher, verbose: bool = False):
                 print("NFFI ignored invalid payload size from", sample.key_expr, flush=True)
             return
         for track in parse_nffi(xml_bytes):
-            publisher.put(
-                json.dumps(track, separators=(",", ":")).encode(),
-                encoding=zenoh.Encoding.APPLICATION_JSON,
-            )
+            publish_dual(publisher, OUTPUT_TOPIC, track, NffiTrack, zenoh)
             if verbose:
                 print(
                     "NFFI {} {} lat={} lon={}".format(

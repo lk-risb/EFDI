@@ -12,7 +12,9 @@ import time
 import zenoh
 
 from namespace_prefix import prefix
-from translation_common import TOPIC_ROOT, make_config, payload_json, put_json
+from protocols.protobuf_codec import publish_dual
+from protocols.spectrum_observation_pb2 import SpectrumObservation
+from translation_common import TOPIC_ROOT, make_config, payload_json
 
 
 INPUT_TOPIC = os.environ.get("SPECTRUM_INPUT_TOPIC") or TOPIC_ROOT + "/raw/spectrum/**"
@@ -80,7 +82,7 @@ def run() -> None:
             for item in values:
                 record = normalize(item)
                 if record:
-                    put_json(publisher, record)
+                    publish_dual(publisher, OUTPUT_TOPIC, record, SpectrumObservation, zenoh)
         except Exception as exc:
             print("spectrum decode error:", exc, flush=True)
 
