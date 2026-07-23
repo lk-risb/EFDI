@@ -20,6 +20,7 @@ jobs:
           PARTNER_NAMESPACE: ci-root
           ZENOH_ADMIN_DB_USER: admin
           ZENOH_ADMIN_DB_PASSWORD: admin-password
+          ZENOH_ADMIN_DB_ROOT_PASSWORD: admin-root-password
           ZENOH_ADMIN_SECRET_KEY: ci-secret
           ZENOH_ADMIN_FIRST_USER: admin
           ZENOH_ADMIN_FIRST_PASS: admin-password
@@ -27,6 +28,7 @@ jobs:
           PARTNER_NAMESPACE_CHILD: ci-child
           ZENOH_ADMIN_DB_USER_CHILD: child
           ZENOH_ADMIN_DB_PASSWORD_CHILD: child-password
+          ZENOH_ADMIN_DB_ROOT_PASSWORD_CHILD: child-root-password
           ZENOH_ADMIN_SECRET_KEY_CHILD: child-secret
           ZENOH_ADMIN_FIRST_USER_CHILD: admin
           ZENOH_ADMIN_FIRST_PASS_CHILD: child-password
@@ -37,6 +39,7 @@ jobs:
           PARTNER_NAMESPACE_GRANDCHILD: ci-grandchild
           ZENOH_ADMIN_DB_USER_GRANDCHILD: grandchild
           ZENOH_ADMIN_DB_PASSWORD_GRANDCHILD: grandchild-password
+          ZENOH_ADMIN_DB_ROOT_PASSWORD_GRANDCHILD: grandchild-root-password
           ZENOH_ADMIN_SECRET_KEY_GRANDCHILD: grandchild-secret
           ZENOH_ADMIN_FIRST_USER_GRANDCHILD: admin
           ZENOH_ADMIN_FIRST_PASS_GRANDCHILD: grandchild-password

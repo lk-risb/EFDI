@@ -5,7 +5,17 @@ ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 PYTHON=${EFDI_PROTOC_PYTHON:-"$ROOT/compose/venv/bin/python3"}
 OUTPUT=${EFDI_PROTOBUF_OUTPUT:-"$ROOT/compose/generated"}
 
-[[ -x "$PYTHON" ]] || { echo "Python environment not found: $PYTHON" >&2; exit 1; }
+if [[ "$PYTHON" == */* ]]; then
+    [[ -x "$PYTHON" ]] || {
+        echo "Python environment not found: $PYTHON" >&2
+        exit 1
+    }
+else
+    PYTHON=$(command -v "$PYTHON") || {
+        echo "Python environment not found on PATH: $PYTHON" >&2
+        exit 1
+    }
+fi
 "$PYTHON" -c 'import grpc_tools.protoc, google.protobuf' 2>/dev/null || {
     echo "grpcio-tools and protobuf are required; install compose/requirements.txt" >&2
     exit 1
