@@ -19,6 +19,10 @@ import json  # noqa: E402
 
 import zenoh  # noqa: E402
 
+from protocols.protobuf_codec import dual_topic, native_topic  # noqa: E402
+from protocols.random.raw_envelope_pb2 import RawEnvelope  # noqa: E402
+from protocols.vendors.sapient.flex335_pb2 import SapientFlex335Track  # noqa: E402
+
 from protocols.vendors.sapient.flex335 import (  # noqa: E402
     SapientDecoder,
     _publish,
@@ -139,7 +143,7 @@ class SapientDecoderTests(unittest.TestCase):
         self.assertNotIn("centre_frequency_hz", event.track["sapient_signals"][0])
         self.assertEqual(
             topic_for_track("LTU/CISB/partner", event.track),
-            "LTU/CISB/partner/air/sapient/flex335/unknown/uav/tracks/v1",
+            "LTU/CISB/partner/air/sapient/acoustic/unknown/uav",
         )
 
     def test_velocity_without_registered_units_is_not_mislabeled_as_metres_per_second(self):
@@ -182,7 +186,7 @@ class SapientDecoderTests(unittest.TestCase):
         self.assertEqual(status_event.track["sensor_status"], "ok")
         self.assertEqual(
             topic_for_track("root/pod", status_event.track),
-            "root/pod/land/sapient/flex335/neutral/sensor/status/v1",
+            "root/pod/land/sapient/acoustic/neutral/sensor",
         )
 
         range_bearing = (
@@ -267,16 +271,14 @@ class NativeProtobufEgressTests(unittest.TestCase):
     """Fabric egress must carry the original BSI Flex 335 v2 bytes, with the
     flattened JSON view published alongside during the transition."""
 
-    def test_topic_for_frame_pairs_v1_with_v2(self):
-        self.assertEqual(topic_for_frame("root/air/tracks/v1"), "root/air/tracks/v2")
-        self.assertEqual(
-            topic_for_frame("root/land/sapient/flex335/neutral/sensor/status/v1"),
-            "root/land/sapient/flex335/neutral/sensor/status/v2",
-        )
+    def test_topic_for_frame_delegates_to_native(self):
+        self.assertEqual(topic_for_frame("root/air/x/id/json"), "root/air/x/id/raw")
         # No /v1 suffix to swap — still gets a distinct protobuf topic.
-        self.assertEqual(topic_for_frame("root/other"), "root/other/v2")
+        self.assertEqual(topic_for_frame("root/other"), "root/other/raw")
 
-    def test_publish_emits_json_and_verbatim_protobuf(self):
+    def test_publish_emits_all_three_tiers(self):
+        """SAPIENT follows the same tier contract as every other protocol:
+        /v1 JSON, /v2 typed EFDI message, /native the original wire bytes."""
         detection = b"".join(
             (
                 field_text(1, "01HREPORT"),
@@ -290,19 +292,36 @@ class NativeProtobufEgressTests(unittest.TestCase):
         session = RecordingSession()
         _publish(session, SapientDecoder(), frame, verbose=False)
 
-        self.assertEqual(len(session.puts), 2)
-        (json_topic, json_payload, json_encoding), (pb_topic, pb_payload, pb_encoding) = session.puts
+        # /v1 JSON, /v2 typed, /native verbatim, plus the SAPIENT interop
+        # tier that every protocol now emits.
+        by_topic = {topic: (payload, encoding) for topic, payload, encoding in session.puts}
+        self.assertGreaterEqual(len(by_topic), 3)
+        json_topic = next(t for t in by_topic if t.endswith("/json"))
 
-        self.assertTrue(json_topic.endswith("/v1"))
-        self.assertEqual(pb_topic, topic_for_frame(json_topic))
-
-        # The protobuf sample is the untouched SapientMessage — no re-encode,
-        # so nothing the decoder does not model can be lost on the way out.
-        self.assertEqual(pb_payload, frame)
-        json.loads(json_payload.decode("utf-8"))
-
+        json_payload, json_encoding = by_topic[json_topic]
         self.assertEqual(json_encoding, zenoh.Encoding.APPLICATION_JSON)
-        self.assertEqual(pb_encoding, zenoh.Encoding.APPLICATION_PROTOBUF)
+        self.assertAlmostEqual(
+            json.loads(json_payload.decode("utf-8"))["lat_deg"], 54.6872, places=4
+        )
+
+        # /v2 — typed EFDI contract, not the raw frame.
+        typed_payload, typed_encoding = by_topic[dual_topic(json_topic)]
+        self.assertEqual(typed_encoding, zenoh.Encoding.APPLICATION_PROTOBUF)
+        typed = SapientFlex335Track()
+        typed.ParseFromString(typed_payload)
+        self.assertAlmostEqual(typed.track.lat_deg, 54.6872, places=4)
+
+        # /native — the untouched SapientMessage, so nothing the decoder does
+        # not model is lost on the way out.
+        raw_key = next((k for k in by_topic if k.endswith("/raw")), None)
+        self.assertIsNotNone(raw_key, f"no /raw view in {sorted(by_topic)}")
+        native_payload, native_encoding = by_topic[raw_key]
+        self.assertEqual(native_encoding, zenoh.Encoding.APPLICATION_PROTOBUF)
+        envelope_message = RawEnvelope()
+        envelope_message.ParseFromString(native_payload)
+        self.assertEqual(envelope_message.payload, frame)
+        self.assertEqual(envelope_message.protocol, "sapient")
+        self.assertEqual(envelope_message.profile, "bsi-flex-335-v2")
 
 
 if __name__ == "__main__":

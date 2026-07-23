@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""asterix_relay.py — Forward ASTERIX UDP from radar to moon-pod.
+"""asterix_relay.py — Forward ASTERIX UDP from a radar to an EFDI pod.
 
 Run this on the PC connected to the Giraffe radar (must be on NetBird mesh).
 
 It listens for ASTERIX UDP packets from the radar on LOCAL_PORT,
-and forwards each packet unchanged to the moon-pod at DEST_IP:DEST_PORT.
+and forwards each packet unchanged to the EFDI pod at DEST_IP:DEST_PORT.
 
 Usage:
     python3 asterix_relay.py
@@ -20,17 +20,17 @@ import argparse
 import socket
 
 LOCAL_PORT = 30002          # port the Giraffe sends ASTERIX to on this PC
-DEST_IP    = ""             # moon-pod NetBird IP — set via --dest IP:PORT
-DEST_PORT  = 30048          # ASTERIX CAT-48 listening port on moon-pod
+DEST_IP    = ""             # EFDI pod NetBird IP — set via --dest IP:PORT
+DEST_PORT  = 30048          # ASTERIX CAT-48 listening port on the EFDI pod
 
 
 def main():
-    ap = argparse.ArgumentParser(description="ASTERIX UDP relay → moon-pod")
+    ap = argparse.ArgumentParser(description="ASTERIX UDP relay → EFDI pod")
     ap.add_argument("--local-port", type=int, default=LOCAL_PORT,
                     help="Local UDP port the radar sends to (default: {})".format(LOCAL_PORT))
     ap.add_argument("--dest", required=not DEST_IP,
                     default="{}:{}".format(DEST_IP, DEST_PORT) if DEST_IP else None,
-                    help="moon-pod address IP:PORT (NetBird mesh IP of the pod)")
+                    help="EFDI pod address IP:PORT (NetBird mesh IP of the pod)")
     args = ap.parse_args()
 
     dest_ip, dest_port = args.dest.rsplit(":", 1)

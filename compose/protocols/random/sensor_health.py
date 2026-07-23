@@ -15,7 +15,7 @@ from translation_common import TOPIC_ROOT, make_config, payload_json
 
 
 INPUT_TOPIC = os.environ.get("SENSOR_HEALTH_INPUT_TOPIC") or TOPIC_ROOT + "/raw/health/**"
-OUTPUT_TOPIC = TOPIC_ROOT + "/land/health/neutral/station/status/v1"
+OUTPUT_TOPIC = TOPIC_ROOT + "/land/health/unknown/neutral/station"
 
 
 def normalize(value: dict, now: float | None = None) -> dict | None:

@@ -68,10 +68,13 @@ class NffiProtocolTests(unittest.TestCase):
         session = Session()
         make_handler(session)(Sample(NFFI_DOCUMENT))
 
-        self.assertEqual(len(session.publications), 2)
-        topic, payload, kwargs = session.publications[0]
+        # JSON /v1 + per-protocol /v2 + SAPIENT /sapient
+        self.assertGreaterEqual(len(session.publications), 2)
+        topic, payload, kwargs = next(
+            x for x in session.publications if x[0].endswith("/json")
+        )
         track = json.loads(payload)
-        self.assertEqual(topic, OUTPUT_TOPIC)
+        self.assertTrue(topic.startswith(OUTPUT_TOPIC))
         self.assertEqual(track["_src"], "nffi")
         self.assertEqual(track["callsign"], "ALPHA 17")
         self.assertIn("encoding", kwargs)

@@ -17,15 +17,15 @@ Option B — mutual TLS directly on official TAK Server port 8089:
 For direct UDP multicast (same L2 only): --udp --host 239.2.3.1 --port 6969
 
 Zenoh topics consumed (5 main categories):
-  AIR:   <ORG>/air/civ/tracks/v1    → CoT a-f-A-C-F / a-h-A-C-F (civil, hostile if RU/BY)
-         <ORG>/air/mil/tracks/v1    → CoT a-n-A-M-F / a-h-A-M-F (military, hostile if RU/BY)
-         <ORG>/air/radar/tracks/v1  → CoT a-u-A     (radar return, unidentified)
-         <ORG>/air/sapient/tracks/v1→ CoT a-u-A     (SAPIENT sensor track)
-  LAND:  <ORG>/land/civ/tracks/v1   → CoT a-f-G-E-V-C (friendly ground vehicle)
-         <ORG>/land/aprs/tracks/v1  → CoT a-n-G-I   (APRS stations / digipeaters / wx)
-         <ORG>/land/nffi/tracks/v1  → CoT a-f-G-U-C (NATO NFFI friendly forces)
-  SEA:   <ORG>/sea/civ/tracks/v1    → CoT a-f-S-X-L / a-h-S-X-L (hostile if RU/BY MMSI)
-  SPACE: <ORG>/space/tracks/v1      → CoT a-f-P     (satellite)
+  AIR:   <ORG>/air/civ/json/tracks    → CoT a-f-A-C-F / a-h-A-C-F (civil, hostile if RU/BY)
+         <ORG>/air/mil/json/tracks    → CoT a-n-A-M-F / a-h-A-M-F (military, hostile if RU/BY)
+         <ORG>/air/radar/json/tracks  → CoT a-u-A     (radar return, unidentified)
+         <ORG>/air/sapient/fused/json/tracks→ CoT a-u-A     (SAPIENT sensor track)
+  LAND:  <ORG>/land/civ/json/tracks   → CoT a-f-G-E-V-C (friendly ground vehicle)
+         <ORG>/land/aprs/json/tracks  → CoT a-n-G-I   (APRS stations / digipeaters / wx)
+         <ORG>/land/nffi/json/tracks  → CoT a-f-G-U-C (NATO NFFI friendly forces)
+  SEA:   <ORG>/sea/civ/json/tracks    → CoT a-f-S-X-L / a-h-S-X-L (hostile if RU/BY MMSI)
+  SPACE: <ORG>/space/json/tracks      → CoT a-f-P     (satellite)
 
 Run:
     venv/bin/python3 cot_layer.py                                          # TCP plaintext → localhost:8087
@@ -184,19 +184,21 @@ def _sensor_alert_cot_type(track: dict) -> str:
 # ADS-B relay sources: identity-only enrichment inputs, blocked until fused.
 _ADS_B_RELAY_SOURCES = frozenset({"adsblol", "airplaneslive"})
 # Raw sensor sources: kinematics are good but no identity; fusion adds REG/ICAO/SQWK.
-# Blocked here because fusion ALWAYS re-publishes every radar track to air/fused/**,
-# so every contact still appears — just once, with merged data.
+# Blocked here because fusion ALWAYS re-publishes every radar track to
+# air/trackfusion/fused/**, so every contact still appears — just once, with
+# merged data.
 _RAW_SENSOR_SOURCES = frozenset({"ASTERIX CAT-48", "ASTERIX CAT-20"})
 
-# Schema: {category}/{vendor}/{protocol}/{affiliation}/{entity_type}/{data_type}/v1
-# Wildcards: ** matches zero-or-more segments, so air/**/civ/aircraft/** catches any
-# vendor+protocol combination under civil air.
-# NOTE: air/fused/** is caught by the broad air/** wildcards below — no separate
-# fused entries needed. The broad wildcards also catch SAPIENT and Link-16.
-# that don't go through the radar fusion path.
+# Schema: {domain}/{source}/{modality}/{affiliation}/{entity}/{type}/{id}/{view}
+# Wildcards: ** matches zero-or-more segments, so air/**/civ/aircraft/** catches
+# any source+modality combination under civil air, and absorbs the trailing
+# {type}/{id}/{view} without naming them.
+# NOTE: air/trackfusion/fused/** is caught by the broad air/** wildcards below —
+# no separate fused entries needed. They also catch SAPIENT and Link-16, which
+# do not go through the radar fusion path.
 _TOPIC_COT = {
     # AIR — affiliation slot drives CoT type; ICAO24 classifier overrides for RU/BY
-    # Covers fused tracks (air/fused/**) + SAPIENT + Link-16.
+    # Covers fused tracks (air/trackfusion/fused/**) + SAPIENT + Link-16.
     # Raw CAT-48 / CAT-20 are dropped by _RAW_SENSOR_SOURCES check in make_handler.
     "air/**/civ/aircraft/**":    (_civ_air_type,  AIR_STALE_S),
     "air/**/mil/aircraft/**":    (_mil_air_type,  AIR_STALE_S),
@@ -1762,7 +1764,9 @@ def run(args):
         print("SUB {} → {} stale={}s".format(key, fn, stale_s), flush=True)
 
     # Radar sensor site status (CAT-34) — updates _radar_status dict + renders CoT marker
-    radar_key = "{}/land/asterix/cat34/neutral/radar/**".format(TOPIC_ROOT)
+    # The source segment is a wildcard: a radar names itself by SAC/SIC, so its
+    # topic is only known once a record has been decoded.
+    radar_key = "{}/land/*/radar/neutral/radar/**".format(TOPIC_ROOT)
     subs.append(session.declare_subscriber(radar_key,
                 make_radar_status_handler(sender, args.verbose)))
     print("SUB {} → [radar sensor sites]".format(radar_key), flush=True)

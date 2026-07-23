@@ -1,4 +1,4 @@
-# efdi-moon-pod examples
+# EFDI examples
 
 Runnable reference snippets for producers on the EFDI data fabric. Illustrative,
 not production — adapt them. The canonical contracts live in the design docs;

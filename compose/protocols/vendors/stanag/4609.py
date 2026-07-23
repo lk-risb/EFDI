@@ -37,7 +37,7 @@ from urllib.parse import urlsplit
 import zenoh
 
 from namespace_prefix import topic_root
-from protocols.protobuf_codec import dual_topic, wrapped_track_message
+from protocols.protobuf_codec import dual_topic, native_topic, publish_native, wrapped_track_message
 from zenoh_auth import apply_zenoh_auth
 
 Stanag4609Track = import_module("protocols.vendors.stanag.4609_pb2").Stanag4609Track
@@ -58,7 +58,7 @@ _STREAM_ID = hashlib.sha1(_SRT_URL.encode("utf-8")).hexdigest()[:10] if _SRT_URL
 KLV_PREFIX = b"\x06\x0E\x2B\x34"
 ST0601_LOCAL_SET_KEY = bytes.fromhex("060e2b34020b01010e01030101000000")
 RAW_TOPIC = "{}/raw/stanag4609/klv".format(TOPIC_ROOT)
-TRACK_TOPIC = "{}/air/stanag4609/unknown/uav/tracks/v1".format(TOPIC_ROOT)
+TRACK_TOPIC = "{}/air/stanag4609/camera/unknown/uav".format(TOPIC_ROOT)
 
 # Backward-compatible internal aliases used by the existing implementation.
 _SOURCE = SOURCE
@@ -403,6 +403,12 @@ def publish_packet(session: "zenoh.Session", packet_index: int, key: bytes, valu
             message.SerializeToString(),
             encoding=zenoh.Encoding.APPLICATION_PROTOBUF,
         )
+    else:
+        # KLV that carried no usable position still reaches protobuf consumers:
+        # the original packet rides a RawEnvelope on the /native sibling, so no
+        # sample is available as JSON only.
+        publish_native(session, native_topic(topic), raw_packet, "stanag4609",
+                       zenoh, profile="misb-st0601")
     if verbose:
         print("STANAG4609 PUB {} {} key={} len={}".format(
             topic.split("/")[-4],

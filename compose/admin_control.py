@@ -121,6 +121,64 @@ SERVICE_SPECS = [
 ]
 SERVICE_NAMES = {name for name, _, _ in SERVICE_SPECS}
 
+# Which file backs each service. Surfaced in the UI so a service name is never
+# ambiguous: `_bridge.py` under bridges/ owns an external connection, a module
+# under protocols/ decodes an already-published wire format, and layers/ writes
+# out to a C2 system. Several services share one script with different
+# arguments (cot_layer.py is both cot-udp and cot-udp-tak), which is exactly the
+# case the name alone cannot express.
+SERVICE_SOURCES = {
+    "zenoh": "(container) efdi-pod-zenoh-router",
+    "admin-control": "admin_control.py",
+    "cert-renewer": "(managed) step-ca certificate renewal",
+    "airplaneslive": "bridges/airplaneslive_adsb_bridge.py",
+    "adsblol": "bridges/adsblol_bridge.py",
+    "aisstream": "bridges/aisstream_ws_bridge.py",
+    "aprs": "bridges/aprsis_bridge.py",
+    "openmeteo": "bridges/openmeteo_forecast_bridge.py",
+    "meteolt": "bridges/meteolt_forecast_bridge.py",
+    "dronuradaras": "bridges/dronuradaras_bridge.py",
+    "dji-cloud": "bridges/dji_cloud_api_bridge.py",
+    "utm-ans": "bridges/utm_ans_bridge.py",
+    "asterix": "protocols/vendors/asterix/cat.py",
+    "track-fusion": "bridges/track_fusion_bridge.py",
+    "link16": "protocols/random/link16.py",
+    "mavlink": "protocols/random/mavlink.py",
+    "opendroneid": "protocols/random/opendroneid.py",
+    "vmf": "protocols/random/vmf.py",
+    "nffi": "protocols/random/nffi.py",
+    "sapient": "protocols/vendors/sapient/flex335.py",
+    "stanag": "protocols/vendors/stanag/ (4586 + 4609 bundle)",
+    "cap": "protocols/random/cap.py",
+    "geojson": "protocols/random/geojson_features.py",
+    "ais-nmea": "protocols/random/ais_nmea.py",
+    "spectrum": "protocols/random/spectrum_observation.py",
+    "sensor-health": "protocols/random/sensor_health.py",
+    "mission-route": "protocols/random/mission_route.py",
+    "mavlink-raw": "bridges/mavlink_raw_bridge.py",
+    "link16-raw": "bridges/link16_jreap_bridge.py",
+    "vmf-raw": "bridges/vmf_bridge.py",
+    "sapient-raw": "bridges/sapient_flex335_bridge.py",
+    "stanag4586-raw": "bridges/stanag4586_bridge.py",
+    "cot-udp": "layers/cot_layer.py",
+    "cot-udp-tak": "layers/cot_layer.py",
+    "cot-bridge": "bridges/cot_bridge.py",
+    "tak-bridge": "bridges/tak_bridge.py",
+    "sitaware": "bridges/sitaware_bridge.py",
+    "sitaware-hq-nvg": "bridges/nvg_bridge.py",
+}
+
+
+def _service_kind(source: str) -> str:
+    """One-word role derived from where the file lives."""
+    if source.startswith("bridges/"):
+        return "bridge"
+    if source.startswith("protocols/"):
+        return "protocol"
+    if source.startswith("layers/"):
+        return "layer"
+    return "infrastructure"
+
 _SERVICE_REQUIRED_KEYS = {
     "aisstream": ("AISSTREAM_KEY",),
     "sitaware": ("SITAWARE_URL", "SITAWARE_API_PATH"),
@@ -810,7 +868,13 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         if path == "/v1/catalog":
             self._json(200, {"services": [
-                {"name": name, "group": group, "description": description}
+                {
+                    "name": name,
+                    "group": group,
+                    "description": description,
+                    "source": SERVICE_SOURCES.get(name, ""),
+                    "kind": _service_kind(SERVICE_SOURCES.get(name, "")),
+                }
                 for name, group, description in SERVICE_SPECS
             ]})
             return

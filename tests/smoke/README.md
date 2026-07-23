@@ -1,4 +1,4 @@
-# moon-pod — bidirectional smoke test
+# EFDI — bidirectional smoke test
 
 Proves the v0 core: data moves **both directions** securely through the pod.
 

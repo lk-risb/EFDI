@@ -10,8 +10,8 @@ Default coverage: worldwide (all oceans/seas). Narrow with --bbox if needed.
 Free-tier note: aisstream.io free plan is rate-limited; worldwide gives high
 volume — expect hundreds of messages per second during busy periods.
 
-Zenoh topic:  <ORG>/ais/aisstream/tracks/v1
-Proto schema: ais_track.proto  (message AisTrack, package ltu.cis.tracks.v1)
+Zenoh topic:  <ORG>/ais/aisstream/json/tracks
+Proto schema: ais_track.proto  (message AisTrack, package efdi.data.v2)
 
 Run:
     AISSTREAM_KEY=<key> venv/bin/python3 ais_bridge.py
@@ -298,7 +298,7 @@ def normalize(msg: dict) -> dict | None:
 # ---------------------------------------------------------------------------
 
 def run(args):
-    topic = "{}/sea/aisstream/ais/civ/vessel/tracks/v1".format(TOPIC_ROOT)
+    topic = "{}/sea/aisstream/ais/civ/vessel".format(TOPIC_ROOT)
     print("Zenoh topic:", topic, flush=True)
     print("AIS bounding box:", args.bbox, flush=True)
 

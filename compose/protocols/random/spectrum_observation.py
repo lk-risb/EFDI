@@ -18,7 +18,7 @@ from translation_common import TOPIC_ROOT, make_config, payload_json
 
 
 INPUT_TOPIC = os.environ.get("SPECTRUM_INPUT_TOPIC") or TOPIC_ROOT + "/raw/spectrum/**"
-OUTPUT_TOPIC = TOPIC_ROOT + "/land/spectrum/neutral/sensor/observations/v1"
+OUTPUT_TOPIC = TOPIC_ROOT + "/land/spectrum/passive_rf/neutral/sensor"
 
 
 def _number(value):

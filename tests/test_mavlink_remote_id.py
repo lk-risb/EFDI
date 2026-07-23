@@ -91,14 +91,17 @@ class MAVLinkRemoteIDTests(unittest.TestCase):
         session = FakeSession()
         remote_ids = {}
         mav._dispatch(messages, {}, remote_ids, session, False)
-        # Dual publish: JSON on /v1 plus the protobuf sibling on /v2.
-        self.assertEqual(len(session.messages), 2)
-        topic, payload, _ = session.messages[0]
-        pb_topic, pb_payload, _ = session.messages[1]
-        self.assertEqual(pb_topic, topic[: -len("/v1")] + "/v2")
-        self.assertGreater(len(pb_payload), 0)
+        # Tiered publish: JSON on /v1, per-protocol protobuf on /v2, and the
+        # SAPIENT interop view on /sapient.
+        by_topic = {topic: payload for topic, payload, _e in session.messages}
+        topic = next(t for t in by_topic if t.endswith("/json"))
+        payload = by_topic[topic]
+        base = topic
+        self.assertIn(topic[: -len("/json")] + "/proto", by_topic)
+        self.assertIn(topic[: -len("/json")] + "/sapient", by_topic)
+        self.assertGreater(len(by_topic[topic[: -len("/json")] + "/proto"]), 0)
         track = __import__("json").loads(payload)
-        self.assertTrue(topic.endswith("/air/mavlink/remote-id/unknown/uav/tracks/v1"))
+        self.assertIn("/air/mavlink/telemetry/unknown/uav/", topic)  # {type}/{id} follow
         self.assertEqual(track["callsign"], "LT-REMOTE-123")
         self.assertEqual(track["remote_id_ua_type"], "uav helicopter or multirotor")
         self.assertEqual(track["remote_id_status"], "airborne")

@@ -359,19 +359,19 @@ The bridge reads MIL-STD-2525B SIDC codes from SitaWare and routes each unit to 
 
 | SIDC affiliation | SIDC dimension | Zenoh topic path | ATAK CoT type |
 | --- | --- | --- | --- |
-| Friendly / Assumed Friendly | Ground (G) | `…/land/sitaware/rest/friendly/unit/…` | `a-f-G-U-C` |
-| Hostile | Ground (G) | `…/land/sitaware/rest/hostile/unit/…` | `a-h-G-U-C` |
-| Neutral | Ground (G) | `…/land/sitaware/rest/neutral/unit/…` | `a-n-G-U-C` |
-| Friendly | Air (A) | `…/air/sitaware/rest/friendly/aircraft/…` | `a-f-A-M-F` |
-| Hostile | Air (A) | `…/air/sitaware/rest/hostile/aircraft/…` | `a-h-A-M-F` |
-| Friendly | Sea (S) | `…/sea/sitaware/rest/friendly/vessel/…` | `a-f-S-X-L` |
-| Hostile | Sea (S) | `…/sea/sitaware/rest/hostile/vessel/…` | `a-h-S-X-L` |
-| Friendly / Hostile / Neutral / Unknown | Space (P) | `…/space/sitaware/rest/<affiliation>/satellite/…` | matching `a-<affiliation>-P` |
-| Any | Special operations forces (F) | `…/land/sitaware/rest/<affiliation>/unit/…` | matching ground-unit type |
+| Friendly / Assumed Friendly | Ground (G) | `…/land/sitaware/c2/friendly/unit/…` | `a-f-G-U-C` |
+| Hostile | Ground (G) | `…/land/sitaware/c2/hostile/unit/…` | `a-h-G-U-C` |
+| Neutral | Ground (G) | `…/land/sitaware/c2/neutral/unit/…` | `a-n-G-U-C` |
+| Friendly | Air (A) | `…/air/sitaware/c2/friendly/aircraft/…` | `a-f-A-M-F` |
+| Hostile | Air (A) | `…/air/sitaware/c2/hostile/aircraft/…` | `a-h-A-M-F` |
+| Friendly | Sea (S) | `…/sea/sitaware/c2/friendly/vessel/…` | `a-f-S-X-L` |
+| Hostile | Sea (S) | `…/sea/sitaware/c2/hostile/vessel/…` | `a-h-S-X-L` |
+| Friendly / Hostile / Neutral / Unknown | Space (P) | `…/space/sitaware/c2/<affiliation>/satellite/…` | matching `a-<affiliation>-P` |
+| Any | Special operations forces (F) | `…/land/sitaware/c2/<affiliation>/unit/…` | matching ground-unit type |
 
 ### NATO NFFI friendly-force protocol translator
 
-`nffi` subscribes to complete NFFI XML documents that a partner receiver or detection system has already published under `…/raw/nffi/{source-id}` in Zenoh. It translates every unit to `…/land/nato/nffi/friendly/unit/tracks/v1`. It owns no TCP client, listener, endpoint, or framing convention. A product-specific connection must live in a separate `_bridge.py` after its endpoint and ICD are known.
+`nffi` subscribes to complete NFFI XML documents that a partner receiver or detection system has already published under `…/raw/nffi/{source-id}` in Zenoh. It translates every unit to `…/land/nato/c2/friendly/unit/{type}/{id}/sapient`. It owns no TCP client, listener, endpoint, or framing convention. A product-specific connection must live in a separate `_bridge.py` after its endpoint and ICD are known.
 
 NFFI friendly-force interoperability is ADatP-36 / STANAG 5527. STANAG 4677 is the separate dismounted-soldier interoperability family; a 4677 JDSSDM-over-NFFI profile would need a separate, profile-specific implementation.
 
@@ -477,24 +477,31 @@ per-item push adapter at an HQ endpoint to work around this limitation.
 
 ## 6. Service Reference
 
+> **Topic tiers.** The `…/tracks/v1` paths below are the JSON tier. Each one has
+> two protobuf siblings carrying the same event: `…/tracks/v2` (typed message
+> from the protocol's `.proto`) and `…/tracks/native/v1` (a `RawEnvelope`
+> wrapping the original wire bytes, byte-exact). Prefer `/v2`; use `/native/v1`
+> when you need a field EFDI does not decode. `/v1` is legacy and will be
+> retired. Full explanation: [INTEGRATIONS.md → Egress topic tiers](INTEGRATIONS.md#egress-topic-tiers-v1-v2-nativev1).
+
 | Service | Script | Zenoh topic (abbreviated) | Trigger |
 | --- | --- | --- | --- |
 | `asterix` | `protocols/vendors/asterix/cat.py` | `…/raw/asterix/catNN` and category-specific normalized ASTERIX topics | ASTERIX vendor's CAT protocol bundle: mixed UDP ingress plus per-category translators |
-| `dronuradaras` | `bridges/dronuradaras_bridge.py` | `…/land/dronuradaras/acoustic/neutral/sensor/status/v1` | 60 s online-only device poll with offline eviction / 10 s detection poll |
-| `utm-ans` | `bridges/utm_ans_bridge.py` | `…/air/utm_ans/utm/unknown/uav/tracks/v1` | Authorized JSON/GeoJSON declared-flight poll; requires `UTM_ANS_API_URL` |
-| `opendroneid` | `protocols/random/opendroneid.py` | `…/air/opendroneid/astm-f3411/*/uav/tracks/v1` | Raw receiver publications under `…/raw/opendroneid/**`; no radio on the router host |
-| `aisstream` | `bridges/aisstream_ws_bridge.py` | `…/sea/aisstream/ais/civ/vessel/tracks/v1` | Authenticated WSS stream |
-| `sitaware` | `bridges/sitaware_bridge.py` | `…/land/sitaware/rest/friendly/unit/tracks/v1` | Configurable REST poll |
-| `nffi` | `protocols/random/nffi.py` | `…/land/nato/nffi/friendly/unit/tracks/v1` | Complete XML documents under `…/raw/nffi/*` in Zenoh |
-| `link16` | `protocols/random/link16.py` | `…/air/link16/jreap/*/aircraft/tracks/v1` | Streaming UDP |
-| `mavlink` | `protocols/random/mavlink.py` | `…/air/mavlink/mav2/*/uav/tracks/v1` | Streaming UDP/TCP |
-| `stanag` | `protocols/vendors/stanag/4586.py` and `4609.py` | `…/raw/stanag4609/klv`, `…/air/stanag4609/unknown/uav/tracks/v1`, and STANAG 4586 track topics | Launcher starts each configured numbered protocol directly |
+| `dronuradaras` | `bridges/dronuradaras_bridge.py` | `…/land/dronuradaras/acoustic/neutral/sensor/{type}/{id}/sapient` | 60 s online-only device poll with offline eviction / 10 s detection poll |
+| `utm-ans` | `bridges/utm_ans_bridge.py` | `…/air/utm_ans/c2/unknown/uav/{type}/{id}/sapient` | Authorized JSON/GeoJSON declared-flight poll; requires `UTM_ANS_API_URL` |
+| `opendroneid` | `protocols/random/opendroneid.py` | `…/air/opendroneid/passive_rf/*/uav/{type}/{id}/sapient` | Raw receiver publications under `…/raw/opendroneid/**`; no radio on the router host |
+| `aisstream` | `bridges/aisstream_ws_bridge.py` | `…/sea/aisstream/ais/civ/vessel/{type}/{id}/sapient` | Authenticated WSS stream |
+| `sitaware` | `bridges/sitaware_bridge.py` | `…/land/sitaware/c2/friendly/unit/{type}/{id}/sapient` | Configurable REST poll |
+| `nffi` | `protocols/random/nffi.py` | `…/land/nato/c2/friendly/unit/{type}/{id}/sapient` | Complete XML documents under `…/raw/nffi/*` in Zenoh |
+| `link16` | `protocols/random/link16.py` | `…/air/link16/c2/*/aircraft/{type}/{id}/sapient` | Streaming UDP |
+| `mavlink` | `protocols/random/mavlink.py` | `…/air/mavlink/telemetry/*/uav/{type}/{id}/sapient` | Streaming UDP/TCP |
+| `stanag` | `protocols/vendors/stanag/4586.py` and `4609.py` | `…/raw/stanag4609/klv`, `…/air/stanag4609/camera/unknown/uav`, and STANAG 4586 track topics | Launcher starts each configured numbered protocol directly |
 | `mavlink-raw`, `link16-raw`, `vmf-raw`, `sapient-raw`, `stanag4586-raw` | `bridges/*_raw_bridge.py` | `…/raw/<protocol>/<source>` | Optional socket ingress; matching protocol runs with `*_ZENOH_RAW=1` |
-| `cap` | `protocols/random/cap.py` | `…/land/cap/neutral/sensor/alerts/v1` | Complete CAP 1.2 XML on `…/raw/cap/**` |
-| `geojson` | `protocols/random/geojson_features.py` | `…/land/ogc/neutral/zone/features/v1` | GeoJSON/OGC Features on `…/raw/geojson/**` |
-| `ais-nmea` | `protocols/random/ais_nmea.py` | `…/sea/ais/nmea/civ/vessel/tracks/v1` | AIVDM/AIVDO on `…/raw/ais/**` |
+| `cap` | `protocols/random/cap.py` | `…/land/cap/c2/neutral/sensor/{type}/{id}/sapient` | Complete CAP 1.2 XML on `…/raw/cap/**` |
+| `geojson` | `protocols/random/geojson_features.py` | `…/land/ogc/c2/neutral/zone/{type}/{id}/sapient` | GeoJSON/OGC Features on `…/raw/geojson/**` |
+| `ais-nmea` | `protocols/random/ais_nmea.py` | `…/sea/nmea/ais/civ/vessel/{type}/{id}/sapient` | AIVDM/AIVDO on `…/raw/ais/**` |
 | `spectrum` / `sensor-health` / `mission-route` | Matching `protocols/random/*.py` | `…/land/spectrum/**`, `…/land/health/**`, `…/air/mission/**` | JSON on their `…/raw/**` topics |
-| `dji-cloud` | `bridges/dji_cloud_api_bridge.py` | `…/air/dji/cloud-api/friendly/uav/tracks/v1` | Source-specific authenticated DJI MQTT 5 bridge |
+| `dji-cloud` | `bridges/dji_cloud_api_bridge.py` | `…/air/dji/telemetry/friendly/uav/{type}/{id}/sapient` | Source-specific authenticated DJI MQTT 5 bridge |
 | `cot-udp` | `layers/cot_layer.py` | Subscriber — all topics | Event-driven |
 | `cot-bridge` | `bridges/cot_bridge.py` | Subscriber — all topics | Event-driven |
 | `tak-bridge` | `bridges/tak_bridge.py` | Subscriber — all topics | TAK-visible CoT ingress |
@@ -722,7 +729,7 @@ credentials and topic permissions.
 ### Zenoh topic schema
 
 ```text
-{NAMESPACE}/{DOMAIN}/{SOURCE}/{PROTOCOL}/{AFFILIATION}/{TYPE}/tracks/v1
+{NAMESPACE}/{DOMAIN}/{SOURCE}/{MODALITY}/{AFFILIATION}/{ENTITY}/{TYPE}/{ID}/{VIEW}
 ```
 
 | Field | Values |
@@ -836,7 +843,7 @@ curl -s -u "$SITAWARE_USER:$SITAWARE_PASS" "$SITAWARE_URL/..." | python3 -m json
 
 **3. SIDC not mapped — unit appears with wrong icon or not at all:**
 
-SitaWare units without a valid 15-character SIDC are routed to `…/land/sitaware/rest/unknown/unit/…` and rendered as unknown ground units (`a-u-G-U-C`). Check the raw SIDC value in the log:
+SitaWare units without a valid 15-character SIDC are routed to `…/land/sitaware/c2/unknown/unit/…` and rendered as unknown ground units (`a-u-G-U-C`). Check the raw SIDC value in the log:
 
 ```bash
 grep "sidc=" $POD_STATE_DIR/logs/sitaware.log | head -10
@@ -915,7 +922,7 @@ _CERT_DIR = os.environ.get("EFDI_CERT_DIR", os.path.dirname(__file__))
 
 def main():
     session = zenoh.open(make_config())
-    topic = f"{ORG}/air/<source>/<protocol>/unknown/aircraft/tracks/v1"
+    topic = f"{ORG}/air/<source>/<modality>/unknown/aircraft/{type}/{id}/sapient"
     pub = session.declare_publisher(topic)
 
     while True:

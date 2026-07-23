@@ -44,12 +44,12 @@ Config:
   FUSION_HANDOFF_NM=2.0   Max distance for cross-radar PSR association
 
 Fused tracks are published to:
-  <ORG>/air/fused/<affiliation>/aircraft/tracks/v1
+  <ORG>/air/fused/fused/<affiliation>/aircraft/json/tracks
 → cot_layer.py picks these up and shows them in ATAK with full identity.
 
 Non-correlated radar tracks (truly non-cooperative, no ID possible) are
 re-published as-is to:
-  <ORG>/air/fused/unknown/aircraft/tracks/v1
+  <ORG>/air/fused/fused/unknown/aircraft/json/tracks
 so they still appear in ATAK but without enrichment.
 
 Config (compose/.env):
@@ -88,36 +88,41 @@ _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", "tcp/127.0.0.1:7448")
 _SPATIAL_NM      = float(os.environ.get("FUSION_SPATIAL_NM",  "2.0"))
 _MAX_AGE_S       = float(os.environ.get("FUSION_MAX_AGE_S",   "60"))
 _RADAR_PREF      = os.environ.get("FUSION_RADAR_PREF", "1") != "0"
-_PROTOBUF_V2_CONSUME = os.environ.get("EFDI_PROTOBUF_V2_CONSUME", "1") != "0"
 
 # Cross-radar handoff — PSR-only targets seen by multiple radars simultaneously
 _HANDOFF_NM      = float(os.environ.get("FUSION_HANDOFF_NM",  "2.0"))  # spatial tolerance
 _HANDOFF_HDG_TOL = 45.0   # heading difference tolerance in degrees
 
-TOPIC_FUSED  = "{}/air/fused/{}/aircraft/tracks/v1"
-TOPIC_FUSED_V2 = "{}/air/fused/{}/aircraft/tracks/v2"
+TOPIC_FUSED  = "{}/air/trackfusion/fused/{}/aircraft"
+TOPIC_FUSED_V2 = "{}/air/trackfusion/fused/{}/aircraft"
 
-# Topics we subscribe to as radar sources (primary: positional authority)
+# Everything this bridge publishes lives under here — used to reject our own
+# output when re-subscribing by modality.
+_OWN_PREFIX = "{}/air/trackfusion/".format(TOPIC_ROOT)
+
+# Radar and ADS-B are separated by MODALITY, not by source name. The source
+# segment is a wildcard because a radar names itself by SAC/SIC, so its topic
+# is not knowable at startup — and two radars must both be picked up.
+#
+# This split is the whole point of the bridge: ASTERIX CAT-048 (radar) is the
+# positional authority, CAT-021 (ADS-B relayed by a ground station) only
+# enriches identity. While both published under the literal `asterix` these
+# two lists were identical and every ASTERIX track was fed in as both.
+
+# Positional authority
 _RADAR_TOPICS = [
-    "{}/air/asterix/cat48/**".format(TOPIC_ROOT),
-    "{}/air/asterix/cat20/**".format(TOPIC_ROOT),
-    "{}/air/link16/**".format(TOPIC_ROOT),
-    "{}/air/stanag4586/**".format(TOPIC_ROOT),
-    "{}/air/mavlink/**".format(TOPIC_ROOT),
+    "{}/air/*/radar/**".format(TOPIC_ROOT),
+    "{}/air/*/mlat/**".format(TOPIC_ROOT),
+    "{}/air/*/fused/**".format(TOPIC_ROOT),
+    "{}/air/link16/c2/**".format(TOPIC_ROOT),
+    "{}/air/stanag4586/telemetry/**".format(TOPIC_ROOT),
+    "{}/air/mavlink/telemetry/**".format(TOPIC_ROOT),
 ]
 
-# Topics we subscribe to as identity enrichment sources
-_ADSB_TOPICS = ["{}/air/asterix/cat21/**".format(TOPIC_ROOT)]
-if _PROTOBUF_V2_CONSUME:
-    _ADSB_TOPICS.extend([
-        "{}/air/airplaneslive/adsb/*/aircraft/tracks/v2".format(TOPIC_ROOT),
-        "{}/air/adsblol/adsb/*/aircraft/tracks/v2".format(TOPIC_ROOT),
-    ])
-else:
-    _ADSB_TOPICS.extend([
-        "{}/air/airplaneslive/adsb/*/aircraft/tracks/v1".format(TOPIC_ROOT),
-        "{}/air/adsblol/adsb/*/aircraft/tracks/v1".format(TOPIC_ROOT),
-    ])
+# Identity enrichment only
+_ADSB_TOPICS = [
+    "{}/air/*/adsb/**".format(TOPIC_ROOT),
+]
 
 # Fields that carry identity (we prefer ADS-B values for these)
 _ID_FIELDS = ("callsign", "registration", "aircraft_type", "icao24",
@@ -218,11 +223,17 @@ class TrackFuser:
     # ------------------------------------------------------------------
 
     def on_radar(self, sample):
+        topic = str(sample.key_expr)
+        # _RADAR_TOPICS matches `/air/*/fused/**` to pick up ASTERIX CAT-062
+        # system tracks — which also matches THIS bridge's own output, so a
+        # fused track would be re-ingested as a radar source and fused with
+        # itself. Drop our own publications before anything else.
+        if topic.startswith(_OWN_PREFIX):
+            return
         try:
             track = json.loads(bytes(sample.payload).decode())
         except (json.JSONDecodeError, UnicodeDecodeError, ValueError, DecodeError):
             return
-        topic = str(sample.key_expr)
         self._age_out()
         now = time.time()
         with self._lock:

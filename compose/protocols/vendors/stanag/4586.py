@@ -58,7 +58,7 @@ _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", "tcp/127.0.0.1:7448")
 
 RECONNECT_S     = 10
 HEARTBEAT_S     = 5
-TOPIC_UAV_OUT   = "{}/air/stanag4586/uav/civ/aircraft/tracks/v1".format(TOPIC_ROOT)
+TOPIC_UAV_OUT   = "{}/air/stanag4586/telemetry/civ/aircraft".format(TOPIC_ROOT)
 ZENOH_RETRY_S   = 5
 
 # Historical deployment constants. They are not asserted to be universal.

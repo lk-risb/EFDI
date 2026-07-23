@@ -1,6 +1,6 @@
 # REST/HTTP bridge — optional compose sidecar for the pod.
-# Build from the REPO ROOT:  docker build -f clients/examples/bridges/rest-http/Dockerfile -t moon-pod-rest-bridge .
-# Run with network_mode: host + the GOAT_* env + the cert dir mounted read-only.
+# Build from the REPO ROOT:  docker build -f clients/examples/bridges/rest-http/Dockerfile -t efdi-rest-bridge .
+# Run with network_mode: host + the EFDI_* env + the cert dir mounted read-only.
 FROM python:3.12-slim
 RUN pip install --no-cache-dir eclipse-zenoh
 WORKDIR /app

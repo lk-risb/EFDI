@@ -177,7 +177,7 @@ class _Vehicle:
         self.track["vertical_rate_ms"] = round(float(climb), 2)
 
     def topic(self) -> str:
-        return "{}/air/mavlink/uav/civ/aircraft/tracks/v1".format(TOPIC_ROOT)
+        return "{}/air/mavlink/telemetry/civ/aircraft".format(TOPIC_ROOT)
 
 
 def _bounded_text(value: bytes, limit: int) -> str | None:
@@ -310,7 +310,7 @@ class _RemoteID:
         self.track["remote_id_operator_id_type"] = payload[22]
 
     def topic(self) -> str:
-        return "{}/air/mavlink/remote-id/unknown/uav/tracks/v1".format(TOPIC_ROOT)
+        return "{}/air/mavlink/telemetry/unknown/uav".format(TOPIC_ROOT)
 
 
 MAX_REMOTE_ID_TRACKS = 20_000
