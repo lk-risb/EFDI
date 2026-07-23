@@ -106,7 +106,7 @@ load_launcher_state() {
                 ;;
             TAK_HOST|TAK_HOST_FALLBACK|TAK_UDP_HOST|TAK_UDP_HOST_FALLBACK|\
             SITAWARE_URL|SITAWARE_URL_FALLBACK|STANAG4609_SRT_URL|STANAG4609_SOURCE|\
-            SAPIENT_HOST|STANAG4586_HOST)
+            SAPIENT_HOST|STANAG4586_HOST|STANAG4586_PROFILE)
                 if [[ -z "${!key:-}" ]]; then
                     printf -v "$key" '%s' "$val"
                     # shellcheck disable=SC2163  # $key names the variable to export.
@@ -130,7 +130,7 @@ save_launcher_state() {
         printf 'SELECTED_SERVICES=%s\n' "$selected"
         for key in TAK_HOST TAK_HOST_FALLBACK TAK_UDP_HOST TAK_UDP_HOST_FALLBACK \
                    SITAWARE_URL SITAWARE_URL_FALLBACK STANAG4609_SRT_URL STANAG4609_SOURCE \
-                   SAPIENT_HOST STANAG4586_HOST; do
+                   SAPIENT_HOST STANAG4586_HOST STANAG4586_PROFILE; do
             # A URL with user-info may contain credentials. Use it for this run,
             # but never copy it into persistent launcher memory.
             [[ -n "${!key:-}" && "${!key}" != *://*@* ]] && \
@@ -188,7 +188,7 @@ declare -A SVC_DESC=(
     [nffi]="Raw NFFI XML on Zenoh → normalized friendly-force tracks"
     [dronuradaras]="dronuradaras.lt drone detection network"
     [sapient]="SAPIENT / BSI Flex 335 sensor feed"
-    [stanag]="STANAG family bundle: 4586 feed + 4609 SRT/KLV"
+    [stanag]="STANAG 4586 + 4609 protocols"
     [mavlink-raw]="MAVLink UDP/TCP → Zenoh raw"
     [link16-raw]="Link-16/JREAP-C UDP/TCP → Zenoh raw"
     [vmf-raw]="VMF UDP/TCP → Zenoh raw"
@@ -212,7 +212,7 @@ declare -A SVC_DESC=(
 svc_ready() {
     case "$1" in
         zenoh|airplaneslive|adsblol|aisstream|aprs|openmeteo|meteolt|\
-        dronuradaras|opendroneid|nffi|cot-udp|cot-udp-tak|cot-bridge|tak-bridge|track-fusion|\
+        dronuradaras|opendroneid|nffi|cot-udp|cot-udp-tak|cot-bridge|track-fusion|\
         cap|geojson|ais-nmea|spectrum|sensor-health|mission-route)
             return 0 ;;
         admin-control) [[ -n "${ZENOH_ADMIN_SECRET_KEY:-}" || -n "${EFDI_CONTROL_TOKEN:-}" ]] ;;
@@ -257,7 +257,7 @@ svc_hint() {
         stanag4586-raw) echo "STANAG4586_RAW_PORT not set" ;;
         sapient)
             if [[ "${SAPIENT_ZENOH_RAW:-}" == "1" ]]; then
-                _start sapient protocols/sapient_flex335.py --zenoh-raw --raw-topic "${SAPIENT_RAW_TOPIC:-}"
+                _start sapient protocols/vendors/sapient/flex335.py --zenoh-raw --raw-topic "${SAPIENT_RAW_TOPIC:-}"
                 return
             fi
             if [[ "${SAPIENT_LISTEN_PORT:-}" ]]; then
@@ -267,7 +267,7 @@ svc_hint() {
             else
                 echo "will prompt for address"
             fi ;;
-        stanag) echo "STANAG family bundle" ;;
+        stanag) echo "STANAG 4586/4609 configuration" ;;
         aisstream)
             [[ "${AISSTREAM_KEY:-}" ]] && echo "API key configured" || echo "will prompt for API key" ;;
         sitaware-hq-nvg)
@@ -289,12 +289,6 @@ svc_hint() {
                 echo "will prompt for address"
             fi ;;
         cot-bridge)
-            if [[ "${TAK_HOST:-}" ]]; then
-                [[ "${TAK_HOST_FALLBACK:-}" ]] && echo "${TAK_HOST}:${TAK_PORT:-8087} (+fallback)" || echo "${TAK_HOST}:${TAK_PORT:-8087}"
-            else
-                echo "will prompt for address"
-            fi ;;
-        tak-bridge)
             if [[ "${TAK_HOST:-}" ]]; then
                 [[ "${TAK_HOST_FALLBACK:-}" ]] && echo "${TAK_HOST}:${TAK_PORT:-8087} (+fallback)" || echo "${TAK_HOST}:${TAK_PORT:-8087}"
             else
@@ -511,28 +505,28 @@ launch() {
             ;;
 
         asterix)
-            _start asterix protocols/asterix.py
+            _start asterix protocols/vendors/asterix/cat.py
             ;;
 
         link16)
             if [[ "${LINK16_ZENOH_RAW:-}" == "1" ]]; then
-                _start link16 protocols/link16.py --zenoh-raw --raw-topic "${LINK16_RAW_TOPIC:-}"
+                _start link16 protocols/random/link16.py --zenoh-raw --raw-topic "${LINK16_RAW_TOPIC:-}"
             else
-                _start link16 protocols/link16.py --port "$LINK16_PORT"
+                _start link16 protocols/random/link16.py --port "$LINK16_PORT"
             fi
             ;;
 
         mavlink)
             if [[ "${MAVLINK_ZENOH_RAW:-}" == "1" ]]; then
-                _start mavlink protocols/mavlink.py --zenoh-raw --raw-topic "${MAVLINK_RAW_TOPIC:-}"
+                _start mavlink protocols/random/mavlink.py --zenoh-raw --raw-topic "${MAVLINK_RAW_TOPIC:-}"
             else
                 local tmav=(); [[ "${MAVLINK_TCP:-}" == "1" ]] && tmav=(--tcp)
-                _start mavlink protocols/mavlink.py --port "$MAVLINK_PORT" "${tmav[@]}"
+                _start mavlink protocols/random/mavlink.py --port "$MAVLINK_PORT" "${tmav[@]}"
             fi
             ;;
 
         opendroneid)
-            _start opendroneid protocols/opendroneid.py
+            _start opendroneid protocols/random/opendroneid.py
             ;;
 
         dji-cloud)
@@ -549,10 +543,10 @@ launch() {
 
         vmf)
             if [[ "${VMF_ZENOH_RAW:-}" == "1" ]]; then
-                _start vmf protocols/vmf.py --zenoh-raw --raw-topic "${VMF_RAW_TOPIC:-}"
+                _start vmf protocols/random/vmf.py --zenoh-raw --raw-topic "${VMF_RAW_TOPIC:-}"
             else
                 local tvmf=(); [[ "${VMF_TCP:-}" == "1" ]] && tvmf=(--tcp)
-                _start vmf protocols/vmf.py --port "$VMF_PORT" "${tvmf[@]}"
+                _start vmf protocols/random/vmf.py --port "$VMF_PORT" "${tvmf[@]}"
             fi
             ;;
 
@@ -577,27 +571,27 @@ launch() {
             ;;
 
         cap)
-            _start cap protocols/cap.py
+            _start cap protocols/random/cap.py
             ;;
 
         geojson)
-            _start geojson protocols/geojson_features.py
+            _start geojson protocols/random/geojson_features.py
             ;;
 
         ais-nmea)
-            _start ais-nmea protocols/ais_nmea.py
+            _start ais-nmea protocols/random/ais_nmea.py
             ;;
 
         spectrum)
-            _start spectrum protocols/spectrum_observation.py
+            _start spectrum protocols/random/spectrum_observation.py
             ;;
 
         sensor-health)
-            _start sensor-health protocols/sensor_health.py
+            _start sensor-health protocols/random/sensor_health.py
             ;;
 
         mission-route)
-            _start mission-route protocols/mission_route.py
+            _start mission-route protocols/random/mission_route.py
             ;;
 
         sitaware)
@@ -625,19 +619,19 @@ launch() {
             ;;
 
         nffi)
-            _start nffi protocols/nffi.py
+            _start nffi protocols/random/nffi.py
             ;;
 
         sapient)
             if [[ "${SAPIENT_LISTEN_PORT:-}" ]]; then
                 local sapient_args=(--listen "$SAPIENT_LISTEN_PORT" --bind "${SAPIENT_BIND:-127.0.0.1}")
                 [[ "${SAPIENT_ALLOW_PEER:-}" ]] && sapient_args+=(--allow-peer "$SAPIENT_ALLOW_PEER")
-                _start sapient protocols/sapient_flex335.py "${sapient_args[@]}"
+                _start sapient protocols/vendors/sapient/flex335.py "${sapient_args[@]}"
                 return
             fi
             if [[ -z "${SAPIENT_HOST:-}" ]]; then
                 if [[ "${EFDI_NONINTERACTIVE:-}" == "1" ]]; then
-                    _start sapient protocols/sapient_flex335.py --zenoh-raw --raw-topic "${SAPIENT_RAW_TOPIC:-}"
+                    _start sapient protocols/vendors/sapient/flex335.py --zenoh-raw --raw-topic "${SAPIENT_RAW_TOPIC:-}"
                     return
                 fi
                 local sapient_host
@@ -648,11 +642,28 @@ launch() {
                 fi
                 export SAPIENT_HOST="$sapient_host"
             fi
-            _start sapient protocols/sapient_flex335.py --host "$SAPIENT_HOST" --port "${SAPIENT_PORT:-7001}"
+            _start sapient protocols/vendors/sapient/flex335.py --host "$SAPIENT_HOST" --port "${SAPIENT_PORT:-7001}"
             ;;
 
         stanag)
-            _start stanag protocols/stanag.py
+            stanag_started=0
+            if [[ "${STANAG4586_PROFILE:-}" == "legacy_ed3_approx" && "${STANAG4586_ZENOH_RAW:-}" == "1" ]]; then
+                stanag_args=(--zenoh-raw)
+                [[ "${STANAG4586_RAW_TOPIC:-}" ]] && stanag_args+=(--raw-topic "$STANAG4586_RAW_TOPIC")
+                _start stanag4586 protocols/vendors/stanag/4586.py "${stanag_args[@]}"
+                stanag_started=1
+            elif [[ "${STANAG4586_PROFILE:-}" == "legacy_ed3_approx" && "${STANAG4586_HOST:-}" ]]; then
+                _start stanag4586 protocols/vendors/stanag/4586.py \
+                    --host "$STANAG4586_HOST" --port "${STANAG4586_PORT:-4586}"
+                stanag_started=1
+            fi
+            if [[ "${STANAG4609_SRT_URL:-}" ]]; then
+                _start stanag4609 protocols/vendors/stanag/4609.py
+                stanag_started=1
+            fi
+            if (( stanag_started == 0 )); then
+                echo "  [skip] stanag          set STANAG4609_SRT_URL, or validate the VSM ICD and set STANAG4586_PROFILE=legacy_ed3_approx plus a 4586 source"
+            fi
             ;;
 
         dronuradaras)

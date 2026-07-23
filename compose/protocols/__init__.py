@@ -1,9 +1,9 @@
 """Protocol modules and their generated protobuf bindings.
 
-The checked-in generated bindings live under compose/generated/protocols,
-while the runtime imports them as `protocols.*_pb2`.  Extend the package path
-so both locations resolve through the same namespace regardless of whether the
-caller sets PYTHONPATH manually.
+Generated bindings live under compose/generated/protocols while source
+contracts and translators live under compose/protocols. Extend the package
+path so `protocols.random.*_pb2` and `protocols.vendors.*_pb2` resolve beside
+their source modules regardless of whether the caller sets PYTHONPATH manually.
 """
 
 from __future__ import annotations

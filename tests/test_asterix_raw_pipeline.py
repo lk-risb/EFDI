@@ -55,12 +55,12 @@ def test_category_and_source_configuration_validation():
 @pytest.mark.parametrize(
     ("module_name", "category"),
     [
-        ("asterix_cat10", 10),
-        ("asterix_cat20", 20),
-        ("asterix_cat21", 21),
-        ("asterix_cat34", 34),
-        ("asterix_cat48", 48),
-        ("asterix_cat62", 62),
+        ("protocols.vendors.asterix.cat", 10),
+        ("protocols.vendors.asterix.cat", 20),
+        ("protocols.vendors.asterix.cat", 21),
+        ("protocols.vendors.asterix.cat", 34),
+        ("protocols.vendors.asterix.cat", 48),
+        ("protocols.vendors.asterix.cat", 62),
     ],
 )
 def test_each_category_translator_accepts_only_its_exact_raw_frame(module_name, category):

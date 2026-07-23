@@ -31,7 +31,7 @@ import zenoh
 from zenoh_auth import apply_zenoh_auth
 from http_json import read_json_response
 from namespace_prefix import topic_root
-from protocols.airplaneslive_track_pb2 import AirplanesLiveTrack
+from protocols.random.airplaneslive_track_pb2 import AirplanesLiveTrack
 from protocols.protobuf_codec import source_track_to_message
 
 ORG       = os.environ.get("PARTNER_NAMESPACE", "")

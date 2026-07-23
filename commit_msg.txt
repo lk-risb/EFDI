@@ -1,13 +1,31 @@
-feat: collapse vendor protocol surfaces and keep launcher bundle-level
+feat: harden the EFDI fabric and align vendor protocols with official profiles
 
-- migrate zenoh-admin persistence to MariaDB and keep the one-time importer fail-closed and row-verified
-- preserve the existing launcher/runtime architecture: Python bridges and layers stay PID-managed host processes, Zenoh/router/admin stay containerized infrastructure
-- keep the bidirectional TAK path intact with cot-bridge as the outbound mTLS writer and tak-bridge as the inbound CoT reader with loop suppression
-- keep the SitaWare HQ integration hardened for retry/discovery and retain the documented HQ/NVG pull paths and endpoint fallbacks
-- continue dual-publishing the fabric-side translators to JSON + protobuf while keeping `/v1` JSON-compatible
-- add the new `protocols/asterix.py` and `protocols/stanag.py` vendor wrappers as the only top-level runtime protocol entrypoints
-- move the split ASTERIX category implementations and STANAG 4586/4609 implementation files under `protocols/_vendor/` so the visible protocol surface stays slim
-- keep ASTERIX decoding for the C2-relevant categories that are actually useful in SW/TAK: CAT-010, CAT-020, CAT-021, CAT-034, CAT-048, and CAT-062
-- keep STANAG 4586 and STANAG 4609 available through the vendor bundle without exposing the split transport/KLV launcher entries
-- update the launcher, admin catalog, and docs to match the collapsed vendor-level surface
-- update the commit note workflow without ever using git add, git commit, or git push
+- migrate zenoh-admin persistence to MariaDB while retaining a fail-closed, row-verified PostgreSQL import path for cutover and rollback
+- preserve the runtime boundary: Zenoh, MariaDB, the socket proxy, zenoh-admin, and Caddy remain Docker infrastructure while bridges and layers remain PID-managed Python processes
+- restore and harden the admin console, service controls, topology aggregation, signed federation configuration, replay protection, trust ACLs, and three-router deployment definitions
+- keep outbound TAK delivery on the TAK-issued mTLS cot-bridge identity and add inbound TAK CoT subscription through tak-bridge with normalization and loop suppression
+- retain the documented SitaWare HQ REST/NVG and Edge NVG paths, endpoint fallbacks, retry behavior, richer aircraft/vessel metadata, affiliations, altitude fields, and marker cleanup
+- consolidate the C2-relevant ASTERIX implementation into protocols/vendors/asterix/cat.py and cat.proto with category selection through --category
+- align CAT-010 1.1, CAT-020 1.11, CAT-021 2.7, CAT-034 1.29, CAT-048 1.32, and CAT-062 1.21 decoding with the official EUROCONTROL UAPs
+- correct CAT-020/021/062 FRN alignment, current coordinate and altitude scaling, compound-field handling, reserved fields, and edition-specific variable/repetitive items
+- decode CAT-020 pre-programmed vehicle messages from the full seven-bit MSG field and expose bounded DOP accuracy components
+- correct CAT-034 system configuration overload/monitoring bit positions, sensor status, processing reductions, collimation, and WGS-84 site-position decoding
+- correct CAT-048 Mode-3/A and flight-level flags, confidence masks, compound-primary ordering, target status, warning/error conditions, Doppler fields, ground-vehicle classification, and current SP/RE ordering
+- fix CAT-062 confirmation decoding to use the CNF bit, decode aircraft-derived ground speed as signed, apply the current Mach 0.008 LSB, and retain current track, flight-plan, Mode S, accuracy, and measured-information alignment
+- implement regression vectors for every edition-sensitive ASTERIX correction
+- place BSI FLEX 335 v2 under protocols/vendors/sapient/flex335.py and flex335.proto and verify its fields and four-byte little-endian framing against the official Dstl schemas and test harness
+- treat SAPIENT additional_information as envelope metadata rather than a content message and reject coordinate datums that cannot be safely transformed
+- preserve schema-defined neutral SAPIENT signal names and suppress derived speed/heading values when v2 registration units are unspecified or inconsistent
+- keep exact native SAPIENT protobuf bytes on /v2 while publishing the normalized JSON view on /v1
+- keep STANAG 4586 and 4609 as one Python module and one protobuf contract per numbered protocol under protocols/vendors/stanag
+- disable the unverified historical STANAG 4586 binary layout by default and require the explicit legacy_ed3_approx profile after validation against the deployed VSM ICD
+- harden STANAG 4586 framing limits and align its normalized and protobuf telemetry fields
+- preserve exact STANAG 4609 KLV packets, support BER and BER-OID lengths, decode current MISB ST 0601 field widths and reserved values, retain zero coordinates, and recover across split stream prefixes and BER lengths
+- keep SRT as the configurable STANAG 4609 transport, redact credentials and query options from logs, and expose decoded sensor/frame-center position, altitude, and camera angles
+- align ASTERIX, SAPIENT, and STANAG protobuf field names with their JSON records and regenerate all Python protobuf bindings
+- fix the shared JSON/protobuf publisher contract so runtime translators pass a Zenoh Session and reliably address both /v1 and /v2 topics
+- move remaining standalone adapters and schemas under protocols/random while keeping shared package/runtime helpers at the protocols root
+- remove obsolete external bridges and preserve online-only dronuradaras publication with tombstones for stale-marker eviction
+- make start.sh restore the saved service selection, keep secrets out of saved state and argv where supported, and correct duplicate TAK readiness/hint branches
+- update English and Lithuanian operational documentation, integration tables, protocol editions, safety gates, and handoff memory to match the shipped behavior
+- validate 137 passing tests with one deployment-only skip, all bridge/layer/protocol Python modules, frontend type-check and production build, shell syntax and ShellCheck warnings, all Compose variants, 23 generated protobuf bindings, and git diff whitespace

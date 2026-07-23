@@ -195,11 +195,11 @@ start_asterix_protocols() {
             48) port="${CAT48_PORT:-}"; tcp_var="${CAT48_TCP:-}" ;;
         esac
         if asterix_category_uses_raw "$category"; then
-            start "asterix-cat${category}" "protocols/asterix_cat${category}.py" --zenoh-raw
+            start "asterix-cat${category}" protocols/vendors/asterix/cat.py --category "$category" --zenoh-raw
         elif [[ "$port" ]]; then
             tcp_args=(); [[ "$tcp_var" == "1" ]] && tcp_args=(--tcp)
-            start "asterix-cat${category}" "protocols/asterix_cat${category}.py" \
-                --port "$port" "${tcp_args[@]}"
+            start "asterix-cat${category}" protocols/vendors/asterix/cat.py \
+                --category "$category" --port "$port" "${tcp_args[@]}"
         else
             echo "  [skip] asterix-cat${category} — set CAT${category}_PORT in .env to enable"
         fi
@@ -207,12 +207,12 @@ start_asterix_protocols() {
 
     host="${CAT62_HOST:-${RADAR_HOST:-}}"
     if asterix_category_uses_raw 62; then
-        start asterix-cat62 protocols/asterix_cat62.py --zenoh-raw
+        start asterix-cat62 protocols/vendors/asterix/cat.py --category 62 --zenoh-raw
     elif [[ "$host" && "$host" != "127.0.0.1" ]]; then
-        start asterix-cat62 protocols/asterix_cat62.py --host "$host" \
+        start asterix-cat62 protocols/vendors/asterix/cat.py --category 62 --host "$host" \
             --port "${CAT62_PORT:-${RADAR_PORT:-50062}}"
     elif [[ "${CAT62_UDP:-}" == "1" ]]; then
-        start asterix-cat62 protocols/asterix_cat62.py --udp --port "${CAT62_PORT:-50062}"
+        start asterix-cat62 protocols/vendors/asterix/cat.py --category 62 --udp --port "${CAT62_PORT:-50062}"
     else
         echo "  [skip] asterix-cat62 — set CAT62_HOST or CAT62_UDP=1 in .env to enable"
     fi
@@ -270,11 +270,21 @@ start_bridges() {
 
     # Optional transport-only ingress.  These processes publish bytes; the
     # matching protocol translators below perform all decoding.
-    [[ "${MAVLINK_RAW_PORT:-}" ]] && start mavlink-raw bridges/mavlink_raw_bridge.py --port "$MAVLINK_RAW_PORT" || true
-    [[ "${LINK16_RAW_PORT:-}" ]] && start link16-raw bridges/link16_jreap_bridge.py --port "$LINK16_RAW_PORT" || true
-    [[ "${VMF_RAW_PORT:-}" ]] && start vmf-raw bridges/vmf_bridge.py --port "$VMF_RAW_PORT" || true
-    [[ "${SAPIENT_RAW_PORT:-}" ]] && start sapient-raw bridges/sapient_flex335_bridge.py --tcp --port "${SAPIENT_RAW_PORT:-7001}" || true
-    [[ "${STANAG4586_RAW_PORT:-}" ]] && start stanag4586-raw bridges/stanag4586_bridge.py --tcp --port "${STANAG4586_RAW_PORT:-4586}" || true
+    if [[ "${MAVLINK_RAW_PORT:-}" ]]; then
+        start mavlink-raw bridges/mavlink_raw_bridge.py --port "$MAVLINK_RAW_PORT"
+    fi
+    if [[ "${LINK16_RAW_PORT:-}" ]]; then
+        start link16-raw bridges/link16_jreap_bridge.py --port "$LINK16_RAW_PORT"
+    fi
+    if [[ "${VMF_RAW_PORT:-}" ]]; then
+        start vmf-raw bridges/vmf_bridge.py --port "$VMF_RAW_PORT"
+    fi
+    if [[ "${SAPIENT_RAW_PORT:-}" ]]; then
+        start sapient-raw bridges/sapient_flex335_bridge.py --tcp --port "$SAPIENT_RAW_PORT"
+    fi
+    if [[ "${STANAG4586_RAW_PORT:-}" ]]; then
+        start stanag4586-raw bridges/stanag4586_bridge.py --tcp --port "$STANAG4586_RAW_PORT"
+    fi
 }
 
 # ---------------------------------------------------------------------------
@@ -288,62 +298,68 @@ start_protocols() {
 
     # Receiver/detection nodes publish raw ASTM/ASD-STAN messages into Zenoh.
     # This idle-safe translator runs on the data plane and needs no radio.
-    start opendroneid protocols/opendroneid.py
+    start opendroneid protocols/random/opendroneid.py
 
-    start cap protocols/cap.py
-    start geojson protocols/geojson_features.py
-    start ais-nmea protocols/ais_nmea.py
-    start spectrum protocols/spectrum_observation.py
-    start sensor-health protocols/sensor_health.py
-    start mission-route protocols/mission_route.py
+    start cap protocols/random/cap.py
+    start geojson protocols/random/geojson_features.py
+    start ais-nmea protocols/random/ais_nmea.py
+    start spectrum protocols/random/spectrum_observation.py
+    start sensor-health protocols/random/sensor_health.py
+    start mission-route protocols/random/mission_route.py
 
     if [[ "${SAPIENT_ZENOH_RAW:-}" == "1" ]]; then
-        start sapient protocols/sapient_flex335.py --zenoh-raw --raw-topic "${SAPIENT_RAW_TOPIC:-}"
+        start sapient protocols/vendors/sapient/flex335.py --zenoh-raw --raw-topic "${SAPIENT_RAW_TOPIC:-}"
     elif [[ "${SAPIENT_LISTEN_PORT:-}" ]]; then
         sapient_args=(--listen "$SAPIENT_LISTEN_PORT" --bind "${SAPIENT_BIND:-127.0.0.1}")
         [[ "${SAPIENT_ALLOW_PEER:-}" ]] && sapient_args+=(--allow-peer "$SAPIENT_ALLOW_PEER")
-        start sapient protocols/sapient_flex335.py "${sapient_args[@]}"
+        start sapient protocols/vendors/sapient/flex335.py "${sapient_args[@]}"
     elif [[ "${SAPIENT_HOST:-}" ]]; then
-        start sapient protocols/sapient_flex335.py --host "$SAPIENT_HOST" --port "${SAPIENT_PORT:-7001}"
+        start sapient protocols/vendors/sapient/flex335.py --host "$SAPIENT_HOST" --port "${SAPIENT_PORT:-7001}"
     else
-        start sapient protocols/sapient_flex335.py --zenoh-raw --raw-topic "${SAPIENT_RAW_TOPIC:-}"
+        start sapient protocols/vendors/sapient/flex335.py --zenoh-raw --raw-topic "${SAPIENT_RAW_TOPIC:-}"
     fi
 
-    start nffi protocols/nffi.py
+    start nffi protocols/random/nffi.py
 
     if [[ "${MAVLINK_ZENOH_RAW:-}" == "1" ]]; then
-        start mavlink protocols/mavlink.py --zenoh-raw --raw-topic "${MAVLINK_RAW_TOPIC:-}"
+        start mavlink protocols/random/mavlink.py --zenoh-raw --raw-topic "${MAVLINK_RAW_TOPIC:-}"
     elif [[ "${MAVLINK_PORT:-}" ]]; then
         mav_args=(); [[ "${MAVLINK_TCP:-}" == "1" ]] && mav_args=(--tcp)
-        start mavlink protocols/mavlink.py --port "$MAVLINK_PORT" "${mav_args[@]}"
+        start mavlink protocols/random/mavlink.py --port "$MAVLINK_PORT" "${mav_args[@]}"
     else
         echo "  [skip] mavlink — set MAVLINK_PORT in .env to enable"
     fi
 
     if [[ "${VMF_ZENOH_RAW:-}" == "1" ]]; then
-        start vmf protocols/vmf.py --zenoh-raw --raw-topic "${VMF_RAW_TOPIC:-}"
+        start vmf protocols/random/vmf.py --zenoh-raw --raw-topic "${VMF_RAW_TOPIC:-}"
     elif [[ "${VMF_PORT:-}" ]]; then
         vmf_args=(); [[ "${VMF_TCP:-}" == "1" ]] && vmf_args=(--tcp)
-        start vmf protocols/vmf.py --port "$VMF_PORT" "${vmf_args[@]}"
+        start vmf protocols/random/vmf.py --port "$VMF_PORT" "${vmf_args[@]}"
     else
         echo "  [skip] vmf — set VMF_PORT in .env to enable"
     fi
 
     if [[ "${LINK16_ZENOH_RAW:-}" == "1" ]]; then
-        start link16 protocols/link16.py --zenoh-raw --raw-topic "${LINK16_RAW_TOPIC:-}"
+        start link16 protocols/random/link16.py --zenoh-raw --raw-topic "${LINK16_RAW_TOPIC:-}"
     elif [[ "${LINK16_PORT:-}" ]]; then
-        start link16 protocols/link16.py --port "$LINK16_PORT"
+        start link16 protocols/random/link16.py --port "$LINK16_PORT"
     else
         echo "  [skip] link16 — set LINK16_PORT in .env to enable"
     fi
 
-    if [[ "${STANAG4586_ZENOH_RAW:-}" == "1" ]]; then
-        start stanag4586 protocols/stanag4586.py --zenoh-raw --raw-topic "${STANAG4586_RAW_TOPIC:-}"
-    elif [[ "${STANAG4586_HOST:-}" ]]; then
-        start stanag4586 protocols/stanag4586.py \
+    if [[ "${STANAG4586_PROFILE:-}" == "legacy_ed3_approx" && "${STANAG4586_ZENOH_RAW:-}" == "1" ]]; then
+        start stanag4586 protocols/vendors/stanag/4586.py --zenoh-raw --raw-topic "${STANAG4586_RAW_TOPIC:-}"
+    elif [[ "${STANAG4586_PROFILE:-}" == "legacy_ed3_approx" && "${STANAG4586_HOST:-}" ]]; then
+        start stanag4586 protocols/vendors/stanag/4586.py \
             --host "$STANAG4586_HOST" --port "${STANAG4586_PORT:-4586}"
     else
-        echo "  [skip] stanag4586 — set STANAG4586_HOST in .env to enable"
+        echo "  [skip] stanag4586 — validate the VSM ICD, then set STANAG4586_PROFILE=legacy_ed3_approx and a source"
+    fi
+
+    if [[ "${STANAG4609_SRT_URL:-}" ]]; then
+        start stanag4609 protocols/vendors/stanag/4609.py
+    else
+        echo "  [skip] stanag4609 — set STANAG4609_SRT_URL in .env to enable"
     fi
 }
 
@@ -404,7 +420,7 @@ start_giraffe_bridges() {
     start_asterix_protocols
 
     if [[ "${LINK16_PORT:-}" ]]; then
-        start link16 protocols/link16.py --port "$LINK16_PORT"
+        start link16 protocols/random/link16.py --port "$LINK16_PORT"
     else
         echo "  [skip] link16 — set LINK16_PORT in .env to enable"
     fi
@@ -412,7 +428,7 @@ start_giraffe_bridges() {
     if [[ "${MAVLINK_PORT:-}" ]]; then
         tcp_mav=""
         [[ "${MAVLINK_TCP:-}" == "1" ]] && tcp_mav="--tcp"
-        start mavlink protocols/mavlink.py --port "$MAVLINK_PORT" ${tcp_mav:+"$tcp_mav"}
+        start mavlink protocols/random/mavlink.py --port "$MAVLINK_PORT" ${tcp_mav:+"$tcp_mav"}
     else
         echo "  [skip] mavlink — set MAVLINK_PORT in .env to enable"
     fi
@@ -426,7 +442,7 @@ start_giraffe_bridges() {
     if [[ "${VMF_PORT:-}" ]]; then
         tcp_vmf=""
         [[ "${VMF_TCP:-}" == "1" ]] && tcp_vmf="--tcp"
-        start vmf protocols/vmf.py --port "$VMF_PORT" ${tcp_vmf:+"$tcp_vmf"}
+        start vmf protocols/random/vmf.py --port "$VMF_PORT" ${tcp_vmf:+"$tcp_vmf"}
     else
         echo "  [skip] vmf — set VMF_PORT in .env to enable"
     fi
@@ -456,10 +472,10 @@ start_giraffe_layers() {
     start track-fusion bridges/track_fusion_bridge.py
 
     # STANAG 4586 UAS interface — only if VSM host is configured
-    if [[ "${STANAG4586_HOST:-}" ]]; then
-        start stanag4586 protocols/stanag4586.py --host "$STANAG4586_HOST" --port "${STANAG4586_PORT:-4586}"
+    if [[ "${STANAG4586_PROFILE:-}" == "legacy_ed3_approx" && "${STANAG4586_HOST:-}" ]]; then
+        start stanag4586 protocols/vendors/stanag/4586.py --host "$STANAG4586_HOST" --port "${STANAG4586_PORT:-4586}"
     else
-        start stanag4586 protocols/stanag4586.py --zenoh-raw
+        start stanag4586 protocols/vendors/stanag/4586.py --zenoh-raw
     fi
 }
 

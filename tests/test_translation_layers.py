@@ -10,12 +10,12 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "compose"))
 sys.path.insert(0, str(ROOT / "compose" / "protocols"))
 
-from ais_nmea import decode_payload, parse_line  # noqa: E402
-from cap import parse_cap  # noqa: E402
-from geojson_features import normalize as normalize_geojson  # noqa: E402
-from mission_route import normalize as normalize_route  # noqa: E402
-from sensor_health import normalize as normalize_health  # noqa: E402
-from spectrum_observation import normalize as normalize_spectrum  # noqa: E402
+from protocols.random.ais_nmea import decode_payload, parse_line  # noqa: E402
+from protocols.random.cap import parse_cap  # noqa: E402
+from protocols.random.geojson_features import normalize as normalize_geojson  # noqa: E402
+from protocols.random.mission_route import normalize as normalize_route  # noqa: E402
+from protocols.random.sensor_health import normalize as normalize_health  # noqa: E402
+from protocols.random.spectrum_observation import normalize as normalize_spectrum  # noqa: E402
 
 
 class TranslationLayerTests(unittest.TestCase):

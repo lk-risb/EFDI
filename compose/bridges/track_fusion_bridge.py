@@ -73,10 +73,10 @@ import zenoh
 from google.protobuf.message import DecodeError
 from zenoh_auth import apply_zenoh_auth
 from namespace_prefix import topic_root
-from protocols.adsblol_track_pb2 import AdsbLolTrack
-from protocols.airplaneslive_track_pb2 import AirplanesLiveTrack
+from protocols.random.adsblol_track_pb2 import AdsbLolTrack
+from protocols.random.airplaneslive_track_pb2 import AirplanesLiveTrack
 from protocols.protobuf_codec import source_message_to_track
-from protocols.normalized_track_pb2 import NormalizedTrack
+from protocols.random.normalized_track_pb2 import NormalizedTrack
 from protocols.protobuf_codec import normalized_track_message
 
 ORG       = os.environ.get("PARTNER_NAMESPACE", "")

@@ -39,11 +39,11 @@ def wrapped_track_message(
     protocol-specific scalar fields alongside it.
 
     Every per-protocol contract in compose/protocols/*.proto follows this shape
-    (see mavlink.proto, vmf.proto, sapient_flex335.proto). Some contracts use
+    (see mavlink.proto, vmf.proto, vendor sapient/flex335.proto). Some contracts use
     a different nested field name such as `sensor` or `normalized`; callers can
     override `wrapper_field` for those cases.
     """
-    from protocols.normalized_track_pb2 import NormalizedTrack
+    from protocols.random.normalized_track_pb2 import NormalizedTrack
 
     message = message_class()
     getattr(message, wrapper_field).CopyFrom(

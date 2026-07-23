@@ -27,7 +27,7 @@ from zenoh_auth import apply_zenoh_auth
 
 from http_json import read_json_response
 from namespace_prefix import topic_root
-from protocols.adsblol_track_pb2 import AdsbLolTrack
+from protocols.random.adsblol_track_pb2 import AdsbLolTrack
 from protocols.protobuf_codec import source_track_to_message
 
 ORG = os.environ.get("PARTNER_NAMESPACE", "")

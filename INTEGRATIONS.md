@@ -41,19 +41,20 @@ and `--multicast-interface`.
 
 | Protocol script | Transport role | Required partner/runtime configuration | Current contract |
 |---|---|---|---|
-| `asterix_cat10.py` | UDP listener or TCP server | Producer sends to `CAT10_PORT`; set airport reference coordinates if reports use only local X/Y or polar positions | EUROCONTROL CAT-010 Ed.1.1, airport surface targets/status |
-| `asterix_cat20.py` | UDP listener or TCP server | Producer sends to `CAT20_PORT` and supplies its ICD | Legacy compatibility UAP only; not claimed as a modern edition |
-| `asterix_cat21.py` | UDP listener or TCP server | ADS-B gateway sends to `CAT21_PORT` and supplies its edition/ICD | Legacy pre-2.2 compatibility UAP; modern CAT-021 2.7 still needs implementation |
-| `asterix_cat34.py` | UDP listener or TCP server | Radar sends CAT-034 alone to `CAT34_PORT` (EFDI convention: UDP 50034) | EUROCONTROL CAT-034 Ed.1.29 radar service messages |
-| `asterix_cat48.py` | UDP listener or TCP server | Radar sends CAT-048 alone to `CAT48_PORT` (EFDI convention: UDP 50048); local polar positions require `CAT48_RADAR_LAT/LON` | EUROCONTROL CAT-048 Ed.1.32 targets |
-| `asterix_cat62.py` | TCP client or UDP listener | Set `CAT62_HOST/PORT`, or `CAT62_UDP=1`; obtain producer ICD | Legacy compatibility UAP; modern Ed.1.21 is not yet decoded |
+| `vendors/asterix/cat.py --category 10` | UDP listener or TCP server | Producer sends to `CAT10_PORT`; set airport reference coordinates if reports use only local X/Y or polar positions | EUROCONTROL CAT-010 Ed.1.1, airport surface targets/status |
+| `vendors/asterix/cat.py --category 20` | UDP listener or TCP server | Producer sends to `CAT20_PORT` and confirms Edition 1.11 | EUROCONTROL CAT-020 Ed.1.11 MLAT reports |
+| `vendors/asterix/cat.py --category 21` | UDP listener or TCP server | ADS-B gateway sends to `CAT21_PORT` and confirms Edition 2.7 | EUROCONTROL CAT-021 Ed.2.7 ADS-B reports |
+| `vendors/asterix/cat.py --category 34` | UDP listener or TCP server | Radar sends CAT-034 alone to `CAT34_PORT` (EFDI convention: UDP 50034) | EUROCONTROL CAT-034 Ed.1.29 radar service messages |
+| `vendors/asterix/cat.py --category 48` | UDP listener or TCP server | Radar sends CAT-048 alone to `CAT48_PORT` (EFDI convention: UDP 50048); local polar positions require `CAT48_RADAR_LAT/LON` | EUROCONTROL CAT-048 Ed.1.32 targets |
+| `vendors/asterix/cat.py --category 62` | TCP client or UDP listener | Set `CAT62_HOST/PORT`, or `CAT62_UDP=1`; confirm Edition 1.21 | EUROCONTROL CAT-062 Ed.1.21 system tracks |
 | `mavlink.py` | UDP listener or TCP server | Autopilot, GCS, or receiver sends MAVLink to `MAVLINK_PORT` | MAVLink 1/2 position plus MAVLink `OPEN_DRONE_ID_*` aggregation |
 | `opendroneid.py` | Zenoh subscriber/translator | Receiver publishes an exact 25-byte message or bounded Message Pack under `…/raw/opendroneid/{receiver}/{transmitter}` | ASTM F3411 / ASD-STAN Basic ID, Location, Auth, Self ID, System, and Operator ID |
-| `sapient_flex335.py` | TCP listener or client | Edge node connects to `SAPIENT_LISTEN_PORT`, or set middleware `SAPIENT_HOST/PORT`; remote listeners require an allowed source CIDR | BSI FLEX 335 v2 framing and public SAPIENT protobuf subset |
+| `vendors/sapient/flex335.py` | TCP listener or client | Edge node connects to `SAPIENT_LISTEN_PORT`, or set middleware `SAPIENT_HOST/PORT`; remote listeners require an allowed source CIDR | BSI FLEX 335 v2 framing and public SAPIENT protobuf subset |
 | `link16.py` | UDP listener | A Link 16/JREAP-C gateway sends its documented UDP profile to `LINK16_PORT` | Gateway data only; no direct radio interface and no guessed TCP framing |
 | `vmf.py` | UDP listener or TCP server | VMF gateway sends to `VMF_PORT` and confirms MIL-STD-47001C profile | Implemented message subset |
 | `nffi.py` | Zenoh subscriber/translator | Publisher writes one complete XML document under `…/raw/nffi/{source-id}` | NATO NFFI / ADatP-36 (STANAG 5527) XML subset |
-| `stanag4586.py` | TCP client | Set CUCS/VSM `STANAG4586_HOST/PORT` and confirm implementation profile | Implemented vehicle-position subset |
+| `vendors/stanag/4586.py` | TCP client | Set CUCS/VSM `STANAG4586_HOST/PORT`; validate the VSM ICD before selecting `STANAG4586_PROFILE=legacy_ed3_approx` | Historical deployment layout, disabled by default; not claimed as a generic STANAG 4586 decoder |
+| `vendors/stanag/4609.py` | SRT/KLV input | Set `STANAG4609_SRT_URL` for the motion-imagery metadata stream | MISB ST 0601 KLV local-set subset over STANAG 4609 motion imagery; SRT is the configured transport, not part of the KLV schema |
 
 All six ASTERIX translators also accept `--zenoh-raw` (or their corresponding
 `CATNN_ZENOH_RAW=1`) for an exact complete frame on `…/raw/asterix/catNN`.
@@ -108,7 +109,7 @@ UTM_ANS_TLS_VERIFY=1
 These records are marked `source_kind=declared_utm_flight` and
 `utm_remote_id_observed=false`. For actual broadcast Remote ID, attach a
 receiver/detection node and publish ASTM F3411/OpenDroneID messages to Zenoh;
-the `protocols/opendroneid.py` translator handles that path. Other lawful
+the `protocols/random/opendroneid.py` translator handles that path. Other lawful
 options are an institutional U-space/CIS or network-identification service
 agreement with Oro navigacija, an approved DroneAware API account, or a
 contracted airport detection system. None is a guaranteed free public feed.
@@ -246,7 +247,6 @@ Zenoh.
 | Priority | Protocol | Use | Gate before implementation |
 |---|---|---|---|
 | High | ONVIF Profile M | Camera analytics objects, metadata, geolocation, and events | Device profile, discovery/auth method, sample metadata stream. [ONVIF Profile M](https://www.onvif.org/profiles/profile-m/) |
-| High | Modern ASTERIX CAT-021 2.7 / CAT-062 1.21 | Current ADS-B and system-track gateways | Exact category edition and producer samples |
 | Medium | VITA 49.2 | Raw RF/spectrum observations | DSP/geolocation stage that converts samples into map-ready bearings/positions. [VITA Radio Transport](https://www.vita.com/page-1855484) |
 | Medium | STANAG 4607 / 4676 | GMTI and NATO track exchange | Licensed ICD/profile and representative messages; do not infer layouts |
 | Vendor-specific | Acoustic/RF counter-UAS API | Bearings, classifications, tracks, sensor health | Vendor ICD/API schema, coordinate frame, time base, lifecycle, and authentication |
@@ -254,7 +254,9 @@ Zenoh.
 SAPIENT is the preferred public, vendor-neutral counter-UAS sensor interface:
 the MOD-owned architecture is standardized as BSI FLEX 335 and publishes its
 protobuf schemas. See the [official SAPIENT guidance](https://www.gov.uk/guidance/sapient-autonomous-sensor-system)
-and [Dstl schemas](https://github.com/dstl/SAPIENT-Proto-Files).
+and [Dstl schemas](https://github.com/dstl/SAPIENT-Proto-Files). Its TCP
+framing is the four-byte little-endian protobuf length used by the
+[official BSI FLEX 335 v2 test harness](https://github.com/dstl/BSI-Flex-335-v2-Test-Harness/blob/main/SAPIENTMessageProcessor/ByteDataMessageBuilder.cs).
 
 ## Hackathon partner intake checklist
 

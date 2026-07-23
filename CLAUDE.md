@@ -70,12 +70,12 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 ### What this is
 ASTERIX radar bridge → Zenoh pub/sub → CoT XML → ATAK. Decodes CAT-34 (monoradar service), CAT-48 (monoradar targets), CAT-21 (ADS-B), CAT-20 (MLAT), CAT-62 (system tracks). Key files:
-- `compose/protocols/asterix_catNN.py` — one edition-scoped ASTERIX category per process
+- `compose/protocols/vendors/asterix/cat.py` — all supported edition-scoped ASTERIX CAT categories, selected per process with `--category`
 - `compose/layers/cot_layer.py` — CoT XML builder / ATAK info card
 
 ### After every edit
 ```
-python3 -m py_compile compose/protocols/asterix_cat*.py
+python3 -m py_compile compose/protocols/vendors/asterix/cat.py
 python3 -m py_compile compose/layers/cot_layer.py
 ```
 

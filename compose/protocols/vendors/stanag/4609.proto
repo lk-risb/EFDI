@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package efdi.protocols.v2;
+
+import "protocols/random/normalized_track.proto";
+
+// STANAG 4609 / MISB KLV ingest with a normalized track projection.
+message Stanag4609Track {
+  efdi.data.v2.NormalizedTrack track = 1;
+  bytes klv_raw = 2;
+  string stream_id = 3;
+  uint32 packet_index = 4;
+  string klv_key = 5;
+  uint32 klv_len = 6;
+  optional string source_tag = 7;
+  optional double sensor_lat_deg = 8;
+  optional double sensor_lon_deg = 9;
+  optional double sensor_alt_m = 10;
+  optional double frame_center_lat_deg = 11;
+  optional double frame_center_lon_deg = 12;
+  optional double frame_center_alt_m = 13;
+  optional double platform_heading_deg = 14;
+  optional double sensor_relative_azimuth_deg = 15;
+  optional double sensor_relative_elevation_deg = 16;
+}

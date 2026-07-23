@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-r"""cot_layer.py — Zenoh EFDI track topics → TAK Server / ATAK CoT bridge.
+"""cot_layer.py — Zenoh EFDI track topics → TAK Server / ATAK CoT bridge.
 
 Subscribes to all EFDI track topics and forwards position updates as
 Cursor-on-Target (CoT) XML to a TAK Server over TCP.
@@ -30,7 +30,7 @@ Zenoh topics consumed (5 main categories):
 Run:
     venv/bin/python3 cot_layer.py                                          # TCP plaintext → localhost:8087
     venv/bin/python3 cot_layer.py --host 100.64.x.x --port 8087           # TCP plaintext → remote TAK Server
-    venv/bin/python3 cot_layer.py --host 100.64.x.x --port 8089 --tls \   # mTLS → official TAK Server
+    venv/bin/python3 cot_layer.py --host 100.64.x.x --port 8089 --tls       # mTLS → official TAK Server
         --cert cert.pem --key key.pem --ca ca.pem
     venv/bin/python3 cot_layer.py --udp --host 239.2.3.1 --port 6969      # UDP multicast
 """
@@ -1153,8 +1153,10 @@ def _build_remarks(track: dict, cot_type: str) -> str:
             if track.get("sys_ovl_rdp"):     status_l.append("[RDP OVERLOAD]")
             if track.get("sys_ovl_xmt"):     status_l.append("[TX OVERLOAD]")
             if track.get("sys_tsv_invalid"): status_l.append("[TIME SOURCE INVALID]")
-            red = track.get("reduction_level")
-            if red: status_l.append("REDUCTION LEVEL: {}".format(red))
+            rdp_red = track.get("rdp_reduction_level")
+            xmt_red = track.get("xmt_reduction_level")
+            if rdp_red: status_l.append("RDP REDUCTION LEVEL: {}".format(rdp_red))
+            if xmt_red: status_l.append("TX REDUCTION LEVEL: {}".format(xmt_red))
             status_l.append("SRC: {}".format(src))
             # CALIBRATION
             ae = track.get("collimation_az_deg"); re = track.get("collimation_rng_nm")

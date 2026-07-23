@@ -34,7 +34,7 @@ from datetime import datetime, timezone
 import zenoh
 
 from namespace_prefix import topic_root
-from protocols.normalized_track_pb2 import NormalizedTrack
+from protocols.random.normalized_track_pb2 import NormalizedTrack
 from protocols.protobuf_codec import publish_dual
 from protocols.translation_common import base_record, make_config
 
@@ -315,7 +315,6 @@ def run(args) -> None:
 
     session = zenoh.open(make_config())
     raw_pub = session.declare_publisher(_RAW_TOPIC)
-    track_pubs: dict[str, object] = {}
 
     print("TAK CoT ingress bridge started", flush=True)
     print("  Hosts  : {}".format(", ".join("{}:{}".format(h, args.port) for h in hosts)), flush=True)
@@ -348,11 +347,7 @@ def run(args) -> None:
                     normalized = _normalize_event(elem)
                     if normalized is not None:
                         topic, record = normalized
-                        pub = track_pubs.get(topic)
-                        if pub is None:
-                            pub = session.declare_publisher(topic)
-                            track_pubs[topic] = pub
-                        publish_dual(pub, topic, record, NormalizedTrack, zenoh)
+                        publish_dual(session, topic, record, NormalizedTrack, zenoh)
                         if args.verbose:
                             print("TAK PUB {} uid={} type={}".format(
                                 topic, record.get("uid"), record.get("cot_type", "")), flush=True)
@@ -371,11 +366,6 @@ def run(args) -> None:
                     pass
 
     raw_pub.undeclare()
-    for pub in track_pubs.values():
-        try:
-            pub.undeclare()
-        except Exception:
-            pass
     session.close()
 
 
