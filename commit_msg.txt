@@ -27,5 +27,6 @@ feat: harden the EFDI fabric and align vendor protocols with official profiles
 - move remaining standalone adapters and schemas under protocols/random while keeping shared package/runtime helpers at the protocols root
 - remove obsolete external bridges and preserve online-only dronuradaras publication with tombstones for stale-marker eviction
 - make start.sh restore the saved service selection, keep secrets out of saved state and argv where supported, and correct duplicate TAK readiness/hint branches
+- update CI for the recursive protocol layout, resolve PATH-based Python executables in protobuf generation, and provide required MariaDB root-password placeholders during Compose validation
 - update English and Lithuanian operational documentation, integration tables, protocol editions, safety gates, and handoff memory to match the shipped behavior
-- validate 137 passing tests with one deployment-only skip, all bridge/layer/protocol Python modules, frontend type-check and production build, shell syntax and ShellCheck warnings, all Compose variants, 23 generated protobuf bindings, and git diff whitespace
+- validate 138 passing tests including the disposable MariaDB integration, all bridge/layer/protocol Python modules, frontend type-check and production build, shell syntax and ShellCheck warnings, all Compose variants, 23 generated protobuf bindings, and git diff whitespace
