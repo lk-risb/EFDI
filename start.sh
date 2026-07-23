@@ -324,17 +324,38 @@ is_bridge_pid() {
     [[ "$efdi_process" == "0" ]]
 }
 
+# True when some OTHER service's pidfile already claims this PID. Several
+# services run the SAME script with different arguments — cot_layer.py is both
+# cot-udp (multicast) and cot-udp-tak (unicast to the TAK client) — so a bare
+# script match is not enough to decide ownership.
+pid_claimed_by_other() {
+    local candidate="$1" own_file="$2" other other_pid
+    for other in "$PID_DIR"/*.pid; do
+        [[ -f "$other" && "$other" != "$own_file" ]] || continue
+        IFS= read -r other_pid < "$other" || continue
+        [[ "$other_pid" == "$candidate" ]] && return 0
+    done
+    return 1
+}
+
 is_running() {
     local f="$PID_DIR/$1.pid" pid cmd live_pid
     if [[ -f "$f" ]]; then
         IFS= read -r pid < "$f"
-        if is_bridge_pid "$pid" "${2:-}"; then
+        # A PID another service already owns is not this service's process; the
+        # pidfile is stale from a previous mis-adoption. Fall through to the
+        # scan below rather than reporting a sibling's process as ours.
+        if ! pid_claimed_by_other "$pid" "$f" && is_bridge_pid "$pid" "${2:-}"; then
             return 0
         fi
     fi
     cmd="${2:-}"
     [[ -n "$cmd" ]] || return 1
     while IFS= read -r live_pid; do
+        # Never adopt a process another service started. Without this, the
+        # second service sharing a script is reported "already running" and is
+        # silently never launched.
+        pid_claimed_by_other "$live_pid" "$f" && continue
         if is_bridge_pid "$live_pid" "$cmd"; then
             printf '%s\n' "$live_pid" > "$f"
             return 0

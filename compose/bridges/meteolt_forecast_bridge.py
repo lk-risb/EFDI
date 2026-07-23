@@ -7,7 +7,7 @@ publishes the nearest upcoming forecast timestamp as a WeatherPoint JSON to the
 EFDI Zenoh fabric.
 
 Zenoh topic:  <ORG>/weather/meteo-lt/<place-code>/forecast/v1
-Proto schema: weather_point.proto  (message WeatherPoint, package ltu.cis.tracks.v1)
+Proto schema: weather_point.proto  (message WeatherPoint, package efdi.data.v2)
 
 Run:
     venv/bin/python3 meteo_lt_bridge.py

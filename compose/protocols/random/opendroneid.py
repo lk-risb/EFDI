@@ -457,7 +457,7 @@ def decode_ingress(key_expr: str, payload: bytes):
 
 def _publish_track(session, track: dict) -> None:
     affiliation = track.get("affiliation", "unknown")
-    topic = "{}/air/opendroneid/astm-f3411/{}/uav/tracks/v1".format(
+    topic = "{}/air/opendroneid/passive_rf/{}/uav".format(
         TOPIC_ROOT, affiliation
     )
     publish_dual(session, topic, track, OpenDroneIdTrack, zenoh)
@@ -499,7 +499,7 @@ def run(args) -> None:
         make_handler(tracker, session, args.verbose, lock),
     )
     print("OpenDroneID raw Zenoh input:", args.input_topic, flush=True)
-    print("OpenDroneID normalized output: {}/air/opendroneid/astm-f3411/**".format(TOPIC_ROOT), flush=True)
+    print("OpenDroneID normalized output: {}/air/opendroneid/passive_rf/**".format(TOPIC_ROOT), flush=True)
     try:
         while True:
             time.sleep(5)

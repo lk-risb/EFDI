@@ -71,6 +71,52 @@ before TAK/SitaWare publication. See the [EUROCONTROL ASTERIX catalogue](https:/
 [CAT-062](https://www.eurocontrol.int/publication/cat062-eurocontrol-specification-surveillance-data-exchange-asterix-part-9-category-062),
 and [CAT-240](https://www.eurocontrol.int/publication/cat240-eurocontrol-specification-surveillance-data-exchange-asterix).
 
+## Egress topic views: `/sapient`, `/json`, `/proto`, `/raw`
+
+Every decoded track is published on one object key with four sibling views.
+They carry the same event at different fidelity, so a consumer subscribes to
+exactly one view and ignores the rest. Nothing is implicit — a consumer reading
+a key always knows what the bytes are.
+
+```
+{prefix}/{pod}/{domain}/{source}/{modality}/{affiliation}/{entity}/{type}/{id}/{view}
+```
+
+| View | Topic suffix | Zenoh encoding | Payload |
+|---|---|---|---|
+| SAPIENT | `…/{id}/sapient` | `application/protobuf` | BSI Flex 335 v2 `SapientMessage`. **The fabric contract.** |
+| JSON | `…/{id}/json` | `application/json` | Flat JSON object. Only the fields the decoder models. |
+| Protobuf | `…/{id}/proto` | `application/protobuf` | Typed message from the protocol's `.proto` (`compose/protocols/`). |
+| Raw | `…/{id}/raw` | `application/protobuf` | `RawEnvelope` wrapping the **original wire bytes**, unmodified. |
+
+**Which view to use.** Default to `/sapient`: it is the agreed contract for data
+leaving the fabric. Use `/proto` when you need full per-protocol sensor detail
+SAPIENT does not model, and `/raw` when you need a field EFDI does not decode at
+all, or want to run the vendor's own decoder over the exact bytes. `/json` is
+for humans and for consumers that cannot link a protobuf runtime.
+
+**Native payloads are byte-exact.** They are re-wrapped, never re-encoded:
+
+- ASTERIX — one standalone data block per record: the CAT byte and 2-byte
+  length header are re-added, so any off-the-shelf ASTERIX decoder reads it.
+- SAPIENT — the original BSI Flex 335 v2 `SapientMessage`, with the 32-bit
+  length prefix already stripped.
+- STANAG 4609 — the raw MISB KLV packet.
+
+The `RawEnvelope` (`compose/protocols/random/raw_envelope.proto`) carries
+`protocol`, `profile` (e.g. `cat048`, `misb-st0601`), `content_type`, and the
+`payload` bytes.
+
+**Fidelity caveat.** `/sapient`, `/json` and `/proto` are only as complete as
+the decoder. When a value cannot be represented in the target contract it is
+dropped from that view and a `protobuf encode failed …` line is logged — one
+view failing never blocks the others. `/raw` is the only view that can never
+lose a field.
+
+All four views sit under the pod's first-party publish prefix, so the existing
+`${DATA_TOPIC_ROOT}/**` router ACL already covers them — adding a view needs no
+ACL change.
+
 ## Source-specific bridges
 
 | Bridge | Endpoint behavior | Configuration needed |
@@ -163,7 +209,7 @@ SITAWARE_TLS_VERIFY=1
 ```
 
 Select `sitaware`; it publishes normalized units below
-`…/{domain}/sitaware/rest/{affiliation}/{entity}/tracks/v1`.
+`…/{domain}/sitaware/c2/{affiliation}/{entity}/{type}/{id}/sapient`.
 
 The current runtime keeps the SitaWare HQ REST and NVG paths separate. If the
 deployment exports NFFI instead, publish complete NFFI XML documents under
@@ -228,7 +274,7 @@ and transmitter topic segments are limited to deployment-safe identifiers; the
 envelope is limited to 4096 bytes and the decoded protocol payload to 228 bytes.
 The translator then publishes only to:
 
-`{NAMESPACE_PREFIX}/{PARTNER_NAMESPACE}/air/opendroneid/astm-f3411/{affiliation}/uav/tracks/v1`
+`{NAMESPACE_PREFIX}/{PARTNER_NAMESPACE}/air/opendroneid/passive_rf/{affiliation}/uav/{type}/{id}/sapient`
 
 Configure runtime-only `OPENDRONEID_FRIENDLY_IDS` to classify own UAS IDs as
 friendly; all others remain unknown. The ordinary router launcher starts the

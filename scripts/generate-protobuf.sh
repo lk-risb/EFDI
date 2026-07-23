@@ -29,9 +29,21 @@ for contract in "${contracts[@]}"; do
     contract_names+=("${contract#"$ROOT/compose/"}")
 done
 
+# Vendored third-party schemas (compose/vendor) are their own include root: the
+# BSI Flex 335 files import each other as "sapient_msg/bsi_flex_335_v2_0/<f>",
+# which only resolves relative to compose/vendor. They are compiled with
+# paths relative to that root, EFDI's own contracts relative to compose/.
+vendor_names=()
+if [[ -d "$ROOT/compose/vendor" ]]; then
+    while IFS= read -r vendored; do
+        vendor_names+=("${vendored#"$ROOT/compose/vendor/"}")
+    done < <(find "$ROOT/compose/vendor" -type f -name '*.proto' -print | sort)
+fi
+
 "$PYTHON" -m grpc_tools.protoc \
     -I "$ROOT/compose" \
+    -I "$ROOT/compose/vendor" \
     --python_out="$OUTPUT" \
-    "${contract_names[@]}"
+    "${contract_names[@]}" "${vendor_names[@]}"
 
-echo "Generated ${#contracts[@]} Python protobuf bindings in $OUTPUT"
+echo "Generated $(( ${#contracts[@]} + ${#vendor_names[@]} )) Python protobuf bindings in $OUTPUT"

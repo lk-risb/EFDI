@@ -15,12 +15,12 @@ SIDC affiliation (char 2):
     U / P → unknown    → a-u-
 
 SIDC battle dimension (char 3):
-    A → air    → air/**/friendly|hostile|.../aircraft/tracks/v1
-    G → ground → land/**/friendly|hostile|.../unit/tracks/v1
-    S → sea    → sea/**/friendly|hostile|.../vessel/tracks/v1
-    U → subsurface → sea/**/…/vessel/tracks/v1
-    P → space  → space/**/friendly|hostile|.../satellite/tracks/v1
-    F → special operations forces → land/**/…/unit/tracks/v1
+    A → air    → air/**/friendly|hostile|.../aircraft/json/tracks
+    G → ground → land/**/friendly|hostile|.../unit/json/tracks
+    S → sea    → sea/**/friendly|hostile|.../vessel/json/tracks
+    U → subsurface → sea/**/…/vessel/json/tracks
+    P → space  → space/**/friendly|hostile|.../satellite/json/tracks
+    F → special operations forces → land/**/…/unit/json/tracks
 
 Configuration (compose/.env):
     SITAWARE_URL=https://10.0.0.1          # base URL of SitaWare server (LAN, primary)
@@ -144,7 +144,7 @@ def sidc_to_topic(sidc: str) -> str:
     """Map a 15-char SIDC to the appropriate Zenoh topic."""
     sidc = (sidc or "").upper().replace("*", "-").replace("-", "")
     if len(sidc) < 3:
-        return "{}/land/sitaware/rest/unknown/unit/tracks/v1".format(TOPIC_ROOT)
+        return "{}/land/sitaware/c2/unknown/unit".format(TOPIC_ROOT)
 
     aff_char = sidc[1] if len(sidc) > 1 else "U"
     dim_char = sidc[2] if len(sidc) > 2 else "G"
@@ -157,9 +157,9 @@ def sidc_to_topic(sidc: str) -> str:
     # "mil" slot loses friendly/hostile state because those topics infer it from
     # ICAO addresses, which friendly-force records normally do not carry.
     if domain == "air":
-        return "{}/air/sitaware/rest/{}/aircraft/tracks/v1".format(TOPIC_ROOT, aff)
+        return "{}/air/sitaware/c2/{}/aircraft".format(TOPIC_ROOT, aff)
 
-    return "{}/{}/sitaware/rest/{}/{}/tracks/v1".format(TOPIC_ROOT, domain, aff, entity)
+    return "{}/{}/sitaware/rest/{}/{}".format(TOPIC_ROOT, domain, aff, entity)
 
 
 # ---------------------------------------------------------------------------

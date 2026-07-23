@@ -26,7 +26,7 @@ from translation_common import TOPIC_ROOT, make_config, payload_bytes
 
 
 INPUT_TOPIC = os.environ.get("CAP_INPUT_TOPIC") or TOPIC_ROOT + "/raw/cap/**"
-OUTPUT_TOPIC = TOPIC_ROOT + "/land/cap/neutral/sensor/alerts/v1"
+OUTPUT_TOPIC = TOPIC_ROOT + "/land/cap/c2/neutral/sensor"
 MAX_XML = 2_000_000
 _NS = "urn:oasis:names:tc:emergency:cap:1.2"
 

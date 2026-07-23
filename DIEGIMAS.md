@@ -367,19 +367,19 @@ Bridge'as nuskaito MIL-STD-2525B SIDC kodus iš SitaWare ir nukreipia kiekvieną
 
 | SIDC priklausomybė | SIDC dimensija | Zenoh temos kelias | ATAK CoT tipas |
 | --- | --- | --- | --- |
-| Draugiškas / Laikomas draugišku | Žemė (G) | `…/land/sitaware/rest/friendly/unit/…` | `a-f-G-U-C` |
-| Priešiškas | Žemė (G) | `…/land/sitaware/rest/hostile/unit/…` | `a-h-G-U-C` |
-| Neutralus | Žemė (G) | `…/land/sitaware/rest/neutral/unit/…` | `a-n-G-U-C` |
-| Draugiškas | Oras (A) | `…/air/sitaware/rest/friendly/aircraft/…` | `a-f-A-M-F` |
-| Priešiškas | Oras (A) | `…/air/sitaware/rest/hostile/aircraft/…` | `a-h-A-M-F` |
-| Draugiškas | Jūra (S) | `…/sea/sitaware/rest/friendly/vessel/…` | `a-f-S-X-L` |
-| Priešiškas | Jūra (S) | `…/sea/sitaware/rest/hostile/vessel/…` | `a-h-S-X-L` |
-| Draugiškas / Priešiškas / Neutralus / Nežinomas | Kosmosas (P) | `…/space/sitaware/rest/<priklausomybė>/satellite/…` | atitinkamas `a-<priklausomybė>-P` |
-| Bet koks | Specialiųjų operacijų pajėgos (F) | `…/land/sitaware/rest/<priklausomybė>/unit/…` | atitinkamas sausumos vieneto tipas |
+| Draugiškas / Laikomas draugišku | Žemė (G) | `…/land/sitaware/c2/friendly/unit/…` | `a-f-G-U-C` |
+| Priešiškas | Žemė (G) | `…/land/sitaware/c2/hostile/unit/…` | `a-h-G-U-C` |
+| Neutralus | Žemė (G) | `…/land/sitaware/c2/neutral/unit/…` | `a-n-G-U-C` |
+| Draugiškas | Oras (A) | `…/air/sitaware/c2/friendly/aircraft/…` | `a-f-A-M-F` |
+| Priešiškas | Oras (A) | `…/air/sitaware/c2/hostile/aircraft/…` | `a-h-A-M-F` |
+| Draugiškas | Jūra (S) | `…/sea/sitaware/c2/friendly/vessel/…` | `a-f-S-X-L` |
+| Priešiškas | Jūra (S) | `…/sea/sitaware/c2/hostile/vessel/…` | `a-h-S-X-L` |
+| Draugiškas / Priešiškas / Neutralus / Nežinomas | Kosmosas (P) | `…/space/sitaware/c2/<priklausomybė>/satellite/…` | atitinkamas `a-<priklausomybė>-P` |
+| Bet koks | Specialiųjų operacijų pajėgos (F) | `…/land/sitaware/c2/<priklausomybė>/unit/…` | atitinkamas sausumos vieneto tipas |
 
 ### NATO NFFI draugiškų pajėgų protokolo vertiklis
 
-`nffi` prenumeruoja pilnus NFFI XML dokumentus, kuriuos partnerio imtuvas ar aptikimo sistema jau paskelbė Zenoh temoje `…/raw/nffi/{source-id}`. Kiekvienas vienetas išverčiamas į `…/land/nato/nffi/friendly/unit/tracks/v1`. Modulis neturi TCP kliento, klausyklės, galinio taško ar kadravimo logikos. Konkrečiam produktui skirtas prisijungimas turi būti atskirame `_bridge.py`, kai žinomas jo galinis taškas ir ICD.
+`nffi` prenumeruoja pilnus NFFI XML dokumentus, kuriuos partnerio imtuvas ar aptikimo sistema jau paskelbė Zenoh temoje `…/raw/nffi/{source-id}`. Kiekvienas vienetas išverčiamas į `…/land/nato/c2/friendly/unit/{type}/{id}/sapient`. Modulis neturi TCP kliento, klausyklės, galinio taško ar kadravimo logikos. Konkrečiam produktui skirtas prisijungimas turi būti atskirame `_bridge.py`, kai žinomas jo galinis taškas ir ICD.
 
 NFFI draugiškų pajėgų sąveiką aprašo ADatP-36 / STANAG 5527. STANAG 4677 yra atskira išlaipinto kario sistemų sąveikos šeima; 4677 JDSSDM-per-NFFI profiliui reikėtų atskiro, konkrečiam profiliui skirto įgyvendinimo.
 
@@ -479,19 +479,26 @@ Adresas priima tik GET/HEAD, pagal nutylėjimą reikalauja Basic autentifikavimo
 
 ## 6. Paslaugų žinynas
 
+> **Temų lygiai.** Žemiau nurodytos `…/tracks/v1` temos yra JSON lygis. Kiekviena
+> turi dvi protobuf temas su tuo pačiu įvykiu: `…/tracks/v2` (tipizuota žinutė iš
+> protokolo `.proto`) ir `…/tracks/native/v1` (`RawEnvelope` su originaliais
+> baitais, tiksliai baitas į baitą). Rinkitės `/v2`; `/native/v1` naudokite, kai
+> reikia lauko, kurio EFDI nedekoduoja. `/v1` yra pasenęs ir bus pašalintas.
+> Išsamiau: [INTEGRATIONS.md → Egress topic tiers](INTEGRATIONS.md#egress-topic-tiers-v1-v2-nativev1).
+
 | Paslauga | Scenarijus | Zenoh tema (sutrumpinta) | Suaktyvinimas |
 | --- | --- | --- | --- |
 | `asterix-udp` | `bridges/asterix_udp_bridge.py` | `…/raw/asterix/catNN` | Vienas bendras unicast/multicast UDP srautas |
 | `asterix-cat10/20/21/34/48/62` | `protocols/vendors/asterix/cat.py --category NN` | ASTERIX kategorijai skirta normali tema | Tiesioginis UDP/TCP arba viena neapdorota Zenoh kategorijos tema procesui |
-| `dronuradaras` | `bridges/dronuradaras_bridge.py` | `…/land/dronuradaras/acoustic/neutral/sensor/status/v1` | Tik prisijungusių įrenginių apklausa 60 s ir atsijungusių pašalinimas / aptikimų apklausa 10 s |
-| `utm-ans` | `bridges/utm_ans_bridge.py` | `…/air/utm_ans/utm/unknown/uav/tracks/v1` | Autorizuotų JSON/GeoJSON deklaruotų skrydžių apklausa; būtinas `UTM_ANS_API_URL` |
-| `opendroneid` | `protocols/random/opendroneid.py` | `…/air/opendroneid/astm-f3411/*/uav/tracks/v1` | Neapdoroti imtuvų pranešimai `…/raw/opendroneid/**`; maršrutizatoriaus mazgui radijo nereikia |
-| `aisstream` | `bridges/aisstream_ws_bridge.py` | `…/sea/aisstream/ais/civ/vessel/tracks/v1` | Autentifikuotas WSS srautas |
-| `sitaware` | `bridges/sitaware_bridge.py` | `…/land/sitaware/rest/friendly/unit/tracks/v1` | Konfigūruojama REST apklausa |
-| `nffi` | `protocols/random/nffi.py` | `…/land/nato/nffi/friendly/unit/tracks/v1` | Pilni XML dokumentai Zenoh temoje `…/raw/nffi/*` |
-| `link16` | `protocols/random/link16.py` | `…/air/link16/jreap/*/aircraft/tracks/v1` | Srautinis UDP |
-| `mavlink` | `protocols/random/mavlink.py` | `…/air/mavlink/mav2/*/uav/tracks/v1` | Srautinis UDP/TCP |
-| `dji-cloud` | `bridges/dji_cloud_api_bridge.py` | `…/air/dji/cloud-api/friendly/uav/tracks/v1` | DJI šaltiniui skirtas autentifikuotas MQTT 5 tiltas |
+| `dronuradaras` | `bridges/dronuradaras_bridge.py` | `…/land/dronuradaras/acoustic/neutral/sensor/{type}/{id}/sapient` | Tik prisijungusių įrenginių apklausa 60 s ir atsijungusių pašalinimas / aptikimų apklausa 10 s |
+| `utm-ans` | `bridges/utm_ans_bridge.py` | `…/air/utm_ans/c2/unknown/uav/{type}/{id}/sapient` | Autorizuotų JSON/GeoJSON deklaruotų skrydžių apklausa; būtinas `UTM_ANS_API_URL` |
+| `opendroneid` | `protocols/random/opendroneid.py` | `…/air/opendroneid/passive_rf/*/uav/{type}/{id}/sapient` | Neapdoroti imtuvų pranešimai `…/raw/opendroneid/**`; maršrutizatoriaus mazgui radijo nereikia |
+| `aisstream` | `bridges/aisstream_ws_bridge.py` | `…/sea/aisstream/ais/civ/vessel/{type}/{id}/sapient` | Autentifikuotas WSS srautas |
+| `sitaware` | `bridges/sitaware_bridge.py` | `…/land/sitaware/c2/friendly/unit/{type}/{id}/sapient` | Konfigūruojama REST apklausa |
+| `nffi` | `protocols/random/nffi.py` | `…/land/nato/c2/friendly/unit/{type}/{id}/sapient` | Pilni XML dokumentai Zenoh temoje `…/raw/nffi/*` |
+| `link16` | `protocols/random/link16.py` | `…/air/link16/c2/*/aircraft/{type}/{id}/sapient` | Srautinis UDP |
+| `mavlink` | `protocols/random/mavlink.py` | `…/air/mavlink/telemetry/*/uav/{type}/{id}/sapient` | Srautinis UDP/TCP |
+| `dji-cloud` | `bridges/dji_cloud_api_bridge.py` | `…/air/dji/telemetry/friendly/uav/{type}/{id}/sapient` | DJI šaltiniui skirtas autentifikuotas MQTT 5 tiltas |
 | `cot-udp` | `layers/cot_layer.py` | Prenumeratorius — visos temos | Įvykio valdomas |
 | `cot-bridge` | `layers/cot_layer.py` | Prenumeratorius — visos temos | Įvykio valdomas |
 | `sitaware-nvg` | `layers/nato_nvg_layer.py` | Prenumeratorius — visos takelių temos | Legacy NVG push adapteris |
@@ -644,7 +651,7 @@ rolių. Tam reikia atskiro vėlesnio sertifikatų subjektų ACL sprendimo.
 ### Zenoh temų schema
 
 ```text
-{VARDAS_ERDVĖ}/{DOMENAS}/{ŠALTINIS}/{PROTOKOLAS}/{PRIKLAUSOMYBĖ}/{TIPAS}/tracks/v1
+{VARDAS_ERDVĖ}/{DOMENAS}/{ŠALTINIS}/{MODALUMAS}/{PRIKLAUSOMYBĖ}/{OBJEKTAS}/{TIPAS}/{ID}/{VAIZDAS}
 ```
 
 | Laukas | Galimos reikšmės |
@@ -758,7 +765,7 @@ curl -s -u "$SITAWARE_USER:$SITAWARE_PASS" "$SITAWARE_URL/..." | python3 -m json
 
 **3. SIDC kodo problema — vienetas rodomas su neteisinga piktograma arba nerodomas:**
 
-SitaWare vienetai be galiojančio 15 simbolių SIDC kodo nukreipiami į `…/land/sitaware/rest/unknown/unit/…` ir rodomi kaip nežinomi žemės vienetai (`a-u-G-U-C`). Patikrinkite SIDC reikšmę žurnale:
+SitaWare vienetai be galiojančio 15 simbolių SIDC kodo nukreipiami į `…/land/sitaware/c2/unknown/unit/…` ir rodomi kaip nežinomi žemės vienetai (`a-u-G-U-C`). Patikrinkite SIDC reikšmę žurnale:
 
 ```bash
 grep "sidc=" $POD_STATE_DIR/logs/sitaware.log | head -10
@@ -813,7 +820,7 @@ _CERT_DIR = os.environ.get("EFDI_CERT_DIR", os.path.dirname(__file__))
 
 def main():
     session = zenoh.open(make_config())
-    topic = f"{ORG}/air/<šaltinis>/<protokolas>/unknown/aircraft/tracks/v1"
+    topic = f"{ORG}/air/<šaltinis>/<modalumas>/unknown/aircraft/{tipas}/{id}/sapient"
     pub = session.declare_publisher(topic)
 
     while True:
@@ -967,7 +974,7 @@ Konfigūracijos skirtukas rodo struktūrizuotus laukus, ne žalią JSON5 — kie
 | --- | --- |
 | Vietinis mTLS portas | Tinklui skirtas listen portas skirtas bridges, audit-sink (numatytasis 7447) |
 | Vietinis TCP portas | Plaintext, tik vietinis listen portas bridge'ams + šiam GUI (numatytasis 7448) |
-| Fabric endpoint | Goat pusės / kolegos endpoint, į kurį šis pod'as skambina — įvedamas kaip atskiri Host + Port laukai (schema visada `tls`, niekada nerodoma); yra vieno paspaudimo šablonai anksčiau naudotiems endpoint'ams |
+| Fabric endpoint | Partnerio / kolegos endpoint, į kurį šis pod'as skambina — įvedamas kaip atskiri Host + Port laukai (schema visada `tls`, niekada nerodoma); yra vieno paspaudimo šablonai anksčiau naudotiems endpoint'ams |
 | Partner namespace | Šio pod'o first-party publish/subscribe prefiksas (jo slotas) — **keičiant šią reikšmę, kita fabric pusė taip pat turi leisti naują reikšmę savo ACL, kitaip publikacijos tyliai nustoja pasiekti** |
 | Inbound namespace | Bilateral prefiksas, kurį fabric publikuoja Į šį pod'ą |
 | Verify name on connect | Pagal nutylėjimą išjungta — gateway sertifikato SAN susietas su tinklo IP, ne su skambinamu DNS vardu; įjungus gali sulūžti fabric ryšys |

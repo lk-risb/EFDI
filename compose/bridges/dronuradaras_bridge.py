@@ -14,7 +14,7 @@ MIL-STD-2525C affiliation letter changes: neutral (green, no alert) → unknown
 See cot_layer.py's _sensor_alert_cot_type().
 
 Zenoh topic:
-  <ORG>/land/dronuradaras/acoustic/neutral/sensor/status/v1   — sensor nodes
+  <ORG>/land/dronuradaras/acoustic/neutral/sensor/json/status   — sensor nodes
   (carries last_detection_ts when a detection has occurred recently)
 
 No API key required — uses the same public CORS origin as the website.
@@ -108,7 +108,7 @@ def _get(path: str) -> dict | None:
 # ---------------------------------------------------------------------------
 
 def run_devices(pub: "zenoh.Publisher", verbose: bool):
-    topic_suffix = "land/dronuradaras/acoustic/neutral/sensor/status/v1"
+    topic_suffix = "land/dronuradaras/acoustic/neutral/sensor"
     print("Device poll topic: {}/{}".format(TOPIC_ROOT, topic_suffix), flush=True)
 
     while True:
@@ -215,7 +215,7 @@ def _publish_sensor_alert(pub_dev: "zenoh.Publisher", dev_id: str, last_detectio
 
 
 def run_detections(pub_dev: "zenoh.Publisher", verbose: bool):
-    print("Detection poll — recolors sensor markers on {}/land/dronuradaras/acoustic/neutral/sensor/status/v1"
+    print("Detection poll — recolors sensor markers on {}/land/dronuradaras/acoustic/neutral/sensor"
           .format(TOPIC_ROOT), flush=True)
 
     seen: dict[str, float] = {}   # detection_id → published_at timestamp
@@ -295,7 +295,7 @@ def main():
 
     session = zenoh.open(make_config())
 
-    topic_dev = "{}/land/dronuradaras/acoustic/neutral/sensor/status/v1".format(TOPIC_ROOT)
+    topic_dev = "{}/land/dronuradaras/acoustic/neutral/sensor".format(TOPIC_ROOT)
     pub_dev = session.declare_publisher(topic_dev)
 
     print("dronuradaras bridge starting", flush=True)

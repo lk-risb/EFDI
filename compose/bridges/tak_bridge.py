@@ -184,7 +184,7 @@ def _topic_for_record(record: dict[str, object]) -> str:
     domain = _domain_from_cot(cot_type)
     affiliation = _affiliation_from_cot(cot_type)
     entity = _entity_from_cot(domain, cot_type, record.get("cot_detail", {}) if isinstance(record.get("cot_detail"), dict) else {})
-    return "{}/{}/{}/{}/{}/{}/tracks/v1".format(
+    return "{}/{}/{}/{}/{}/{}".format(
         TOPIC_ROOT, domain, _TAK_SOURCE, _TAK_PROTOCOL, affiliation, entity
     )
 

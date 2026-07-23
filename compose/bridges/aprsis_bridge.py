@@ -7,8 +7,8 @@ each track as JSON to the EFDI Zenoh fabric.
 
 No API key required — APRS-IS is an open network.
 
-Zenoh topic:  <ORG>/aprs/aprs-is/tracks/v1  (configurable)
-Proto schema: aprs_track.proto  (message AprsTrack, package ltu.cis.tracks.v1)
+Zenoh topic:  <ORG>/aprs/aprs-is/json/tracks  (configurable)
+Proto schema: aprs_track.proto  (message AprsTrack, package efdi.data.v2)
 
 Run:
     . venv/bin/activate
@@ -219,12 +219,12 @@ _LAND_CODES = set("><jkuvURfa=")  # car, motorcycle, jeep, trucks, van, bus, RV,
 def _route_topic(symbol: str) -> str:
     code = symbol[1] if len(symbol) >= 2 else ""
     if code in _AIR_CODES:
-        return "{}/air/aprs-is/aprs/civ/aircraft/tracks/v1".format(TOPIC_ROOT)
+        return "{}/air/aprs-is/passive_rf/civ/aircraft".format(TOPIC_ROOT)
     if code in _SEA_CODES:
-        return "{}/sea/aprs-is/aprs/civ/vessel/tracks/v1".format(TOPIC_ROOT)
+        return "{}/sea/aprs-is/passive_rf/civ/vessel".format(TOPIC_ROOT)
     if code in _LAND_CODES:
-        return "{}/land/aprs-is/aprs/civ/vehicle/tracks/v1".format(TOPIC_ROOT)
-    return "{}/land/aprs-is/aprs/neutral/station/tracks/v1".format(TOPIC_ROOT)   # digipeaters / wx / home
+        return "{}/land/aprs-is/passive_rf/civ/vehicle".format(TOPIC_ROOT)
+    return "{}/land/aprs-is/passive_rf/neutral/station".format(TOPIC_ROOT)   # digipeaters / wx / home
 
 
 # ---------------------------------------------------------------------------
@@ -236,15 +236,15 @@ def run(args):
     print("APRS-IS server: {}:{} | filter: {}".format(APRSIS_HOST, APRSIS_PORT, filt_desc), flush=True)
 
     session = zenoh.open(make_config())
-    pub_air   = session.declare_publisher("{}/air/aprs-is/aprs/civ/aircraft/tracks/v1".format(TOPIC_ROOT))
-    pub_sea   = session.declare_publisher("{}/sea/aprs-is/aprs/civ/vessel/tracks/v1".format(TOPIC_ROOT))
-    pub_land  = session.declare_publisher("{}/land/aprs-is/aprs/civ/vehicle/tracks/v1".format(TOPIC_ROOT))
-    pub_misc  = session.declare_publisher("{}/land/aprs-is/aprs/neutral/station/tracks/v1".format(TOPIC_ROOT))
+    pub_air   = session.declare_publisher("{}/air/aprs-is/passive_rf/civ/aircraft".format(TOPIC_ROOT))
+    pub_sea   = session.declare_publisher("{}/sea/aprs-is/passive_rf/civ/vessel".format(TOPIC_ROOT))
+    pub_land  = session.declare_publisher("{}/land/aprs-is/passive_rf/civ/vehicle".format(TOPIC_ROOT))
+    pub_misc  = session.declare_publisher("{}/land/aprs-is/passive_rf/neutral/station".format(TOPIC_ROOT))
     _pubs = {
-        "{}/air/aprs-is/aprs/civ/aircraft/tracks/v1".format(TOPIC_ROOT):     pub_air,
-        "{}/sea/aprs-is/aprs/civ/vessel/tracks/v1".format(TOPIC_ROOT):       pub_sea,
-        "{}/land/aprs-is/aprs/civ/vehicle/tracks/v1".format(TOPIC_ROOT):     pub_land,
-        "{}/land/aprs-is/aprs/neutral/station/tracks/v1".format(TOPIC_ROOT): pub_misc,
+        "{}/air/aprs-is/passive_rf/civ/aircraft".format(TOPIC_ROOT):     pub_air,
+        "{}/sea/aprs-is/passive_rf/civ/vessel".format(TOPIC_ROOT):       pub_sea,
+        "{}/land/aprs-is/passive_rf/civ/vehicle".format(TOPIC_ROOT):     pub_land,
+        "{}/land/aprs-is/passive_rf/neutral/station".format(TOPIC_ROOT): pub_misc,
     }
 
     try:

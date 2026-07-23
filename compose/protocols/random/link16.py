@@ -29,13 +29,13 @@ NOTE: Bit field positions in this file are based on MIL-STD-6016F / STANAG 5516
 revisions moved some sub-fields.
 
 Zenoh topics published:
-    air/link16/jreap/friendly/aircraft/tracks/v1   — J2.2 / J3.2 friend
-    air/link16/jreap/hostile/aircraft/tracks/v1    — J3.2 hostile
-    air/link16/jreap/unknown/tracks/v1             — J3.2 unknown
-    sea/link16/jreap/friendly/vessel/tracks/v1     — J2.5 / J3.5 friend
-    sea/link16/jreap/hostile/vessel/tracks/v1      — J3.5 hostile
-    land/link16/jreap/friendly/unit/tracks/v1      — J3.7 friend
-    land/link16/jreap/hostile/unit/tracks/v1       — J3.7 hostile
+    air/link16/jreap/friendly/aircraft/json/tracks   — J2.2 / J3.2 friend
+    air/link16/jreap/hostile/aircraft/json/tracks    — J3.2 hostile
+    air/link16/jreap/unknown/json/tracks             — J3.2 unknown
+    sea/link16/jreap/friendly/vessel/json/tracks     — J2.5 / J3.5 friend
+    sea/link16/jreap/hostile/vessel/json/tracks      — J3.5 hostile
+    land/link16/jreap/friendly/unit/json/tracks      — J3.7 friend
+    land/link16/jreap/hostile/unit/json/tracks       — J3.7 hostile
 
 Configuration (compose/.env):
     LINK16_PORT=3010           # JREAP-C UDP listen port (default: 3010)
@@ -91,18 +91,18 @@ _ID_AFF = {
 
 # Topic templates per (domain, affiliation)
 _TOPIC_MAP = {
-    ("air",  "friendly"): "{}/air/link16/jreap/friendly/aircraft/tracks/v1".format(TOPIC_ROOT),
-    ("air",  "hostile"):  "{}/air/link16/jreap/hostile/aircraft/tracks/v1".format(TOPIC_ROOT),
-    ("air",  "neutral"):  "{}/air/link16/jreap/neutral/aircraft/tracks/v1".format(TOPIC_ROOT),
-    ("air",  "unknown"):  "{}/air/link16/jreap/unknown/tracks/v1".format(TOPIC_ROOT),
-    ("sea",  "friendly"): "{}/sea/link16/jreap/friendly/vessel/tracks/v1".format(TOPIC_ROOT),
-    ("sea",  "hostile"):  "{}/sea/link16/jreap/hostile/vessel/tracks/v1".format(TOPIC_ROOT),
-    ("sea",  "neutral"):  "{}/sea/link16/jreap/neutral/vessel/tracks/v1".format(TOPIC_ROOT),
-    ("sea",  "unknown"):  "{}/sea/link16/jreap/unknown/vessel/tracks/v1".format(TOPIC_ROOT),
-    ("land", "friendly"): "{}/land/link16/jreap/friendly/unit/tracks/v1".format(TOPIC_ROOT),
-    ("land", "hostile"):  "{}/land/link16/jreap/hostile/unit/tracks/v1".format(TOPIC_ROOT),
-    ("land", "neutral"):  "{}/land/link16/jreap/neutral/unit/tracks/v1".format(TOPIC_ROOT),
-    ("land", "unknown"):  "{}/land/link16/jreap/unknown/unit/tracks/v1".format(TOPIC_ROOT),
+    ("air",  "friendly"): "{}/air/link16/c2/friendly/aircraft".format(TOPIC_ROOT),
+    ("air",  "hostile"):  "{}/air/link16/c2/hostile/aircraft".format(TOPIC_ROOT),
+    ("air",  "neutral"):  "{}/air/link16/c2/neutral/aircraft".format(TOPIC_ROOT),
+    ("air",  "unknown"):  "{}/air/link16/c2/unknown".format(TOPIC_ROOT),
+    ("sea",  "friendly"): "{}/sea/link16/c2/friendly/vessel".format(TOPIC_ROOT),
+    ("sea",  "hostile"):  "{}/sea/link16/c2/hostile/vessel".format(TOPIC_ROOT),
+    ("sea",  "neutral"):  "{}/sea/link16/c2/neutral/vessel".format(TOPIC_ROOT),
+    ("sea",  "unknown"):  "{}/sea/link16/c2/unknown/vessel".format(TOPIC_ROOT),
+    ("land", "friendly"): "{}/land/link16/c2/friendly/unit".format(TOPIC_ROOT),
+    ("land", "hostile"):  "{}/land/link16/c2/hostile/unit".format(TOPIC_ROOT),
+    ("land", "neutral"):  "{}/land/link16/c2/neutral/unit".format(TOPIC_ROOT),
+    ("land", "unknown"):  "{}/land/link16/c2/unknown/unit".format(TOPIC_ROOT),
 }
 
 
@@ -466,7 +466,7 @@ def _topic_for(track: dict, msg_type: str) -> str:
     domain = track.get("domain") or _MSG_DOMAIN.get(msg_type, "land")
     aff    = track.get("affiliation", "unknown")
     return _TOPIC_MAP.get((domain, aff),
-                           "{}/land/link16/jreap/unknown/unit/tracks/v1".format(TOPIC_ROOT))
+                           "{}/land/link16/c2/unknown/unit".format(TOPIC_ROOT))
 
 
 def process_packet(data: bytes, pub: "zenoh.Session", verbose: bool):

@@ -18,7 +18,7 @@ from translation_common import TOPIC_ROOT, make_config, payload_bytes
 
 
 INPUT_TOPIC = os.environ.get("AIS_NMEA_INPUT_TOPIC") or TOPIC_ROOT + "/raw/ais/**"
-OUTPUT_TOPIC = TOPIC_ROOT + "/sea/ais/nmea/civ/vessel/tracks/v1"
+OUTPUT_TOPIC = TOPIC_ROOT + "/sea/nmea/ais/civ/vessel"
 _LINE = re.compile(r"^!(?:AIVDM|AIVDO),(\d+),(\d+),([^,]*),([^,]*),([^,]*),(\d*)\*(?:[0-9A-Fa-f]{2})$")
 
 

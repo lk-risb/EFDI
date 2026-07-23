@@ -18,7 +18,7 @@ from translation_common import TOPIC_ROOT, make_config, payload_json
 
 
 INPUT_TOPIC = os.environ.get("GEOJSON_INPUT_TOPIC") or TOPIC_ROOT + "/raw/geojson/**"
-OUTPUT_TOPIC = TOPIC_ROOT + "/land/ogc/neutral/zone/features/v1"
+OUTPUT_TOPIC = TOPIC_ROOT + "/land/ogc/c2/neutral/zone"
 
 
 def _points(geometry: dict) -> list[tuple[float, float]]:

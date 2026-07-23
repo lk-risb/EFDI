@@ -6,8 +6,8 @@ area. ADSB.lol is a named external service, so this is a source bridge rather
 than an ADS-B protocol translator.
 
 Current JSON topics:
-  <PREFIX>/<ORG>/air/adsblol/adsb/civ/aircraft/tracks/v1
-  <PREFIX>/<ORG>/air/adsblol/adsb/mil/aircraft/tracks/v1
+  <PREFIX>/<ORG>/air/adsblol/adsb/civ/aircraft/json/tracks
+  <PREFIX>/<ORG>/air/adsblol/adsb/mil/aircraft/json/tracks
 
 The API source is BSD-3-Clause and its public data is licensed ODbL 1.0. Public
 rate limits are dynamic; production users should coordinate with ADSB.lol and
@@ -216,16 +216,16 @@ def run(args) -> None:
 
     session = zenoh.open(make_config())
     civil = session.declare_publisher(
-        "{}/air/adsblol/adsb/civ/aircraft/tracks/v1".format(TOPIC_ROOT)
+        "{}/air/adsblol/adsb/civ/aircraft".format(TOPIC_ROOT)
     )
     military = session.declare_publisher(
-        "{}/air/adsblol/adsb/mil/aircraft/tracks/v1".format(TOPIC_ROOT)
+        "{}/air/adsblol/adsb/mil/aircraft".format(TOPIC_ROOT)
     )
     civil_v2 = session.declare_publisher(
-        "{}/air/adsblol/adsb/civ/aircraft/tracks/v2".format(TOPIC_ROOT)
+        "{}/air/adsblol/adsb/civ/aircraft".format(TOPIC_ROOT)
     )
     military_v2 = session.declare_publisher(
-        "{}/air/adsblol/adsb/mil/aircraft/tracks/v2".format(TOPIC_ROOT)
+        "{}/air/adsblol/adsb/mil/aircraft".format(TOPIC_ROOT)
     )
     print(
         "ADSB.lol: {} centers radius={}nm interval={}s".format(
