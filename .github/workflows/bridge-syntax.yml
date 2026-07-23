@@ -15,18 +15,26 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: py_compile all bridges and layers
+      - name: Compile bridge, layer, and protocol modules
         run: |
-          python3 -m py_compile compose/bridges/*.py compose/protocols/*.py compose/layers/*.py
+          python3 -m compileall -q compose/bridges compose/protocols compose/layers
       - name: Compile all Protobuf contracts
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq protobuf-compiler
-          for protocol in compose/protocols/*.py; do
-            # Shared transport helpers are not protocol translators and do not
-            # have a wire-contract schema of their own.
-            [[ "$protocol" == "compose/protocols/translation_common.py" ]] && continue
+          while IFS= read -r protocol; do
             schema="${protocol%.py}.proto"
             test -f "$schema" || { echo "Missing matching schema: $schema"; exit 1; }
-          done
-          protoc -I compose/protocols --descriptor_set_out=/tmp/efdi-protocols.pb --include_imports compose/protocols/*.proto
+          done < <(
+            find compose/protocols/random compose/protocols/vendors \
+              -type f -name '*.py' -not -path '*/__pycache__/*' -print |
+              sort
+          )
+          mapfile -t schemas < <(
+            find compose/protocols -type f -name '*.proto' -print | sort
+          )
+          test "${#schemas[@]}" -gt 0
+          protoc -I compose \
+            --descriptor_set_out=/tmp/efdi-protocols.pb \
+            --include_imports \
+            "${schemas[@]}"
