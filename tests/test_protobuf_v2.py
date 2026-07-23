@@ -5,8 +5,8 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "compose"))
 
-from protocols.adsblol_track_pb2 import AdsbLolTrack  # noqa: E402
-from protocols.normalized_track_pb2 import NormalizedTrack  # noqa: E402
+from protocols.random.adsblol_track_pb2 import AdsbLolTrack  # noqa: E402
+from protocols.random.normalized_track_pb2 import NormalizedTrack  # noqa: E402
 from protocols.protobuf_codec import (  # noqa: E402
     normalized_track_message,
     source_message_to_track,

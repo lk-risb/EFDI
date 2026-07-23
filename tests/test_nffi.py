@@ -11,7 +11,12 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "compose"))
 sys.path.insert(0, str(ROOT / "compose" / "protocols"))
 
-from nffi import MAX_NFFI_XML, make_handler, parse_nffi  # noqa: E402
+from protocols.random.nffi import (  # noqa: E402
+    MAX_NFFI_XML,
+    OUTPUT_TOPIC,
+    make_handler,
+    parse_nffi,
+)
 
 
 NFFI_DOCUMENT = b"""\
@@ -30,12 +35,12 @@ NFFI_DOCUMENT = b"""\
 """
 
 
-class Publisher:
+class Session:
     def __init__(self):
         self.publications = []
 
-    def put(self, payload, **kwargs):
-        self.publications.append((json.loads(payload), kwargs))
+    def put(self, topic, payload, **kwargs):
+        self.publications.append((topic, payload, kwargs))
 
 
 class Sample:
@@ -60,24 +65,26 @@ class NffiProtocolTests(unittest.TestCase):
         self.assertEqual(tracks[0]["nffi_affil"], "FRIEND")
 
     def test_raw_zenoh_xml_is_published_as_normalized_json(self):
-        publisher = Publisher()
-        make_handler(publisher)(Sample(NFFI_DOCUMENT))
+        session = Session()
+        make_handler(session)(Sample(NFFI_DOCUMENT))
 
-        self.assertEqual(len(publisher.publications), 1)
-        track, kwargs = publisher.publications[0]
+        self.assertEqual(len(session.publications), 2)
+        topic, payload, kwargs = session.publications[0]
+        track = json.loads(payload)
+        self.assertEqual(topic, OUTPUT_TOPIC)
         self.assertEqual(track["_src"], "nffi")
         self.assertEqual(track["callsign"], "ALPHA 17")
         self.assertIn("encoding", kwargs)
 
     def test_rejects_empty_oversized_and_malformed_documents(self):
-        publisher = Publisher()
-        handler = make_handler(publisher)
+        session = Session()
+        handler = make_handler(session)
 
         handler(Sample(b""))
         handler(Sample(b"x" * (MAX_NFFI_XML + 1)))
         handler(Sample(b"<NFFI><UnitInfo>"))
 
-        self.assertEqual(publisher.publications, [])
+        self.assertEqual(session.publications, [])
 
 
 if __name__ == "__main__":

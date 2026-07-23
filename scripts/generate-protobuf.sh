@@ -11,17 +11,17 @@ OUTPUT=${EFDI_PROTOBUF_OUTPUT:-"$ROOT/compose/generated"}
     exit 1
 }
 
-mkdir -p "$OUTPUT/protocols"
-mapfile -t contracts < <(find "$ROOT/compose/protocols" -maxdepth 1 -type f -name '*.proto' -print | sort)
+mkdir -p "$OUTPUT"
+mapfile -t contracts < <(find "$ROOT/compose/protocols" -type f -name '*.proto' -print | sort)
 (( ${#contracts[@]} > 0 )) || { echo "No protobuf contracts found" >&2; exit 1; }
 contract_names=()
 for contract in "${contracts[@]}"; do
-    contract_names+=("$(basename "$contract")")
+    contract_names+=("${contract#"$ROOT/compose/"}")
 done
 
 "$PYTHON" -m grpc_tools.protoc \
-    -I "$ROOT/compose/protocols" \
-    --python_out="$OUTPUT/protocols" \
+    -I "$ROOT/compose" \
+    --python_out="$OUTPUT" \
     "${contract_names[@]}"
 
 echo "Generated ${#contracts[@]} Python protobuf bindings in $OUTPUT"

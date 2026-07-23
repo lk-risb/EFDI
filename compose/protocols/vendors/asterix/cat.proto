@@ -1,0 +1,142 @@
+syntax = "proto3";
+
+package efdi.protocols.v2;
+
+import "protocols/random/normalized_track.proto";
+
+// Unified ASTERIX CAT contract for every category implemented by EFDI.
+// Matches cat.py (EUROCONTROL CAT-010 Ed.1.1).
+message AsterixCat10Track {
+  efdi.data.v2.NormalizedTrack track = 1;
+  optional uint32 sac = 2;
+  optional uint32 sic = 3;
+  optional string msg_type = 4;
+  optional uint32 track_num = 5;
+  optional string icao24 = 6;
+  optional string callsign = 7;
+  optional string squawk = 8;
+  optional double cart_x_m = 9;
+  optional double cart_y_m = 10;
+  optional double speed_ms = 11;
+  optional double heading_deg = 12;
+  optional bool delete_track = 13;
+  optional string target_type = 14;
+}
+
+message AsterixCat10SensorStatus {
+  efdi.data.v2.NormalizedTrack sensor = 1;
+  optional uint32 sac = 2;
+  optional uint32 sic = 3;
+  optional string status = 4;
+}
+
+// Matches EUROCONTROL CAT-020 Ed.1.11 in cat.py.
+message AsterixCat20Track {
+  efdi.data.v2.NormalizedTrack track = 1;
+  optional uint32 sac = 2;
+  optional uint32 sic = 3;
+  optional uint32 track_num = 4;
+  optional string icao24 = 5;
+  optional string callsign = 6;
+  optional string squawk = 7;
+  optional double x_m = 8;
+  optional double y_m = 9;
+  optional double measured_height_ft = 10;
+}
+
+// Matches EUROCONTROL CAT-021 Ed.2.7 in cat.py.
+message AsterixCat21Track {
+  efdi.data.v2.NormalizedTrack track = 1;
+  optional uint32 sac = 2;
+  optional uint32 sic = 3;
+  optional string icao24 = 4;
+  optional string callsign = 5;
+  optional string squawk = 6;
+  optional uint32 emitter_category = 7;
+  optional double alt_geom_ft = 8;
+  optional double alt_baro_ft = 9;
+  optional uint32 mops_version = 10;
+  optional uint32 nac_p = 11;
+  optional uint32 nac_v = 12;
+  optional uint32 sil = 13;
+}
+
+// Matches EUROCONTROL CAT-034 Ed.1.29 radar service messages.
+message AsterixCat34Status {
+  efdi.data.v2.NormalizedTrack sensor = 1;
+  optional uint32 sac = 2;
+  optional uint32 sic = 3;
+  optional string msg_type = 4;
+  optional double sector_deg = 5;
+  optional double antenna_azimuth_deg = 6;
+  optional double rotation_s = 7;
+  optional string system_status = 8;
+  optional string processing_status = 9;
+  optional bool sys_nogo = 10;
+  optional bool rdp_chain_2 = 11;
+  optional bool rdp_restart = 12;
+  optional bool sys_ovl_rdp = 13;
+  optional bool sys_ovl_xmt = 14;
+  optional bool sys_msc_connected = 15;
+  optional bool sys_tsv_invalid = 16;
+  optional string psr_status = 17;
+  optional string ssr_status = 18;
+  optional string mds_status = 19;
+  optional uint32 rdp_reduction_level = 20;
+  optional uint32 xmt_reduction_level = 21;
+  optional uint32 psr_reduction_level = 22;
+  optional uint32 ssr_reduction_level = 23;
+  optional uint32 mds_reduction_level = 24;
+  optional double site_lat = 25;
+  optional double site_lon = 26;
+  optional double site_alt_m = 27;
+  optional double collimation_rng_nm = 28;
+  optional double collimation_az_deg = 29;
+}
+
+// Matches EUROCONTROL CAT-048 Ed.1.32 target reports.
+message AsterixCat48Track {
+  efdi.data.v2.NormalizedTrack track = 1;
+  optional uint32 sac = 2;
+  optional uint32 sic = 3;
+  optional uint32 track_num = 4;
+  optional string icao24 = 5;
+  optional string callsign = 6;
+  optional string squawk = 7;
+  optional double range_nm = 8;
+  optional double azimuth_deg = 9;
+  optional double alt_baro_ft = 10;
+  optional string track_sensor = 11;
+  optional bool confirmed = 12;
+  optional bool track_end = 13;
+}
+
+// ASTERIX CAT-062 Ed.1.21 system track (cat.py).
+// Current JSON topic: <PREFIX>/<ORG>/air/asterix/cat62/unknown/aircraft/tracks/v1
+// JSON wire format: key _ts → timestamp; optional decoded fields are present.
+// Zero value means "not present/decoded" for numeric optional fields.
+message Cat62Track {
+  double timestamp                 = 1;  // Unix epoch when frame was decoded locally (_ts)
+  optional uint32 sac              = 2;  // System Area Code — I062/010 byte 0
+  optional uint32 sic              = 3;  // System Identification Code — I062/010 byte 1
+  optional uint32 service_id       = 4;  // Service Identification — I062/015
+  optional double tod_s            = 5;  // Seconds since 00:00 UTC, LSB = 1/128 s — I062/070
+  optional double lat_deg          = 6;  // WGS-84 latitude, LSB = 180/2^25 deg — I062/105
+  optional double lon_deg          = 7;  // WGS-84 longitude, LSB = 180/2^25 deg — I062/105
+  optional double x_m              = 8;  // Cartesian X in metres, LSB = 0.5 m — I062/100
+  optional double y_m              = 9;  // Cartesian Y in metres, LSB = 0.5 m — I062/100
+  optional double vx_ms            = 10; // Cartesian velocity Vx in m/s, LSB = 0.25 — I062/185
+  optional double vy_ms            = 11; // Cartesian velocity Vy in m/s, LSB = 0.25 — I062/185
+  optional double speed_ms         = 12; // Derived ground speed |V| = hypot(vx, vy) in m/s
+  optional double heading_deg      = 13; // Derived heading from atan2(vx,vy), degrees CW from N
+  optional double ax_ms2           = 14; // Acceleration X in m/s², LSB = 0.25 — I062/210
+  optional double ay_ms2           = 15; // Acceleration Y in m/s², LSB = 0.25 — I062/210
+  optional string squawk           = 16; // Mode 3/A squawk in octal, e.g. "7700" — I062/060
+  optional uint32 track_num        = 17; // System track number (12-bit) — I062/040
+  optional bool track_monosensor   = 18; // MON bit from I062/080
+  optional bool confirmed          = 19; // True when CNF=0 in I062/080
+  optional double measured_alt_ft  = 20; // Measured flight level in feet — I062/136
+  optional double calc_geo_alt_ft  = 21; // Calculated geometric altitude in feet — I062/130
+  optional double calc_baro_alt_ft = 22; // Calculated barometric altitude in feet — I062/135
+  optional efdi.data.v2.NormalizedTrack normalized = 100;
+}

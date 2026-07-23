@@ -260,8 +260,8 @@ Interaktyvus paleidiklis rodo visas paslaugas su jų parengties būsena. Įjunki
   Protocols
   ──────────────────────────────────────────────────────────
   [14] [✓] asterix-cat10  ASTERIX CAT-010 airport surface        UDP 50010
-  [15] [✓] asterix-cat20  ASTERIX CAT-020 legacy MLAT            UDP 50020
-  [16] [✓] asterix-cat21  ASTERIX CAT-021 legacy ADS-B           UDP 50021
+  [15] [✓] asterix-cat20  ASTERIX CAT-020 Ed.1.11 MLAT           UDP 50020
+  [16] [✓] asterix-cat21  ASTERIX CAT-021 Ed.2.7 ADS-B           UDP 50021
   [17] [✓] asterix-cat34  ASTERIX CAT-034 radar service          UDP 50034
   [18] [✓] asterix-cat48  ASTERIX CAT-048 radar targets          UDP 50048
   [19] [✓] asterix-cat62  ASTERIX CAT-062 system tracks          UDP 50062
@@ -482,15 +482,15 @@ Adresas priima tik GET/HEAD, pagal nutylėjimą reikalauja Basic autentifikavimo
 | Paslauga | Scenarijus | Zenoh tema (sutrumpinta) | Suaktyvinimas |
 | --- | --- | --- | --- |
 | `asterix-udp` | `bridges/asterix_udp_bridge.py` | `…/raw/asterix/catNN` | Vienas bendras unicast/multicast UDP srautas |
-| `asterix-cat10/20/21/34/48/62` | `protocols/asterix_catNN.py` | ASTERIX kategorijai skirta normali tema | Tiesioginis UDP/TCP arba viena neapdorota Zenoh kategorijos tema procesui |
+| `asterix-cat10/20/21/34/48/62` | `protocols/vendors/asterix/cat.py --category NN` | ASTERIX kategorijai skirta normali tema | Tiesioginis UDP/TCP arba viena neapdorota Zenoh kategorijos tema procesui |
 | `dronuradaras` | `bridges/dronuradaras_bridge.py` | `…/land/dronuradaras/acoustic/neutral/sensor/status/v1` | Tik prisijungusių įrenginių apklausa 60 s ir atsijungusių pašalinimas / aptikimų apklausa 10 s |
 | `utm-ans` | `bridges/utm_ans_bridge.py` | `…/air/utm_ans/utm/unknown/uav/tracks/v1` | Autorizuotų JSON/GeoJSON deklaruotų skrydžių apklausa; būtinas `UTM_ANS_API_URL` |
-| `opendroneid` | `protocols/opendroneid.py` | `…/air/opendroneid/astm-f3411/*/uav/tracks/v1` | Neapdoroti imtuvų pranešimai `…/raw/opendroneid/**`; maršrutizatoriaus mazgui radijo nereikia |
+| `opendroneid` | `protocols/random/opendroneid.py` | `…/air/opendroneid/astm-f3411/*/uav/tracks/v1` | Neapdoroti imtuvų pranešimai `…/raw/opendroneid/**`; maršrutizatoriaus mazgui radijo nereikia |
 | `aisstream` | `bridges/aisstream_ws_bridge.py` | `…/sea/aisstream/ais/civ/vessel/tracks/v1` | Autentifikuotas WSS srautas |
 | `sitaware` | `bridges/sitaware_bridge.py` | `…/land/sitaware/rest/friendly/unit/tracks/v1` | Konfigūruojama REST apklausa |
-| `nffi` | `protocols/nffi.py` | `…/land/nato/nffi/friendly/unit/tracks/v1` | Pilni XML dokumentai Zenoh temoje `…/raw/nffi/*` |
-| `link16` | `protocols/link16.py` | `…/air/link16/jreap/*/aircraft/tracks/v1` | Srautinis UDP |
-| `mavlink` | `protocols/mavlink.py` | `…/air/mavlink/mav2/*/uav/tracks/v1` | Srautinis UDP/TCP |
+| `nffi` | `protocols/random/nffi.py` | `…/land/nato/nffi/friendly/unit/tracks/v1` | Pilni XML dokumentai Zenoh temoje `…/raw/nffi/*` |
+| `link16` | `protocols/random/link16.py` | `…/air/link16/jreap/*/aircraft/tracks/v1` | Srautinis UDP |
+| `mavlink` | `protocols/random/mavlink.py` | `…/air/mavlink/mav2/*/uav/tracks/v1` | Srautinis UDP/TCP |
 | `dji-cloud` | `bridges/dji_cloud_api_bridge.py` | `…/air/dji/cloud-api/friendly/uav/tracks/v1` | DJI šaltiniui skirtas autentifikuotas MQTT 5 tiltas |
 | `cot-udp` | `layers/cot_layer.py` | Prenumeratorius — visos temos | Įvykio valdomas |
 | `cot-bridge` | `layers/cot_layer.py` | Prenumeratorius — visos temos | Įvykio valdomas |
@@ -635,7 +635,11 @@ konkrečiomis asmens rolėmis ar sertifikatų subjektais. Šie keturi klientai
 patikrina duomenų srautą ir C2 elgseną, bet neįrodo mažiausių Zenoh teisių tarp
 rolių. Tam reikia atskiro vėlesnio sertifikatų subjektų ACL sprendimo.
 
-> **ASTERIX leidimai:** CAT-48 atitinka EUROCONTROL 1.32 leidimą, o CAT-34 — 1.29 leidimą. CAT-20, CAT-21 ir CAT-62 šiuo metu naudoja tik senus suderinamumo UAP ir įjungti parodo įspėjimą; nejunkite modernių CAT-20 1.9, CAT-21 2.2+ ar CAT-62 1.21 srautų, kol neįgyvendintas tikslus dekoderio profilis. Link-16 priima tik UDP, nes šliuzo TCP kadravimas dar neaprašytas.
+> **ASTERIX leidimai:** įgyvendinti standartiniai UAP yra CAT-010 1.1,
+> CAT-020 1.11, CAT-021 2.7, CAT-034 1.29, CAT-048 1.32 ir CAT-062 1.21.
+> Prieš jungdami šaltinį patvirtinkite jo leidimą; kitam ar gamintojo UAP
+> būtinas atskirai pasirenkamas dekoderio profilis. Link-16 priima tik UDP,
+> nes šliuzo TCP kadravimas dar neaprašytas.
 
 ### Zenoh temų schema
 

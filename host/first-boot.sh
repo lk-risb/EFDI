@@ -95,6 +95,7 @@ export LISTEN_KEY_PEM="/etc/zenoh/tls/pod-key.pem"
 export CONNECT_CERT_PEM="/etc/zenoh/tls/pod-cert.pem"
 export CONNECT_KEY_PEM="/etc/zenoh/tls/pod-key.pem"
 export CA_ROOTS_PEM="/etc/zenoh/tls/ca-roots.pem"
+# shellcheck disable=SC2016  # envsubst requires literal variable names here.
 envsubst \
   '${ZENOH_LISTEN_PORT} ${ZENOH_LOCAL_TCP_PORT} ${ZENOH_CONNECT_ENDPOINTS} ${PARTNER_NAMESPACE} ${INBOUND_NAMESPACE} ${NAMESPACE_PREFIX} ${NAMESPACE_ROOT} ${DATA_TOPIC_ROOT} ${ZENOH_VERIFY_NAME_ON_CONNECT} ${ZENOH_PLUGINS_LOADING_ENABLED} ${LISTEN_CERT_PEM} ${LISTEN_KEY_PEM} ${CONNECT_CERT_PEM} ${CONNECT_KEY_PEM} ${CA_ROOTS_PEM}' \
   < "${POD_DIR}/host/zenoh-router.json5.tmpl" \

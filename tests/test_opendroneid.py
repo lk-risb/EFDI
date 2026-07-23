@@ -13,8 +13,9 @@ import xml.etree.ElementTree as ET
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "compose"))
 sys.path.insert(0, str(ROOT / "compose" / "protocols"))
+sys.path.insert(0, str(ROOT / "compose" / "layers"))
 
-from opendroneid import (  # noqa: E402
+from protocols.random.opendroneid import (  # noqa: E402
     RemoteIDTracker,
     TYPE_BASIC_ID,
     TYPE_LOCATION,

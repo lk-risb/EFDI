@@ -22,8 +22,8 @@ sys.path.insert(0, os.fspath(ROOT / "compose"))
 
 import zenoh  # noqa: E402
 
-from protocols.mavlink_pb2 import MavlinkTrack  # noqa: E402
-from protocols.normalized_track_pb2 import NormalizedTrack  # noqa: E402
+from protocols.random.mavlink_pb2 import MavlinkTrack  # noqa: E402
+from protocols.random.normalized_track_pb2 import NormalizedTrack  # noqa: E402
 from protocols.protobuf_codec import (  # noqa: E402
     dual_topic,
     publish_dual,

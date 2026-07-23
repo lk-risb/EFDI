@@ -9,7 +9,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # bridges/ = data ingestion (sensor/API → Zenoh)
 # protocols/ = one reusable protocol translator per wire/API contract
 # layers/    = TAK and SitaWare connection/output layers
-COPY namespace_prefix.py http_json.py bridges/*.py protocols/*.py layers/*.py ./
+COPY namespace_prefix.py http_json.py bridges/*.py layers/*.py ./
+COPY protocols/vendors ./protocols/vendors
 # No writable mounts (certs come in read-only) — drop root, nothing needs it.
 # Fixed UID:GID 10001:10001 — scripts/gen-certs.sh chgrp's each leaf private
 # key to GID 10001 so this user can read it despite the /certs mount being :ro.
