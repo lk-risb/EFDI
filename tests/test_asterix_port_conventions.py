@@ -23,7 +23,7 @@ class AsterixPortConventionTests(unittest.TestCase):
 
     def test_protocol_defaults_match_the_environment_contract(self):
         for category, port in EXPECTED.items():
-            source = (ROOT / "compose" / "protocols" / f"asterix_cat{category}.py").read_text(
+            source = (ROOT / "compose" / "protocols" / "vendors" / "asterix" / "cat.py").read_text(
                 encoding="utf-8"
             )
             self.assertIn(

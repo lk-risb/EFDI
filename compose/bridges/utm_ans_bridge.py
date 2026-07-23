@@ -12,7 +12,7 @@ Zenoh output:
 
 The record is marked ``source_kind=declared_utm_flight`` and never claims that
 the aircraft was observed by Remote ID. Actual broadcast Remote ID remains the
-responsibility of ``protocols/opendroneid.py`` and a receiver publishing raw
+responsibility of ``protocols/random/opendroneid.py`` and a receiver publishing raw
 messages into Zenoh.
 """
 

@@ -29,7 +29,7 @@ Read `CLAUDE.md` first; its project constraints apply to every agent and tool.
 
 - Completed before this handoff: publish-script builder, direct signed federation push/status, ACL and replay protection, configurable namespace prefix, TAK-style UI pass, and topology ACL.
 - Completed in the current continuation: restored PID-managed Python bridge runtime; removed live per-bridge containers and their Compose/admin-control wrappers; completed topology aggregation and shared UI map integration for Dashboard, Topology, and Federation.
-- Bridge/protocol audit completed: launchers now provide the shared Python module path and `run.sh all` covers every retained integration; HTTP/WebSocket inputs are bounded. SitaWare adapters remain interface-specific: optional deployment-documented HQ REST inbound, Edge NVG REST outbound, and the native HQ NVG pull feed used by an HQ NVG Import Subscription. `/rest/v2/units` is not a universal HQ resource. CoT parsing/routing is hardened; CAT-48/34 were checked against current EUROCONTROL specifications. CAT-20/21/62 are explicitly documented legacy UAPs, and Link-16 TCP is disabled until a gateway framing ICD exists.
+- Bridge/protocol audit completed: launchers now provide the shared Python module path and `run.sh all` covers every retained integration; HTTP/WebSocket inputs are bounded. SitaWare adapters remain interface-specific: optional deployment-documented HQ REST inbound, Edge NVG REST outbound, and the native HQ NVG pull feed used by an HQ NVG Import Subscription. `/rest/v2/units` is not a universal HQ resource. CoT parsing/routing is hardened; ASTERIX CAT-010 1.1, CAT-020 1.11, CAT-021 2.7, CAT-034 1.29, CAT-048 1.32, and CAT-062 1.21 are the implemented standard UAPs. Link-16 TCP remains disabled until a gateway framing ICD exists.
 - Windy, yr.no, PurpleAir, OSM/Overpass, and N2YO bridges and their dedicated schemas/downstream wiring were removed at the user's request.
 - Static checks pass. Live browser and real multi-pod topology/config-push checks still require rebuilding/deploying the admin containers.
 - Zero-trust cascading relay remains the next planned feature, but its plan requires successful live topology verification first.
@@ -67,6 +67,18 @@ Read `CLAUDE.md` first; its project constraints apply to every agent and tool.
   `bridges/cot_bridge.py` entrypoint with a TAK-issued certificate, not the
   Zenoh certificate. There is no EFDI-managed TAK/SitaWare CoT receive bridge
   in the current runtime catalog.
+- The 2026-07-23 protocol conformance pass targets the official standard UAPs:
+  CAT-020 1.11, CAT-021 2.7, CAT-034 1.29, CAT-048 1.32, and CAT-062 1.21.
+  It fixes CAT-034 compound/status fields and CAT-062 CNF decoding, and pins
+  edition-sensitive layouts with regression vectors. SAPIENT decoding follows
+  the Dstl BSI FLEX 335 v2 schemas and official four-byte little-endian test-
+  harness framing. STANAG 4609 preserves exact KLV packets and decodes a safe
+  MISB ST 0601 subset; SRT is only its transport. The historical STANAG 4586
+  layout is disabled unless `STANAG4586_PROFILE=legacy_ed3_approx` is selected
+  after validating it against the deployed VSM ICD.
+- `publish_dual` runtime callers must pass a Zenoh Session, not a declared
+  v1 Publisher, because the helper addresses both the JSON `/v1` topic and its
+  Protobuf `/v2` sibling. The 2026-07-23 audit corrected all retained callers.
 
 ## Installed agent skills
 

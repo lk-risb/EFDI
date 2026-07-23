@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, os.fspath(ROOT / "compose"))
 sys.path.insert(0, os.fspath(ROOT / "compose" / "protocols"))
 
-from asterix_cat10 import decode_cat010_record  # noqa: E402
+from protocols.vendors.asterix.cat import decode_cat010_record  # noqa: E402
 
 
 def fspec(*frns: int) -> bytes:

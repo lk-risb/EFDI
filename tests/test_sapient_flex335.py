@@ -19,7 +19,7 @@ import json  # noqa: E402
 
 import zenoh  # noqa: E402
 
-from sapient_flex335 import (  # noqa: E402
+from protocols.vendors.sapient.flex335 import (  # noqa: E402
     SapientDecoder,
     _publish,
     iter_frames,
@@ -131,10 +131,46 @@ class SapientDecoderTests(unittest.TestCase):
         self.assertAlmostEqual(event.track["heading_deg"], 90.0, places=2)
         self.assertEqual(event.track["vertical_rate_ms"], 2.5)
         self.assertEqual(event.track["sapient_signals"][0]["amplitude"], -21.5)
+        self.assertAlmostEqual(
+            event.track["sapient_signals"][0]["centre_frequency"],
+            2_450_000_000.0,
+            delta=256.0,
+        )
+        self.assertNotIn("centre_frequency_hz", event.track["sapient_signals"][0])
         self.assertEqual(
             topic_for_track("LTU/CISB/partner", event.track),
             "LTU/CISB/partner/air/sapient/flex335/unknown/uav/tracks/v1",
         )
+
+    def test_velocity_without_registered_units_is_not_mislabeled_as_metres_per_second(self):
+        decoder = SapientDecoder()
+        velocity = field_double(1, 36.0) + field_double(2, 0.0) + field_double(3, 2.5)
+        detection = b"".join(
+            (
+                field_text(1, "01HREPORT"),
+                field_text(2, "01HOBJECT"),
+                field_bytes(6, location(54.6872, 25.2797, 145.0)),
+                field_bytes(19, velocity),
+            )
+        )
+        event = decoder.decode(envelope(7, detection))
+        self.assertIsNone(event.warning)
+        self.assertNotIn("speed_ms", event.track)
+        self.assertNotIn("heading_deg", event.track)
+        self.assertNotIn("vertical_rate_ms", event.track)
+
+    def test_conflicting_registration_units_disable_velocity_normalization(self):
+        def detection_definition(horizontal: int, vertical: int) -> bytes:
+            units = field_varint(1, horizontal) + field_varint(2, vertical)
+            return field_bytes(6, field_bytes(4, units))
+
+        mode = field_bytes(10, detection_definition(1, 1))
+        mode += field_bytes(10, detection_definition(2, 2))
+        decoder = SapientDecoder()
+        decoder.decode(envelope(4, field_bytes(7, mode)))
+        node = decoder.nodes[NODE_ID]
+        self.assertIsNone(node.horizontal_speed_units)
+        self.assertIsNone(node.vertical_speed_units)
 
     def test_range_bearing_uses_status_sensor_location(self):
         status = (

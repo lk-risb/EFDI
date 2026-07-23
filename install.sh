@@ -117,7 +117,7 @@ if [ "$INSTALL_MODE" = "production" ]; then
     ask BUNDLE_DIR "certs directory" "$HOME/efdi-certs"
 
     if [ -d "$BUNDLE_DIR" ]; then
-        PEM_COUNT=$(ls "$BUNDLE_DIR/efdi"/*.pem 2>/dev/null | wc -l)
+        PEM_COUNT=$(find "$BUNDLE_DIR/efdi" -maxdepth 1 -type f -name '*.pem' 2>/dev/null | wc -l)
         if (( PEM_COUNT >= 3 )); then
             ok "Certs found ($PEM_COUNT .pem files)"
         else

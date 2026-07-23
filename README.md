@@ -42,7 +42,7 @@ This repository is the EFDI-partner collaboration surface. It carries **no partn
 ## What it does
 
 ```
-[Giraffe AMB]    ──mixed ASTERIX UDP──► asterix_udp_bridge ──Zenoh/raw──► asterix_cat34/48 ─┐
+[Giraffe AMB]    ──mixed ASTERIX UDP──► asterix_udp_bridge ──Zenoh/raw──► CAT-34/48 ────────┐
 [ADSB.lol]       ──REST/HTTPS───► adsblol_bridge      ─┤
 [Oro navigacija UTM]──authorized JSON/GeoJSON──► utm_ans_bridge ─┤
 [dronuradaras.lt]──REST/HTTPS──► dronuradaras_bridge  ─┤
@@ -110,7 +110,13 @@ Only the local `zenoh-router` owns `ZENOH_FABRIC_ENDPOINT` (or the preferred
 multi-link `ZENOH_FABRIC_ENDPOINTS` JSON array), so changing a parent or
 federation address does not require modifying or restarting every adapter.
 
-ASTERIX compatibility is edition-specific. CAT-48 is aligned to EUROCONTROL Edition 1.32 and CAT-34 to Edition 1.29. The existing CAT-20, CAT-21, and CAT-62 tables are retained only as legacy compatibility UAPs; they emit startup warnings and must not be used for modern CAT-20 1.9, CAT-21 2.2+, or CAT-62 1.21 streams without implementing the producer's exact edition/ICD. Link-16/JREAP-C field layouts are likewise gateway-profile dependent; UDP is available, while TCP is intentionally disabled until its stream framing is documented.
+ASTERIX compatibility is edition-specific. The implemented UAPs are CAT-010
+Edition 1.1, CAT-020 Edition 1.11, CAT-021 Edition 2.7, CAT-034 Edition 1.29,
+CAT-048 Edition 1.32, and CAT-062 Edition 1.21. A producer using another
+edition or a non-standard UAP needs a separate, explicitly selected profile;
+do not feed it into one of these decoders by resemblance. Link-16/JREAP-C field
+layouts are likewise gateway-profile dependent; UDP is available, while TCP
+is intentionally disabled until its stream framing is documented.
 
 Client onboarding is certificate-based: each pod gets a signed mTLS bundle issued by EFDI, scoped to its own namespace. Services run as individual host processes managed by PID files in `compose/state/.pids/`. The only containerised components are the Zenoh router and the zenoh-admin panel — this keeps the data path inspectable, restartable in isolation, and free of container networking overhead.
 

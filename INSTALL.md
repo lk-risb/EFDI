@@ -479,21 +479,21 @@ per-item push adapter at an HQ endpoint to work around this limitation.
 
 | Service | Script | Zenoh topic (abbreviated) | Trigger |
 | --- | --- | --- | --- |
-| `asterix` | `protocols/asterix.py` | `…/raw/asterix/catNN` and category-specific normalized ASTERIX topics | Family bundle: mixed UDP ingress plus per-category translators |
+| `asterix` | `protocols/vendors/asterix/cat.py` | `…/raw/asterix/catNN` and category-specific normalized ASTERIX topics | ASTERIX vendor's CAT protocol bundle: mixed UDP ingress plus per-category translators |
 | `dronuradaras` | `bridges/dronuradaras_bridge.py` | `…/land/dronuradaras/acoustic/neutral/sensor/status/v1` | 60 s online-only device poll with offline eviction / 10 s detection poll |
 | `utm-ans` | `bridges/utm_ans_bridge.py` | `…/air/utm_ans/utm/unknown/uav/tracks/v1` | Authorized JSON/GeoJSON declared-flight poll; requires `UTM_ANS_API_URL` |
-| `opendroneid` | `protocols/opendroneid.py` | `…/air/opendroneid/astm-f3411/*/uav/tracks/v1` | Raw receiver publications under `…/raw/opendroneid/**`; no radio on the router host |
+| `opendroneid` | `protocols/random/opendroneid.py` | `…/air/opendroneid/astm-f3411/*/uav/tracks/v1` | Raw receiver publications under `…/raw/opendroneid/**`; no radio on the router host |
 | `aisstream` | `bridges/aisstream_ws_bridge.py` | `…/sea/aisstream/ais/civ/vessel/tracks/v1` | Authenticated WSS stream |
 | `sitaware` | `bridges/sitaware_bridge.py` | `…/land/sitaware/rest/friendly/unit/tracks/v1` | Configurable REST poll |
-| `nffi` | `protocols/nffi.py` | `…/land/nato/nffi/friendly/unit/tracks/v1` | Complete XML documents under `…/raw/nffi/*` in Zenoh |
-| `link16` | `protocols/link16.py` | `…/air/link16/jreap/*/aircraft/tracks/v1` | Streaming UDP |
-| `mavlink` | `protocols/mavlink.py` | `…/air/mavlink/mav2/*/uav/tracks/v1` | Streaming UDP/TCP |
-| `stanag` | `protocols/stanag.py` | `…/raw/stanag4609/klv`, `…/air/stanag4609/unknown/uav/tracks/v1`, and STANAG 4586 track topics | Family bundle: 4586 feed plus 4609 SRT/KLV |
+| `nffi` | `protocols/random/nffi.py` | `…/land/nato/nffi/friendly/unit/tracks/v1` | Complete XML documents under `…/raw/nffi/*` in Zenoh |
+| `link16` | `protocols/random/link16.py` | `…/air/link16/jreap/*/aircraft/tracks/v1` | Streaming UDP |
+| `mavlink` | `protocols/random/mavlink.py` | `…/air/mavlink/mav2/*/uav/tracks/v1` | Streaming UDP/TCP |
+| `stanag` | `protocols/vendors/stanag/4586.py` and `4609.py` | `…/raw/stanag4609/klv`, `…/air/stanag4609/unknown/uav/tracks/v1`, and STANAG 4586 track topics | Launcher starts each configured numbered protocol directly |
 | `mavlink-raw`, `link16-raw`, `vmf-raw`, `sapient-raw`, `stanag4586-raw` | `bridges/*_raw_bridge.py` | `…/raw/<protocol>/<source>` | Optional socket ingress; matching protocol runs with `*_ZENOH_RAW=1` |
-| `cap` | `protocols/cap.py` | `…/land/cap/neutral/sensor/alerts/v1` | Complete CAP 1.2 XML on `…/raw/cap/**` |
-| `geojson` | `protocols/geojson_features.py` | `…/land/ogc/neutral/zone/features/v1` | GeoJSON/OGC Features on `…/raw/geojson/**` |
-| `ais-nmea` | `protocols/ais_nmea.py` | `…/sea/ais/nmea/civ/vessel/tracks/v1` | AIVDM/AIVDO on `…/raw/ais/**` |
-| `spectrum` / `sensor-health` / `mission-route` | Matching `protocols/*.py` | `…/land/spectrum/**`, `…/land/health/**`, `…/air/mission/**` | JSON on their `…/raw/**` topics |
+| `cap` | `protocols/random/cap.py` | `…/land/cap/neutral/sensor/alerts/v1` | Complete CAP 1.2 XML on `…/raw/cap/**` |
+| `geojson` | `protocols/random/geojson_features.py` | `…/land/ogc/neutral/zone/features/v1` | GeoJSON/OGC Features on `…/raw/geojson/**` |
+| `ais-nmea` | `protocols/random/ais_nmea.py` | `…/sea/ais/nmea/civ/vessel/tracks/v1` | AIVDM/AIVDO on `…/raw/ais/**` |
+| `spectrum` / `sensor-health` / `mission-route` | Matching `protocols/random/*.py` | `…/land/spectrum/**`, `…/land/health/**`, `…/air/mission/**` | JSON on their `…/raw/**` topics |
 | `dji-cloud` | `bridges/dji_cloud_api_bridge.py` | `…/air/dji/cloud-api/friendly/uav/tracks/v1` | Source-specific authenticated DJI MQTT 5 bridge |
 | `cot-udp` | `layers/cot_layer.py` | Subscriber — all topics | Event-driven |
 | `cot-bridge` | `bridges/cot_bridge.py` | Subscriber — all topics | Event-driven |
@@ -518,9 +518,11 @@ MAVLINK_RAW_TOPIC=                 # defaults to …/raw/mavlink/<hostname>
 The raw bridge publishes octets only; it does not classify or alter them. The
 MAVLink, Link-16, VMF, SAPIENT/FLEX 335, and STANAG 4586 translators consume
 those Zenoh topics and publish normalized JSON. Link-16 TCP remains disabled
-until the gateway provides a documented stream-framing ICD. VMF, SAPIENT, and
-STANAG 4586 TCP ingress use their documented length/header framing; confirm the
-edition and vendor profile before live use.
+until the gateway provides a documented stream-framing ICD. SAPIENT ingress
+uses the public BSI Flex 335 v2 protobuf contract. The retained STANAG 4586
+binary layout is a historical deployment approximation, not a generic standard
+profile: it stays disabled unless `STANAG4586_PROFILE=legacy_ed3_approx` is
+explicitly set after validating the layout against the deployed VSM ICD.
 
 CAP, GeoJSON, AIS NMEA, spectrum, health, and route translators are idle-safe
 Zenoh subscribers. A partner publishes complete JSON/XML/NMEA payloads below
@@ -711,7 +713,11 @@ least-privilege Zenoh authorization between personas. Enforced persona access
 needs a subsequent certificate-subject ACL design with separate client
 credentials and topic permissions.
 
-> **ASTERIX editions:** CAT-48 follows EUROCONTROL Edition 1.32 and CAT-34 follows Edition 1.29. CAT-20, CAT-21, and CAT-62 currently use legacy compatibility UAPs and print a warning when enabled; do not connect modern CAT-20 1.9, CAT-21 2.2+, or CAT-62 1.21 feeds until their exact decoder profiles are implemented. Link-16 accepts UDP only because the gateway's TCP framing is not yet documented.
+> **ASTERIX editions:** the implemented standard UAPs are CAT-010 1.1,
+> CAT-020 1.11, CAT-021 2.7, CAT-034 1.29, CAT-048 1.32, and CAT-062 1.21.
+> Confirm the producer edition before connecting it; a different or
+> vendor-specific UAP needs an explicit decoder profile. Link-16 accepts UDP
+> only because the gateway's TCP framing is not yet documented.
 
 ### Zenoh topic schema
 
