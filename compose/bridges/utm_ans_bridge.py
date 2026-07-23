@@ -8,7 +8,7 @@ GeoJSON export/API URL supplied by Oro navigacija or the deployment owner; it
 does not scrape the public map or guess private endpoints.
 
 Zenoh output:
-  <PREFIX>/<ORG>/air/utm_ans/utm/unknown/uav/tracks/v1
+  <PREFIX>/<ORG>/air/utm_ans/c2/unknown/uav/json/tracks
 
 The record is marked ``source_kind=declared_utm_flight`` and never claims that
 the aircraft was observed by Remote ID. Actual broadcast Remote ID remains the
@@ -41,7 +41,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 _CERT_DIR = os.environ.get("EFDI_CERT_DIR", HERE)
 _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", "tcp/127.0.0.1:7448")
 
-TOPIC_UAV = "{}/air/utm_ans/utm/unknown/uav/tracks/v1".format(TOPIC_ROOT)
+TOPIC_UAV = "{}/air/utm_ans/c2/unknown/uav".format(TOPIC_ROOT)
 SOURCE = "utm_ans"
 MAX_TEXT = 256
 MAX_RESPONSE_BYTES = 10_000_000

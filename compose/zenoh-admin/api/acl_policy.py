@@ -81,7 +81,7 @@ def compile_acl(
                 f"{federation_root}/**/@config/v1",
                 f"{federation_root}/**/@config/relay/v1",
                 f"{federation_root}/**/@config/status/v1",
-                f"{federation_root}/**/@topology/v1",
+                f"{federation_root}/**/@topology",
             ],
         ),
     ]
@@ -131,7 +131,7 @@ def compile_acl(
                 ("subscribe-deliver", ["put", "reply"], ["egress"], list(peer.subscribe)),
                 ("control-in", ["put"], ["ingress"], [
                     f"{peer.namespace.removesuffix('/**')}/@config/status/v1",
-                    f"{peer.namespace.removesuffix('/**')}/@topology/v1",
+                    f"{peer.namespace.removesuffix('/**')}/@topology",
                 ]),
                 ("control-out", ["put", "declare_subscriber"], ["egress"], [
                     f"{peer.namespace.removesuffix('/**')}/@config/v1",
@@ -150,7 +150,7 @@ def compile_acl(
                 ]),
                 ("control-out", ["put"], ["egress"], [
                     f"{local_namespace}/@config/status/v1",
-                    f"{local_namespace}/@topology/v1",
+                    f"{local_namespace}/@topology",
                 ]),
             ]
         for suffix, messages, flows, scopes in definitions:

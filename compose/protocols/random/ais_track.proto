@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package ltu.cis.tracks.v1;
+package efdi.data.v2;
 
 // Source-record schema colocated with EFDI protocol contracts.
 

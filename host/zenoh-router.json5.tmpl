@@ -117,7 +117,7 @@
       {
         // Router federation (config push/pull + hop-by-hop relay + status
         // reporting + topology autodiscovery) rides @config/v1 +
-        // @config/relay/v1 + @config/status/v1 + @topology/v1
+        // @config/relay/v1 + @config/status/v1 + @topology
         // under EVERY pod's namespace, mesh-wide — a deliberate wildcard
         // covering all descendants, not just direct children. Reason:
         // federation trees run thousands of routers deep
@@ -159,7 +159,7 @@
         messages: ["put", "declare_subscriber"],
         flows: ["egress", "ingress"],
         permission: "allow",
-        key_exprs: ["${NAMESPACE_ROOT}/**/@config/v1", "${NAMESPACE_ROOT}/**/@config/relay/v1", "${NAMESPACE_ROOT}/**/@config/status/v1", "${NAMESPACE_ROOT}/**/@topology/v1"],
+        key_exprs: ["${NAMESPACE_ROOT}/**/@config/v1", "${NAMESPACE_ROOT}/**/@config/relay/v1", "${NAMESPACE_ROOT}/**/@config/status/v1", "${NAMESPACE_ROOT}/**/@topology"],
       },
     ],
     subjects: [

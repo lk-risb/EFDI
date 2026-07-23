@@ -29,6 +29,13 @@ import zenoh
 from zenoh_auth import apply_zenoh_auth
 
 from namespace_prefix import topic_root
+from protocols.protobuf_codec import (
+    native_topic,
+    publish_dual,
+    publish_native,
+    semantic_topic,
+)
+from protocols.vendors.sapient.flex335_pb2 import SapientFlex335Track
 
 
 MAX_FRAME_BYTES = 1_048_576
@@ -399,9 +406,21 @@ def _clean_class(value: str) -> str:
     return " ".join(value.lower().replace("_", " ").replace("-", " ").split())
 
 
+def _modality(track: dict) -> str:
+    """The `modality` topic segment, taken from the node's own registration.
+
+    A SAPIENT node declares its NodeType when it registers, and _NODE_TYPES
+    already renders that enum as the exact vocabulary the topic uses — so an
+    incoming SAPIENT camera lands under /camera/ and a radar under /radar/,
+    rather than every node collapsing into one segment.
+    """
+    types = track.get("sapient_node_types") or []
+    return str(types[0]) if types else "unknown"
+
+
 def topic_for_track(topic_root: str, track: dict) -> str:
     if track.get("sapient_message_type") == "status_report":
-        return "{}/land/sapient/flex335/neutral/sensor/status/v1".format(topic_root)
+        return "{}/land/sapient/{}/neutral/sensor".format(topic_root, _modality(track))
 
     object_class = _clean_class(str(track.get("sapient_class") or "unknown"))
     if any(token in object_class for token in ("drone", "uas", "uav", "quadcopter")):
@@ -418,22 +437,18 @@ def topic_for_track(topic_root: str, track: dict) -> str:
         domain, entity = "land", "sensor"
     else:
         domain, entity = "air", "aircraft"
-    return "{}/{}/sapient/flex335/unknown/{}/tracks/v1".format(topic_root, domain, entity)
+    return "{}/{}/sapient/{}/unknown/{}".format(
+        topic_root, domain, _modality(track), entity)
 
 
 def topic_for_frame(track_topic: str) -> str:
-    """Native-protobuf egress topic paired with a JSON track topic.
+    """Deprecated alias for native_topic().
 
-    The /v1 topics carry the flattened JSON view (lossy: only the fields this
-    module models). The /v2 sibling carries the original BSI Flex 335 v2
-    SapientMessage bytes verbatim, so fabric consumers get full fidelity —
-    including fields EFDI does not decode. JSON is published alongside during
-    the transition and is intended to be retired once consumers move to /v2.
+    Kept so existing callers keep working after the egress topics were renamed
+    from numbered versions to named formats (.../json, /sapient, /proto,
+    /native). The verbatim SapientMessage now rides the /native sibling.
     """
-    if track_topic.endswith("/v1"):
-        return track_topic[: -len("/v1")] + "/v2"
-    return track_topic + "/v2"
-
+    return native_topic(track_topic)
 
 class SapientDecoder:
     def __init__(self):
@@ -792,21 +807,17 @@ def _publish(session, decoder: SapientDecoder, frame: bytes, verbose: bool, sock
     if event.track is None:
         return
     topic = topic_for_track(TOPIC_ROOT, event.track)
-    session.put(
-        topic,
-        json.dumps(event.track, separators=(",", ":")).encode("utf-8"),
-        encoding=zenoh.Encoding.APPLICATION_JSON,
-    )
-    # Native BSI Flex 335 v2 egress. `frame` is the bare SapientMessage — both
-    # ingress paths strip the 32-bit little-endian length prefix before this
-    # point (iter_frames, and the --zenoh-raw reassembler), so the bytes are a
-    # complete protobuf message. Republished verbatim: no re-encode, no field
-    # loss, and no dependency on a locally-modelled schema.
-    session.put(
-        topic_for_frame(topic),
-        frame,
-        encoding=zenoh.Encoding.APPLICATION_PROTOBUF,
-    )
+    # /sapient, /json and /proto views on this object's key.
+    publish_dual(session, topic, event.track, SapientFlex335Track, zenoh)
+    # /raw carries the original BSI Flex 335 v2 SapientMessage. `frame` is the
+    # bare message — both ingress paths strip the 32-bit little-endian length
+    # prefix before this point (iter_frames, and the --zenoh-raw reassembler) —
+    # so it is republished verbatim: no re-encode, no field loss, and no
+    # dependency on the locally-modelled subset above. Built from the SAME
+    # object key publish_dual uses, so all four views sit together.
+    publish_native(session, native_topic(semantic_topic(topic, event.track)),
+                   frame, "sapient", zenoh,
+                   profile="bsi-flex-335-v2", content_type="application/protobuf")
     if verbose:
         print(
             "SAPIENT {} {} -> {} lat={} lon={}".format(

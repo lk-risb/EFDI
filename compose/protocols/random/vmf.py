@@ -260,7 +260,7 @@ def _topic(track: dict) -> str:
     domain = track.pop("_domain", "land")
     entity = track.pop("_entity", "unit")
     aff    = track.pop("_aff",    "unknown")
-    return "{}/{}/vmf/{}/{}/tracks/v1".format(TOPIC_ROOT, domain, aff, entity)
+    return "{}/{}/vmf/{}/{}".format(TOPIC_ROOT, domain, aff, entity)
 
 
 # ---------------------------------------------------------------------------

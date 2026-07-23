@@ -105,6 +105,26 @@
 
   --font-display: "Chakra Petch", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  /* 2026 restyle. The app uses `rounded-md` in 104 places, so the radius SCALE
+     is redefined here rather than editing every call site — every existing
+     utility picks up the softer geometry automatically. */
+  --radius-sm: 0.5rem;    /* 8px  — chips, tight inputs */
+  --radius-md: 0.75rem;   /* 12px — the app-wide default */
+  --radius-lg: 1rem;      /* 16px — cards, panels */
+  --radius-xl: 1.25rem;   /* 20px — modals, hero surfaces */
+  --radius-2xl: 1.5rem;
+
+  /* Elevation. Dark mode leans on depth + a hairline rather than heavy shadow,
+     which would be invisible on a near-black canvas anyway. */
+  --shadow-e1: 0 1px 2px rgb(0 0 0 / 0.04), 0 1px 3px rgb(0 0 0 / 0.06);
+  --shadow-e2: 0 2px 4px rgb(0 0 0 / 0.04), 0 6px 16px rgb(0 0 0 / 0.08);
+  --shadow-e3: 0 8px 24px rgb(0 0 0 / 0.10), 0 2px 6px rgb(0 0 0 / 0.06);
+
+  /* Spring-ish easing — overshoots slightly so motion reads physical rather
+     than linear. Used for hover lift and panel entry. */
+  --ease-spring: cubic-bezier(0.22, 1.2, 0.36, 1);
+  --ease-out-soft: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 /* HUD identity: uppercase, letter-spaced small labels used for table
@@ -117,10 +137,20 @@
 
 /* Glass panel — floating HUD surfaces (sidebar, cards, modals). Dark mode
    only; light mode keeps the flat white/zinc surfaces already in place. */
+.hud-glass {
+  /* Mica: a translucent surface that samples the canvas behind it, with a
+     hairline top highlight so the panel edge catches "light". Saturation is
+     boosted so the accent stays vivid through the blur. */
+  background: color-mix(in srgb, #ffffff 72%, transparent);
+  backdrop-filter: blur(20px) saturate(150%);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+  box-shadow: var(--shadow-e2), inset 0 1px 0 rgb(255 255 255 / 0.6);
+}
 .dark .hud-glass {
-  background: rgba(255, 255, 255, 0.03);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  background: rgba(255, 255, 255, 0.045);
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  box-shadow: 0 8px 32px rgb(0 0 0 / 0.45), inset 0 1px 0 rgb(255 255 255 / 0.06);
 }
 
 /* Every accent-colored primary action (buttons using bg-accent-fill) gets an
@@ -148,24 +178,42 @@
    hud-card utility class on Dashboard/table container cards. Light mode
    gets a softer lift/border cue; dark mode adds the full accent glow. */
 .hud-card {
-  transition: border-color 200ms ease, box-shadow 200ms ease, transform 200ms ease;
+  box-shadow: var(--shadow-e1);
+  transition: border-color 260ms var(--ease-out-soft),
+              box-shadow 260ms var(--ease-out-soft),
+              transform 260ms var(--ease-spring);
 }
 .hud-card:hover {
-  border-color: color-mix(in srgb, var(--color-accent-fill) 25%, transparent);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--color-accent-fill) 30%, transparent);
+  box-shadow: var(--shadow-e3);
+  transform: translateY(-3px);
+}
+.dark .hud-card {
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.4);
 }
 .dark .hud-card:hover {
-  border-color: color-mix(in srgb, var(--color-accent-fill) 40%, transparent);
-  box-shadow: 0 0 24px color-mix(in srgb, var(--color-accent-fill) 12%, transparent);
+  border-color: color-mix(in srgb, var(--color-accent-fill) 45%, transparent);
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.5),
+              0 0 28px color-mix(in srgb, var(--color-accent-fill) 14%, transparent);
+}
+
+/* Respect users who ask the OS for less motion: keep the colour/elevation
+   feedback, drop the translation. */
+@media (prefers-reduced-motion: reduce) {
+  .hud-card,
+  .hud-card:hover,
+  .bg-accent-fill,
+  .bg-accent-fill:hover { transform: none; }
+  .hud-enter { animation: none; }
+  .hud-live-dot { animation: none; }
 }
 
 @keyframes hud-fade-in-up {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateY(12px) scale(0.99); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 .hud-enter {
-  animation: hud-fade-in-up 0.35s ease-out both;
+  animation: hud-fade-in-up 0.45s var(--ease-spring) both;
 }
 .hud-enter-delay-1 { animation-delay: 0.05s; }
 .hud-enter-delay-2 { animation-delay: 0.1s; }
@@ -188,25 +236,24 @@
   background-position: 0 24px;
 }
 
-/* Corner-bracket / reticle framing. Apply `hud-frame` (position: relative) to
-   the panel, then four `<span class="hud-corner hud-corner-{tl,tr,bl,br}">`
-   children (see HudCorners.tsx). */
+/* `hud-frame` still establishes the positioning context panels rely on. The
+   corner brackets it used to anchor were retired in the 2026 restyle — panels
+   now read as surfaces (radius + elevation + accent ring) rather than reticles.
+   HudCorners.tsx is a no-op; the .hud-corner rules are gone with it. */
 .hud-frame {
   position: relative;
 }
-.hud-corner {
-  position: absolute;
-  z-index: 1001;
-  width: 14px;
-  height: 14px;
-  border-color: var(--color-accent-fill);
-  opacity: 0.7;
-  pointer-events: none;
+
+/* Light theme, brought up to parity with dark rather than left as bare white.
+   A faint tinted wash keeps large light surfaces from glaring under the panel
+   grid, and matches the softer geometry. */
+.hud-grid-bg:not(.dark .hud-grid-bg) {
+  background-image:
+    linear-gradient(to right, rgb(9 9 11 / 0.028) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(9 9 11 / 0.028) 1px, transparent 1px);
+  background-size: 32px 32px;
+  background-position: 0 24px;
 }
-.hud-corner-tl { top: -1px; left: -1px; border-top: 2px solid; border-left: 2px solid; }
-.hud-corner-tr { top: -1px; right: -1px; border-top: 2px solid; border-right: 2px solid; }
-.hud-corner-bl { bottom: -1px; left: -1px; border-bottom: 2px solid; border-left: 2px solid; }
-.hud-corner-br { bottom: -1px; right: -1px; border-bottom: 2px solid; border-right: 2px solid; }
 
 /* Dense management-console primitives used by router hierarchy and PKI views. */
 .enterprise-chip {

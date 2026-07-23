@@ -16,7 +16,7 @@ from translation_common import TOPIC_ROOT, make_config, payload_json
 
 
 INPUT_TOPIC = os.environ.get("MISSION_ROUTE_INPUT_TOPIC") or TOPIC_ROOT + "/raw/routes/**"
-OUTPUT_TOPIC = TOPIC_ROOT + "/air/mission/unknown/aircraft/routes/v1"
+OUTPUT_TOPIC = TOPIC_ROOT + "/air/mission/c2/unknown/aircraft"
 
 
 def _geometry(value: dict) -> dict | None:

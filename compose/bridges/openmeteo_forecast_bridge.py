@@ -6,7 +6,7 @@ at configured Baltic locations and publishes each as a WeatherPoint JSON to the
 EFDI Zenoh fabric.
 
 Zenoh topic:  <ORG>/weather/openmeteo/<place>/current/v1
-Proto schema: weather_point.proto  (message WeatherPoint, package ltu.cis.tracks.v1)
+Proto schema: weather_point.proto  (message WeatherPoint, package efdi.data.v2)
 
 Run:
     venv/bin/python3 openmeteo_bridge.py

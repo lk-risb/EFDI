@@ -1,0 +1,22 @@
+# Docker does NOT honour .gitignore, so every runtime path has to be excluded
+# here as well. Without this the build context carries pod state and — worse —
+# the cert bundle (BUNDLE_DIR defaults to compose/certs), which would land in an
+# image layer. It also made `docker build` fail outright on state/ files the
+# building user cannot read.
+
+# Runtime state and secrets — never belong in an image.
+certs/
+state/
+state-child/
+state-grandchild/
+.env
+
+# Local tooling and build output (regenerated inside the image).
+venv/
+.venv/
+generated/
+**/__pycache__/
+**/*.pyc
+
+# The admin service has its own build context; nothing here needs its tree.
+zenoh-admin/

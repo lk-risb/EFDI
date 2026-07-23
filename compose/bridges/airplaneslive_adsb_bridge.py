@@ -9,8 +9,8 @@ selections, and ADS-B quality values. Run alongside adsblol_bridge.py so two
 independent receiver networks can improve combined coverage.
 
 Zenoh topics:
-  <ORG>/air/airplaneslive/tracks/v1  — regional ADS-B
-  <ORG>/air/airplaneslive/mil/v1     — worldwide military traffic
+  <ORG>/air/airplaneslive/adsb/json/tracks  — regional ADS-B
+  <ORG>/air/airplaneslive/adsb/mil/v1     — worldwide military traffic
 
 Proto schema: airplaneslive_track.proto (message AirplanesLiveTrack)
 
@@ -225,10 +225,10 @@ def normalize(ac: dict, is_military: bool) -> dict | None:
 
 def run(args):
     session = zenoh.open(make_config())
-    pub_tracks = session.declare_publisher("{}/air/airplaneslive/adsb/civ/aircraft/tracks/v1".format(TOPIC_ROOT))
-    pub_mil    = session.declare_publisher("{}/air/airplaneslive/adsb/mil/aircraft/tracks/v1".format(TOPIC_ROOT))
-    pub_tracks_v2 = session.declare_publisher("{}/air/airplaneslive/adsb/civ/aircraft/tracks/v2".format(TOPIC_ROOT))
-    pub_mil_v2 = session.declare_publisher("{}/air/airplaneslive/adsb/mil/aircraft/tracks/v2".format(TOPIC_ROOT))
+    pub_tracks = session.declare_publisher("{}/air/airplaneslive/adsb/civ/aircraft".format(TOPIC_ROOT))
+    pub_mil    = session.declare_publisher("{}/air/airplaneslive/adsb/mil/aircraft".format(TOPIC_ROOT))
+    pub_tracks_v2 = session.declare_publisher("{}/air/airplaneslive/adsb/civ/aircraft".format(TOPIC_ROOT))
+    pub_mil_v2 = session.declare_publisher("{}/air/airplaneslive/adsb/mil/aircraft".format(TOPIC_ROOT))
 
     url_mil = "{}/mil".format(BASE_URL)
     print("airplanes.live: {} centers radius={}nm  poll={}s".format(

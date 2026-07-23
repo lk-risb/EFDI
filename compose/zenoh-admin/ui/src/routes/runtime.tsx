@@ -54,7 +54,24 @@ type ServiceState = {
   pid: number | null
   details?: ServiceDetails
 }
-type CatalogItem = { name: string; group: string; description: string }
+type CatalogItem = {
+  name: string
+  group: string
+  description: string
+  // Which file backs the service, and its role derived from that path. A name
+  // alone cannot say whether an entry owns an external connection (bridge),
+  // decodes an already-published format (protocol), or writes out to a C2
+  // system (layer) — and some names share one script with different arguments.
+  source?: string
+  kind?: 'bridge' | 'protocol' | 'layer' | 'infrastructure'
+}
+
+const KIND_STYLE: Record<string, string> = {
+  bridge: 'text-sky-600 dark:text-sky-400 border-sky-500/40',
+  protocol: 'text-violet-600 dark:text-violet-400 border-violet-500/40',
+  layer: 'text-amber-600 dark:text-amber-400 border-amber-500/40',
+  infrastructure: 'text-zinc-500 border-zinc-500/40',
+}
 
 function servicePresentation(state: ServiceState | undefined, selected: boolean) {
   if (state?.status === 'auth-failed') return { label: 'HQ auth failed', text: 'text-red-500', dot: 'bg-red-500' }
@@ -134,6 +151,7 @@ function RuntimePage() {
   const [saving, setSaving] = useState(false)
   const [filter, setFilter] = useState('')
   const [group, setGroup] = useState('All')
+  const [kind, setKind] = useState('All')
   const [values, setValues] = useState<Record<string, string>>({})
   const [secrets, setSecrets] = useState<Record<string, boolean>>({})
   const [editableKeys, setEditableKeys] = useState<string[]>([])
@@ -180,9 +198,17 @@ function RuntimePage() {
   }, [refreshIntervalMs])
 
   const groups = useMemo(() => ['All', ...Array.from(new Set(catalog.map(item => item.group)))], [catalog])
+  // Architectural role, independent of the business grouping above: a C2
+  // integration cares whether a service ingests (bridge), decodes (protocol),
+  // or writes out to a C2 system (layer).
+  const kinds = useMemo(() => {
+    const present = new Set(catalog.map(item => item.kind).filter(Boolean) as string[])
+    return ['All', 'bridge', 'protocol', 'layer', 'infrastructure'].filter(k => k === 'All' || present.has(k))
+  }, [catalog])
   const filtered = catalog.filter(item =>
     (group === 'All' || item.group === group) &&
-    (!filter || `${item.name} ${item.description}`.toLowerCase().includes(filter.toLowerCase()))
+    (kind === 'All' || item.kind === kind) &&
+    (!filter || `${item.name} ${item.description} ${item.source ?? ''}`.toLowerCase().includes(filter.toLowerCase()))
   )
   const runningCount = runtime?.services.filter(service => service.running).length ?? 0
   const configuredCount = Object.keys(runtime?.config ?? {}).length
@@ -297,6 +323,7 @@ function RuntimePage() {
           <Card>
             <div className="mb-4 flex items-start justify-between gap-3 border-b border-zinc-200 pb-4 dark:border-white/10"><div><h2 className="hud-label flex items-center gap-2 text-sm font-semibold"><Activity size={16} className="text-accent-ring" /> Bridge and layer control</h2><p className="mt-1 text-xs text-zinc-500">Start, stop, restart, and inspect every host-managed integration.</p></div><div className="relative"><Search size={14} className="absolute left-2.5 top-2.5 text-zinc-500" /><input value={filter} onChange={e => setFilter(e.target.value)} placeholder="Filter" className="w-32 rounded-md border border-zinc-300 bg-zinc-100 py-2 pl-8 pr-2 text-xs dark:border-white/10 dark:bg-[#141416]" /></div></div>
             <div className="mb-4 flex gap-1 overflow-x-auto pb-1">{groups.map(item => <button key={item} onClick={() => setGroup(item)} className={`whitespace-nowrap rounded-full border px-2.5 py-1 text-[10px] ${group === item ? 'border-accent-ring bg-accent-ring/10 text-accent-ring' : 'border-zinc-300 text-zinc-500 dark:border-zinc-700'}`}>{item}</button>)}</div>
+            <div className="mb-4 flex items-center gap-1 overflow-x-auto pb-1"><span className="shrink-0 text-[10px] uppercase tracking-wider text-zinc-500">Role</span>{kinds.map(item => <button key={item} onClick={() => setKind(item)} className={`whitespace-nowrap rounded-full border px-2.5 py-1 text-[10px] ${kind === item ? 'border-accent-ring bg-accent-ring/10 text-accent-ring' : 'border-zinc-300 text-zinc-500 dark:border-zinc-700'}`}>{item}</button>)}</div>
             <div className={`max-h-[680px] space-y-1.5 overflow-auto pr-1 ${denseRows ? 'text-[11px]' : ''}`}>
               {filtered.map((item, index) => {
                 const state = runtime?.services.find(service => service.name === item.name)
@@ -320,10 +347,22 @@ function RuntimePage() {
                       />
                       <span className={`h-2 w-2 shrink-0 rounded-full ${presentation.dot}`} />
                       <div className="min-w-0 flex-1">
-                        <p className="truncate font-mono text-xs text-zinc-800 dark:text-zinc-200">{item.name}</p>
+                        <div className="flex items-center gap-1.5">
+                          <p className="truncate font-mono text-xs text-zinc-800 dark:text-zinc-200">{item.name}</p>
+                          {item.kind && (
+                            <span className={`shrink-0 rounded border px-1 text-[9px] uppercase tracking-wider ${KIND_STYLE[item.kind] ?? KIND_STYLE.infrastructure}`}>
+                              {item.kind}
+                            </span>
+                          )}
+                        </div>
                         <p className="truncate text-[10px] text-zinc-500">
                           {item.description}{state?.pid ? ` · PID ${state.pid}` : ''}{serviceTelemetry(state)}
                         </p>
+                        {item.source && (
+                          <p className="truncate font-mono text-[10px] text-zinc-400 dark:text-zinc-600" title={item.source}>
+                            {item.source}
+                          </p>
+                        )}
                       </div>
                       <span className={`hidden text-[10px] uppercase tracking-[0.18em] sm:inline ${presentation.text}`}>{presentation.label}</span>
                       <button title="Start" disabled={!canWrite || !!action || state?.running} onClick={() => serviceAction(item.name, 'start')} className="rounded p-1.5 text-zinc-500 transition hover:bg-emerald-500/10 hover:text-emerald-500 disabled:opacity-30"><Play size={13} /></button>

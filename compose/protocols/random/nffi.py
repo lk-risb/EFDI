@@ -11,7 +11,7 @@ its profiles can use an NFFI transport, but this generic NFFI translator does
 not claim to decode the STANAG 4677 JDSSDM profile.
 
 Raw input:  <PREFIX>/<ORG>/raw/nffi/<source-id>
-Output:     <PREFIX>/<ORG>/land/nato/nffi/friendly/unit/tracks/v1
+Output:     <PREFIX>/<ORG>/land/nato/c2/friendly/unit/json/tracks
 """
 
 import argparse
@@ -34,7 +34,7 @@ _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", "tcp/127.0.0.1:7448")
 
 MAX_NFFI_XML = 10_000_000
 DEFAULT_INPUT_TOPIC = "{}/raw/nffi/*".format(TOPIC_ROOT)
-OUTPUT_TOPIC = "{}/land/nato/nffi/friendly/unit/tracks/v1".format(TOPIC_ROOT)
+OUTPUT_TOPIC = "{}/land/nato/c2/friendly/unit".format(TOPIC_ROOT)
 ZENOH_RETRY_S = 5
 
 # NFFI XML namespaces used by ADatP-36 / STANAG 5527 implementations

@@ -1,7 +1,7 @@
 """Federation topology autodiscovery. Each pod's admin periodically publishes a
 self-describing fact — its own namespace, cert CN, direct parent namespace, and
-directly-registered children — on {prefix}/{own-ns}/@topology/v1. Any node
-subscribes with a single {prefix}/**/@topology/v1 wildcard and reconstructs the
+directly-registered children — on {prefix}/{own-ns}/@topology. Any node
+subscribes with a single {prefix}/**/@topology wildcard and reconstructs the
 whole tree client-side from the parent pointers. Every non-root fact carries a
 bounded public delegation chain, so the root verifies descendants without
 preloading every descendant certificate or trusting a child's plain claim.
@@ -92,11 +92,11 @@ def _parent_namespace() -> str | None:
 
 
 def _own_topic() -> str:
-    return f"{_prefix()}/{_OWN_NAMESPACE}/@topology/v1"
+    return f"{_prefix()}/{_OWN_NAMESPACE}/@topology"
 
 
 def _wildcard() -> str:
-    return f"{_prefix()}/**/@topology/v1"
+    return f"{_prefix()}/**/@topology"
 
 
 def _router_zid(session: "zenoh.Session") -> str | None:
@@ -334,7 +334,7 @@ def _handle_topology_sample(loop: asyncio.AbstractEventLoop, sample):
         return
     prefix = _prefix().strip("/")
     key = str(sample.key_expr)
-    expected_suffix = "/@topology/v1"
+    expected_suffix = "/@topology"
     if not (key.startswith(prefix + "/") and key.endswith(expected_suffix)):
         return
     topic_namespace = key[len(prefix) + 1:-len(expected_suffix)]

@@ -74,8 +74,8 @@ class AdsbLolBridgeTests(unittest.TestCase):
             "lon_deg": 25.27,
             "is_military": True,
         }
-        fuser.on_adsb(Sample("test/air/adsblol/adsb/mil/aircraft/tracks/v1", adsb))
-        self.assertIn("/air/fused/mil/", session.publications[-1][0])
+        fuser.on_adsb(Sample("test/air/adsblol/adsb/mil/aircraft/b738/4ca123/json", adsb))
+        self.assertIn("/air/trackfusion/fused/mil/", session.publications[-1][0])
 
         radar = {
             "_src": "ASTERIX CAT-48",
@@ -85,8 +85,8 @@ class AdsbLolBridgeTests(unittest.TestCase):
             "lon_deg": 25.271,
             "radar_id": "site-1",
         }
-        fuser.on_radar(Sample("test/air/asterix/cat48/unknown/aircraft/tracks/v1", radar))
-        self.assertIn("/air/fused/mil/", session.publications[-1][0])
+        fuser.on_radar(Sample("test/air/010-042/radar/unknown/aircraft/unknown/site-1/json", radar))
+        self.assertIn("/air/trackfusion/fused/mil/", session.publications[-1][0])
 
 
 if __name__ == "__main__":

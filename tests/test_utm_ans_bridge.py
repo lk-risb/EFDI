@@ -35,7 +35,7 @@ class UtmAnsBridgeTests(unittest.TestCase):
         self.assertEqual(track["utm_flight_id"], "LT-TEST-42")
         self.assertEqual(track["speed_ms"], 10.29)
         self.assertEqual(track["heading_deg"], 91)
-        self.assertIn("/air/utm_ans/utm/unknown/uav/tracks/v1", TOPIC_UAV)
+        self.assertIn("/air/utm_ans/c2/unknown/uav", TOPIC_UAV)
 
     def test_extracts_geojson_feature_collection(self):
         records = _records({

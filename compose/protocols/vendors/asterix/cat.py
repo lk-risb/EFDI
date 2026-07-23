@@ -22,6 +22,21 @@ from protocols.vendors.asterix.cat_pb2 import (
     Cat62Track,
 )
 
+
+def _asterix_source(track: dict) -> str:
+    """The reporting sensor's identity, for the `source` topic segment.
+
+    Every ASTERIX category carries SAC/SIC (System Area Code / System
+    Identification Code) in I0xx/010, so the sensor names itself on the wire.
+    Two radars feeding one router therefore stay separable by topic; before
+    this they both published under the literal `asterix` and collided.
+
+    Topic constants below are templates holding `{source}` — the segment can
+    only be filled once a record has been decoded.
+    """
+    return "{:03d}-{:03d}".format(track.get("sac", 0) or 0, track.get("sic", 0) or 0)
+
+
 # ==========================================================================
 # CAT-010
 # ==========================================================================
@@ -46,7 +61,8 @@ import zenoh
 from zenoh_auth import apply_zenoh_auth
 
 from namespace_prefix import topic_root
-from protocols.protobuf_codec import publish_dual
+from protocols.protobuf_codec import (publish_dual, publish_native, native_topic,
+                                      semantic_topic, asterix_data_block)
 
 
 _cat10_ORG       = os.environ.get("PARTNER_NAMESPACE", "")
@@ -59,11 +75,12 @@ _cat10__CERT_DIR = os.environ.get("EFDI_CERT_DIR", _cat10_HERE)
 
 _cat10__ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", "tcp/127.0.0.1:7448")
 
-_cat10_TOPIC_010_AIR = "{}/air/asterix/cat10/civ/aircraft/tracks/v1".format(_cat10_TOPIC_ROOT)
+# CAT-010 is airport surface movement: a surface movement radar, so `radar`.
+_cat10_TOPIC_010_AIR = _cat10_TOPIC_ROOT + "/air/{source}/radar/civ/aircraft"
 
-_cat10_TOPIC_010_GROUND = "{}/land/asterix/cat10/unknown/vehicle/tracks/v1".format(_cat10_TOPIC_ROOT)
+_cat10_TOPIC_010_GROUND = _cat10_TOPIC_ROOT + "/land/{source}/radar/unknown/vehicle"
 
-_cat10_TOPIC_010_SENSOR = "{}/land/asterix/cat10/neutral/radar/status/v1".format(_cat10_TOPIC_ROOT)
+_cat10_TOPIC_010_SENSOR = _cat10_TOPIC_ROOT + "/land/{source}/radar/neutral/radar"
 _cat10_RAW_INPUT_TOPIC = "{}/raw/asterix/cat10".format(_cat10_TOPIC_ROOT)
 
 _cat10_CAT_010 = 0x0A
@@ -468,8 +485,12 @@ def _cat10__make_cat010_handler(session, site, site_name):
                         print("cat10 target without map position; configure CAT10_SITE_LAT/LON for local coordinates", flush=True)
                     continue
                 ground = track.get("target_type") == "ground_vehicle" or "vehicle_fleet" in track
-                topic = _cat10_TOPIC_010_GROUND if ground else _cat10_TOPIC_010_AIR
+                topic = (_cat10_TOPIC_010_GROUND if ground else _cat10_TOPIC_010_AIR
+                         ).format(source=_asterix_source(track))
                 publish_dual(session, topic, track, AsterixCat10Track, zenoh)
+                publish_native(session, native_topic(semantic_topic(topic, track)),
+                               asterix_data_block(10, data[previous:pos]),
+                               "asterix", zenoh, profile="cat010")
                 if verbose:
                     print("cat10 {} -> {}".format(track.get("track_num", "target"), topic), flush=True)
             elif track.get("msg_type") in ("start_update_cycle", "periodic_status", "event_status"):
@@ -487,7 +508,7 @@ def _cat10__make_cat010_handler(session, site, site_name):
                 )
                 publish_dual(
                     session,
-                    _cat10_TOPIC_010_SENSOR,
+                    _cat10_TOPIC_010_SENSOR.format(source=_asterix_source(track)),
                     status,
                     AsterixCat10SensorStatus,
                     zenoh,
@@ -622,7 +643,8 @@ import zenoh
 from zenoh_auth import apply_zenoh_auth
 
 from namespace_prefix import topic_root
-from protocols.protobuf_codec import publish_dual
+from protocols.protobuf_codec import (publish_dual, publish_native, native_topic,
+                                      semantic_topic, asterix_data_block)
 
 
 _cat20_ORG       = os.environ.get("PARTNER_NAMESPACE", "")
@@ -635,7 +657,9 @@ _cat20__CERT_DIR = os.environ.get("EFDI_CERT_DIR", _cat20_HERE)
 
 _cat20__ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", "tcp/127.0.0.1:7448")
 
-_cat20_TOPIC_020    = "{}/air/asterix/cat20/civ/aircraft/tracks/v1".format(_cat20_TOPIC_ROOT)
+# CAT-020 is multilateration, not radar — the position is computed from time
+# differences of arrival, so it gets its own modality.
+_cat20_TOPIC_020    = _cat20_TOPIC_ROOT + "/air/{source}/mlat/civ/aircraft"
 _cat20_RAW_INPUT_TOPIC = "{}/raw/asterix/cat20".format(_cat20_TOPIC_ROOT)
 
 _cat20_CAT_020 = 0x14
@@ -1036,7 +1060,8 @@ def _cat20_decode_cat020_record(data: bytes, pos: int):
 def _cat20__pub(pub, track: dict, label: str, verbose: bool):
     if "lat_deg" not in track or "lon_deg" not in track:
         return
-    publish_dual(pub, _cat20_TOPIC_020, track, AsterixCat20Track, zenoh)
+    publish_dual(pub, _cat20_TOPIC_020.format(source=_asterix_source(track)),
+                 track, AsterixCat20Track, zenoh)
     if verbose:
         ident = (track.get("icao24") or track.get("callsign") or
                  track.get("radar_id") or track.get("track_num") or "?")
@@ -1052,9 +1077,16 @@ def _cat20__make_cat020_handler(pub):
     def _h(data: bytes, verbose: bool):
         pos = 0
         while pos < len(data):
+            previous = pos
             track, pos = _cat20_decode_cat020_record(data, pos)
+            if pos <= previous:
+                break
             if len(track) > 2:
                 _cat20__pub(pub, track, "cat20", verbose)
+                publish_native(pub, native_topic(semantic_topic(
+                                   _cat20_TOPIC_020.format(source=_asterix_source(track)), track)),
+                               asterix_data_block(20, data[previous:pos]),
+                               "asterix", zenoh, profile="cat020")
     return _h
 
 def _cat20__process_stream(frame_iter, handlers: dict, verbose: bool):
@@ -1177,7 +1209,8 @@ import zenoh
 from zenoh_auth import apply_zenoh_auth
 
 from namespace_prefix import topic_root
-from protocols.protobuf_codec import publish_dual
+from protocols.protobuf_codec import (publish_dual, publish_native, native_topic,
+                                      semantic_topic, asterix_data_block)
 
 
 _cat21_ORG       = os.environ.get("PARTNER_NAMESPACE", "")
@@ -1190,7 +1223,9 @@ _cat21__CERT_DIR = os.environ.get("EFDI_CERT_DIR", _cat21_HERE)
 
 _cat21__ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", "tcp/127.0.0.1:7448")
 
-_cat21_TOPIC_021    = "{}/air/asterix/cat21/civ/aircraft/tracks/v1".format(_cat21_TOPIC_ROOT)
+# CAT-021 carries ADS-B reports. The ground station relayed them; it did not
+# sense the target, so the modality is `adsb`, not `radar`.
+_cat21_TOPIC_021    = _cat21_TOPIC_ROOT + "/air/{source}/adsb/civ/aircraft"
 _cat21_RAW_INPUT_TOPIC = "{}/raw/asterix/cat21".format(_cat21_TOPIC_ROOT)
 
 _cat21_CAT_021 = 0x15
@@ -1601,7 +1636,8 @@ def _cat21_decode_cat021_record(data: bytes, pos: int):
 def _cat21__pub(pub, track: dict, label: str, verbose: bool):
     if "lat_deg" not in track or "lon_deg" not in track:
         return
-    publish_dual(pub, _cat21_TOPIC_021, track, AsterixCat21Track, zenoh)
+    publish_dual(pub, _cat21_TOPIC_021.format(source=_asterix_source(track)),
+                 track, AsterixCat21Track, zenoh)
     if verbose:
         ident = (track.get("icao24") or track.get("callsign") or
                  track.get("radar_id") or track.get("track_num") or "?")
@@ -1925,9 +1961,16 @@ def _cat21__make_cat021_handler(pub):
     def _h(data: bytes, verbose: bool):
         pos = 0
         while pos < len(data):
+            previous = pos
             track, pos = _cat21_decode_cat021_record(data, pos)
+            if pos <= previous:
+                break
             if len(track) > 2:
                 _cat21__pub(pub, track, "cat21", verbose)
+                publish_native(pub, native_topic(semantic_topic(
+                                   _cat21_TOPIC_021.format(source=_asterix_source(track)), track)),
+                               asterix_data_block(21, data[previous:pos]),
+                               "asterix", zenoh, profile="cat021")
     return _h
 
 def _cat21__process_stream(frame_iter, handlers: dict, verbose: bool):
@@ -2050,7 +2093,8 @@ import zenoh
 from zenoh_auth import apply_zenoh_auth
 
 from namespace_prefix import topic_root
-from protocols.protobuf_codec import publish_dual
+from protocols.protobuf_codec import (publish_dual, publish_native, native_topic,
+                                      semantic_topic, asterix_data_block)
 
 
 _cat34_ORG       = os.environ.get("PARTNER_NAMESPACE", "")
@@ -2063,7 +2107,9 @@ _cat34__CERT_DIR = os.environ.get("EFDI_CERT_DIR", _cat34_HERE)
 
 _cat34__ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", "tcp/127.0.0.1:7448")
 
-_cat34_TOPIC_SENSOR = "{}/land/asterix/cat34/neutral/radar/status/v1".format(_cat34_TOPIC_ROOT)
+# The observer and the observed are both a radar here: CAT-034 reports the
+# radar's own service status, so the radar is the tracked object.
+_cat34_TOPIC_SENSOR = _cat34_TOPIC_ROOT + "/land/{source}/radar/neutral/radar"
 _cat34_RAW_INPUT_TOPIC = "{}/raw/asterix/cat34".format(_cat34_TOPIC_ROOT)
 
 _cat34_CAT_034 = 0x22
@@ -2342,7 +2388,7 @@ def _cat34__make_cat034_handler(pub_sensor, site, radar_name):
             payload["_ts"] = time.time()
             publish_dual(
                 pub_sensor,
-                _cat34_TOPIC_SENSOR,
+                _cat34_TOPIC_SENSOR.format(source=_asterix_source(payload)),
                 payload,
                 AsterixCat34Status,
                 zenoh,
@@ -2369,7 +2415,7 @@ def _cat34__make_cat034_handler(pub_sensor, site, radar_name):
             payload["_ts"] = time.time()
             publish_dual(
                 pub_sensor,
-                _cat34_TOPIC_SENSOR,
+                _cat34_TOPIC_SENSOR.format(source=_asterix_source(payload)),
                 payload,
                 AsterixCat34Status,
                 zenoh,
@@ -2463,7 +2509,7 @@ def _cat34__make_cat034_handler(pub_sensor, site, radar_name):
             # Publish the full status update (no sweep azimuth — just the site marker)
             publish_dual(
                 pub_sensor,
-                _cat34_TOPIC_SENSOR,
+                _cat34_TOPIC_SENSOR.format(source=_asterix_source(status)),
                 status,
                 AsterixCat34Status,
                 zenoh,
@@ -2611,7 +2657,8 @@ import zenoh
 from zenoh_auth import apply_zenoh_auth
 
 from namespace_prefix import topic_root
-from protocols.protobuf_codec import publish_dual
+from protocols.protobuf_codec import (publish_dual, publish_native, native_topic,
+                                      semantic_topic, asterix_data_block)
 
 
 _cat48_ORG       = os.environ.get("PARTNER_NAMESPACE", "")
@@ -2624,7 +2671,7 @@ _cat48__CERT_DIR = os.environ.get("EFDI_CERT_DIR", _cat48_HERE)
 
 _cat48__ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", "tcp/127.0.0.1:7448")
 
-_cat48_TOPIC_048    = "{}/air/asterix/cat48/unknown/aircraft/tracks/v1".format(_cat48_TOPIC_ROOT)
+_cat48_TOPIC_048    = _cat48_TOPIC_ROOT + "/air/{source}/radar/unknown/aircraft"
 _cat48_RAW_INPUT_TOPIC = "{}/raw/asterix/cat48".format(_cat48_TOPIC_ROOT)
 
 _cat48_CAT_048 = 0x30
@@ -3145,7 +3192,8 @@ def _cat48_decode_cat048_record(data: bytes, pos: int,
 def _cat48__pub(pub, track: dict, label: str, verbose: bool):
     if "lat_deg" not in track or "lon_deg" not in track:
         return
-    publish_dual(pub, _cat48_TOPIC_048, track, AsterixCat48Track, zenoh)
+    publish_dual(pub, _cat48_TOPIC_048.format(source=_asterix_source(track)),
+                 track, AsterixCat48Track, zenoh)
     if verbose:
         ident = (track.get("icao24") or track.get("callsign") or
                  track.get("radar_id") or track.get("track_num") or "?")
@@ -3162,13 +3210,20 @@ def _cat48__make_cat048_handler(pub, site):
     def _h(data: bytes, verbose: bool):
         pos = 0
         while pos < len(data):
+            previous = pos
             track, pos = _cat48_decode_cat048_record(data, pos, site[0], site[1])
+            if pos <= previous:
+                break
             if len(track) > 2:
                 if verbose and "lat_deg" not in track:
                     ident = track.get("icao24") or track.get("radar_id") or "PSR"
                     print("cat48 {} no-position (awaiting I034/120 or set --radar-lat/--radar-lon)".format(
                         ident), flush=True)
                 _cat48__pub(pub, track, "cat48", verbose)
+                publish_native(pub, native_topic(semantic_topic(
+                                   _cat48_TOPIC_048.format(source=_asterix_source(track)), track)),
+                               asterix_data_block(48, data[previous:pos]),
+                               "asterix", zenoh, profile="cat048")
     return _h
 
 def _cat48__process_stream(frame_iter, handlers: dict, verbose: bool):
@@ -3295,7 +3350,8 @@ import zenoh
 from zenoh_auth import apply_zenoh_auth
 
 from namespace_prefix import topic_root
-from protocols.protobuf_codec import publish_dual
+from protocols.protobuf_codec import (publish_dual, publish_native, native_topic,
+                                      semantic_topic, asterix_data_block)
 
 
 _cat62_ORG       = os.environ.get("PARTNER_NAMESPACE", "")
@@ -3308,7 +3364,9 @@ _cat62__CERT_DIR = os.environ.get("EFDI_CERT_DIR", _cat62_HERE)
 
 _cat62__ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", "tcp/127.0.0.1:7448")
 
-_cat62_TOPIC_062    = "{}/air/asterix/cat62/unknown/aircraft/tracks/v1".format(_cat62_TOPIC_ROOT)
+# CAT-062 is the output of a tracker that has already combined several sensors,
+# so the modality is `fused` rather than any one sensing method.
+_cat62_TOPIC_062    = _cat62_TOPIC_ROOT + "/air/{source}/fused/unknown/aircraft"
 _cat62_RAW_INPUT_TOPIC = "{}/raw/asterix/cat62".format(_cat62_TOPIC_ROOT)
 
 _cat62_CAT_062 = 0x3E
@@ -3944,7 +4002,9 @@ def _cat62__pub(pub, track: dict, label: str, verbose: bool, topic: str = _cat62
         return
     publish_dual(
         pub,
-        topic,
+        # A --topic override without `{source}` formats to itself, so an
+        # operator-supplied literal topic still works unchanged.
+        topic.format(source=_asterix_source(track)),
         track,
         Cat62Track,
         zenoh,
@@ -4257,9 +4317,16 @@ def _cat62__make_cat062_handler(pub, topic: str = _cat62_TOPIC_062):
     def _h(data: bytes, verbose: bool):
         pos = 0
         while pos < len(data):
+            previous = pos
             track, pos = _cat62_decode_cat62_record(data, pos)
+            if pos <= previous:
+                break
             if len(track) > 2:
                 _cat62__pub(pub, track, "cat62", verbose, topic)
+                publish_native(pub, native_topic(semantic_topic(
+                                   topic.format(source=_asterix_source(track)), track)),
+                               asterix_data_block(62, data[previous:pos]),
+                               "asterix", zenoh, profile="cat062")
     return _h
 
 def _cat62__process_stream(frame_iter, handlers: dict, verbose: bool):
