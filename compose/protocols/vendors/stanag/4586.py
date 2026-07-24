@@ -58,7 +58,7 @@ _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", "tcp/127.0.0.1:7448")
 
 RECONNECT_S     = 10
 HEARTBEAT_S     = 5
-TOPIC_UAV_OUT   = "{}/air/stanag4586/telemetry/civ/aircraft".format(TOPIC_ROOT)
+TOPIC_UAV_OUT   = "{}/air/stanag_4586/telemetry/civ/aircraft".format(TOPIC_ROOT)
 ZENOH_RETRY_S   = 5
 
 # Historical deployment constants. They are not asserted to be universal.
@@ -168,7 +168,7 @@ def _decode_vehicle_state(body: bytes, instance: int) -> dict | None:
     track = {
         "_ts":        time.time(),
         "_src":       "STANAG 4586",
-        "uid":        "stanag4586-vsm-{}".format(instance),
+        "uid":        "stanag_4586-vsm-{}".format(instance),
         "vsm_instance": instance,
         "callsign":   "UAV-VSM-{}".format(instance),
         "lat_deg":    round(lat, 6),
@@ -280,7 +280,7 @@ def run_zenoh_raw(args):
         except zenoh.ZError as exc:
             print("STANAG4586 raw Zenoh connect failed: {} — retry in {}s".format(exc, ZENOH_RETRY_S), flush=True)
             time.sleep(ZENOH_RETRY_S)
-    topic = args.raw_topic or TOPIC_ROOT + "/raw/stanag4586/**"
+    topic = args.raw_topic or TOPIC_ROOT + "/raw/stanag_4586/**"
     buffer = bytearray()
 
     def on_sample(sample):
@@ -332,7 +332,7 @@ def main():
                     default=int(os.environ.get("STANAG4586_PORT", "4586")))
     ap.add_argument("--verbose", "-v", action="store_true")
     ap.add_argument("--zenoh-raw", action="store_true",
-                    help="decode bytes from .../raw/stanag4586/** instead of opening VSM TCP")
+                    help="decode bytes from .../raw/stanag_4586/** instead of opening VSM TCP")
     ap.add_argument("--raw-topic", default=os.environ.get("STANAG4586_RAW_TOPIC", ""))
     args = ap.parse_args()
     if not args.host and not args.zenoh_raw:

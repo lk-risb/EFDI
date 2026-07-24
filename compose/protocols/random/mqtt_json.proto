@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package efdi.data.v2;
+
+// Generic MQTT sensor JSON normalized to the fabric's minimal contract.
+// Vendor payloads that do not match are left on the raw namespace untouched.
+message MqttSensorRecord {
+  double timestamp = 1;
+  string source = 2;
+  string uid = 3;
+  double lat_deg = 4;
+  double lon_deg = 5;
+  optional string mqtt_topic = 6;
+  optional string label = 7;
+  optional double geo_alt_m = 8;
+  optional double speed_ms = 9;
+  optional double heading_deg = 10;
+  optional string sensor_type = 11;
+  optional string properties_json = 12;
+}

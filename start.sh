@@ -79,12 +79,13 @@ SERVICES=(
     zenoh
     admin-control
     cert-renewer
-    airplaneslive adsblol aisstream aprs openmeteo meteolt
+    airplaneslive adsblol aprs meteolt
     sitaware dronuradaras dji-cloud utm-ans asterix track-fusion
-    link16 mavlink opendroneid vmf nffi sapient stanag
-    mavlink-raw link16-raw vmf-raw sapient-raw stanag4586-raw
-    cap geojson ais-nmea spectrum sensor-health mission-route
-    cot-udp cot-udp-tak cot-bridge tak-bridge sitaware-hq-nvg
+    stanag5516 mavlink opendroneid vmf nffi sapient stanag4586 stanag4609
+    mavlink-raw stanag5516-raw vmf-raw sapient-raw stanag4586-raw stanag4609-raw
+    mqtt-raw sensorthings-raw
+    cap geojson mqtt sensorthings sparkplug spectrum sensor-health mission-route
+    cot_layer tak-bridge nvg_layer
 )
 
 # Restore only non-secret launcher choices. Explicit compose/.env values win;
@@ -104,7 +105,7 @@ load_launcher_state() {
             SELECTED_SERVICES)
                 REMEMBERED_SERVICES="$val"
                 ;;
-            TAK_HOST|TAK_HOST_FALLBACK|TAK_UDP_HOST|TAK_UDP_HOST_FALLBACK|\
+            TAK_HOST|TAK_HOST_FALLBACK|\
             SITAWARE_URL|SITAWARE_URL_FALLBACK|STANAG4609_SRT_URL|STANAG4609_SOURCE|\
             SAPIENT_HOST|STANAG4586_HOST|STANAG4586_PROFILE)
                 if [[ -z "${!key:-}" ]]; then
@@ -128,7 +129,7 @@ save_launcher_state() {
     {
         printf '# EFDI launcher memory: selections and endpoint addresses only.\n'
         printf 'SELECTED_SERVICES=%s\n' "$selected"
-        for key in TAK_HOST TAK_HOST_FALLBACK TAK_UDP_HOST TAK_UDP_HOST_FALLBACK \
+        for key in TAK_HOST TAK_HOST_FALLBACK \
                    SITAWARE_URL SITAWARE_URL_FALLBACK STANAG4609_SRT_URL STANAG4609_SOURCE \
                    SAPIENT_HOST STANAG4586_HOST STANAG4586_PROFILE; do
             # A URL with user-info may contain credentials. Use it for this run,
@@ -147,23 +148,23 @@ declare -A SVC_CAT=(
     [admin-control]="Infrastructure"
     [cert-renewer]="Infrastructure"
     [airplaneslive]="Open-data bridges" [adsblol]="Open-data bridges"
-    [aisstream]="Open-data bridges" [aprs]="Open-data bridges"
-    [openmeteo]="Open-data bridges"
+    [aprs]="Open-data bridges"
     [meteolt]="Open-data bridges"
     [asterix]="Sensor bridges"
-    [link16]="Protocols" [mavlink]="Protocols" [vmf]="Protocols"
+    [stanag5516]="Protocols" [mavlink]="Protocols" [vmf]="Protocols"
+    [mqtt]="Protocols" [sensorthings]="Protocols" [sparkplug]="Protocols"
     [opendroneid]="Protocols" [nffi]="Protocols"
     [sitaware]="Sensor bridges" [dronuradaras]="Sensor bridges" [dji-cloud]="Sensor bridges"
     [utm-ans]="Open-data bridges"
-    [sapient]="Protocols" [stanag]="Protocols"
+    [sapient]="Protocols" [stanag4586]="Protocols" [stanag4609]="Protocols"
     [tak-bridge]="C2 inputs"
-    [mavlink-raw]="Sensor bridges" [link16-raw]="Sensor bridges"
+    [mavlink-raw]="Sensor bridges" [stanag5516-raw]="Sensor bridges"
+    [mqtt-raw]="Sensor bridges" [sensorthings-raw]="Sensor bridges"
     [vmf-raw]="Sensor bridges" [sapient-raw]="Sensor bridges"
-    [stanag4586-raw]="Sensor bridges"
-    [cap]="Protocols" [geojson]="Protocols" [ais-nmea]="Protocols"
+    [stanag4586-raw]="Sensor bridges" [stanag4609-raw]="Sensor bridges"
+    [cap]="Protocols" [geojson]="Protocols"
     [spectrum]="Protocols" [sensor-health]="Protocols" [mission-route]="Protocols"
-    [cot-udp]="Output layers"   [cot-udp-tak]="Output layers"
-    [sitaware-hq-nvg]="Output layers"
+    [cot_layer]="Output layers"   [nvg_layer]="Output layers"
     [track-fusion]="Sensor bridges"
 )
 
@@ -173,12 +174,13 @@ declare -A SVC_DESC=(
     [cert-renewer]="Automatic short-lived transport certificate renewal"
     [airplaneslive]="Airplanes.live ADS-B aircraft"
     [adsblol]="ADSB.lol open-data aircraft"
-    [aisstream]="AISstream live vessel positions"
     [aprs]="APRS-IS stations, vehicles, and vessels"
-    [openmeteo]="Open-Meteo weather stations"
     [meteolt]="meteo.lt weather stations"
     [asterix]="ASTERIX family bundle: UDP ingress + CAT-010/020/021/034/048/062 translators"
-    [link16]="Link-16 JREAP-C datalink"
+    [stanag5516]="STANAG 5516 Link-16 J-series (JREAP-C)"
+    [mqtt]="MQTT sensor JSON on Zenoh → sensor records"
+    [sensorthings]="OGC SensorThings observations → sensor records"
+    [sparkplug]="Eclipse Sparkplug B (MQTT protobuf) → sensor records"
     [mavlink]="MAVLink UAV telemetry"
     [opendroneid]="Raw Open Drone ID on Zenoh → normalized UAV tracks"
     [dji-cloud]="DJI Cloud API MQTT aircraft telemetry"
@@ -188,32 +190,33 @@ declare -A SVC_DESC=(
     [nffi]="Raw NFFI XML on Zenoh → normalized friendly-force tracks"
     [dronuradaras]="dronuradaras.lt drone detection network"
     [sapient]="SAPIENT / BSI Flex 335 sensor feed"
-    [stanag]="STANAG 4586 + 4609 protocols"
+    [stanag4586]="STANAG 4586 UAV control (VSM)"
+    [stanag4609]="STANAG 4609 KLV decoder (raw → tracks)"
     [mavlink-raw]="MAVLink UDP/TCP → Zenoh raw"
-    [link16-raw]="Link-16/JREAP-C UDP/TCP → Zenoh raw"
+    [stanag5516-raw]="STANAG 5516/JREAP-C UDP → Zenoh raw"
+    [mqtt-raw]="MQTT broker → Zenoh raw"
+    [sensorthings-raw]="OGC SensorThings REST poll → Zenoh raw"
     [vmf-raw]="VMF UDP/TCP → Zenoh raw"
     [sapient-raw]="SAPIENT/FLEX 335 TCP → Zenoh raw"
     [stanag4586-raw]="STANAG 4586 TCP → Zenoh raw"
+    [stanag4609-raw]="STANAG 4609 SRT/KLV → Zenoh raw"
     [cap]="CAP 1.2 XML on Zenoh → alerts"
     [geojson]="GeoJSON/OGC Features on Zenoh → areas"
-    [ais-nmea]="AIS NMEA on Zenoh → vessels"
     [spectrum]="RF spectrum observations on Zenoh"
     [sensor-health]="Sensor health on Zenoh"
     [mission-route]="UAV routes and corridors on Zenoh"
-    [cot-udp]="CoT → ATAK UDP multicast 239.2.3.1:6969 (same LAN only)"
-    [cot-udp-tak]="CoT → WinTAK/ATAK UDP unicast (crosses LAN/VPN)"
-    [cot-bridge]="CoT → TAK Server TCP"
+    [cot_layer]="CoT → TAK Server (mTLS)"
     [tak-bridge]="TAK Server CoT ingress"
-    [sitaware-hq-nvg]="EFDI tracks → SitaWare HQ pull feed (outbound NVG)"
+    [nvg_layer]="EFDI tracks → SitaWare (outbound NVG push)"
     [track-fusion]="Radar/ADS-B track correlation"
 )
 
 # ── Ready check — 0=can start, 1=missing config ───────────────────────────
 svc_ready() {
     case "$1" in
-        zenoh|airplaneslive|adsblol|aisstream|aprs|openmeteo|meteolt|\
-        dronuradaras|opendroneid|nffi|cot-udp|cot-udp-tak|cot-bridge|track-fusion|\
-        cap|geojson|ais-nmea|spectrum|sensor-health|mission-route)
+        zenoh|airplaneslive|adsblol|aprs|meteolt|\
+        dronuradaras|opendroneid|nffi|cot_layer|track-fusion|\
+        cap|geojson|spectrum|sensor-health|mission-route)
             return 0 ;;
         admin-control) [[ -n "${ZENOH_ADMIN_SECRET_KEY:-}" || -n "${EFDI_CONTROL_TOKEN:-}" ]] ;;
         cert-renewer)
@@ -222,21 +225,30 @@ svc_ready() {
                -f "${EFDI_STEP_RENEW_CERT_PATH:-${EFDI_CERT_DIR}/${PARTNER_NAMESPACE}-cert.pem}" &&
                -f "${EFDI_STEP_RENEW_KEY_PATH:-${EFDI_CERT_DIR}/${PARTNER_NAMESPACE}-key.pem}" ]]
             ;;
-        asterix|stanag) return 0 ;;
-        link16)   [[ "${LINK16_ZENOH_RAW:-}" == "1" || "${LINK16_PORT:-}" ]] ;;
+        asterix) return 0 ;;
+        stanag5516) [[ "${STANAG5516_ZENOH_RAW:-}" == "1" || "${STANAG5516_PORT:-}" ]] ;;
+        mqtt)         return 0 ;;
+        sensorthings) return 0 ;;
+        sparkplug)    return 0 ;;
         mavlink)  [[ "${MAVLINK_ZENOH_RAW:-}" == "1" || "${MAVLINK_PORT:-}" ]] ;;
         dji-cloud) [[ "${DJI_MQTT_HOST:-}" ]] ;;
         utm-ans) [[ "${UTM_ANS_API_URL:-}" ]] ;;
         vmf)          [[ "${VMF_ZENOH_RAW:-}" == "1" || "${VMF_PORT:-}" ]] ;;
         mavlink-raw)  [[ "${MAVLINK_RAW_PORT:-}" ]] ;;
-        link16-raw)   [[ "${LINK16_RAW_PORT:-}" ]] ;;
+        stanag5516-raw) [[ "${STANAG5516_RAW_PORT:-}" ]] ;;
+        mqtt-raw)     [[ "${MQTT_HOST:-}" ]] ;;
+        sensorthings-raw) [[ "${SENSORTHINGS_URL:-}" ]] ;;
         vmf-raw)      [[ "${VMF_RAW_PORT:-}" ]] ;;
         sapient-raw)  [[ "${SAPIENT_RAW_PORT:-}" ]] ;;
         stanag4586-raw) [[ "${STANAG4586_RAW_PORT:-}" ]] ;;
+        stanag4609-raw) [[ "${STANAG4609_SRT_URL:-}" ]] ;;
         sitaware)     return 0 ;;  # always ready; prompts for server IP at launch if unset
         tak-bridge)   [[ "${TAK_HOST:-}" || "${TAK_HOST_FALLBACK:-}" ]] ;;
-        sapient|stanag4586) return 0 ;;
-        sitaware-hq-nvg) [[ "${SITAWARE_HQ_NVG_ENABLE:-}" == "1" ]] ;;
+        sapient) return 0 ;;
+        stanag4586) [[ "${STANAG4586_PROFILE:-}" == "legacy_ed3_approx" &&
+                       ( -n "${STANAG4586_ZENOH_RAW:-}" || -n "${STANAG4586_HOST:-}" ) ]] ;;
+        stanag4609) [[ "${STANAG4609_SRT_URL:-}" ]] ;;
+        nvg_layer) [[ -n "${SITAWARE_NVG_URL:-}" ]] ;;
         *)        return 0 ;;
     esac
 }
@@ -245,16 +257,19 @@ svc_ready() {
 svc_hint() {
     case "$1" in
         asterix) echo "ASTERIX family bundle" ;;
-        link16)   echo "set LINK16_PORT or LINK16_ZENOH_RAW=1" ;;
+        stanag5516) echo "set STANAG5516_PORT or STANAG5516_ZENOH_RAW=1" ;;
         mavlink)  echo "set MAVLINK_PORT or MAVLINK_ZENOH_RAW=1" ;;
         dji-cloud) echo "DJI_MQTT_HOST not set" ;;
         utm-ans) echo "UTM_ANS_API_URL not set (authorized JSON/GeoJSON feed required)" ;;
         vmf)      echo "set VMF_PORT or VMF_ZENOH_RAW=1" ;;
         mavlink-raw) echo "MAVLINK_RAW_PORT not set" ;;
-        link16-raw) echo "LINK16_RAW_PORT not set" ;;
+        stanag5516-raw) echo "STANAG5516_RAW_PORT not set" ;;
+        mqtt-raw) echo "MQTT_HOST not set" ;;
+        sensorthings-raw) echo "SENSORTHINGS_URL not set" ;;
         vmf-raw) echo "VMF_RAW_PORT not set" ;;
         sapient-raw) echo "SAPIENT_RAW_PORT not set" ;;
         stanag4586-raw) echo "STANAG4586_RAW_PORT not set" ;;
+        stanag4609-raw) echo "STANAG4609_SRT_URL not set" ;;
         sapient)
             if [[ "${SAPIENT_ZENOH_RAW:-}" == "1" ]]; then
                 _start sapient protocols/vendors/sapient/flex335.py --zenoh-raw --raw-topic "${SAPIENT_RAW_TOPIC:-}"
@@ -267,15 +282,10 @@ svc_hint() {
             else
                 echo "will prompt for address"
             fi ;;
-        stanag) echo "STANAG 4586/4609 configuration" ;;
-        aisstream)
-            [[ "${AISSTREAM_KEY:-}" ]] && echo "API key configured" || echo "will prompt for API key" ;;
-        sitaware-hq-nvg)
-            if [[ "${SITAWARE_HQ_NVG_ENABLE:-}" == "1" ]]; then
-                echo "${SITAWARE_HQ_NVG_BIND:-127.0.0.1}:${SITAWARE_HQ_NVG_PORT:-8088}${SITAWARE_HQ_NVG_PATH:-/nvg}"
-            else
-                echo "SITAWARE_HQ_NVG_ENABLE=0"
-            fi ;;
+        stanag4586) echo "set STANAG4586_PROFILE=legacy_ed3_approx plus a 4586 source" ;;
+        stanag4609) echo "STANAG4609_SRT_URL not set (ingest via stanag4609-raw)" ;;
+        nvg_layer)
+            [[ -n "${SITAWARE_NVG_URL:-}" ]] && echo "${SITAWARE_NVG_URL}" || echo "will prompt for SitaWare NVG endpoint" ;;
         sitaware)
             if [[ "${SITAWARE_URL:-}" ]]; then
                 [[ "${SITAWARE_URL_FALLBACK:-}" ]] && echo "${SITAWARE_URL} (+fallback)" || echo "${SITAWARE_URL}"
@@ -288,15 +298,9 @@ svc_hint() {
             else
                 echo "will prompt for address"
             fi ;;
-        cot-bridge)
+        cot_layer)
             if [[ "${TAK_HOST:-}" ]]; then
                 [[ "${TAK_HOST_FALLBACK:-}" ]] && echo "${TAK_HOST}:${TAK_PORT:-8087} (+fallback)" || echo "${TAK_HOST}:${TAK_PORT:-8087}"
-            else
-                echo "will prompt for address"
-            fi ;;
-        cot-udp-tak)
-            if [[ "${TAK_UDP_HOST:-}" ]]; then
-                [[ "${TAK_UDP_HOST_FALLBACK:-}" ]] && echo "${TAK_UDP_HOST}:${TAK_UDP_PORT:-8087} (+fallback)" || echo "${TAK_UDP_HOST}:${TAK_UDP_PORT:-8087}"
             else
                 echo "will prompt for address"
             fi ;;
@@ -316,8 +320,8 @@ is_bridge_pid() {
         fi
         [[ "$arg" == "$COMPOSE_DIR/"* ]] && efdi_process=0
     done < "/proc/$pid/cmdline"
-    # A service's implementation may change during an upgrade (for example,
-    # cot-bridge moved from layers/cot_layer.py to bridges/cot_bridge.py). Treat
+    # A service's implementation may change during an upgrade (for example, a
+    # service's script moving between layers/ and bridges/). Treat
     # the PID-file's still-live EFDI process as running until an explicit stop
     # or restart removes it; otherwise a normal launcher run can duplicate the
     # same Zenoh subscriber.
@@ -325,9 +329,8 @@ is_bridge_pid() {
 }
 
 # True when some OTHER service's pidfile already claims this PID. Several
-# services run the SAME script with different arguments — cot_layer.py is both
-# cot-udp (multicast) and cot-udp-tak (unicast to the TAK client) — so a bare
-# script match is not enough to decide ownership.
+# services run the SAME script with different arguments — asterix runs cat.py
+# once per --category — so a bare script match is not enough to decide ownership.
 pid_claimed_by_other() {
     local candidate="$1" own_file="$2" other other_pid
     for other in "$PID_DIR"/*.pid; do
@@ -500,25 +503,8 @@ launch() {
             _start adsblol bridges/adsblol_bridge.py
             ;;
 
-        aisstream)
-            if [[ -z "${AISSTREAM_KEY:-}" ]]; then
-                local ais_key
-                _prompt_secret "AISstream API key" ais_key
-                if [[ -z "$ais_key" ]]; then
-                    printf "  ${YELLOW}[skip]${R}  aisstream        no API key entered\n"
-                    return
-                fi
-                export AISSTREAM_KEY="$ais_key"
-            fi
-            _start aisstream bridges/aisstream_ws_bridge.py
-            ;;
-
         aprs)
             _start aprs bridges/aprsis_bridge.py
-            ;;
-
-        openmeteo)
-            _start openmeteo bridges/openmeteo_forecast_bridge.py
             ;;
 
         meteolt)
@@ -529,11 +515,14 @@ launch() {
             _start asterix protocols/vendors/asterix/cat.py
             ;;
 
-        link16)
-            if [[ "${LINK16_ZENOH_RAW:-}" == "1" ]]; then
-                _start link16 protocols/random/link16.py --zenoh-raw --raw-topic "${LINK16_RAW_TOPIC:-}"
+        stanag5516)
+            if [[ "${STANAG5516_ZENOH_RAW:-}" == "1" ]]; then
+                _start stanag5516 protocols/vendors/stanag/5516.py --zenoh-raw --raw-topic "${STANAG5516_RAW_TOPIC:-}"
+            elif [[ -z "${STANAG5516_PORT:-}" ]]; then
+                printf "  ${YELLOW}[skip]${R}  stanag5516       set STANAG5516_PORT or STANAG5516_ZENOH_RAW=1\n"
+                return
             else
-                _start link16 protocols/random/link16.py --port "$LINK16_PORT"
+                _start stanag5516 protocols/vendors/stanag/5516.py --port "$STANAG5516_PORT"
             fi
             ;;
 
@@ -575,8 +564,36 @@ launch() {
             _start mavlink-raw bridges/mavlink_raw_bridge.py --port "$MAVLINK_RAW_PORT"
             ;;
 
-        link16-raw)
-            _start link16-raw bridges/link16_jreap_bridge.py --port "$LINK16_RAW_PORT"
+        stanag5516-raw)
+            if [[ -z "${STANAG5516_RAW_PORT:-}" ]]; then
+                printf "  ${YELLOW}[skip]${R}  stanag5516-raw   set STANAG5516_RAW_PORT (JREAP-C UDP port)\n"
+                return
+            fi
+            _start stanag5516-raw bridges/5516_bridge.py --port "$STANAG5516_RAW_PORT"
+            ;;
+
+        mqtt-raw)
+            if [[ -z "${MQTT_HOST:-}" ]]; then
+                _prompt_address "MQTT broker" MQTT_HOST
+                if [[ -z "${MQTT_HOST:-}" ]]; then
+                    printf "  ${YELLOW}[skip]${R}  mqtt-raw         no broker address entered\n"
+                    return
+                fi
+                export MQTT_HOST
+            fi
+            _start mqtt-raw bridges/mqtt_bridge.py
+            ;;
+
+        sensorthings-raw)
+            if [[ -z "${SENSORTHINGS_URL:-}" ]]; then
+                _prompt_address "OGC SensorThings service root (https://host/v1.1)" SENSORTHINGS_URL
+                if [[ -z "${SENSORTHINGS_URL:-}" ]]; then
+                    printf "  ${YELLOW}[skip]${R}  sensorthings-raw no service root entered\n"
+                    return
+                fi
+                export SENSORTHINGS_URL
+            fi
+            _start sensorthings-raw bridges/sensorthings_bridge.py
             ;;
 
         vmf-raw)
@@ -588,7 +605,15 @@ launch() {
             ;;
 
         stanag4586-raw)
-            _start stanag4586-raw bridges/stanag4586_bridge.py --tcp --port "${STANAG4586_RAW_PORT:-4586}"
+            _start stanag4586-raw bridges/4586_bridge.py --tcp --port "${STANAG4586_RAW_PORT:-4586}"
+            ;;
+
+        stanag4609-raw)
+            if [[ -z "${STANAG4609_SRT_URL:-}" ]]; then
+                printf "  ${YELLOW}[skip]${R}  stanag4609-raw   set STANAG4609_SRT_URL (srt://host:port)\n"
+                return
+            fi
+            _start stanag4609-raw bridges/4609_bridge.py
             ;;
 
         cap)
@@ -599,8 +624,16 @@ launch() {
             _start geojson protocols/random/geojson_features.py
             ;;
 
-        ais-nmea)
-            _start ais-nmea protocols/random/ais_nmea.py
+        mqtt)
+            _start mqtt protocols/random/mqtt_json.py
+            ;;
+
+        sensorthings)
+            _start sensorthings protocols/random/sensorthings.py
+            ;;
+
+        sparkplug)
+            _start sparkplug protocols/vendors/sparkplug/sparkplug.py
             ;;
 
         spectrum)
@@ -666,70 +699,54 @@ launch() {
             _start sapient protocols/vendors/sapient/flex335.py --host "$SAPIENT_HOST" --port "${SAPIENT_PORT:-7001}"
             ;;
 
-        stanag)
-            stanag_started=0
-            if [[ "${STANAG4586_PROFILE:-}" == "legacy_ed3_approx" && "${STANAG4586_ZENOH_RAW:-}" == "1" ]]; then
+        stanag4586)
+            if [[ "${STANAG4586_PROFILE:-}" != "legacy_ed3_approx" ]]; then
+                printf "  ${YELLOW}[skip]${R}  stanag4586       validate the VSM ICD, then set STANAG4586_PROFILE=legacy_ed3_approx\n"
+                return
+            fi
+            if [[ "${STANAG4586_ZENOH_RAW:-}" == "1" ]]; then
                 stanag_args=(--zenoh-raw)
                 [[ "${STANAG4586_RAW_TOPIC:-}" ]] && stanag_args+=(--raw-topic "$STANAG4586_RAW_TOPIC")
                 _start stanag4586 protocols/vendors/stanag/4586.py "${stanag_args[@]}"
-                stanag_started=1
-            elif [[ "${STANAG4586_PROFILE:-}" == "legacy_ed3_approx" && "${STANAG4586_HOST:-}" ]]; then
+            elif [[ -n "${STANAG4586_HOST:-}" ]]; then
                 _start stanag4586 protocols/vendors/stanag/4586.py \
                     --host "$STANAG4586_HOST" --port "${STANAG4586_PORT:-4586}"
-                stanag_started=1
+            else
+                printf "  ${YELLOW}[skip]${R}  stanag4586       set STANAG4586_HOST or STANAG4586_ZENOH_RAW=1\n"
             fi
-            if [[ "${STANAG4609_SRT_URL:-}" ]]; then
-                _start stanag4609 protocols/vendors/stanag/4609.py
-                stanag_started=1
+            ;;
+
+        stanag4609)
+            if [[ -z "${STANAG4609_SRT_URL:-}" ]]; then
+                printf "  ${YELLOW}[skip]${R}  stanag4609       set STANAG4609_SRT_URL (ingest runs as stanag4609-raw)\n"
+                return
             fi
-            if (( stanag_started == 0 )); then
-                echo "  [skip] stanag          set STANAG4609_SRT_URL, or validate the VSM ICD and set STANAG4586_PROFILE=legacy_ed3_approx plus a 4586 source"
-            fi
+            _start stanag4609 protocols/vendors/stanag/4609.py --zenoh-raw
             ;;
 
         dronuradaras)
             _start dronuradaras bridges/dronuradaras_bridge.py
             ;;
 
-        cot-udp)
-            _start cot-udp layers/cot_layer.py --udp --host 239.2.3.1 --port 6969
-            ;;
 
-        cot-udp-tak)
-            local tak_udp_host="${TAK_UDP_HOST:-}"
-            local tak_udp_host2="${TAK_UDP_HOST_FALLBACK:-}"
-            local tak_udp_port="${TAK_UDP_PORT:-8087}"
-            if [[ -z "$tak_udp_host" && -z "$tak_udp_host2" ]]; then
-                _prompt_address "WinTAK/ATAK client" tak_udp_host
-                if [[ -z "$tak_udp_host" ]]; then
-                    printf "  ${YELLOW}[skip]${R}  cot-udp-tak     no address entered\n"
-                    return
-                fi
-                export TAK_UDP_HOST="$tak_udp_host"
-            fi
-            local udp_hosts=(); [[ -n "$tak_udp_host"  ]] && udp_hosts+=(--host "$tak_udp_host")
-            [[ -n "$tak_udp_host2" ]] && udp_hosts+=(--host "$tak_udp_host2")
-            _start cot-udp-tak layers/cot_layer.py --udp "${udp_hosts[@]}" --port "$tak_udp_port"
-            ;;
-
-        cot-bridge)
+        cot_layer)
             local tak_host="${TAK_HOST:-}"
             local tak_host2="${TAK_HOST_FALLBACK:-}"
             if [[ -z "$tak_host" && -z "$tak_host2" ]]; then
                 _prompt_address "TAK Server" tak_host
                 if [[ -z "$tak_host" ]]; then
-                    printf "  ${YELLOW}[skip]${R}  cot-bridge         no address entered\n"
+                    printf "  ${YELLOW}[skip]${R}  cot_layer          no address entered\n"
                     return
                 fi
                 export TAK_HOST="$tak_host"
             fi
             local tcp_hosts=(); [[ -n "$tak_host"  ]] && tcp_hosts+=(--host "$tak_host")
             [[ -n "$tak_host2" ]] && tcp_hosts+=(--host "$tak_host2")
-            local tcp_args=("${tcp_hosts[@]}" --port "${TAK_PORT:-8087}")
+            local tcp_args=("${tcp_hosts[@]}" --port "${TAK_PORT:-8089}")
             if [[ "${TAK_TLS:-}" == "1" ]]; then
                 tcp_args+=(--tls --cert "${TAK_CERT:-}" --key "${TAK_KEY:-}" --ca "${TAK_CA:-}")
             fi
-            _start cot-bridge bridges/cot_bridge.py "${tcp_args[@]}"
+            _start cot_layer layers/cot_layer.py "${tcp_args[@]}"
             ;;
 
         tak-bridge)
@@ -752,15 +769,22 @@ launch() {
             _start tak-bridge bridges/tak_bridge.py "${tak_ingest_args[@]}"
             ;;
 
-        sitaware-hq-nvg)
-            if [[ -z "${SITAWARE_HQ_NVG_USER:-}" && \
-                  "${SITAWARE_HQ_NVG_ALLOW_ANONYMOUS:-}" != "1" ]]; then
-                local hq_nvg_user hq_nvg_pass
-                _prompt_credentials "SitaWare HQ NVG feed" hq_nvg_user hq_nvg_pass
-                export SITAWARE_HQ_NVG_USER="$hq_nvg_user"
-                export SITAWARE_HQ_NVG_PASS="$hq_nvg_pass"
+        nvg_layer)
+            if [[ -z "${SITAWARE_NVG_URL:-}" ]]; then
+                _prompt_address "SitaWare NVG endpoint (https://host:port)" SITAWARE_NVG_URL
+                if [[ -z "${SITAWARE_NVG_URL:-}" ]]; then
+                    printf "  ${YELLOW}[skip]${R}  nvg_layer          no SitaWare NVG endpoint entered\n"
+                    return
+                fi
+                export SITAWARE_NVG_URL
             fi
-            _start sitaware-hq-nvg bridges/nvg_bridge.py
+            if [[ -z "${SITAWARE_NVG_USER:-}" ]]; then
+                local nvg_user nvg_pass
+                _prompt_credentials "SitaWare NVG push" nvg_user nvg_pass
+                export SITAWARE_NVG_USER="$nvg_user"
+                export SITAWARE_NVG_PASS="$nvg_pass"
+            fi
+            _start nvg_layer layers/nvg_layer.py
             ;;
 
         track-fusion)
@@ -819,7 +843,7 @@ for svc in "${SERVICES[@]}"; do
     fi
 done
 if (( restored == 0 )); then
-    for svc in zenoh admin-control cot-udp cot-bridge track-fusion asterix stanag; do
+    for svc in zenoh admin-control cot_layer track-fusion asterix stanag; do
         sel[$svc]=1
     done
 fi

@@ -1,43 +1,40 @@
 #!/usr/bin/env python3
-"""STANAG 4609 SRT/KLV ingest → Zenoh.
+"""STANAG 4609 KLV decoder — Zenoh raw → canonical tracks.
 
-Reads an SRT transport carrying MPEG-TS with KLV metadata, extracts the KLV
-packet stream with ffmpeg, and publishes best-effort metadata snapshots to the
-EFDI Zenoh fabric.
+Subscribes to the raw MISB KLV packets that bridges/4609_bridge.py ingests from
+the SRT/MPEG-TS transport, decodes a small, safe subset of common MISB ST 0601
+fields, and publishes positioned frames as canonical tracks (SAPIENT / JSON /
+protobuf views). SRT/ffmpeg ingest is the bridge's job; this protocol never
+touches the transport and never transcodes the video essence itself.
 
-The bridge is intentionally conservative:
-- it publishes the raw KLV packet bytes for downstream consumers that want the
-  exact MISB payload
-- it decodes a small, safe subset of common MISB ST 0601 fields when present
-- it never attempts to transcode the video essence itself
+The decoder is intentionally conservative:
+- a positioned frame (sensor or frame-centre lat/lon present) becomes a track;
+  its exact KLV bytes ride the /raw sibling of the object key
+- non-positioned KLV carries no canonical track: its bytes already live on the
+  fabric via the ingress bridge, so the decoder stays silent
 
 Config (compose/.env):
-  STANAG4609_SRT_URL=srt://host:port?mode=listener  # required
-  STANAG4609_SOURCE=optional-stream-name            # optional display/source tag
+  STANAG4609_SOURCE=optional-stream-name  # ingress source tag (contact identity)
 
 Run:
-  venv/bin/python3 protocols/vendors/stanag/4609.py
+  venv/bin/python3 protocols/vendors/stanag/4609.py --zenoh-raw
 """
 
 from __future__ import annotations
 
 import argparse
 import base64
-import hashlib
 from importlib import import_module
 import json
 import os
 import queue
-import subprocess
-import threading
 import time
 from datetime import datetime, timezone
-from urllib.parse import urlsplit
 
 import zenoh
 
 from namespace_prefix import topic_root
-from protocols.protobuf_codec import dual_topic, native_topic, publish_native, wrapped_track_message
+from protocols.protobuf_codec import native_topic, publish_native, publish_dual, semantic_topic
 from zenoh_auth import apply_zenoh_auth
 
 Stanag4609Track = import_module("protocols.vendors.stanag.4609_pb2").Stanag4609Track
@@ -47,37 +44,20 @@ TOPIC_ROOT = topic_root()
 HERE = os.path.dirname(os.path.abspath(__file__))
 _CERT_DIR = os.environ.get("EFDI_CERT_DIR", HERE)
 _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", "tcp/127.0.0.1:7448")
-_SRT_URL = os.environ.get("STANAG4609_SRT_URL", "").strip()
-SOURCE = os.environ.get("STANAG4609_SOURCE", "stanag4609").strip() or "stanag4609"
-_FFMPEG_BIN = os.environ.get("STANAG4609_FFMPEG_BIN", "ffmpeg")
+SOURCE = os.environ.get("STANAG4609_SOURCE", "stanag_4609").strip() or "stanag_4609"
 _RECONNECT_S = float(os.environ.get("STANAG4609_RECONNECT_S", "10"))
 READ_CHUNK = int(os.environ.get("STANAG4609_READ_CHUNK", "65536"))
 MAX_KLV_BYTES = int(os.environ.get("STANAG4609_MAX_KLV_BYTES", "1048576"))
-_STREAM_ID = hashlib.sha1(_SRT_URL.encode("utf-8")).hexdigest()[:10] if _SRT_URL else "stream"
 
 KLV_PREFIX = b"\x06\x0E\x2B\x34"
 ST0601_LOCAL_SET_KEY = bytes.fromhex("060e2b34020b01010e01030101000000")
-RAW_TOPIC = "{}/raw/stanag4609/klv".format(TOPIC_ROOT)
-TRACK_TOPIC = "{}/air/stanag4609/camera/unknown/uav".format(TOPIC_ROOT)
+TRACK_TOPIC = "{}/air/stanag_4609/camera/unknown/uav".format(TOPIC_ROOT)
 
 # Backward-compatible internal aliases used by the existing implementation.
-_SOURCE = SOURCE
 _READ_CHUNK = READ_CHUNK
 _KLV_PREFIX = KLV_PREFIX
 _ST0601_LOCAL_SET_KEY = ST0601_LOCAL_SET_KEY
-_RAW_TOPIC = RAW_TOPIC
 _TRACK_TOPIC = TRACK_TOPIC
-
-
-def _safe_stream_label(url: str) -> str:
-    """Return a useful endpoint label without credentials or SRT options."""
-    try:
-        parsed = urlsplit(url)
-        host = parsed.hostname or "configured-host"
-        port = ":{}".format(parsed.port) if parsed.port is not None else ""
-        return "{}://{}{}".format(parsed.scheme or "srt", host, port)
-    except ValueError:
-        return "srt://configured-host"
 
 
 def make_config() -> "zenoh.Config":
@@ -336,39 +316,19 @@ def pack_track_payload(payload: dict[str, object], raw_packet: bytes) -> dict[st
     return proto_payload
 
 
-def _ffmpeg_proc() -> subprocess.Popen[bytes]:
-    if not _SRT_URL:
-        raise SystemExit("Set STANAG4609_SRT_URL in .env")
-    cmd = [
-        _FFMPEG_BIN,
-        "-hide_banner",
-        "-loglevel", "error",
-        "-nostdin",
-        "-i", _SRT_URL,
-        "-map", "0:d:0?",
-        "-c", "copy",
-        "-f", "data",
-        "pipe:1",
-    ]
-    return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+def publish_packet(session, packet_index, key, value, verbose, stream_id, source):
+    """Decode one raw KLV packet; publish a track only if it carries a position.
 
-
-def _stderr_pump(proc: subprocess.Popen[bytes]) -> None:
-    if proc.stderr is None:
-        return
-    for raw in iter(proc.stderr.readline, b""):
-        line = raw.decode("utf-8", "replace").rstrip()
-        if line:
-            print("STANAG4609 ffmpeg: {}".format(line), flush=True)
-
-
-def publish_packet(session: "zenoh.Session", packet_index: int, key: bytes, value: bytes, verbose: bool) -> None:
+    Non-positioned KLV produces no canonical output — its exact bytes already
+    live on the fabric (the ingress bridge put them there), so re-publishing here
+    would only echo into this decoder's own raw subscription.
+    """
     raw_packet = key + _encode_ber(len(value)) + value
     payload = {
         "_ts": time.time(),
-        "_src": _SOURCE,
-        "stream_id": _STREAM_ID,
-        "source_tag": _SOURCE,
+        "_src": source,
+        "stream_id": stream_id,
+        "source_tag": source,
         "packet_index": packet_index,
         "klv_key": key.hex(),
         "klv_len": len(value),
@@ -392,30 +352,26 @@ def publish_packet(session: "zenoh.Session", packet_index: int, key: bytes, valu
         altitude = decoded.get("sensor_alt_m")
         if altitude is None: altitude = decoded.get("frame_center_alt_m")
         if altitude is not None: payload["geo_alt_m"] = altitude
-    topic = _TRACK_TOPIC if "lat_deg" in payload and "lon_deg" in payload else _RAW_TOPIC
-    session.put(topic, json.dumps(payload).encode(), encoding=zenoh.Encoding.APPLICATION_JSON)
-    if topic == _TRACK_TOPIC:
-        proto_payload = dict(payload)
-        proto_payload["klv_raw"] = raw_packet
-        message = wrapped_track_message(Stanag4609Track, proto_payload)
-        session.put(
-            dual_topic(topic),
-            message.SerializeToString(),
-            encoding=zenoh.Encoding.APPLICATION_PROTOBUF,
-        )
-    else:
-        # KLV that carried no usable position still reaches protobuf consumers:
-        # the original packet rides a RawEnvelope on the /native sibling, so no
-        # sample is available as JSON only.
-        publish_native(session, native_topic(topic), raw_packet, "stanag4609",
-                       zenoh, profile="misb-st0601")
+
+    if "lat_deg" not in payload or "lon_deg" not in payload:
+        return
+
+    # A positioned frame is a track, so it leaves on the object key in every
+    # view — SAPIENT, JSON and the per-protocol protobuf — exactly like the
+    # other decoders. The stream is the object: its identity is the ingress
+    # source tag, so successive frames update one contact instead of spawning
+    # a new key each frame.
+    payload["uid"] = stream_id
+    obj_key = semantic_topic(_TRACK_TOPIC, payload)
+    publish_dual(session, _TRACK_TOPIC, payload, Stanag4609Track, zenoh,
+                 wrapper_field="track")
+    # The exact KLV packet rides the /raw sibling of that same object key —
+    # it is not embedded in the protobuf, the RawEnvelope is its home.
+    publish_native(session, native_topic(obj_key), raw_packet, "stanag_4609",
+                   zenoh, profile="misb-st0601")
     if verbose:
-        print("STANAG4609 PUB {} {} key={} len={}".format(
-            topic.split("/")[-4],
-            topic,
-            payload["klv_key"][:12],
-            payload["klv_len"],
-        ), flush=True)
+        print("STANAG4609 TRACK {} uid={} key={} len={}".format(
+            _TRACK_TOPIC, stream_id, payload["klv_key"][:12], payload["klv_len"]), flush=True)
 
 
 def run(args):
@@ -427,44 +383,41 @@ def run(args):
             print("STANAG4609 Zenoh connect failed: {} — retry in {}s".format(exc, _RECONNECT_S), flush=True)
             time.sleep(_RECONNECT_S)
 
-    print("STANAG 4609 video metadata bridge started", flush=True)
-    print("  SRT    : {}".format(_safe_stream_label(_SRT_URL)), flush=True)
-    print("  Stream : {}".format(_STREAM_ID), flush=True)
-    print("  Topic  : {}".format(_TRACK_TOPIC), flush=True)
+    topic = args.raw_topic or "{}/raw/stanag_4609/**".format(TOPIC_ROOT)
+    counter = {"i": 0}
 
-    while True:
-        proc = None
-        stderr_thread = None
-        try:
-            proc = _ffmpeg_proc()
-            assert proc.stdout is not None
-            stderr_thread = threading.Thread(target=_stderr_pump, args=(proc,), daemon=True)
-            stderr_thread.start()
-            print("STANAG4609 ffmpeg connected", flush=True)
-            packet_index = 0
-            for key, value in _parse_klv_packets(proc.stdout):
-                publish_packet(session, packet_index, key, value, args.verbose)
-                packet_index += 1
-            rc = proc.wait(timeout=5)
-            raise RuntimeError("ffmpeg exited with code {}".format(rc))
-        except KeyboardInterrupt:
-            break
-        except Exception as exc:
-            print("STANAG4609 error: {} — retry in {}s".format(exc, _RECONNECT_S), flush=True)
-            time.sleep(_RECONNECT_S)
-        finally:
-            if proc is not None and proc.poll() is None:
-                proc.kill()
-                try:
-                    proc.wait(timeout=3)
-                except Exception:
-                    pass
+    def on_sample(sample):
+        data = sample.payload.to_bytes() if hasattr(sample.payload, "to_bytes") else bytes(sample.payload)
+        parsed = split_klv_packet(data)
+        if parsed is None:
+            return
+        key, value = parsed
+        # Contact identity is the ingress source segment of the raw topic
+        # (…/raw/stanag_4609/<source>); fall back to the configured SOURCE.
+        source = str(sample.key_expr).rstrip("/").rsplit("/", 1)[-1] or SOURCE
+        publish_packet(session, counter["i"], key, value, args.verbose, source, source)
+        counter["i"] += 1
 
-    session.close()
+    subscriber = session.declare_subscriber(topic, on_sample)
+    print("STANAG 4609 KLV decoder started", flush=True)
+    print("  Raw   : {}".format(topic), flush=True)
+    print("  Track : {}".format(_TRACK_TOPIC), flush=True)
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        subscriber.undeclare()
+        session.close()
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="STANAG 4609 SRT/KLV → Zenoh")
+    parser = argparse.ArgumentParser(description="STANAG 4609 KLV decoder — Zenoh raw → tracks")
+    parser.add_argument("--zenoh-raw", action="store_true",
+                        help="decode KLV from …/raw/stanag_4609/** (default and only mode)")
+    parser.add_argument("--raw-topic", default=os.environ.get("STANAG4609_RAW_TOPIC", ""),
+                        help="override the raw KLV subscription key expression")
     parser.add_argument("--verbose", "-v", action="store_true")
     args = parser.parse_args()
     run(args)

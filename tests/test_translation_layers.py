@@ -10,7 +10,6 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "compose"))
 sys.path.insert(0, str(ROOT / "compose" / "protocols"))
 
-from protocols.random.ais_nmea import decode_payload, parse_line  # noqa: E402
 from protocols.random.cap import parse_cap  # noqa: E402
 from protocols.random.geojson_features import normalize as normalize_geojson  # noqa: E402
 from protocols.random.mission_route import normalize as normalize_route  # noqa: E402
@@ -41,12 +40,6 @@ class TranslationLayerTests(unittest.TestCase):
         self.assertEqual(record["uid"], "GEO-zone-1")
         self.assertEqual(record["geometry_type"], "Polygon")
         self.assertAlmostEqual(record["lat_deg"], 54.25, places=5)
-
-    def test_ais_line_parser_rejects_non_ais(self):
-        self.assertIsNone(parse_line("not AIS"))
-        parsed = parse_line("!AIVDM,1,1,,A,15Muq?P000PD;88MD5MTDww@2<0l,0*00")
-        self.assertIsNotNone(parsed)
-        self.assertIsNone(decode_payload("", 0, now=100))
 
     def test_other_normalizers_preserve_provenance(self):
         spectrum = normalize_spectrum({"uid": "r1", "frequency_hz": 433920000, "lat": 54, "lon": 25}, now=1)

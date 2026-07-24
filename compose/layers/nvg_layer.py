@@ -112,7 +112,10 @@ _TOPIC_SIDC = {
     "air/**/hostile/aircraft/**":    "SHAPMF----*****",
     "air/**/neutral/aircraft/**":    "SNAPMF----*****",
     "air/**/unknown/**":             _unknown_air_sidc,
-    "land/**/civ/vehicle/**":        "SFGPUCV---*****",  # Friendly Ground Vehicle
+    # Equipment/Vehicle/Civilian — NOT "UCV", which is Unit/Combat/Aviation and
+    # renders every civilian car as a rotary-wing aviation unit. Matches the
+    # a-f-G-E-V-C that cot_layer sends for the same track.
+    "land/**/civ/vehicle/**":        "SFGPEVC---*****",  # Friendly Civilian Vehicle
     "land/**/neutral/station/**":    "SNGPES----*****",  # Neutral Ground Sensor (HQ-supported)
     "land/**/neutral/sensor/**":     "SNGPES----*****",  # Neutral Ground Sensor
     "land/**/neutral/radar/**":      "SNGPESR---*****",  # Neutral Ground Radar
@@ -812,6 +815,10 @@ class TrackCache:
 
 def make_handler(sidc, cache: TrackCache):
     def handler(sample):
+        # Objects publish four views (sapient/json/proto/raw); the wildcards
+        # match all of them and the NVG item is built from the flat JSON.
+        if not str(sample.key_expr).endswith("/json"):
+            return
         try:
             track = json.loads(bytes(sample.payload).decode())
         except (json.JSONDecodeError, UnicodeDecodeError, ValueError):

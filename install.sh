@@ -219,7 +219,6 @@ ask_opt TAK_HOST "TAK Server hostname/IP" ""
 ask_opt TAK_PORT "TAK Server port"        "8087"
 
 section "API keys (optional)"
-ask_opt AISSTREAM_KEY   "AISStream.io WebSocket key"      ""
 
 # ── Summary ────────────────────────────────────────────────────────────────────
 echo ""
@@ -315,7 +314,6 @@ if [ -f "$ENV_FILE" ]; then
     MANAGED_KEYS+="|LINK16_PORT|LINK16_TCP|MAVLINK_PORT|MAVLINK_TCP|VMF_PORT|VMF_TCP"
     MANAGED_KEYS+="|SITAWARE_URL|SITAWARE_API_PATH|SITAWARE_USER|SITAWARE_PASS|SITAWARE_POLL_S|SITAWARE_DISCOVER"
     MANAGED_KEYS+="|TAK_HOST|TAK_PORT"
-    MANAGED_KEYS+="|AISSTREAM_KEY"
     EXTRA_LINES=$(grep -Ev "^(#|[[:space:]]*$)" "$ENV_FILE" 2>/dev/null \
                   | grep -Ev "^(${MANAGED_KEYS})=" || true)
 fi
@@ -366,7 +364,6 @@ fi
     [ -n "${TAK_PORT:-}"        ] && echo "TAK_PORT=${TAK_PORT}"
     echo ""
     echo "# ── API keys ──────────────────────────────────────────────────────────"
-    [ -n "${AISSTREAM_KEY:-}"  ] && echo "AISSTREAM_KEY=${AISSTREAM_KEY}"
     if [ -n "$EXTRA_LINES" ]; then
         echo ""
         echo "# ── Preserved from prior .env ────────────────────────────────────────"

@@ -208,7 +208,7 @@ SITAWARE_HQ_NVG_TLS_CERT=
 SITAWARE_HQ_NVG_TLS_KEY=
 
 # ── Link-16 JREAP-C ─────────────────────────────────────────────────────────
-LINK16_PORT=                   # Leave empty if no Link-16 source
+STANAG5516_PORT=                   # Leave empty if no Link-16 source
 # Link-16 currently accepts JREAP-C UDP only; TCP needs the gateway framing ICD.
 
 # ── MAVLink ─────────────────────────────────────────────────────────────────
@@ -239,54 +239,51 @@ The interactive launcher displays all services with their readiness state. Toggl
   ──────────────────────────────────────────────────────────
   [ 2] [✓] airplaneslive  Airplanes.live ADS-B aircraft          ready
   [ 3] [✓] adsblol        ADSB.lol open-data aircraft            ready
-  [ 4] [ ] aisstream      AISstream live vessel positions        will prompt for API key
-  [ 5] [✓] aprs           APRS-IS stations, vehicles, vessels    ready
-  [ 6] [✓] openmeteo      Open-Meteo weather stations            ready
-  [ 7] [✓] meteolt        meteo.lt weather stations              ready
-  [ 8] [ ] utm-ans        Lithuanian UTM declared UAV flights    UTM_ANS_API_URL not set
+  [ 4] [✓] aprs           APRS-IS stations, vehicles, vessels    ready
+  [ 6] [✓] meteolt        meteo.lt weather stations              ready
+  [ 7] [ ] utm-ans        Lithuanian UTM declared UAV flights    UTM_ANS_API_URL not set
 
   Sensor bridges
   ──────────────────────────────────────────────────────────
-  [ 9] [ ] sitaware       SitaWare HQ documented JSON resource   will prompt for address+login
-  [10] [✓] dronuradaras   dronuradaras.lt drone detection        ready
-  [11] [ ] dji-cloud      DJI Cloud API aircraft                 DJI_MQTT_HOST not set
-  [12] [✓] asterix        ASTERIX family bundle                 ready
-  [13] [✓] track-fusion   Radar/ADS-B track correlation          ready
+  [ 8] [ ] sitaware       SitaWare HQ documented JSON resource   will prompt for address+login
+  [ 9] [✓] dronuradaras   dronuradaras.lt drone detection        ready
+  [10] [ ] dji-cloud      DJI Cloud API aircraft                 DJI_MQTT_HOST not set
+  [11] [✓] asterix        ASTERIX family bundle                 ready
+  [12] [✓] track-fusion   Radar/ADS-B track correlation          ready
 
   Protocols
   ──────────────────────────────────────────────────────────
-  [14] [ ] link16         Link-16 JREAP-C datalink               LINK16_PORT not set
-  [15] [ ] mavlink        MAVLink UAV telemetry                  MAVLINK_PORT not set
-  [16] [✓] opendroneid    Raw Open Drone ID Zenoh translator     ready
-  [17] [ ] vmf            VMF MIL-STD-47001C messages            VMF_PORT not set
-  [18] [✓] nffi           NATO NFFI XML Zenoh translator         ready
-  [19] [ ] sapient        SAPIENT / BSI Flex 335                 will prompt for address
-  [20] [✓] stanag         STANAG family bundle                   ready
-  [21] [ ] mavlink-raw    MAVLink socket → Zenoh raw             MAVLINK_RAW_PORT not set
-  [22] [ ] link16-raw     Link-16 socket → Zenoh raw             LINK16_RAW_PORT not set
-  [23] [ ] vmf-raw        VMF socket → Zenoh raw                 VMF_RAW_PORT not set
-  [24] [ ] sapient-raw    SAPIENT socket → Zenoh raw             SAPIENT_RAW_PORT not set
-  [25] [ ] stanag4586-raw STANAG 4586 socket → Zenoh raw         STANAG4586_RAW_PORT not set
+  [13] [ ] stanag5516     Link-16 JREAP-C datalink               STANAG5516_PORT not set
+  [14] [ ] mavlink        MAVLink UAV telemetry                  MAVLINK_PORT not set
+  [15] [✓] opendroneid    Raw Open Drone ID Zenoh translator     ready
+  [16] [ ] vmf            VMF MIL-STD-47001C messages            VMF_PORT not set
+  [17] [✓] nffi           NATO NFFI XML Zenoh translator         ready
+  [18] [ ] sapient        SAPIENT / BSI Flex 335                 will prompt for address
+  [19] [✓] stanag         STANAG family bundle                   ready
+  [20] [ ] mavlink-raw    MAVLink socket → Zenoh raw             MAVLINK_RAW_PORT not set
+  [21] [ ] stanag5516-raw Link-16 socket → Zenoh raw             STANAG5516_RAW_PORT not set
+  [22] [ ] vmf-raw        VMF socket → Zenoh raw                 VMF_RAW_PORT not set
+  [23] [ ] sapient-raw    SAPIENT socket → Zenoh raw             SAPIENT_RAW_PORT not set
+  [24] [ ] stanag4586-raw STANAG 4586 socket → Zenoh raw         STANAG4586_RAW_PORT not set
 
   Zenoh-native translators
   ──────────────────────────────────────────────────────────
-  [28] [✓] cap            CAP 1.2 XML → alerts                   ready
-  [29] [✓] geojson        GeoJSON/OGC Features → areas           ready
-  [30] [✓] ais-nmea       AIS NMEA → vessel tracks               ready
-  [31] [✓] spectrum       RF spectrum observations               ready
-  [32] [✓] sensor-health  Sensor health/heartbeat records       ready
-  [33] [✓] mission-route  UAV routes and corridors              ready
+  [25] [✓] cap            CAP 1.2 XML → alerts                   ready
+  [26] [✓] geojson        GeoJSON/OGC Features → areas           ready
+  [27] [✓] spectrum       RF spectrum observations               ready
+  [28] [✓] sensor-health  Sensor health/heartbeat records       ready
+  [29] [✓] mission-route  UAV routes and corridors              ready
 
   TAK and SitaWare layers
   ──────────────────────────────────────────────────────────
 
   Output layers
   ──────────────────────────────────────────────────────────
-  [34] [✓] cot-udp        CoT → ATAK UDP multicast 239.2.3.1:6969
-  [35] [ ] cot-udp-tak    CoT → WinTAK/ATAK UDP unicast
-  [36] [✓] cot-bridge     CoT → TAK Server TCP
-  [37] [ ] tak-bridge     TAK Server CoT ingress               will prompt for address
-  [38] [ ] sitaware-hq-nvg EFDI tracks → SitaWare HQ pull feed   SITAWARE_HQ_NVG_ENABLE=0
+  [30] [✓] cot-udp        CoT → ATAK UDP multicast 239.2.3.1:6969
+  [31] [ ] cot-udp-tak    CoT → WinTAK/ATAK UDP unicast
+  [32] [✓] cot-bridge     CoT → TAK Server TCP
+  [33] [ ] tak-bridge     TAK Server CoT ingress               will prompt for address
+  [34] [ ] sitaware-hq-nvg EFDI tracks → SitaWare HQ pull feed   SITAWARE_HQ_NVG_ENABLE=0
 ```
 
 **Launcher controls:**
@@ -306,7 +303,6 @@ The interactive launcher displays all services with their readiness state. Toggl
 | Giraffe ASTERIX + ATAK multicast | `zenoh asterix cot-udp` |
 | Giraffe + drone detection + ATAK | `zenoh dronuradaras asterix cot-udp` |
 | Giraffe + SitaWare + ATAK multicast | `zenoh sitaware asterix cot-udp` |
-| AIS vessels polled by SitaWare HQ | `zenoh aisstream` |
 | EFDI tracks polled by SitaWare HQ | `zenoh mission-route` |
 | All ready inputs + TAK Server | `a`, then deselect `cot-udp` |
 | Radar only, no TAK output (debug) | `zenoh asterix` |
@@ -314,11 +310,6 @@ The interactive launcher displays all services with their readiness state. Toggl
 Processes are tracked via PID files in `$POD_STATE_DIR/.pids/` and log to `$POD_STATE_DIR/logs/<service>.log`.
 
 After a successful launch, `start.sh` remembers the selected services and the last TAK/SitaWare endpoint addresses in `$POD_STATE_DIR/launcher-state.env` (mode 600). It also merges any currently running PID-managed services into that selection. On the next interactive launch it displays the complete restored selection and auto-starts it after five seconds; press `c` during the countdown to change it. It never stores passwords, API keys, or certificate material there. Explicit values in `compose/.env` take precedence over remembered addresses.
-
-`aisstream` requires an AISstream API key. Select the `aisstream` service and enter the key
-at its hidden prompt for a one-run secret, or set `AISSTREAM_KEY` only in the
-ignored runtime file `compose/.env`. The key is passed through the environment,
-not a command-line argument, and is never copied into launcher memory.
 
 ---
 
@@ -490,16 +481,17 @@ per-item push adapter at an HQ endpoint to work around this limitation.
 | `dronuradaras` | `bridges/dronuradaras_bridge.py` | `…/land/dronuradaras/acoustic/neutral/sensor/{type}/{id}/sapient` | 60 s online-only device poll with offline eviction / 10 s detection poll |
 | `utm-ans` | `bridges/utm_ans_bridge.py` | `…/air/utm_ans/c2/unknown/uav/{type}/{id}/sapient` | Authorized JSON/GeoJSON declared-flight poll; requires `UTM_ANS_API_URL` |
 | `opendroneid` | `protocols/random/opendroneid.py` | `…/air/opendroneid/passive_rf/*/uav/{type}/{id}/sapient` | Raw receiver publications under `…/raw/opendroneid/**`; no radio on the router host |
-| `aisstream` | `bridges/aisstream_ws_bridge.py` | `…/sea/aisstream/ais/civ/vessel/{type}/{id}/sapient` | Authenticated WSS stream |
 | `sitaware` | `bridges/sitaware_bridge.py` | `…/land/sitaware/c2/friendly/unit/{type}/{id}/sapient` | Configurable REST poll |
 | `nffi` | `protocols/random/nffi.py` | `…/land/nato/c2/friendly/unit/{type}/{id}/sapient` | Complete XML documents under `…/raw/nffi/*` in Zenoh |
-| `link16` | `protocols/random/link16.py` | `…/air/link16/c2/*/aircraft/{type}/{id}/sapient` | Streaming UDP |
+| `stanag5516` | `protocols/vendors/stanag/5516.py` | `…/air/stanag_5516/c2/*/aircraft/{type}/{id}/sapient` | Streaming UDP |
 | `mavlink` | `protocols/random/mavlink.py` | `…/air/mavlink/telemetry/*/uav/{type}/{id}/sapient` | Streaming UDP/TCP |
-| `stanag` | `protocols/vendors/stanag/4586.py` and `4609.py` | `…/raw/stanag4609/klv`, `…/air/stanag4609/camera/unknown/uav`, and STANAG 4586 track topics | Launcher starts each configured numbered protocol directly |
-| `mavlink-raw`, `link16-raw`, `vmf-raw`, `sapient-raw`, `stanag4586-raw` | `bridges/*_raw_bridge.py` | `…/raw/<protocol>/<source>` | Optional socket ingress; matching protocol runs with `*_ZENOH_RAW=1` |
+| `stanag` | `protocols/vendors/stanag/4586.py` and `4609.py` | `…/raw/stanag_4609/klv`, `…/air/stanag_4609/camera/unknown/uav`, and STANAG 4586 track topics | Launcher starts each configured numbered protocol directly |
+| `mavlink-raw`, `stanag5516-raw`, `vmf-raw`, `sapient-raw`, `stanag4586-raw` | `bridges/*_raw_bridge.py` | `…/raw/<protocol>/<source>` | Optional socket ingress; matching protocol runs with `*_ZENOH_RAW=1` |
 | `cap` | `protocols/random/cap.py` | `…/land/cap/c2/neutral/sensor/{type}/{id}/sapient` | Complete CAP 1.2 XML on `…/raw/cap/**` |
 | `geojson` | `protocols/random/geojson_features.py` | `…/land/ogc/c2/neutral/zone/{type}/{id}/sapient` | GeoJSON/OGC Features on `…/raw/geojson/**` |
-| `ais-nmea` | `protocols/random/ais_nmea.py` | `…/sea/nmea/ais/civ/vessel/{type}/{id}/sapient` | AIVDM/AIVDO on `…/raw/ais/**` |
+| `mqtt` | `protocols/random/mqtt_json.py` | `…/land/mqtt/iot/unknown/sensor/{type}/{id}/sapient` | Vendor JSON on `…/raw/mqtt/**` (bridge forwards any payload verbatim) |
+| `sensorthings` | `protocols/random/sensorthings.py` | `…/land/sensorthings/iot/neutral/sensor/{type}/{id}/sapient` | Observations on `…/raw/sensorthings/**` |
+| `sparkplug` | `protocols/vendors/sparkplug/sparkplug.py` | `…/land/sparkplug/iot/unknown/sensor/{type}/{id}/sapient` | Sparkplug B protobuf on `…/raw/mqtt/spBv1.0/**` |
 | `spectrum` / `sensor-health` / `mission-route` | Matching `protocols/random/*.py` | `…/land/spectrum/**`, `…/land/health/**`, `…/air/mission/**` | JSON on their `…/raw/**` topics |
 | `dji-cloud` | `bridges/dji_cloud_api_bridge.py` | `…/air/dji/telemetry/friendly/uav/{type}/{id}/sapient` | Source-specific authenticated DJI MQTT 5 bridge |
 | `cot-udp` | `layers/cot_layer.py` | Subscriber — all topics | Event-driven |
@@ -531,7 +523,7 @@ binary layout is a historical deployment approximation, not a generic standard
 profile: it stays disabled unless `STANAG4586_PROFILE=legacy_ed3_approx` is
 explicitly set after validating the layout against the deployed VSM ICD.
 
-CAP, GeoJSON, AIS NMEA, spectrum, health, and route translators are idle-safe
+CAP, GeoJSON, spectrum, health, and route translators are idle-safe
 Zenoh subscribers. A partner publishes complete JSON/XML/NMEA payloads below
 the corresponding `raw/**` topic; no internet URL or receiver is embedded in
 the translator.

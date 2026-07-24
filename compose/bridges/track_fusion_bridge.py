@@ -43,14 +43,18 @@ Cross-radar handoff (same-protocol, PSR-only targets):
 Config:
   FUSION_HANDOFF_NM=2.0   Max distance for cross-radar PSR association
 
-Fused tracks are published to:
-  <ORG>/air/fused/fused/<affiliation>/aircraft/json/tracks
+Fused tracks are published on the object key, in every view:
+  <ORG>/air/trackfusion/fused/<affiliation>/aircraft/<type>/<id>/{sapient,json,proto,raw}
 → cot_layer.py picks these up and shows them in ATAK with full identity.
 
 Non-correlated radar tracks (truly non-cooperative, no ID possible) are
-re-published as-is to:
-  <ORG>/air/fused/fused/unknown/aircraft/json/tracks
+re-published as-is under:
+  <ORG>/air/trackfusion/fused/unknown/aircraft/<type>/<id>/{sapient,json,proto,raw}
 so they still appear in ATAK but without enrichment.
+
+`source` is `trackfusion` (this bridge) and `modality` is `fused`; the pair is
+also what keeps our own output out of the radar-source subscription — see
+_OWN_PREFIX below.
 
 Config (compose/.env):
   FUSION_SPATIAL_NM=2.0    Max distance for spatial match (default 2 NM)
@@ -73,9 +77,6 @@ import zenoh
 from google.protobuf.message import DecodeError
 from zenoh_auth import apply_zenoh_auth
 from namespace_prefix import topic_root
-from protocols.random.adsblol_track_pb2 import AdsbLolTrack
-from protocols.random.airplaneslive_track_pb2 import AirplanesLiveTrack
-from protocols.protobuf_codec import source_message_to_track
 from protocols.random.normalized_track_pb2 import NormalizedTrack
 from protocols.protobuf_codec import normalized_track_message
 
@@ -115,7 +116,7 @@ _RADAR_TOPICS = [
     "{}/air/*/mlat/**".format(TOPIC_ROOT),
     "{}/air/*/fused/**".format(TOPIC_ROOT),
     "{}/air/link16/c2/**".format(TOPIC_ROOT),
-    "{}/air/stanag4586/telemetry/**".format(TOPIC_ROOT),
+    "{}/air/stanag_4586/telemetry/**".format(TOPIC_ROOT),
     "{}/air/mavlink/telemetry/**".format(TOPIC_ROOT),
 ]
 
@@ -224,6 +225,11 @@ class TrackFuser:
 
     def on_radar(self, sample):
         topic = str(sample.key_expr)
+        # A track is published in four views; the fusion model is dict-based, so
+        # only the JSON view is consumed. The `**` subscription matches all four,
+        # so the other three are skipped here rather than left to fail json.loads.
+        if not topic.endswith("/json"):
+            return
         # _RADAR_TOPICS matches `/air/*/fused/**` to pick up ASTERIX CAT-062
         # system tracks — which also matches THIS bridge's own output, so a
         # fused track would be re-ingested as a radar source and fused with
@@ -341,14 +347,15 @@ class TrackFuser:
         return self._radar_primary[uid]
 
     def on_adsb(self, sample):
+        topic = str(sample.key_expr)
+        # Enrichment tracks are consumed from the JSON view only — see on_radar.
+        # The old `/v2` protobuf branch keyed on a view name that no longer
+        # exists (the typed view is `/proto` now), so it was dead: parsing it
+        # here as well would double-ingest every track.
+        if not topic.endswith("/json"):
+            return
         try:
-            topic = str(sample.key_expr)
-            if topic.endswith("/v2"):
-                message = AirplanesLiveTrack() if "/airplaneslive/" in topic else AdsbLolTrack()
-                message.ParseFromString(bytes(sample.payload))
-                track = source_message_to_track(message)
-            else:
-                track = json.loads(bytes(sample.payload).decode())
+            track = json.loads(bytes(sample.payload).decode())
         except (json.JSONDecodeError, UnicodeDecodeError, ValueError, DecodeError):
             return
         self._age_out()   # clean stale radar entries before checking coverage

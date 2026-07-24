@@ -212,7 +212,7 @@ SITAWARE_HQ_NVG_TLS_CERT=
 SITAWARE_HQ_NVG_TLS_KEY=
 
 # ── Link-16 JREAP-C ─────────────────────────────────────────────────────────
-LINK16_PORT=                   # Palikite tuščią, jei Link-16 šaltinio nėra
+STANAG5516_PORT=                   # Palikite tuščią, jei Link-16 šaltinio nėra
 # Link-16 šiuo metu priima tik JREAP-C UDP; TCP reikia šliuzo kadravimo ICD.
 
 # ── MAVLink ─────────────────────────────────────────────────────────────────
@@ -243,57 +243,54 @@ Interaktyvus paleidiklis rodo visas paslaugas su jų parengties būsena. Įjunki
   ──────────────────────────────────────────────────────────
   [ 2] [✓] airplaneslive  Airplanes.live ADS-B aircraft          ready
   [ 3] [✓] adsblol        ADSB.lol open-data aircraft            ready
-  [ 4] [ ] aisstream      AISstream live vessel positions        will prompt for API key
-  [ 5] [✓] aprs           APRS-IS stations, vehicles, vessels    ready
-  [ 6] [✓] openmeteo      Open-Meteo weather stations            ready
-  [ 7] [✓] meteolt        meteo.lt weather stations              ready
-  [ 8] [ ] utm-ans        Lithuanian UTM declared UAV flights    UTM_ANS_API_URL not set
+  [ 4] [✓] aprs           APRS-IS stations, vehicles, vessels    ready
+  [ 6] [✓] meteolt        meteo.lt weather stations              ready
+  [ 7] [ ] utm-ans        Lithuanian UTM declared UAV flights    UTM_ANS_API_URL not set
 
   Sensor bridges
   ──────────────────────────────────────────────────────────
-  [ 9] [ ] sitaware       SitaWare HQ dokumentuotas JSON resursas will prompt for address+login
-  [10] [✓] dronuradaras   dronuradaras.lt drone detection        ready
-  [11] [ ] dji-cloud      DJI Cloud API aircraft                 DJI_MQTT_HOST not set
-  [12] [ ] asterix-udp    Mixed ASTERIX UDP → raw topics         ASTERIX_PORT not set
-  [13] [✓] track-fusion   Radar/ADS-B track correlation          ready
+  [ 8] [ ] sitaware       SitaWare HQ dokumentuotas JSON resursas will prompt for address+login
+  [ 9] [✓] dronuradaras   dronuradaras.lt drone detection        ready
+  [10] [ ] dji-cloud      DJI Cloud API aircraft                 DJI_MQTT_HOST not set
+  [11] [ ] asterix-udp    Mixed ASTERIX UDP → raw topics         ASTERIX_PORT not set
+  [12] [✓] track-fusion   Radar/ADS-B track correlation          ready
 
   Protocols
   ──────────────────────────────────────────────────────────
-  [14] [✓] asterix-cat10  ASTERIX CAT-010 airport surface        UDP 50010
-  [15] [✓] asterix-cat20  ASTERIX CAT-020 Ed.1.11 MLAT           UDP 50020
-  [16] [✓] asterix-cat21  ASTERIX CAT-021 Ed.2.7 ADS-B           UDP 50021
-  [17] [✓] asterix-cat34  ASTERIX CAT-034 radar service          UDP 50034
-  [18] [✓] asterix-cat48  ASTERIX CAT-048 radar targets          UDP 50048
-  [19] [✓] asterix-cat62  ASTERIX CAT-062 system tracks          UDP 50062
-  [20] [ ] link16         Link-16 JREAP-C datalink               LINK16_PORT not set
-  [21] [ ] mavlink        MAVLink UAV telemetry                  MAVLINK_PORT not set
-  [22] [✓] opendroneid    Raw Open Drone ID Zenoh translator     ready
-  [23] [ ] vmf            VMF MIL-STD-47001C messages            VMF_PORT not set
-  [24] [✓] nffi           NATO NFFI XML Zenoh translator         ready
-  [25] [ ] sapient        SAPIENT / BSI Flex 335                 will prompt for address
-  [26] [ ] stanag4586     STANAG 4586 UAV feed                   will prompt for address
-  [27] [ ] mavlink-raw    MAVLink socket → Zenoh raw             MAVLINK_RAW_PORT not set
-  [28] [ ] link16-raw     Link-16 socket → Zenoh raw             LINK16_RAW_PORT not set
-  [29] [ ] vmf-raw        VMF socket → Zenoh raw                 VMF_RAW_PORT not set
-  [30] [ ] sapient-raw    SAPIENT socket → Zenoh raw             SAPIENT_RAW_PORT not set
-  [31] [ ] stanag4586-raw STANAG 4586 socket → Zenoh raw         STANAG4586_RAW_PORT not set
+  [13] [✓] asterix-cat10  ASTERIX CAT-010 airport surface        UDP 50010
+  [14] [✓] asterix-cat20  ASTERIX CAT-020 Ed.1.11 MLAT           UDP 50020
+  [15] [✓] asterix-cat21  ASTERIX CAT-021 Ed.2.7 ADS-B           UDP 50021
+  [16] [✓] asterix-cat34  ASTERIX CAT-034 radar service          UDP 50034
+  [17] [✓] asterix-cat48  ASTERIX CAT-048 radar targets          UDP 50048
+  [18] [✓] asterix-cat62  ASTERIX CAT-062 system tracks          UDP 50062
+  [19] [ ] stanag5516     Link-16 JREAP-C datalink               STANAG5516_PORT not set
+  [20] [ ] mavlink        MAVLink UAV telemetry                  MAVLINK_PORT not set
+  [21] [✓] opendroneid    Raw Open Drone ID Zenoh translator     ready
+  [22] [ ] vmf            VMF MIL-STD-47001C messages            VMF_PORT not set
+  [23] [✓] nffi           NATO NFFI XML Zenoh translator         ready
+  [24] [ ] sapient        SAPIENT / BSI Flex 335                 will prompt for address
+  [25] [ ] stanag4586     STANAG 4586 UAV feed                   will prompt for address
+  [26] [ ] mavlink-raw    MAVLink socket → Zenoh raw             MAVLINK_RAW_PORT not set
+  [27] [ ] stanag5516-raw Link-16 socket → Zenoh raw             STANAG5516_RAW_PORT not set
+  [28] [ ] vmf-raw        VMF socket → Zenoh raw                 VMF_RAW_PORT not set
+  [29] [ ] sapient-raw    SAPIENT socket → Zenoh raw             SAPIENT_RAW_PORT not set
+  [30] [ ] stanag4586-raw STANAG 4586 socket → Zenoh raw         STANAG4586_RAW_PORT not set
 
   Zenoh-native translators
   ──────────────────────────────────────────────────────────
-  [32] [✓] cap            CAP 1.2 XML → alerts                   ready
-  [33] [✓] geojson        GeoJSON/OGC Features → areas           ready
-  [34] [✓] ais-nmea       AIS NMEA → vessel tracks               ready
-  [35] [✓] spectrum       RF spectrum observations               ready
-  [36] [✓] sensor-health  Sensor health/heartbeat records         ready
-  [37] [✓] mission-route  UAV routes and corridors                ready
+  [31] [✓] cap            CAP 1.2 XML → alerts                   ready
+  [32] [✓] geojson        GeoJSON/OGC Features → areas           ready
+  [33] [✓] spectrum       RF spectrum observations               ready
+  [34] [✓] sensor-health  Sensor health/heartbeat records         ready
+  [35] [✓] mission-route  UAV routes and corridors                ready
 
   Output layers
   ──────────────────────────────────────────────────────────
-  [40] [✓] cot-udp        CoT → ATAK UDP multicast 239.2.3.1:6969
-  [41] [ ] cot-udp-tak    CoT → WinTAK/ATAK UDP unicast
-  [42] [✓] cot-bridge        CoT → TAK Server TCP
-  [43] [ ] sitaware-nvg   EFDI tracks → legacy NVG push adapter  will prompt for address+login
-  [44] [ ] sitaware-hq-nvg EFDI tracks → SitaWare HQ pull feed   SITAWARE_HQ_NVG_ENABLE=0
+  [36] [✓] cot-udp        CoT → ATAK UDP multicast 239.2.3.1:6969
+  [37] [ ] cot-udp-tak    CoT → WinTAK/ATAK UDP unicast
+  [38] [✓] cot-bridge        CoT → TAK Server TCP
+  [39] [ ] sitaware-nvg   EFDI tracks → legacy NVG push adapter  will prompt for address+login
+  [40] [ ] sitaware-hq-nvg EFDI tracks → SitaWare HQ pull feed   SITAWARE_HQ_NVG_ENABLE=0
 ```
 
 **Paleidiklio valdymas:**
@@ -313,7 +310,6 @@ Interaktyvus paleidiklis rodo visas paslaugas su jų parengties būsena. Įjunki
 | Giraffe CAT-34/48 + ATAK multicast | `1 17 18 40` |
 | Giraffe + drono aptikimai + ATAK | `1 10 17 18 40` |
 | Giraffe + SitaWare + ATAK multicast | `1 9 17 18 40` |
-| AIS laivai rodomi SitaWare HQ | `1 4 44` |
 | EFDI takeliai siunčiami į legacy NVG push adapterį | `1 43` |
 | SitaWare HQ periodiškai ima EFDI takelius | `1 44` |
 | Visi parengti šaltiniai + TAK serveris | `a`, tada atžymėkite `40` (cot-udp) |
@@ -322,11 +318,6 @@ Interaktyvus paleidiklis rodo visas paslaugas su jų parengties būsena. Įjunki
 Procesų PID failai saugomi `$POD_STATE_DIR/.pids/`, žurnalai rašomi į `$POD_STATE_DIR/logs/<paslauga>.log`.
 
 Po sėkmingo paleidimo `start.sh` išsaugo pasirinktų paslaugų sąrašą ir paskutinius TAK/SitaWare adresus faile `$POD_STATE_DIR/launcher-state.env` (teisės 600). Jis taip pat įtraukia visus tuo metu veikiančius PID valdomus procesus. Kitą kartą interaktyviai paleidus rodomas visas atkurtas pasirinkimas ir po penkių sekundžių automatiškai paleidžiamas; per atgalinį skaičiavimą paspauskite `c`, jei norite pakeisti nustatymus. Slaptažodžiai, API raktai ir sertifikatai ten nesaugomi. Aiškiai `compose/.env` nustatyti adresai turi pirmenybę.
-
-`aisstream` reikia AISstream API rakto. Pasirinkite 4 paslaugą ir įveskite
-raktą paslėptame lauke vienam paleidimui arba nustatykite `AISSTREAM_KEY` tik
-ignoruojamame vykdymo faile `compose/.env`. Raktas perduodamas per aplinką,
-nerodomas proceso argumentuose ir neišsaugomas paleidiklio atmintyje.
 
 ---
 
@@ -493,10 +484,9 @@ Adresas priima tik GET/HEAD, pagal nutylėjimą reikalauja Basic autentifikavimo
 | `dronuradaras` | `bridges/dronuradaras_bridge.py` | `…/land/dronuradaras/acoustic/neutral/sensor/{type}/{id}/sapient` | Tik prisijungusių įrenginių apklausa 60 s ir atsijungusių pašalinimas / aptikimų apklausa 10 s |
 | `utm-ans` | `bridges/utm_ans_bridge.py` | `…/air/utm_ans/c2/unknown/uav/{type}/{id}/sapient` | Autorizuotų JSON/GeoJSON deklaruotų skrydžių apklausa; būtinas `UTM_ANS_API_URL` |
 | `opendroneid` | `protocols/random/opendroneid.py` | `…/air/opendroneid/passive_rf/*/uav/{type}/{id}/sapient` | Neapdoroti imtuvų pranešimai `…/raw/opendroneid/**`; maršrutizatoriaus mazgui radijo nereikia |
-| `aisstream` | `bridges/aisstream_ws_bridge.py` | `…/sea/aisstream/ais/civ/vessel/{type}/{id}/sapient` | Autentifikuotas WSS srautas |
 | `sitaware` | `bridges/sitaware_bridge.py` | `…/land/sitaware/c2/friendly/unit/{type}/{id}/sapient` | Konfigūruojama REST apklausa |
 | `nffi` | `protocols/random/nffi.py` | `…/land/nato/c2/friendly/unit/{type}/{id}/sapient` | Pilni XML dokumentai Zenoh temoje `…/raw/nffi/*` |
-| `link16` | `protocols/random/link16.py` | `…/air/link16/c2/*/aircraft/{type}/{id}/sapient` | Srautinis UDP |
+| `stanag5516` | `protocols/vendors/stanag/5516.py` | `…/air/stanag_5516/c2/*/aircraft/{type}/{id}/sapient` | Srautinis UDP |
 | `mavlink` | `protocols/random/mavlink.py` | `…/air/mavlink/telemetry/*/uav/{type}/{id}/sapient` | Srautinis UDP/TCP |
 | `dji-cloud` | `bridges/dji_cloud_api_bridge.py` | `…/air/dji/telemetry/friendly/uav/{type}/{id}/sapient` | DJI šaltiniui skirtas autentifikuotas MQTT 5 tiltas |
 | `cot-udp` | `layers/cot_layer.py` | Prenumeratorius — visos temos | Įvykio valdomas |

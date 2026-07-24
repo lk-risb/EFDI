@@ -50,7 +50,7 @@ and `--multicast-interface`.
 | `mavlink.py` | UDP listener or TCP server | Autopilot, GCS, or receiver sends MAVLink to `MAVLINK_PORT` | MAVLink 1/2 position plus MAVLink `OPEN_DRONE_ID_*` aggregation |
 | `opendroneid.py` | Zenoh subscriber/translator | Receiver publishes an exact 25-byte message or bounded Message Pack under `…/raw/opendroneid/{receiver}/{transmitter}` | ASTM F3411 / ASD-STAN Basic ID, Location, Auth, Self ID, System, and Operator ID |
 | `vendors/sapient/flex335.py` | TCP listener or client | Edge node connects to `SAPIENT_LISTEN_PORT`, or set middleware `SAPIENT_HOST/PORT`; remote listeners require an allowed source CIDR | BSI FLEX 335 v2 framing and public SAPIENT protobuf subset |
-| `link16.py` | UDP listener | A Link 16/JREAP-C gateway sends its documented UDP profile to `LINK16_PORT` | Gateway data only; no direct radio interface and no guessed TCP framing |
+| `5516.py` | UDP listener | A Link 16/JREAP-C gateway sends its documented UDP profile to `STANAG5516_PORT` | Gateway data only; no direct radio interface and no guessed TCP framing |
 | `vmf.py` | UDP listener or TCP server | VMF gateway sends to `VMF_PORT` and confirms MIL-STD-47001C profile | Implemented message subset |
 | `nffi.py` | Zenoh subscriber/translator | Publisher writes one complete XML document under `…/raw/nffi/{source-id}` | NATO NFFI / ADatP-36 (STANAG 5527) XML subset |
 | `vendors/stanag/4586.py` | TCP client | Set CUCS/VSM `STANAG4586_HOST/PORT`; validate the VSM ICD before selecting `STANAG4586_PROFILE=legacy_ed3_approx` | Historical deployment layout, disabled by default; not claimed as a generic STANAG 4586 decoder |
@@ -124,12 +124,11 @@ ACL change.
 | Mixed ASTERIX UDP | Receives one unicast or multicast UDP stream and publishes exact frames by category | `ASTERIX_PORT`, categories, and optional bind/multicast/source filter |
 | Airplanes.live | Polls its fixed HTTPS API | None; optional runtime bounds/rate |
 | ADSB.lol | Polls its free/open-data v2 point API; source code BSD-3-Clause, public data ODbL 1.0 | None for public API; coordinate production use or feed data if required by the operator |
-| AISstream | Connects to fixed WSS service | Runtime-only `AISSTREAM_KEY` |
 | APRS-IS | Connects to APRS-IS | Runtime area/range; upstream connection is built in |
 | dronuradaras.lt | Polls its fixed public HTTPS API | None |
 | Oro navigacija UTM (`utm.ans.lt`) | Polls an explicitly authorized JSON/GeoJSON export or API | `UTM_ANS_API_URL`; optional bearer `UTM_ANS_API_TOKEN` |
 | DJI Cloud API | Connects to a deployment's DJI MQTT 5 broker and selects aircraft OSD messages | `DJI_MQTT_HOST`, broker credentials/TLS, and DJI Pilot 2 or Dock enrollment |
-| meteo.lt / Open-Meteo | Poll fixed public HTTPS APIs | Optional locations/bounds/rate |
+| meteo.lt | Polls the fixed public HTTPS API | Optional places/rate |
 | SitaWare HQ REST inbound | Polls deployment-specific resource | URL, credentials, and the real `SITAWARE_API_PATH`; there is no universal units URL |
 | Track fusion | Subscribes to local Zenoh topics | No external endpoint; starts working when normalized tracks arrive |
 
