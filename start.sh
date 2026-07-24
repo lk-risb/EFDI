@@ -85,7 +85,7 @@ SERVICES=(
     mavlink-raw stanag5516-raw vmf-raw sapient-raw stanag4586-raw stanag4609-raw
     mqtt-raw sensorthings-raw
     cap geojson mqtt sensorthings sparkplug spectrum sensor-health mission-route
-    cot_layer tak-bridge nvg_layer
+    cot_layer tak-bridge nvg_bridge nvg_layer
 )
 
 # Restore only non-secret launcher choices. Explicit compose/.env values win;
@@ -165,6 +165,7 @@ declare -A SVC_CAT=(
     [cap]="Protocols" [geojson]="Protocols"
     [spectrum]="Protocols" [sensor-health]="Protocols" [mission-route]="Protocols"
     [cot_layer]="Output layers"   [nvg_layer]="Output layers"
+    [nvg_bridge]="C2 inputs"
     [track-fusion]="Sensor bridges"
 )
 
@@ -207,7 +208,8 @@ declare -A SVC_DESC=(
     [mission-route]="UAV routes and corridors on Zenoh"
     [cot_layer]="CoT → TAK Server (mTLS)"
     [tak-bridge]="TAK Server CoT ingress"
-    [nvg_layer]="EFDI tracks → SitaWare (outbound NVG push)"
+    [nvg_bridge]="SitaWare NVG export → Zenoh"
+    [nvg_layer]="EFDI tracks → SitaWare (NVG feed, SitaWare polls)"
     [track-fusion]="Radar/ADS-B track correlation"
 )
 
@@ -248,7 +250,10 @@ svc_ready() {
         stanag4586) [[ "${STANAG4586_PROFILE:-}" == "legacy_ed3_approx" &&
                        ( -n "${STANAG4586_ZENOH_RAW:-}" || -n "${STANAG4586_HOST:-}" ) ]] ;;
         stanag4609) [[ "${STANAG4609_SRT_URL:-}" ]] ;;
-        nvg_layer) [[ -n "${SITAWARE_NVG_URL:-}" ]] ;;
+        # nvg_layer serves a feed, so it needs a port to listen on;
+        # nvg_bridge reads SitaWare's export, so it needs a URL.
+        nvg_layer) [[ -n "${SITAWARE_HQ_NVG_PORT:-}" ]] ;;
+        nvg_bridge) [[ -n "${SITAWARE_NVG_IMPORT_URL:-}" || ( -n "${SITAWARE_URL:-}" && -n "${SITAWARE_API_PATH:-}" ) ]] ;;
         *)        return 0 ;;
     esac
 }
@@ -271,11 +276,12 @@ svc_hint() {
         stanag4586-raw) echo "STANAG4586_RAW_PORT not set" ;;
         stanag4609-raw) echo "STANAG4609_SRT_URL not set" ;;
         sapient)
+            # This function only DESCRIBES a service — it must never launch one.
+            # A stray _start here (copy-pasted from launch()) meant that merely
+            # asking sapient for its status hint started it.
             if [[ "${SAPIENT_ZENOH_RAW:-}" == "1" ]]; then
-                _start sapient protocols/vendors/sapient/flex335.py --zenoh-raw --raw-topic "${SAPIENT_RAW_TOPIC:-}"
-                return
-            fi
-            if [[ "${SAPIENT_LISTEN_PORT:-}" ]]; then
+                echo "zenoh raw ${SAPIENT_RAW_TOPIC:-(default topic)}"
+            elif [[ "${SAPIENT_LISTEN_PORT:-}" ]]; then
                 echo "listen ${SAPIENT_BIND:-127.0.0.1}:${SAPIENT_LISTEN_PORT}"
             elif [[ "${SAPIENT_HOST:-}" ]]; then
                 echo "${SAPIENT_HOST}:${SAPIENT_PORT:-7001}"
@@ -285,7 +291,19 @@ svc_hint() {
         stanag4586) echo "set STANAG4586_PROFILE=legacy_ed3_approx plus a 4586 source" ;;
         stanag4609) echo "STANAG4609_SRT_URL not set (ingest via stanag4609-raw)" ;;
         nvg_layer)
-            [[ -n "${SITAWARE_NVG_URL:-}" ]] && echo "${SITAWARE_NVG_URL}" || echo "will prompt for SitaWare NVG endpoint" ;;
+            if [[ -n "${SITAWARE_HQ_NVG_PORT:-}" ]]; then
+                echo "serving ${SITAWARE_HQ_NVG_BIND:-127.0.0.1}:${SITAWARE_HQ_NVG_PORT}${SITAWARE_HQ_NVG_PATH:-/nvg}"
+            else
+                echo "SITAWARE_HQ_NVG_PORT not set"
+            fi ;;
+        nvg_bridge)
+            if [[ -n "${SITAWARE_NVG_IMPORT_URL:-}" ]]; then
+                echo "${SITAWARE_NVG_IMPORT_URL}"
+            elif [[ -n "${SITAWARE_URL:-}" && -n "${SITAWARE_API_PATH:-}" ]]; then
+                echo "${SITAWARE_URL}${SITAWARE_API_PATH}"
+            else
+                echo "SITAWARE_NVG_IMPORT_URL not set"
+            fi ;;
         sitaware)
             if [[ "${SITAWARE_URL:-}" ]]; then
                 [[ "${SITAWARE_URL_FALLBACK:-}" ]] && echo "${SITAWARE_URL} (+fallback)" || echo "${SITAWARE_URL}"
@@ -769,20 +787,23 @@ launch() {
             _start tak-bridge bridges/tak_bridge.py "${tak_ingest_args[@]}"
             ;;
 
-        nvg_layer)
-            if [[ -z "${SITAWARE_NVG_URL:-}" ]]; then
-                _prompt_address "SitaWare NVG endpoint (https://host:port)" SITAWARE_NVG_URL
-                if [[ -z "${SITAWARE_NVG_URL:-}" ]]; then
-                    printf "  ${YELLOW}[skip]${R}  nvg_layer          no SitaWare NVG endpoint entered\n"
-                    return
-                fi
-                export SITAWARE_NVG_URL
+        nvg_bridge)
+            # Reads SitaWare's NVG Export Endpoint into the fabric. Falls back
+            # to the same URL the sitaware bridge uses, since both point at the
+            # same server — one speaks NVG XML, the other the JSON track API.
+            if [[ -z "${SITAWARE_NVG_IMPORT_URL:-}" && ( -z "${SITAWARE_URL:-}" || -z "${SITAWARE_API_PATH:-}" ) ]]; then
+                printf "  ${YELLOW}[skip]${R}  nvg_bridge         set SITAWARE_NVG_IMPORT_URL (or SITAWARE_URL + SITAWARE_API_PATH)\n"
+                return
             fi
-            if [[ -z "${SITAWARE_NVG_USER:-}" ]]; then
-                local nvg_user nvg_pass
-                _prompt_credentials "SitaWare NVG push" nvg_user nvg_pass
-                export SITAWARE_NVG_USER="$nvg_user"
-                export SITAWARE_NVG_PASS="$nvg_pass"
+            _start nvg_bridge bridges/nvg_bridge.py
+            ;;
+
+        nvg_layer)
+            # Serves the NVG feed SitaWare's Import Subscription polls, so it
+            # takes a listen address and has nothing to prompt for.
+            if [[ -z "${SITAWARE_HQ_NVG_PORT:-}" ]]; then
+                printf "  ${YELLOW}[skip]${R}  nvg_layer          set SITAWARE_HQ_NVG_PORT\n"
+                return
             fi
             _start nvg_layer layers/nvg_layer.py
             ;;
@@ -793,6 +814,26 @@ launch() {
 
     esac
 }
+
+# Prerequisite report for the admin-control agent, one line per service:
+#
+#   <name><TAB>ready|blocked<TAB><hint>
+#
+# The web UI needs to know that a service cannot start BEFORE offering a Start
+# button, otherwise an unconfigured service spawns, exits immediately and shows
+# up as CRASHED with no reason. That answer lives in svc_ready/svc_hint, and
+# re-implementing those tables in Python would leave two copies to drift apart,
+# so the agent asks this script instead. Reporting only — starts nothing.
+if [[ "${1:-}" == "--check-all" ]]; then
+    for svc in "${SERVICES[@]}"; do
+        if svc_ready "$svc"; then
+            printf '%s\tready\t%s\n' "$svc" "$(svc_hint "$svc")"
+        else
+            printf '%s\tblocked\t%s\n' "$svc" "$(svc_hint "$svc")"
+        fi
+    done
+    exit 0
+fi
 
 # Non-interactive entrypoint used by the localhost admin-control agent.  It
 # reuses the exact same launch table as the human menu, including environment

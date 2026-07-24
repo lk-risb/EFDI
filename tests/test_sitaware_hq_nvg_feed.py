@@ -16,7 +16,10 @@ sys.path.insert(0, str(ROOT / "compose"))
 sys.path.insert(0, str(ROOT / "compose" / "bridges"))
 sys.path.insert(0, str(ROOT / "compose" / "layers"))
 
-from nvg_bridge import (  # noqa: E402
+# The feed server moved to nvg_layer: it writes the fabric OUT to SitaWare, so
+# it is the C2 egress. SitaWare polling it is a transport detail. nvg_bridge is
+# now the ingress that reads SitaWare's NVG export back into Zenoh.
+from nvg_layer import (  # noqa: E402
     NVGFeedCache,
     NVGFeedServer,
     basic_authorized,

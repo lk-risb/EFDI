@@ -1,489 +1,232 @@
 #!/usr/bin/env python3
-"""Expose live EFDI tracks as a pull-based NVG 2.0.2 feed for SitaWare HQ.
+"""nvg_bridge.py — SitaWare NVG export → Zenoh bridge.
 
-SitaWare Headquarters 6.22 can create an ``NVG Import Subscription`` whose
-remote endpoint is polled periodically.  This native process subscribes to the
-same Zenoh track topics as the legacy outbound NVG adapter, keeps a bounded live snapshot,
-and serves that snapshot as one NVG document over HTTP(S).
+Polls a SitaWare NVG Export Endpoint, decodes the NVG 2.0.2 document, and
+publishes each positioned item onto the EFDI fabric so the output layers can
+forward it to the other C2 systems.
 
-This is deliberately separate from the legacy outbound NVG push adapter: HQ
-pulls this document, while the push adapter writes per-item updates elsewhere.
+This is the INGRESS side of the SitaWare integration: a _bridge brings an
+external system's data into Zenoh. Sending EFDI tracks the other way is
+layers/nvg_layer.py, which serves the feed SitaWare's Import Subscription
+polls — SitaWare initiating that transfer does not make it an ingress.
 
-Required configuration:
+It exists alongside sitaware_bridge.py because the two speak different
+languages to the same server: sitaware_bridge reads the JSON track-server API,
+while an NVG Export Endpoint returns XML, which that bridge cannot parse.
 
-    SITAWARE_HQ_NVG_USER=efdi-feed
-    SITAWARE_HQ_NVG_PASS=<dedicated-random-password>
-
-For a remote HQ host, either configure TLS or explicitly acknowledge an
-isolated lab-only HTTP connection:
-
-    SITAWARE_HQ_NVG_BIND=0.0.0.0
-    SITAWARE_HQ_NVG_PORT=8088
-    SITAWARE_HQ_NVG_TLS_CERT=/path/to/server-cert.pem
-    SITAWARE_HQ_NVG_TLS_KEY=/path/to/server-key.pem
-
-The SitaWare subscription URL is then ``https://<efdi-host>:8088/nvg``.
+    SITAWARE_NVG_IMPORT_URL     full URL of the NVG export endpoint
+                                (defaults to SITAWARE_URL + SITAWARE_API_PATH)
+    SITAWARE_NVG_IMPORT_USER    basic-auth user (defaults to SITAWARE_USER)
+    SITAWARE_NVG_IMPORT_PASS    basic-auth pass (defaults to SITAWARE_PASS)
+    SITAWARE_NVG_IMPORT_POLL_S  seconds between polls (default 10)
 """
 
 from __future__ import annotations
 
 import argparse
 import base64
-import hashlib
-import hmac
 import json
 import math
 import os
 import ssl
-import threading
 import time
-import urllib.parse
+import urllib.error
+import urllib.request
 import xml.etree.ElementTree as ET
-from collections.abc import Callable
-from datetime import datetime, timezone
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import zenoh
-from layers.nvg_layer import (
-    NVG_NS,
-    NVG_VERSION,
-    TOPIC_ROOT,
-    _TOPIC_SIDC,
-    _uid,
-    _resolve_sidc,
-    make_config,
-    track_to_nvg_item,
-)
+from zenoh_auth import apply_zenoh_auth
+from namespace_prefix import topic_root
+from protocols.protobuf_codec import semantic_topic
+# One SIDC -> topic mapping for both SitaWare ingress paths; a second copy would
+# drift and land the same unit on two different keys.
+from bridges.sitaware_bridge import sidc_to_topic
 
-MAX_ZENOH_PAYLOAD = 1_000_000
-_TOPIC_STALE_S = {
-    "env/weather/station/**": 7200.0,
-}
-_HQ_SYMBOL_SCHEME = "2525b"
-_ACCESS_LOG_INTERVAL_S = 60.0
+ORG        = os.environ.get("PARTNER_NAMESPACE", "")
+TOPIC_ROOT = topic_root()
+HERE       = os.path.dirname(os.path.abspath(__file__))
+_CERT_DIR  = os.environ.get("EFDI_CERT_DIR", HERE)
+_ENDPOINT  = os.environ.get("ZENOH_LOCAL_ENDPOINT", "tcp/127.0.0.1:7448")
 
-
-def _env_true(name: str) -> bool:
-    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
+NVG_NS = "https://tide.act.nato.int/schemas/2012/10/nvg"
+MAX_DOCUMENT_BYTES = 16 * 1024 * 1024
+SOURCE = "sitaware-nvg"
 
 
-class NVGFeedCache:
-    """Thread-safe, size-bounded snapshot of recently received NVG items."""
-
-    def __init__(
-        self,
-        stale_s: float,
-        max_tracks: int,
-        clock: Callable[[], float] = time.monotonic,
-        wall_clock: Callable[[], float] = time.time,
-    ) -> None:
-        if not math.isfinite(stale_s) or stale_s <= 0:
-            raise ValueError("stale_s must be a positive finite number")
-        if max_tracks <= 0:
-            raise ValueError("max_tracks must be positive")
-        self._stale_s = stale_s
-        self._max_tracks = max_tracks
-        self._clock = clock
-        self._wall_clock = wall_clock
-        self._lock = threading.Lock()
-        self._items: dict[str, tuple[str, float, float]] = {}
-
-    def upsert(self, track: dict, sidc: str, stale_s: float | None = None) -> str | None:
-        item_stale_s = self._stale_s if stale_s is None else stale_s
-        if not math.isfinite(item_stale_s) or item_stale_s <= 0:
-            raise ValueError("item stale_s must be a positive finite number")
-        result = track_to_nvg_item(
-            track,
-            sidc,
-            symbol_scheme=_HQ_SYMBOL_SCHEME,
-            valid_until=self._wall_clock() + item_stale_s,
-        )
-        if result is None:
-            return None
-        uid, xml = result
-        now = self._clock()
-        with self._lock:
-            if uid not in self._items and len(self._items) >= self._max_tracks:
-                oldest_uid = min(self._items, key=lambda key: self._items[key][1])
-                del self._items[oldest_uid]
-            self._items[uid] = (xml, now, item_stale_s)
-        return uid
-
-    def remove(self, track: dict) -> str:
-        uid = _uid(track)
-        with self._lock:
-            self._items.pop(uid, None)
-        return uid
-
-    def _snapshot(self) -> list[tuple[str, str]]:
-        now = self._clock()
-        with self._lock:
-            expired = [
-                uid for uid, (_, seen_at, stale_s) in self._items.items()
-                if now - seen_at > stale_s
-            ]
-            for uid in expired:
-                del self._items[uid]
-            return sorted((uid, xml) for uid, (xml, _, _) in self._items.items())
-
-    def document(self) -> tuple[bytes, int]:
-        snapshot = self._snapshot()
-        ET.register_namespace("", NVG_NS)
-        root = ET.Element("{%s}nvg" % NVG_NS, {"version": NVG_VERSION})
-        count = 0
-        for _, item_xml in snapshot:
-            # This XML was generated locally by track_to_nvg_item; no external
-            # or user-supplied XML is parsed here.
-            try:
-                item_root = ET.fromstring(item_xml)
-            except ET.ParseError:
-                continue
-            for child in item_root:
-                root.append(child)
-                count += 1
-        body = b'<?xml version="1.0" encoding="UTF-8"?>' + ET.tostring(
-            root, encoding="utf-8"
-        )
-        return body, count
+def make_config() -> "zenoh.Config":
+    conf = zenoh.Config()
+    conf.insert_json5("mode", '"client"')
+    conf.insert_json5("connect/endpoints", json.dumps([_ENDPOINT]))
+    apply_zenoh_auth(conf)
+    if _ENDPOINT.startswith("tls"):
+        conf.insert_json5("transport/link/tls", json.dumps({
+            "root_ca_certificate": os.path.join(_CERT_DIR, "efdi-ca-root.pem"),
+            "connect_certificate": os.path.join(_CERT_DIR, ORG + "-cert.pem"),
+            "connect_private_key": os.path.join(_CERT_DIR, ORG + "-key.pem"),
+            "enable_mtls": True,
+            "verify_name_on_connect": True,
+        }))
+    return conf
 
 
-def basic_authorized(header: str | None, username: str, password: str) -> bool:
-    if not header or not username or not password:
-        return False
-    token = base64.b64encode(f"{username}:{password}".encode("utf-8")).decode("ascii")
-    expected = "Basic " + token
-    return hmac.compare_digest(header, expected)
+def _number(value: str | None) -> float | None:
+    if value is None:
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
 
 
-class NVGFeedServer(ThreadingHTTPServer):
-    daemon_threads = True
-    allow_reuse_address = True
-
-    def __init__(
-        self,
-        address: tuple[str, int],
-        cache: NVGFeedCache,
-        feed_path: str,
-        username: str,
-        password: str,
-        allow_anonymous: bool,
-        verbose: bool,
-    ) -> None:
-        self.cache = cache
-        self.feed_path = feed_path
-        self.username = username
-        self.password = password
-        self.allow_anonymous = allow_anonymous
-        self.verbose = verbose
-        self._request_lock = threading.Lock()
-        self._successful_requests = 0
-        self._unauthorized_requests = 0
-        self._last_successful_request: float | None = None
-        self._last_unauthorized_request: float | None = None
-        self._last_access_log = {"successful": 0.0, "unauthorized": 0.0}
-        super().__init__(address, NVGFeedHandler)
-
-    @staticmethod
-    def _timestamp(value: float | None) -> str | None:
-        if value is None:
-            return None
-        return datetime.fromtimestamp(value, timezone.utc).isoformat(timespec="seconds").replace(
-            "+00:00", "Z"
-        )
-
-    def record_feed_request(self, authorized: bool) -> bool:
-        """Record one feed request and return whether it should be logged."""
-        now = time.time()
-        monotonic_now = time.monotonic()
-        outcome = "successful" if authorized else "unauthorized"
-        with self._request_lock:
-            if authorized:
-                self._successful_requests += 1
-                self._last_successful_request = now
-                count = self._successful_requests
-            else:
-                self._unauthorized_requests += 1
-                self._last_unauthorized_request = now
-                count = self._unauthorized_requests
-            should_log = (
-                count == 1
-                or monotonic_now - self._last_access_log[outcome] >= _ACCESS_LOG_INTERVAL_S
-            )
-            if should_log:
-                self._last_access_log[outcome] = monotonic_now
-            return should_log
-
-    def request_stats(self) -> dict[str, int | float | str | None]:
-        now = time.time()
-        with self._request_lock:
-            last_success = self._last_successful_request
-            return {
-                "successful_requests": self._successful_requests,
-                "unauthorized_requests": self._unauthorized_requests,
-                "last_successful_request": self._timestamp(last_success),
-                "last_unauthorized_request": self._timestamp(
-                    self._last_unauthorized_request
-                ),
-                "seconds_since_last_success": (
-                    round(max(0.0, now - last_success), 1)
-                    if last_success is not None
-                    else None
-                ),
-            }
+def _sidc_of(symbol: str | None) -> str:
+    """Strip the scheme prefix NVG puts on a symbol ("2525b:SFGPU----*****")."""
+    if not symbol:
+        return ""
+    return symbol.split(":", 1)[1] if ":" in symbol else symbol
 
 
-class NVGFeedHandler(BaseHTTPRequestHandler):
-    server: NVGFeedServer
-    server_version = "EFDI-NVG/1.0"
-    sys_version = ""
+def parse_nvg(document: bytes) -> list[dict]:
+    """Decode NVG <point> elements into EFDI track dicts.
 
-    def _authorized(self) -> bool:
-        return self.server.allow_anonymous or basic_authorized(
-            self.headers.get("Authorization"),
-            self.server.username,
-            self.server.password,
-        )
+    Items without a usable position are skipped rather than published with a
+    null location: a track whose position cannot be trusted is worse on a map
+    than a track that is absent.
+    """
+    try:
+        root = ET.fromstring(document)
+    except ET.ParseError:
+        return []
 
-    def _headers(self, status: int, content_type: str, length: int) -> None:
-        self.send_response(status)
-        self.send_header("Content-Type", content_type)
-        self.send_header("Content-Length", str(length))
-        self.send_header("Cache-Control", "no-store")
-        self.send_header("X-Content-Type-Options", "nosniff")
-        self.end_headers()
+    tracks: list[dict] = []
+    now = time.time()
+    for point in root.iter("{%s}point" % NVG_NS):
+        lon = _number(point.get("x"))
+        lat = _number(point.get("y"))
+        if lat is None or lon is None:
+            continue
+        if not (-90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0):
+            continue
 
-    def _reject_unauthorized(self) -> None:
-        body = b"Authentication required\n"
-        self.send_response(401)
-        self.send_header("WWW-Authenticate", 'Basic realm="EFDI NVG feed", charset="UTF-8"')
-        self.send_header("Content-Type", "text/plain; charset=utf-8")
-        self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
-        self.send_header("X-Content-Type-Options", "nosniff")
-        self.end_headers()
-        if self.command != "HEAD":
-            self.wfile.write(body)
+        uri = point.get("uri") or ""
+        # Our own items come back carrying the urn:efdi: uid we published; keep
+        # the bare uid so a round-tripped object keeps one identity on the
+        # fabric instead of appearing again under a second key.
+        uid = uri.rsplit(":", 1)[-1] if uri.startswith("urn:efdi:") else uri
 
-    def _route(self, include_body: bool) -> None:
-        path = urllib.parse.urlsplit(self.path).path
-        if path not in {self.server.feed_path, "/healthz"}:
-            body = b"Not found\n"
-            self._headers(404, "text/plain; charset=utf-8", len(body))
-            if include_body:
-                self.wfile.write(body)
-            return
-        authorized = self._authorized()
-        if not authorized:
-            if path == self.server.feed_path and self.server.record_feed_request(False):
-                print(
-                    "NVG feed rejected unauthorized request from {}".format(
-                        self.client_address[0]
-                    ),
-                    flush=True,
-                )
-            self._reject_unauthorized()
-            return
-
-        if path == "/healthz":
-            _, count = self.server.cache.document()
-            body = json.dumps(
-                {
-                    "status": "ok",
-                    "tracks": count,
-                    "feed_requests": self.server.request_stats(),
-                },
-                separators=(",", ":"),
-            ).encode()
-            content_type = "application/json; charset=utf-8"
-        else:
-            body, count = self.server.cache.document()
-            if self.server.record_feed_request(True):
-                print(
-                    "NVG feed served {} tracks to {}".format(
-                        count, self.client_address[0]
-                    ),
-                    flush=True,
-                )
-            content_type = "application/xml; charset=utf-8"
-        etag = '"' + hashlib.sha256(body).hexdigest() + '"'
-        self.send_response(200)
-        self.send_header("Content-Type", content_type)
-        self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
-        self.send_header("ETag", etag)
-        self.send_header("X-Content-Type-Options", "nosniff")
-        self.end_headers()
-        if include_body:
-            self.wfile.write(body)
-
-    def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
-        self._route(include_body=True)
-
-    def do_HEAD(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
-        self._route(include_body=False)
-
-    def do_POST(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
-        body = b"Method not allowed\n"
-        self.send_response(405)
-        self.send_header("Allow", "GET, HEAD")
-        self.send_header("Content-Type", "text/plain; charset=utf-8")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
-
-    def log_message(self, fmt: str, *args) -> None:
-        if self.server.verbose:
-            print("NVG HTTP {} - {}".format(self.client_address[0], fmt % args), flush=True)
+        track = {
+            "_src":     SOURCE,
+            "_ts":      now,
+            "_ingress": "sitaware_nvg",
+            "uid":      uid or None,
+            "sidc":     _sidc_of(point.get("symbol")),
+            "lat_deg":  round(lat, 6),
+            "lon_deg":  round(lon, 6),
+        }
+        label = point.get("label")
+        if label:
+            track["callsign"] = label
+        course = _number(point.get("course"))
+        if course is not None:
+            track["heading_deg"] = course
+        speed = _number(point.get("speed"))
+        if speed is not None:
+            track["speed_ms"] = speed
+        tracks.append({key: value for key, value in track.items() if value is not None})
+    return tracks
 
 
-def make_handler(
-    sidc,
-    cache: NVGFeedCache,
-    verbose: bool,
-    stale_s: float | None = None,
-):
-    def handler(sample) -> None:
-        try:
-            payload = bytes(sample.payload)
-            if len(payload) > MAX_ZENOH_PAYLOAD:
-                raise ValueError("payload exceeds 1 MB")
-            track = json.loads(payload.decode("utf-8"))
-            if not isinstance(track, dict):
-                raise ValueError("track payload is not an object")
-        except (json.JSONDecodeError, UnicodeDecodeError, ValueError) as exc:
-            if verbose:
-                print("NVG feed ignored invalid Zenoh sample: {}".format(exc), flush=True)
-            return
-        if track.get("_delete"):
-            uid = cache.remove(track)
-            if verbose:
-                print("NVG feed removed {}".format(uid), flush=True)
-            return
-        uid = cache.upsert(track, _resolve_sidc(sidc, track), stale_s=stale_s)
-        if verbose and uid:
-            print("NVG feed cached {}".format(uid), flush=True)
+def _tls_context(ca_file: str, insecure: bool) -> "ssl.SSLContext | None":
+    """Verify against a pinned certificate where possible.
 
-    return handler
+    SitaWare ships a self-signed server certificate, so there is no CA to chain
+    to — but trusting that one certificate still beats trusting anything.
+    Hostname checking is off because the certificate carries only a CN and no
+    subjectAltName, which Python has refused to match since 3.7; the pin is what
+    authenticates the server. --insecure disables verification outright and is
+    the last resort, not the default.
+    """
+    if ca_file:
+        context = ssl.create_default_context(cafile=ca_file)
+        context.check_hostname = False
+        return context
+    return ssl._create_unverified_context() if insecure else None
 
 
-def _validate_args(args, password: str) -> None:
-    if not args.path.startswith("/") or "?" in args.path or "#" in args.path:
-        raise SystemExit("SITAWARE_HQ_NVG_PATH must be an absolute path without query/fragment")
-    if not (1 <= args.port <= 65535):
-        raise SystemExit("SITAWARE_HQ_NVG_PORT must be between 1 and 65535")
-    if bool(args.tls_cert) != bool(args.tls_key):
-        raise SystemExit("Set both SITAWARE_HQ_NVG_TLS_CERT and SITAWARE_HQ_NVG_TLS_KEY")
-    if not args.allow_anonymous and (not args.user or not password):
-        raise SystemExit(
-            "Set SITAWARE_HQ_NVG_USER and SITAWARE_HQ_NVG_PASS, or explicitly "
-            "set SITAWARE_HQ_NVG_ALLOW_ANONYMOUS=1"
-        )
-    non_loopback = args.bind not in {"127.0.0.1", "::1", "localhost"}
-    if non_loopback and not args.tls_cert and not args.allow_insecure_http:
-        raise SystemExit(
-            "Refusing a non-loopback plain-HTTP feed. Configure TLS, or explicitly "
-            "set SITAWARE_HQ_NVG_ALLOW_INSECURE_HTTP=1 for an isolated lab network."
-        )
+def fetch(url: str, auth_header: str, context: "ssl.SSLContext | None") -> bytes | None:
+    # No Accept header: SitaWare's NVG export answers 500 to
+    # "Accept: application/xml" and 200 to a request that does not ask for a
+    # type at all, even though what it returns is XML either way.
+    request = urllib.request.Request(url, headers={
+        "Authorization": auth_header,
+        "User-Agent": "efdi-nvg-bridge/1.0",
+    })
+    try:
+        with urllib.request.urlopen(request, timeout=20, context=context) as response:
+            return response.read(MAX_DOCUMENT_BYTES)
+    except urllib.error.HTTPError as exc:
+        print("NVG import HTTP {} from {}".format(exc.code, url), flush=True)
+    except (urllib.error.URLError, OSError) as exc:
+        print("NVG import unreachable: {}".format(exc), flush=True)
+    return None
 
 
 def run(args) -> None:
-    password = os.environ.get("SITAWARE_HQ_NVG_PASS", "")
-    _validate_args(args, password)
+    auth = "Basic " + base64.b64encode(
+        "{}:{}".format(args.user, args.password).encode()).decode()
+    print("NVG import: {} every {}s".format(args.url, args.poll_s), flush=True)
 
-    cache = NVGFeedCache(args.stale_s, args.max_tracks)
-    server = NVGFeedServer(
-        (args.bind, args.port),
-        cache,
-        args.path,
-        args.user,
-        password,
-        args.allow_anonymous,
-        args.verbose,
-    )
-    scheme = "http"
-    if args.tls_cert:
-        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-        context.minimum_version = ssl.TLSVersion.TLSv1_2
-        context.load_cert_chain(args.tls_cert, args.tls_key)
-        server.socket = context.wrap_socket(server.socket, server_side=True)
-        scheme = "https"
-
+    context = _tls_context(args.ca, args.insecure)
     session = zenoh.open(make_config())
-    subscribers = []
     try:
-        for suffix, sidc in _TOPIC_SIDC.items():
-            key = "{}/{}".format(TOPIC_ROOT, suffix)
-            item_stale_s = max(args.stale_s, _TOPIC_STALE_S.get(suffix, args.stale_s))
-            subscribers.append(
-                session.declare_subscriber(
-                    key,
-                    make_handler(sidc, cache, args.verbose, stale_s=item_stale_s),
-                )
-            )
-            print(
-                "SUB {} -> SIDC {}".format(
-                    key, getattr(sidc, "__name__", sidc)
-                ),
-                flush=True,
-            )
-
-        print(
-            "SitaWare HQ NVG feed listening on {}://{}:{}{} (stale={}s, max={})".format(
-                scheme, args.bind, args.port, args.path, args.stale_s, args.max_tracks
-            ),
-            flush=True,
-        )
-        if scheme == "http" and args.user:
-            print(
-                "WARNING: Basic Auth is being sent over plain HTTP. Use only on an "
-                "isolated lab network and migrate the feed to HTTPS.",
-                flush=True,
-            )
-        server.serve_forever(poll_interval=0.5)
+        while True:
+            document = fetch(args.url, auth, context)
+            if document is not None:
+                tracks = parse_nvg(document)
+                for track in tracks:
+                    topic = semantic_topic(
+                        sidc_to_topic(track.get("sidc", "")), track) + "/json"
+                    session.put(topic, json.dumps(track).encode(),
+                                encoding=zenoh.Encoding.APPLICATION_JSON)
+                    if args.verbose:
+                        print("NVG in {} -> {}".format(
+                            track.get("callsign") or track.get("uid"), topic), flush=True)
+                print("NVG import published {} items".format(len(tracks)), flush=True)
+            time.sleep(args.poll_s)
     except KeyboardInterrupt:
         pass
     finally:
-        server.shutdown()
-        server.server_close()
-        for subscriber in subscribers:
-            subscriber.undeclare()
         session.close()
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Zenoh tracks -> SitaWare HQ NVG pull feed")
-    parser.add_argument("--bind", default=os.environ.get("SITAWARE_HQ_NVG_BIND", "127.0.0.1"))
+    default_url = os.environ.get("SITAWARE_NVG_IMPORT_URL", "")
+    if not default_url:
+        base = os.environ.get("SITAWARE_URL", "").rstrip("/")
+        path = os.environ.get("SITAWARE_API_PATH", "")
+        default_url = base + path if base and path else ""
+
+    parser = argparse.ArgumentParser(description="SitaWare NVG export → Zenoh")
+    parser.add_argument("--url", default=default_url)
+    parser.add_argument("--user", default=os.environ.get(
+        "SITAWARE_NVG_IMPORT_USER", os.environ.get("SITAWARE_USER", "")))
+    parser.add_argument("--password", default=os.environ.get(
+        "SITAWARE_NVG_IMPORT_PASS", os.environ.get("SITAWARE_PASS", "")))
+    parser.add_argument("--poll-s", type=float, default=float(
+        os.environ.get("SITAWARE_NVG_IMPORT_POLL_S", "10")))
+    parser.add_argument("--ca", default=os.environ.get("SITAWARE_NVG_IMPORT_CA", ""),
+                        help="PEM holding SitaWare's server certificate to pin")
     parser.add_argument(
-        "--port", type=int, default=int(os.environ.get("SITAWARE_HQ_NVG_PORT", "8088"))
-    )
-    parser.add_argument("--path", default=os.environ.get("SITAWARE_HQ_NVG_PATH", "/nvg"))
-    parser.add_argument("--user", default=os.environ.get("SITAWARE_HQ_NVG_USER", ""))
-    parser.add_argument(
-        "--tls-cert", default=os.environ.get("SITAWARE_HQ_NVG_TLS_CERT", "")
-    )
-    parser.add_argument("--tls-key", default=os.environ.get("SITAWARE_HQ_NVG_TLS_KEY", ""))
-    parser.add_argument(
-        "--stale-s",
-        type=float,
-        default=float(os.environ.get("SITAWARE_HQ_NVG_STALE_S", "120")),
-    )
-    parser.add_argument(
-        "--max-tracks",
-        type=int,
-        default=int(os.environ.get("SITAWARE_HQ_NVG_MAX_TRACKS", "10000")),
-    )
-    parser.add_argument(
-        "--allow-anonymous",
-        action="store_true",
-        default=_env_true("SITAWARE_HQ_NVG_ALLOW_ANONYMOUS"),
-    )
-    parser.add_argument(
-        "--allow-insecure-http",
-        action="store_true",
-        default=_env_true("SITAWARE_HQ_NVG_ALLOW_INSECURE_HTTP"),
-    )
+        "--insecure", action="store_true",
+        default=os.environ.get("SITAWARE_TLS_VERIFY", "1") == "0",
+        help="skip TLS verification (SitaWare ships a self-signed certificate)")
     parser.add_argument("--verbose", "-v", action="store_true")
-    run(parser.parse_args())
+    args = parser.parse_args()
+
+    if not args.url:
+        raise SystemExit(
+            "set SITAWARE_NVG_IMPORT_URL, or SITAWARE_URL + SITAWARE_API_PATH")
+    run(args)
 
 
 if __name__ == "__main__":
