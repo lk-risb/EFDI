@@ -73,6 +73,11 @@ const KIND_STYLE: Record<string, string> = {
   infrastructure: 'text-zinc-500 border-zinc-500/40',
 }
 
+// Runtime list reads outward along the data path: layers (what reaches C2)
+// first, then the protocols that decode, then the bridges that ingest, and the
+// router/control agent last — they are the substrate, not integrations you toggle.
+const KIND_RANK: Record<string, number> = { layer: 0, protocol: 1, bridge: 2, infrastructure: 3 }
+
 function servicePresentation(state: ServiceState | undefined, selected: boolean) {
   if (state?.status === 'auth-failed') return { label: 'HQ auth failed', text: 'text-red-500', dot: 'bg-red-500' }
   if (state?.status === 'client-stale') return { label: 'HQ pull stale', text: 'text-red-500', dot: 'bg-red-500' }
@@ -104,26 +109,37 @@ const FIELD_GROUPS: { title: string; description: string; fields: { key: string;
     { key: 'ZENOH_LOCAL_ENDPOINT', label: 'Local Zenoh endpoint', placeholder: 'tcp/127.0.0.1:7448' },
     { key: 'PARTNER_NAMESPACE', label: 'Partner namespace', placeholder: 'partner-a' },
   ] },
-  { title: 'TAK and CoT', description: 'Configure the active CoT bridge and TAK output paths.', fields: [
+  { title: 'TAK and CoT', description: 'Authenticated CoT feed to the TAK Server over mTLS.', fields: [
     { key: 'TAK_HOST', label: 'TAK Server host / IP', placeholder: '192.168.20.6' },
     { key: 'TAK_PORT', label: 'TAK Server TLS port', placeholder: '8087' },
     { key: 'TAK_TLS', label: 'TAK TLS enabled (1/0)', placeholder: '1' },
-    { key: 'TAK_UDP_HOST', label: 'TAK UDP destination host / IP', placeholder: '239.2.3.1' },
-    { key: 'TAK_UDP_PORT', label: 'TAK UDP destination port', placeholder: '6969' },
   ] },
   { title: 'SitaWare and UTM', description: 'HTTPS endpoints and polling settings. Passwords and tokens are write-only.', fields: [
     { key: 'SITAWARE_URL', label: 'SitaWare HQ URL', placeholder: 'https://host.example' },
     { key: 'SITAWARE_API_PATH', label: 'SitaWare API path', placeholder: '/deployment-specific/path' },
     { key: 'SITAWARE_USER', label: 'SitaWare username' }, { key: 'SITAWARE_PASS', label: 'SitaWare password', secret: true },
     { key: 'SITAWARE_POLL_S', label: 'SitaWare poll seconds', placeholder: '10' },
-    { key: 'SITAWARE_HQ_NVG_STALE_S', label: 'SitaWare HQ NVG stale seconds', placeholder: '120' },
-    { key: 'SITAWARE_HQ_NVG_MAX_TRACKS', label: 'SitaWare HQ NVG maximum tracks', placeholder: '10000' },
+    { key: 'SITAWARE_NVG_URL', label: 'NVG push endpoint (nvg_layer)', placeholder: 'https://sitaware.example:8080' },
+    { key: 'SITAWARE_NVG_USER', label: 'NVG push username' },
+    { key: 'SITAWARE_NVG_PASS', label: 'NVG push password', secret: true },
+    { key: 'SITAWARE_NVG_SOURCE', label: 'NVG source name', placeholder: 'efdi-live' },
     { key: 'UTM_ANS_API_URL', label: 'UTM JSON/GeoJSON URL', placeholder: 'https://authorized-feed.example' },
     { key: 'UTM_ANS_API_TOKEN', label: 'UTM API token', secret: true },
   ] },
   { title: 'Video and metadata ingest', description: 'SRT/KLV sources and source naming for the STANAG 4609 bridge.', fields: [
     { key: 'STANAG4609_SRT_URL', label: 'STANAG 4609 SRT URL', placeholder: 'srt://host:port?mode=listener' },
-    { key: 'STANAG4609_SOURCE', label: 'STANAG 4609 source label', placeholder: 'stanag4609' },
+    { key: 'STANAG4609_SOURCE', label: 'STANAG 4609 source label', placeholder: 'stanag_4609' },
+  ] },
+  { title: 'MQTT and IoT sensor feeds', description: 'MQTT broker ingress and OGC SensorThings polling. The MQTT bridge forwards payloads verbatim; the mqtt translator reads JSON only.', fields: [
+    { key: 'MQTT_HOST', label: 'MQTT broker host', placeholder: 'broker.example' },
+    { key: 'MQTT_PORT', label: 'MQTT broker port', placeholder: '1883' },
+    { key: 'MQTT_TOPIC', label: 'MQTT subscription filters', placeholder: 'sensors/#' },
+    { key: 'MQTT_USER', label: 'MQTT username' },
+    { key: 'MQTT_PASS', label: 'MQTT password', secret: true },
+    { key: 'MQTT_TLS', label: 'MQTT TLS enabled (1/0)', placeholder: '0' },
+    { key: 'SENSORTHINGS_URL', label: 'SensorThings service root', placeholder: 'https://host/FROST-Server/v1.1' },
+    { key: 'SENSORTHINGS_POLL_S', label: 'SensorThings poll seconds', placeholder: '30' },
+    { key: 'SENSORTHINGS_TOKEN', label: 'SensorThings bearer token', secret: true },
   ] },
   { title: 'Sensors and data sources', description: 'Common partner endpoints. Protocol-specific CAT and raw-port settings are available under Advanced.', fields: [
     { key: 'ASTERIX_PORT', label: 'Mixed ASTERIX UDP port', placeholder: '50000' }, { key: 'ASTERIX_CATEGORIES', label: 'ASTERIX categories', placeholder: '34,48' },
@@ -132,7 +148,6 @@ const FIELD_GROUPS: { title: string; description: string; fields: { key: string;
     { key: 'CAT62_PORT', label: 'CAT-062 port', placeholder: '50062' }, { key: 'MAVLINK_PORT', label: 'MAVLink port' },
     { key: 'DJI_MQTT_HOST', label: 'DJI Cloud MQTT host' }, { key: 'DJI_MQTT_PORT', label: 'DJI MQTT port', placeholder: '8883' },
     { key: 'DJI_MQTT_USERNAME', label: 'DJI MQTT username' }, { key: 'DJI_MQTT_PASSWORD', label: 'DJI MQTT password', secret: true },
-    { key: 'AISSTREAM_KEY', label: 'AISstream API key', secret: true },
   ] },
 ]
 
@@ -197,19 +212,28 @@ function RuntimePage() {
     return () => window.clearInterval(timer)
   }, [refreshIntervalMs])
 
-  const groups = useMemo(() => ['All', ...Array.from(new Set(catalog.map(item => item.group)))], [catalog])
+  // Runtime Control lists only integrations an operator manages. The router,
+  // the control agent and the cert-renewer are the substrate the pod runs ON —
+  // you never toggle them from here, and stopping one severs your own control —
+  // so they are dropped entirely rather than shown as inert rows.
+  const managed = useMemo(() => catalog.filter(item => item.kind !== 'infrastructure'), [catalog])
+  const groups = useMemo(() => ['All', ...Array.from(new Set(managed.map(item => item.group)))], [managed])
   // Architectural role, independent of the business grouping above: a C2
   // integration cares whether a service ingests (bridge), decodes (protocol),
   // or writes out to a C2 system (layer).
   const kinds = useMemo(() => {
-    const present = new Set(catalog.map(item => item.kind).filter(Boolean) as string[])
-    return ['All', 'bridge', 'protocol', 'layer', 'infrastructure'].filter(k => k === 'All' || present.has(k))
-  }, [catalog])
-  const filtered = catalog.filter(item =>
+    const present = new Set(managed.map(item => item.kind).filter(Boolean) as string[])
+    return ['All', 'bridge', 'protocol', 'layer'].filter(k => k === 'All' || present.has(k))
+  }, [managed])
+  const filtered = managed.filter(item =>
     (group === 'All' || item.group === group) &&
     (kind === 'All' || item.kind === kind) &&
     (!filter || `${item.name} ${item.description} ${item.source ?? ''}`.toLowerCase().includes(filter.toLowerCase()))
-  )
+  ).sort((a, b) => {
+    const ra = KIND_RANK[a.kind ?? 'bridge'] ?? 2
+    const rb = KIND_RANK[b.kind ?? 'bridge'] ?? 2
+    return ra - rb || a.name.localeCompare(b.name)
+  })
   const runningCount = runtime?.services.filter(service => service.running).length ?? 0
   const configuredCount = Object.keys(runtime?.config ?? {}).length
   const selectedServices = useMemo(() => new Set(runtime?.selected_services ?? []), [runtime?.selected_services])
@@ -340,8 +364,11 @@ function RuntimePage() {
                     <div className="relative z-10 flex items-center gap-2">
                       <input
                         type="checkbox"
-                        checked={selected}
-                        disabled={!canWrite || selectionBusy === item.name}
+                        checked={selected || item.kind === 'infrastructure'}
+                        // Infrastructure is always in the launch set and cannot be
+                        // deselected — dropping the router or control agent from the
+                        // next launch is another way to lose control of the pod.
+                        disabled={!canWrite || selectionBusy === item.name || item.kind === 'infrastructure'}
                         onChange={e => updateSelection(item.name, e.target.checked)}
                         className="h-4 w-4 rounded border-zinc-400 bg-transparent accent-accent-fill focus:ring-accent-ring disabled:opacity-30 dark:border-zinc-600"
                       />
@@ -366,7 +393,7 @@ function RuntimePage() {
                       </div>
                       <span className={`hidden text-[10px] uppercase tracking-[0.18em] sm:inline ${presentation.text}`}>{presentation.label}</span>
                       <button title="Start" disabled={!canWrite || !!action || state?.running} onClick={() => serviceAction(item.name, 'start')} className="rounded p-1.5 text-zinc-500 transition hover:bg-emerald-500/10 hover:text-emerald-500 disabled:opacity-30"><Play size={13} /></button>
-                      <button title="Stop" disabled={!canWrite || !!action || !state?.running || item.name === 'zenoh'} onClick={() => serviceAction(item.name, 'stop')} className="rounded p-1.5 text-zinc-500 transition hover:bg-red-500/10 hover:text-red-500 disabled:opacity-30"><Square size={12} /></button>
+                      <button title={item.kind === 'infrastructure' ? 'Infrastructure cannot be stopped from here' : 'Stop'} disabled={!canWrite || !!action || !state?.running || item.kind === 'infrastructure'} onClick={() => serviceAction(item.name, 'stop')} className="rounded p-1.5 text-zinc-500 transition hover:bg-red-500/10 hover:text-red-500 disabled:opacity-30"><Square size={12} /></button>
                       <button title="Restart" disabled={!canWrite || !!action || item.name === 'admin-control'} onClick={() => serviceAction(item.name, 'restart')} className="rounded p-1.5 text-zinc-500 transition hover:bg-accent-ring/10 hover:text-accent-ring disabled:opacity-30"><RefreshCw size={13} className={action === 'restart' ? 'animate-spin' : ''} /></button>
                       <button title="Show logs" onClick={() => showLogs(item.name)} className="rounded p-1.5 text-zinc-500 transition hover:bg-zinc-200 dark:hover:bg-white/10"><FileText size={13} /></button>
                     </div>

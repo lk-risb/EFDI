@@ -6,15 +6,15 @@ Cursor-on-Target (CoT) XML to a TAK Server over TCP.
 All connected ATAK / iTAK / TAKX / WinTAK devices see the tracks automatically
 through the server — no per-device configuration, no multicast required.
 
-Option A — plaintext TCP (NetBird tunnel provides encryption):
-  Default: TCP → localhost:8087
-  Override: --host <ip> --port <port>
-
-Option B — mutual TLS directly on official TAK Server port 8089:
+Transport — mutual TLS on the official TAK Server streaming port 8089:
   --host <ip> --port 8089 --tls --cert cert.pem --key key.pem --ca ca.pem
   Generate certs with: make add-service NAME=efdi-pod  (in the TAK repo)
 
-For direct UDP multicast (same L2 only): --udp --host 239.2.3.1 --port 6969
+Do NOT use port 8087. That is the anonymous `stdtcp` input: TAK Server accepts
+and ACKs every byte written to it, but does not distribute those events to the
+8089 subscribers, so nothing ever reaches WinTAK/ATAK. Only an authenticated
+8089 connection lands in the __ANON__ group the clients are subscribed to.
+Plaintext TCP to another port stays supported (omit --tls) for a local relay.
 
 Zenoh topics consumed (5 main categories):
   AIR:   <ORG>/air/civ/json/tracks    → CoT a-f-A-C-F / a-h-A-C-F (civil, hostile if RU/BY)
@@ -28,11 +28,8 @@ Zenoh topics consumed (5 main categories):
   SPACE: <ORG>/space/json/tracks      → CoT a-f-P     (satellite)
 
 Run:
-    venv/bin/python3 cot_layer.py                                          # TCP plaintext → localhost:8087
-    venv/bin/python3 cot_layer.py --host 100.64.x.x --port 8087           # TCP plaintext → remote TAK Server
     venv/bin/python3 cot_layer.py --host 100.64.x.x --port 8089 --tls       # mTLS → official TAK Server
         --cert cert.pem --key key.pem --ca ca.pem
-    venv/bin/python3 cot_layer.py --udp --host 239.2.3.1 --port 6969      # UDP multicast
 """
 
 import argparse
@@ -1197,7 +1194,7 @@ def _build_remarks(track: dict, cot_type: str) -> str:
             _sec("SENSOR", sensor_l)
             _sec("ALERT",  alert_l)
 
-        elif src in ("openmeteo", "meteo-lt"):   # WEATHER
+        elif src == "meteo-lt":   # WEATHER
             place = (track.get("place_name") or track.get("place_code") or src).upper()
             ident_l = []; env_l = []
             if time_str: ident_l.append("TIME: {}".format(time_str))
@@ -1476,6 +1473,30 @@ def track_to_cot(track: dict, cot_type: str, stale_s: float = COT_STALE_S) -> st
 # TCP sender — persistent connection with auto-reconnect
 # ---------------------------------------------------------------------------
 
+def _enable_keepalive(sock: socket.socket) -> None:
+    """Make the OS notice a silently-dropped peer instead of leaving a half-open
+    socket.
+
+    Over a flaky mesh (e.g. a NetBird tunnel that dies mid-stream) TCP does not
+    fail a write immediately: sendall() keeps succeeding into an unacknowledged
+    send buffer and every CoT is lost with no error to trigger a reconnect. This
+    arms two Linux guards so a dead peer surfaces as an error within ~20s:
+      * SO_KEEPALIVE probes an *idle* connection (10s idle, 5s interval, 3 fails)
+      * TCP_USER_TIMEOUT bounds *in-flight unACKed* data — the case that bit us,
+        where the link drops while we are actively sending.
+    Best-effort: options absent on non-Linux platforms are skipped.
+    """
+    try:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+        for name, value in (("TCP_KEEPIDLE", 10), ("TCP_KEEPINTVL", 5), ("TCP_KEEPCNT", 3)):
+            if hasattr(socket, name):
+                sock.setsockopt(socket.IPPROTO_TCP, getattr(socket, name), value)
+        if hasattr(socket, "TCP_USER_TIMEOUT"):
+            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_USER_TIMEOUT, 20000)
+    except OSError:
+        pass
+
+
 class TcpSender:
     """Thread-safe TCP writer with reconnect. Supports plaintext and mutual TLS.
 
@@ -1502,6 +1523,7 @@ class TcpSender:
         host, port = self.hosts[self._idx % len(self.hosts)]
         try:
             raw = socket.create_connection((host, port), timeout=SEND_TIMEOUT_S)
+            _enable_keepalive(raw)
             if self._tls:
                 ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
                 # Server identity is anchored by mutual TLS (client cert + shared CA),
@@ -1536,9 +1558,15 @@ class TcpSender:
         try:
             sock.sendall(data)
         except OSError:
+            # Reconnect to the SAME candidate — do not advance _idx here. A
+            # failed write means the server closed an established stream, not
+            # that this network path is down. The candidates are alternate
+            # addresses of one TAK Server, which identifies streaming clients
+            # by their certificate, so coming back on a different address makes
+            # it drop the previous session — which fails the next write and
+            # rotates again. Rotation belongs to the connect-failure path.
             with self._lock:
                 self._sock = None
-            self._idx += 1
             threading.Timer(RECONNECT_S, self._connect).start()
 
     def close(self):
@@ -1548,37 +1576,10 @@ class TcpSender:
                 self._sock = None
 
 
-# ---------------------------------------------------------------------------
-# UDP sender (multicast / unicast fallback)
-# ---------------------------------------------------------------------------
-
-class UdpSender:
-    """Sends each CoT event to every configured destination (dual-homed fallback).
-
-    UDP has no connection state, so there's nothing to "detect" and fail over —
-    instead, every destination gets every packet. Whichever network path (LAN,
-    NetBird mesh, multicast) is actually up delivers it; unreachable paths just
-    drop silently (or log once) without blocking the others.
-    """
-
-    def __init__(self, dests: list[tuple[str, int]]):
-        self.dests = dests
-        self._sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-        self._sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        if any(addr.startswith("224.") or addr.startswith("239.") for addr, _ in dests):
-            self._sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, struct.pack("b", 32))
-            self._sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_LOOP, 1)
-
-    def send(self, xml: str):
-        data = xml.encode("utf-8")
-        for dest in self.dests:
-            try:
-                self._sock.sendto(data, dest)
-            except OSError as exc:
-                print("CoT UDP send error ({}:{}): {}".format(dest[0], dest[1], exc), flush=True)
-
-    def close(self):
-        self._sock.close()
+# Views that carry the same object as the flat JSON and must not be processed
+# twice. Anything else — including a bare topic with no view suffix — is treated
+# as the JSON payload.
+_NON_JSON_VIEWS = frozenset({"sapient", "proto", "raw"})
 
 
 # ---------------------------------------------------------------------------
@@ -1587,6 +1588,18 @@ class UdpSender:
 
 def make_handler(cot_type_or_fn, sender, verbose: bool, stale_s: float = COT_STALE_S):
     def handler(sample):
+        # An object published via publish_dual appears in several views
+        # (sapient/json/proto) and the topic wildcards match all of them; CoT is
+        # built from the flat JSON, so the non-JSON views are skipped rather
+        # than left to fail json.loads.
+        #
+        # Skip by DENYING the redundant views, not by requiring "/json": several
+        # bridges (APRS, weather, ADS-B, dronuradaras) publish a single flat JSON
+        # sample on a bare topic with no view suffix at all. Requiring "/json"
+        # silently discarded every one of them, so TAK stayed empty while the
+        # SitaWare feed — which has no such filter — showed them all.
+        if str(sample.key_expr).rsplit("/", 1)[-1] in _NON_JSON_VIEWS:
+            return
         try:
             track = json.loads(bytes(sample.payload).decode())
         except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
@@ -1599,8 +1612,8 @@ def make_handler(cot_type_or_fn, sender, verbose: bool, stale_s: float = COT_STA
         src = track.get("_src", "")
         key = str(sample.key_expr)
         # TAK Server connections are bidirectional. Never send a TAK-ingress
-        # track straight back into the server TCP connection; UDP consumers
-        # and SitaWare still receive it normally.
+        # track straight back into the server TCP connection; SitaWare (via the
+        # NVG layer) still receives it normally.
         if track.get("_ingress") == "tak_server" and getattr(
             sender, "drop_tak_ingress", False
         ):
@@ -1699,6 +1712,10 @@ def make_radar_status_handler(sender, verbose: bool):
     """Handler for CAT-34 radar sensor status topics.
     Stores status for AIR stat card enrichment and forwards a CoT radar-site marker."""
     def handler(sample):
+        # CAT-34 status also ships in several views; consume the flat JSON only
+        # (bare-topic publishers have no view suffix — see make_handler).
+        if str(sample.key_expr).rsplit("/", 1)[-1] in _NON_JSON_VIEWS:
+            return
         try:
             track = json.loads(bytes(sample.payload).decode())
         except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
@@ -1737,21 +1754,17 @@ def make_radar_status_handler(sender, verbose: bool):
 
 def run(args):
     hosts = [(h, args.port) for h in args.host]
-    if args.udp:
-        sender = UdpSender(hosts)
-        print("CoT → UDP {}".format(", ".join("{}:{}".format(h, p) for h, p in hosts)), flush=True)
-    else:
-        tls = getattr(args, "tls", False)
-        if tls and not getattr(args, "ca", None):
-            raise SystemExit("--ca / TAK_CA is required when --tls is specified")
-        sender = TcpSender(hosts,
-                           tls=tls,
-                           certfile=getattr(args, "cert", None),
-                           keyfile=getattr(args, "key", None),
-                           cafile=getattr(args, "ca", None))
-        mode = "TLS mTLS" if tls else "TCP plaintext"
-        print("CoT → {} candidates: {} (TAK Server, first reachable wins)".format(
-            mode, ", ".join("{}:{}".format(h, p) for h, p in hosts)), flush=True)
+    tls = getattr(args, "tls", False)
+    if tls and not getattr(args, "ca", None):
+        raise SystemExit("--ca / TAK_CA is required when --tls is specified")
+    sender = TcpSender(hosts,
+                       tls=tls,
+                       certfile=getattr(args, "cert", None),
+                       keyfile=getattr(args, "key", None),
+                       cafile=getattr(args, "ca", None))
+    mode = "TLS mTLS" if tls else "TCP plaintext"
+    print("CoT → {} candidates: {} (TAK Server, first reachable wins)".format(
+        mode, ", ".join("{}:{}".format(h, p) for h, p in hosts)), flush=True)
 
     session = zenoh.open(make_config())
     _start_dr_thread(sender)
@@ -1789,8 +1802,9 @@ def main():
     ap.add_argument("--host", action="append", default=None,
                     help="TAK Server host — repeatable (e.g. --host <lan-ip> --host <netbird-ip>) "
                          "to try multiple network paths; falls back to TAK_HOST env or 127.0.0.1")
-    ap.add_argument("--port", type=int, default=int(os.environ.get("TAK_PORT", "8087")),
-                    help="TAK Server port (default: 8087)")
+    ap.add_argument("--port", type=int, default=int(os.environ.get("TAK_PORT", "8089")),
+                    help="TAK Server port (default: 8089, the mTLS streaming port — the "
+                         "anonymous 8087 input is not distributed to 8089 subscribers)")
     ap.add_argument("--tls", action="store_true",
                     default=os.environ.get("TAK_TLS", "") == "1",
                     help="Enable mutual TLS — Option B, port 8089 (requires --cert, --key, --ca)")
@@ -1800,8 +1814,6 @@ def main():
                     help="Client private key PEM (mTLS Option B)")
     ap.add_argument("--ca", default=os.environ.get("TAK_CA"),
                     help="CA certificate PEM (mTLS Option B)")
-    ap.add_argument("--udp", action="store_true",
-                    help="Use UDP instead of TCP (for direct multicast/unicast, no TAK Server)")
     ap.add_argument("--verbose", "-v", action="store_true",
                     help="Print each CoT message sent")
     args = ap.parse_args()

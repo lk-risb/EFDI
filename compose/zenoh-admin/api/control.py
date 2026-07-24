@@ -68,7 +68,7 @@ async def get_runtime(_=Depends(require_role("readonly", "admin", "superadmin"))
 
 @router.get("/logs/{name}")
 async def get_runtime_logs(name: str, _=Depends(require_role("readonly", "admin", "superadmin"))):
-    if not name or any(ch not in "abcdefghijklmnopqrstuvwxyz0123456789-" for ch in name):
+    if not name or any(ch not in "abcdefghijklmnopqrstuvwxyz0123456789-_" for ch in name):
         raise HTTPException(status_code=400, detail="invalid service name")
     return _control(f"/v1/logs/{name}")
 
@@ -93,7 +93,7 @@ async def service_action(
 ):
     if action not in {"start", "stop", "restart"}:
         raise HTTPException(status_code=400, detail="action must be start, stop, or restart")
-    if not name or any(ch not in "abcdefghijklmnopqrstuvwxyz0123456789-" for ch in name):
+    if not name or any(ch not in "abcdefghijklmnopqrstuvwxyz0123456789-_" for ch in name):
         raise HTTPException(status_code=400, detail="invalid service name")
     result = _control(f"/v1/services/{name}/{action}", method="POST")
     await write_audit(db, actor.id, f"runtime_service_{action}", name)

@@ -268,6 +268,17 @@ def _normalize_event(event: ET.Element) -> tuple[str, dict[str, object]] | None:
 def _connect(host: str, port: int, tls: bool, certfile: str | None, keyfile: str | None, cafile: str | None) -> socket.socket:
     raw = socket.create_connection((host, port), timeout=30)
     raw.settimeout(60.0)
+    # Detect a silently-dropped TAK peer (a NetBird tunnel dying mid-stream)
+    # instead of blocking on recv() forever against a half-open socket.
+    try:
+        raw.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+        for name, value in (("TCP_KEEPIDLE", 10), ("TCP_KEEPINTVL", 5), ("TCP_KEEPCNT", 3)):
+            if hasattr(socket, name):
+                raw.setsockopt(socket.IPPROTO_TCP, getattr(socket, name), value)
+        if hasattr(socket, "TCP_USER_TIMEOUT"):
+            raw.setsockopt(socket.IPPROTO_TCP, socket.TCP_USER_TIMEOUT, 20000)
+    except OSError:
+        pass
     if not tls:
         return raw
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
@@ -372,7 +383,7 @@ def run(args) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="TAK CoT → Zenoh bridge")
     parser.add_argument("--host", action="append", default=[], help="TAK host / IP (repeatable; fallback path supported)")
-    parser.add_argument("--port", type=int, default=int(os.environ.get("TAK_PORT", "8087")))
+    parser.add_argument("--port", type=int, default=int(os.environ.get("TAK_PORT", "8089")))
     parser.add_argument("--tls", action="store_true", default=os.environ.get("TAK_TLS", "0") == "1")
     parser.add_argument("--cert", default=os.environ.get("TAK_CERT"))
     parser.add_argument("--key", default=os.environ.get("TAK_KEY"))

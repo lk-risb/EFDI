@@ -63,12 +63,12 @@ stop_zenoh() {
     docker compose -f "$SCRIPT_DIR/compose/docker-compose.yml" stop zenoh-router 2>/dev/null || true
 }
 
-_SOURCE_BRIDGES=(airplaneslive adsblol aisstream aprs openmeteo meteolt
+_SOURCE_BRIDGES=(airplaneslive adsblol aprs meteolt
                  dronuradaras dji-cloud utm-ans sitaware asterix-udp track-fusion)
 _PROTOCOLS=(asterix-cat10 asterix-cat20 asterix-cat21 asterix-cat34
-            asterix-cat48 asterix-cat62 link16 mavlink opendroneid vmf sapient
+            asterix-cat48 asterix-cat62 stanag5516 mavlink opendroneid vmf sapient
             nffi stanag4586 stanag4609)
-_LAYERS=(cot-udp cot-udp-tak cot-bridge sitaware-hq-nvg)
+_LAYERS=(cot_layer nvg_layer)
 
 case "$MODE" in
     all)
@@ -77,7 +77,7 @@ case "$MODE" in
         stop_zenoh
         ;;
     giraffe)
-        echo "=== Stopping open-API bridges (leaving giraffe sensors + cot-udp) ==="
+        echo "=== Stopping open-API bridges (leaving giraffe sensors + layers) ==="
         for name in "${_SOURCE_BRIDGES[@]}"; do
             stop_scripts "$name"
         done
@@ -105,7 +105,7 @@ case "$MODE" in
         ;;
     *)
         case "$MODE" in
-            admin-control|cert-renewer|airplaneslive|adsblol|aisstream|aprs|openmeteo|meteolt|dronuradaras|dji-cloud|utm-ans|sitaware|asterix-udp|track-fusion|asterix-cat10|asterix-cat20|asterix-cat21|asterix-cat34|asterix-cat48|asterix-cat62|link16|mavlink|opendroneid|vmf|sapient|nffi|stanag4586|stanag4609|mavlink-raw|link16-raw|vmf-raw|sapient-raw|stanag4586-raw|cap|geojson|ais-nmea|spectrum|sensor-health|mission-route|cot-udp|cot-udp-tak|cot-bridge|sitaware-hq-nvg)
+            admin-control|cert-renewer|airplaneslive|adsblol|aprs|meteolt|dronuradaras|dji-cloud|utm-ans|sitaware|tak-bridge|asterix|asterix-udp|track-fusion|asterix-cat10|asterix-cat20|asterix-cat21|asterix-cat34|asterix-cat48|asterix-cat62|stanag5516|mavlink|opendroneid|vmf|sapient|nffi|stanag4586|stanag4609|mavlink-raw|stanag5516-raw|vmf-raw|sapient-raw|stanag4586-raw|stanag4609-raw|cap|geojson|mqtt|mqtt-raw|sensorthings|sensorthings-raw|sparkplug|spectrum|sensor-health|mission-route|cot_layer|nvg_layer)
                 echo "=== Stopping $MODE ==="
                 stop_scripts "$MODE"
                 echo "Done."

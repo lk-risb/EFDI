@@ -29,24 +29,25 @@ NOTE: Bit field positions in this file are based on MIL-STD-6016F / STANAG 5516
 revisions moved some sub-fields.
 
 Zenoh topics published:
-    air/link16/jreap/friendly/aircraft/json/tracks   — J2.2 / J3.2 friend
-    air/link16/jreap/hostile/aircraft/json/tracks    — J3.2 hostile
-    air/link16/jreap/unknown/json/tracks             — J3.2 unknown
-    sea/link16/jreap/friendly/vessel/json/tracks     — J2.5 / J3.5 friend
-    sea/link16/jreap/hostile/vessel/json/tracks      — J3.5 hostile
-    land/link16/jreap/friendly/unit/json/tracks      — J3.7 friend
-    land/link16/jreap/hostile/unit/json/tracks       — J3.7 hostile
+    air/stanag_5516/jreap/friendly/aircraft/json/tracks   — J2.2 / J3.2 friend
+    air/stanag_5516/jreap/hostile/aircraft/json/tracks    — J3.2 hostile
+    air/stanag_5516/jreap/unknown/json/tracks             — J3.2 unknown
+    sea/stanag_5516/jreap/friendly/vessel/json/tracks     — J2.5 / J3.5 friend
+    sea/stanag_5516/jreap/hostile/vessel/json/tracks      — J3.5 hostile
+    land/stanag_5516/jreap/friendly/unit/json/tracks      — J3.7 friend
+    land/stanag_5516/jreap/hostile/unit/json/tracks       — J3.7 hostile
 
 Configuration (compose/.env):
-    LINK16_PORT=3010           # JREAP-C UDP listen port (default: 3010)
-    LINK16_TCP=0               # reserved; TCP requires a gateway framing ICD
+    STANAG5516_PORT=3010           # JREAP-C UDP listen port (default: 3010)
+    STANAG5516_TCP=0               # reserved; TCP requires a gateway framing ICD
 
 Run:
-    venv/bin/python3 protocols/random/link16.py
-    venv/bin/python3 protocols/random/link16.py --port 3010 --verbose
+    venv/bin/python3 protocols/vendors/stanag/5516.py
+    venv/bin/python3 protocols/vendors/stanag/5516.py --port 3010 --verbose
 """
 
 import argparse
+from importlib import import_module
 import json
 import os
 import socket
@@ -56,8 +57,9 @@ import time
 import zenoh
 from zenoh_auth import apply_zenoh_auth
 from namespace_prefix import topic_root
-from protocols.random.link16_pb2 import Link16Track
 from protocols.protobuf_codec import publish_dual
+
+Stanag5516Track = import_module("protocols.vendors.stanag.5516_pb2").Stanag5516Track
 
 ORG       = os.environ.get("PARTNER_NAMESPACE", "")
 TOPIC_ROOT = topic_root()
@@ -65,7 +67,7 @@ HERE      = os.path.dirname(os.path.abspath(__file__))
 _CERT_DIR = os.environ.get("EFDI_CERT_DIR", HERE)
 _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", "tcp/127.0.0.1:7448")
 
-JREAP_PORT   = int(os.environ.get("LINK16_PORT", "3010"))
+JREAP_PORT   = int(os.environ.get("STANAG5516_PORT", "3010"))
 WORD_BITS    = 75
 WORD_BYTES   = 10     # 75 bits padded to 80 bits (5 unused LSBs per word)
 
@@ -91,18 +93,18 @@ _ID_AFF = {
 
 # Topic templates per (domain, affiliation)
 _TOPIC_MAP = {
-    ("air",  "friendly"): "{}/air/link16/c2/friendly/aircraft".format(TOPIC_ROOT),
-    ("air",  "hostile"):  "{}/air/link16/c2/hostile/aircraft".format(TOPIC_ROOT),
-    ("air",  "neutral"):  "{}/air/link16/c2/neutral/aircraft".format(TOPIC_ROOT),
-    ("air",  "unknown"):  "{}/air/link16/c2/unknown".format(TOPIC_ROOT),
-    ("sea",  "friendly"): "{}/sea/link16/c2/friendly/vessel".format(TOPIC_ROOT),
-    ("sea",  "hostile"):  "{}/sea/link16/c2/hostile/vessel".format(TOPIC_ROOT),
-    ("sea",  "neutral"):  "{}/sea/link16/c2/neutral/vessel".format(TOPIC_ROOT),
-    ("sea",  "unknown"):  "{}/sea/link16/c2/unknown/vessel".format(TOPIC_ROOT),
-    ("land", "friendly"): "{}/land/link16/c2/friendly/unit".format(TOPIC_ROOT),
-    ("land", "hostile"):  "{}/land/link16/c2/hostile/unit".format(TOPIC_ROOT),
-    ("land", "neutral"):  "{}/land/link16/c2/neutral/unit".format(TOPIC_ROOT),
-    ("land", "unknown"):  "{}/land/link16/c2/unknown/unit".format(TOPIC_ROOT),
+    ("air",  "friendly"): "{}/air/stanag_5516/c2/friendly/aircraft".format(TOPIC_ROOT),
+    ("air",  "hostile"):  "{}/air/stanag_5516/c2/hostile/aircraft".format(TOPIC_ROOT),
+    ("air",  "neutral"):  "{}/air/stanag_5516/c2/neutral/aircraft".format(TOPIC_ROOT),
+    ("air",  "unknown"):  "{}/air/stanag_5516/c2/unknown".format(TOPIC_ROOT),
+    ("sea",  "friendly"): "{}/sea/stanag_5516/c2/friendly/vessel".format(TOPIC_ROOT),
+    ("sea",  "hostile"):  "{}/sea/stanag_5516/c2/hostile/vessel".format(TOPIC_ROOT),
+    ("sea",  "neutral"):  "{}/sea/stanag_5516/c2/neutral/vessel".format(TOPIC_ROOT),
+    ("sea",  "unknown"):  "{}/sea/stanag_5516/c2/unknown/vessel".format(TOPIC_ROOT),
+    ("land", "friendly"): "{}/land/stanag_5516/c2/friendly/unit".format(TOPIC_ROOT),
+    ("land", "hostile"):  "{}/land/stanag_5516/c2/hostile/unit".format(TOPIC_ROOT),
+    ("land", "neutral"):  "{}/land/stanag_5516/c2/neutral/unit".format(TOPIC_ROOT),
+    ("land", "unknown"):  "{}/land/stanag_5516/c2/unknown/unit".format(TOPIC_ROOT),
 }
 
 
@@ -466,7 +468,7 @@ def _topic_for(track: dict, msg_type: str) -> str:
     domain = track.get("domain") or _MSG_DOMAIN.get(msg_type, "land")
     aff    = track.get("affiliation", "unknown")
     return _TOPIC_MAP.get((domain, aff),
-                           "{}/land/link16/c2/unknown/unit".format(TOPIC_ROOT))
+                           "{}/land/stanag_5516/c2/unknown/unit".format(TOPIC_ROOT))
 
 
 def process_packet(data: bytes, pub: "zenoh.Session", verbose: bool):
@@ -502,9 +504,9 @@ def process_packet(data: bytes, pub: "zenoh.Session", verbose: bool):
             track = decoder(words[i:i + needed])
             if track:
                 topic = _topic_for(track, msg_type)
-                publish_dual(pub, topic, track, Link16Track, zenoh)
+                publish_dual(pub, topic, track, Stanag5516Track, zenoh)
                 if verbose:
-                    print("PUB link16 {} aff={} lat={} lon={} alt={}ft".format(
+                    print("PUB stanag_5516 {} aff={} lat={} lon={} alt={}ft".format(
                         msg_type,
                         track.get("affiliation", "?"),
                         round(track.get("lat_deg", 0), 4),
@@ -539,10 +541,10 @@ def run_zenoh_raw(raw_topic: str, verbose: bool):
             data = sample.payload.to_bytes() if hasattr(sample.payload, "to_bytes") else bytes(sample.payload)
             process_packet(data, session, verbose)
         except Exception as exc:
-            print("Link16 raw decode error:", exc, flush=True)
+            print("STANAG5516 raw decode error:", exc, flush=True)
 
     subscriber = session.declare_subscriber(raw_topic, on_sample)
-    print("Link16 Zenoh raw translator subscribed to {}".format(raw_topic), flush=True)
+    print("STANAG5516 Zenoh raw translator subscribed to {}".format(raw_topic), flush=True)
     try:
         while True:
             time.sleep(60)
@@ -565,8 +567,8 @@ def main():
                     help="TCP server mode instead of UDP")
     ap.add_argument("--verbose", "-v", action="store_true")
     ap.add_argument("--zenoh-raw", action="store_true",
-                    help="decode bytes from .../raw/link16/** instead of opening UDP")
-    ap.add_argument("--raw-topic", default=os.environ.get("LINK16_RAW_TOPIC", ""))
+                    help="decode bytes from .../raw/stanag_5516/** instead of opening UDP")
+    ap.add_argument("--raw-topic", default=os.environ.get("STANAG5516_RAW_TOPIC", ""))
     args = ap.parse_args()
 
     if args.tcp:
@@ -576,7 +578,7 @@ def main():
         )
 
     if args.zenoh_raw:
-        run_zenoh_raw(args.raw_topic or TOPIC_ROOT + "/raw/link16/**", args.verbose)
+        run_zenoh_raw(args.raw_topic or TOPIC_ROOT + "/raw/stanag_5516/**", args.verbose)
         return
 
     session = zenoh.open(make_config())

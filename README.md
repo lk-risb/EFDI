@@ -47,16 +47,15 @@ This repository is the EFDI-partner collaboration surface. It carries **no partn
 [Oro navigacija UTM]──authorized JSON/GeoJSON──► utm_ans_bridge ─┤
 [dronuradaras.lt]──REST/HTTPS──► dronuradaras_bridge  ─┤
 [Drone RID node] ──Zenoh/raw───► opendroneid          ─┤
-[AISstream]      ──WSS/AIS─────► aisstream_ws_bridge ─┤
 [SitaWare HQ]    ──documented REST API──► sitaware_bridge ─┤──► Zenoh router (local) ──► cot_layer ──► ATAK
 [NFFI publisher] ──Zenoh/XML───► nffi                  ─┤                                      ├──► TAK Server
-[Link-16]        ──UDP────────► link16                 ─┤                                      ├──► nvg_bridge ◄── SitaWare HQ polls
+[Link-16]        ──UDP────────► stanag5516              ─┤                                      ├──► nvg_bridge ◄── SitaWare HQ polls
 [MAVLink]        ──UDP/TCP────► mavlink                ─┘              └──► track_fusion_bridge
                                                                       └──► nvg_bridge ◄── SitaWare HQ polls
 ```
 
 Zenoh-native translators are also included for CAP 1.2 alerts, GeoJSON/OGC
-Features, AIS NMEA, RF spectrum observations, sensor health, and mission
+Features, RF spectrum observations, sensor health, and mission
 routes. Their raw publishers write complete payloads below `raw/**`; the
 router host does not need radio or sensor hardware.
 
@@ -82,22 +81,25 @@ consumers continue to decode `/v1` safely.
 | `adsblol_bridge` | Free/open-data ADS-B API → normalized regional civil/military aircraft tracks |
 | `utm_ans_bridge` | Authorized Oro navigacija UTM JSON/GeoJSON export → declared civilian UAV tracks; not a national Remote ID feed |
 | `opendroneid` | Raw ASTM/ASD-STAN messages published by receiver/detection nodes → normalized Zenoh UAV tracks; routers require no radio hardware |
-| `aisstream_ws_bridge` | Authenticated WSS stream, AIS vessel positions and static data |
 | `sitaware_bridge` | SitaWare HQ friendly-force REST polling (inbound) |
 | `nffi` | NATO NFFI / ADatP-36 (STANAG 5527) XML translator for raw Zenoh publications |
 | `nvg_bridge` | Pull-based NVG 2.0.2 snapshot for SitaWare HQ Import Subscriptions (outbound) |
-| `link16` | JREAP-C UDP; TCP requires a verified gateway framing ICD |
+| `stanag5516` | JREAP-C UDP; TCP requires a verified gateway framing ICD |
 | `mavlink` | MAVLink 2 UDP/TCP, including OPEN_DRONE_ID messages |
 | `asterix` | ASTERIX family bundle: mixed UDP ingress plus CAT-010/020/021/034/048/062 translators |
 | `stanag` | STANAG family bundle: 4586 feed plus 4609 SRT transport and KLV decode |
-| `mavlink_raw_bridge` / `link16_jreap_bridge` / `vmf_bridge` / `stanag4586_bridge` | Optional socket ingress only; publishes raw bytes to Zenoh |
+| `mavlink_raw_bridge` / `5516_bridge` / `vmf_bridge` / `4586_bridge` | Optional socket ingress only; publishes raw bytes to Zenoh |
 | `cap` | CAP 1.2 XML → time-bounded alerts and areas |
 | `geojson_features` | GeoJSON/OGC Features → zones and overlays |
-| `ais_nmea` | NMEA AIVDM/AIVDO → vessel tracks |
 | `spectrum_observation` / `sensor_health` | Vendor-neutral RF and sensor-status translators |
 | `mission_route` | GeoJSON/JSON UAV routes and corridors |
+| `mqtt_json` | Generic MQTT sensor JSON on `…/raw/mqtt/**` → sensor records |
+| `sensorthings` | OGC SensorThings API Observations → sensor records |
+| `sparkplug` | Eclipse Sparkplug B (MQTT protobuf); resolves BIRTH-declared metric aliases |
 | `dji_cloud_api_bridge` | Source-specific DJI Cloud API MQTT 5 aircraft telemetry bridge |
-| `cot_layer` | CoT XML output — UDP multicast + TAK Server TCP |
+| `mqtt_bridge` | Generic MQTT broker ingress; forwards payloads verbatim, decodes nothing |
+| `sensorthings_bridge` | Polls an OGC SensorThings v1.1 service for new Observations |
+| `cot_layer` | CoT XML output — authenticated TAK Server TCP/mTLS |
 | `tak_bridge` | TAK Server / CoT ingress — normalized CoT back into Zenoh |
 | `track_fusion_bridge` | ASTERIX CAT-48 / CAT-21 correlation |
 | `zenoh-admin` | FastAPI + React panel — router status, config, bridge/protocol/layer lifecycle, endpoints, and write-only credentials |

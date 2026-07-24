@@ -159,13 +159,21 @@ def parse_position(body: str) -> dict | None:
 
     rest = rest.strip()
 
-    # Course/speed (only meaningful if not 000/000)
+    # The "CCC/SSS" field after the symbol carries two different quantities
+    # depending on the symbol. For weather stations (symbol code "_") it is
+    # wind direction and wind speed in MPH; for everything else it is the
+    # station's own course and speed in KNOTS. Same bytes, different meaning
+    # and different unit, so it is decoded into different fields rather than
+    # dropped — a wx station is not travelling at the wind speed.
     cs = _CS_RE.match(rest)
     if cs:
-        course, speed_kts = int(cs.group(1)), int(cs.group(2))
-        if course != 0 or speed_kts != 0:
-            track["heading_deg"] = float(course)
-            track["speed_ms"] = round(speed_kts * 0.514444, 2)  # knots → m/s
+        direction, magnitude = int(cs.group(1)), int(cs.group(2))
+        if sym_code == "_":
+            track["wind_dir_deg"] = float(direction)
+            track["wind_speed_ms"] = round(magnitude * 0.44704, 2)   # mph → m/s
+        elif direction != 0 or magnitude != 0:
+            track["heading_deg"] = float(direction)
+            track["speed_ms"] = round(magnitude * 0.514444, 2)       # knots → m/s
         rest = rest[7:]
 
     # Altitude
