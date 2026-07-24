@@ -1,43 +1,45 @@
 #!/usr/bin/env python3
-"""nvg_layer.py — Zenoh EFDI track topics → NVG translation layer.
+"""nvg_layer.py — Zenoh EFDI track topics → NVG 2.0.2 feed for SitaWare.
 
-Subscribes to all EFDI track topics, translates them into NVG 2.0 items, and
-pushes live positions to an NVG-capable SitaWare endpoint. This file is kept as
-a legacy push adapter; the HQ-only runtime uses ``nvg_bridge.py`` instead.
+Converts live EFDI tracks to NVG items (APP-6 / 2525 symbol codes, position,
+modifiers, extended data) and serves them as one NVG document over HTTP(S).
 
-NVG items are PUT individually on each Zenoh update so connected operators see
-real-time movement.  A background refresh thread re-PUTs live items every
-REFRESH_S seconds and DELETEs items older than STALE_S seconds.
+This is the C2 EGRESS for SitaWare: a _layer writes out to a C2 system. That
+SitaWare initiates the transfer — HQ 6.22 polls this endpoint via an "NVG
+Import Subscription" — is a property of the transport, not of the direction the
+data travels. Ingest from SitaWare belongs in bridges/nvg_bridge.py.
 
-NVG REST base: https://<host>:<port>/SWEdge/nvg/v2
-  PUT  /sources/{source}/items/{item-id}   — create / update one item
-  DELETE /sources/{source}/items/{item-id} — remove one item
+Required configuration:
 
-Required env vars (or --args). Named SITAWARE_NVG_* (not SITAWARE_*) because this
-is the outbound NVG push adapter and uses a separate endpoint/credentials from
-the inbound SitaWare HQ pull in sitaware_bridge.py:
-  SITAWARE_NVG_URL    https://nvg-endpoint.example     (no trailing slash)
-  SITAWARE_NVG_USER    your integration username
-  SITAWARE_NVG_PASS    your integration password
-  SITAWARE_NVG_SOURCE  efdi-live                 (source name, created automatically)
+    SITAWARE_HQ_NVG_USER=<feed-user>
+    SITAWARE_HQ_NVG_PASS=<password>
 
-Run:
-  SITAWARE_NVG_URL=https://192.168.1.10:8080 SITAWARE_NVG_USER=admin SITAWARE_NVG_PASS=secret \\
-    venv/bin/python3 nvg_layer.py
+For a remote HQ host, either configure TLS or explicitly acknowledge an
+isolated lab-only HTTP connection:
+
+    SITAWARE_HQ_NVG_BIND=0.0.0.0
+    SITAWARE_HQ_NVG_PORT=8088
+    SITAWARE_HQ_NVG_TLS_CERT=/path/to/server-cert.pem
+    SITAWARE_HQ_NVG_TLS_KEY=/path/to/server-key.pem
+
+The SitaWare subscription URL is then https://<efdi-host>:8088/nvg.
 """
 
 import argparse
 import base64
 import json
 import math
+import hashlib
+import hmac
+import ssl
 import os
 import threading
 import time
-import urllib.error
 import urllib.parse
-import urllib.request
 import xml.etree.ElementTree as ET
+from collections.abc import Callable
 from datetime import datetime, timezone
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import zenoh
 from zenoh_auth import apply_zenoh_auth
@@ -104,12 +106,20 @@ def _resolve_sidc(resolver, track: dict) -> str:
     return resolver(track) if callable(resolver) else resolver
 
 
+# Views carrying the same object in a non-JSON encoding. Anything else,
+# including a bare topic with no view suffix, is the flat JSON payload.
+_NON_JSON_VIEWS = frozenset({"sapient", "proto", "raw"})
+
 _TOPIC_SIDC = {
     "air/**/civ/aircraft/**":        _civil_air_sidc,
     "air/**/mil/aircraft/**":        _military_air_sidc,
     "air/**/friendly/aircraft/**":   "SFAPMF----*****",
     "air/**/friendly/uav/**":        "SFAPMFQ---*****",
     "air/**/hostile/aircraft/**":    "SHAPMF----*****",
+    # Mirrors friendly/uav. Without it a hostile UAV reached TAK but was dropped
+    # from the NVG feed entirely, so the two C2 systems disagreed on whether the
+    # track existed at all.
+    "air/**/hostile/uav/**":         "SHAPMFQ---*****",
     "air/**/neutral/aircraft/**":    "SNAPMF----*****",
     "air/**/unknown/**":             _unknown_air_sidc,
     # Equipment/Vehicle/Civilian — NOT "UCV", which is Unit/Combat/Aviation and
@@ -705,190 +715,435 @@ def track_to_nvg_item(
     return uid, xml_str
 
 
-# ---------------------------------------------------------------------------
-# NVG HTTP client
-# ---------------------------------------------------------------------------
-
-class NvgClient:
-    def __init__(self, base_url: str, source: str, user: str, password: str):
-        self.base    = base_url.rstrip("/")
-        self.source  = source
-        self._auth   = "Basic " + base64.b64encode("{}:{}".format(user, password).encode()).decode()
-
-    def _req(self, method: str, path: str, body: str | None = None) -> int:
-        source = urllib.parse.quote(self.source, safe="")
-        url = "{}/SWEdge/nvg/v2/sources/{}/items{}".format(self.base, source, path)
-        data = body.encode("utf-8") if body else None
-        req = urllib.request.Request(url, data=data, method=method, headers={
-            "Authorization":  self._auth,
-            "Content-Type":   "application/xml; charset=utf-8",
-            "Accept":         "application/xml",
-            "User-Agent":     "efdi-nvg-bridge/1.0",
-        })
-        try:
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                return resp.status
-        except urllib.error.HTTPError as exc:
-            return exc.code
-        except urllib.error.URLError as exc:
-            print("NVG HTTP error:", exc, flush=True)
-            return 0
-
-    def put_item(self, item_id: str, nvg_xml: str) -> bool:
-        status = self._req("PUT", "/{}".format(urllib.parse.quote(item_id, safe="")), nvg_xml)
-        return status in (200, 201, 204)
-
-    def delete_item(self, item_id: str) -> bool:
-        status = self._req("DELETE", "/{}".format(urllib.parse.quote(item_id, safe="")))
-        return status in (200, 204, 404)
+MAX_ZENOH_PAYLOAD = 1_000_000
+_TOPIC_STALE_S = {
+    "env/weather/station/**": 7200.0,
+}
+_HQ_SYMBOL_SCHEME = "2525b"
+_ACCESS_LOG_INTERVAL_S = 60.0
 
 
-# ---------------------------------------------------------------------------
-# Track cache + refresh thread
-# ---------------------------------------------------------------------------
+def _env_true(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
 
-class TrackCache:
-    def __init__(self, client: NvgClient, stale_s: int, refresh_s: int, verbose: bool):
-        self._client   = client
-        self._stale_s  = stale_s
-        self._refresh_s = refresh_s
-        self._verbose  = verbose
-        self._lock     = threading.Lock()
-        self._tracks: dict[str, dict] = {}   # uid → {track, sidc, last_seen}
-        self._thread   = threading.Thread(target=self._refresh_loop, daemon=True)
-        self._thread.start()
 
-    def upsert(self, track: dict, sidc: str):
-        result = track_to_nvg_item(track, sidc)
+class NVGFeedCache:
+    """Thread-safe, size-bounded snapshot of recently received NVG items."""
+
+    def __init__(
+        self,
+        stale_s: float,
+        max_tracks: int,
+        clock: Callable[[], float] = time.monotonic,
+        wall_clock: Callable[[], float] = time.time,
+    ) -> None:
+        if not math.isfinite(stale_s) or stale_s <= 0:
+            raise ValueError("stale_s must be a positive finite number")
+        if max_tracks <= 0:
+            raise ValueError("max_tracks must be positive")
+        self._stale_s = stale_s
+        self._max_tracks = max_tracks
+        self._clock = clock
+        self._wall_clock = wall_clock
+        self._lock = threading.Lock()
+        self._items: dict[str, tuple[str, float, float]] = {}
+
+    def upsert(self, track: dict, sidc: str, stale_s: float | None = None) -> str | None:
+        item_stale_s = self._stale_s if stale_s is None else stale_s
+        if not math.isfinite(item_stale_s) or item_stale_s <= 0:
+            raise ValueError("item stale_s must be a positive finite number")
+        result = track_to_nvg_item(
+            track,
+            sidc,
+            symbol_scheme=_HQ_SYMBOL_SCHEME,
+            valid_until=self._wall_clock() + item_stale_s,
+        )
         if result is None:
-            return
-        uid, nvg_xml = result
-        ok = self._client.put_item(uid, nvg_xml)
-        if self._verbose:
-            label = track.get("callsign") or track.get("mmsi") or uid[-10:]
-            print("NVG PUT {} {} {}".format("OK" if ok else "FAIL", sidc[:6], label), flush=True)
+            return None
+        uid, xml = result
+        now = self._clock()
         with self._lock:
-            self._tracks[uid] = {"track": track, "sidc": sidc, "last_seen": time.time()}
+            if uid not in self._items and len(self._items) >= self._max_tracks:
+                oldest_uid = min(self._items, key=lambda key: self._items[key][1])
+                del self._items[oldest_uid]
+            self._items[uid] = (xml, now, item_stale_s)
+        return uid
 
-    def remove(self, track: dict):
+    def remove(self, track: dict) -> str:
         uid = _uid(track)
         with self._lock:
-            self._tracks.pop(uid, None)
-        self._client.delete_item(uid)
-        if self._verbose:
-            print("NVG DEL offline", uid, flush=True)
+            self._items.pop(uid, None)
+        return uid
 
-    def _refresh_loop(self):
-        while True:
-            time.sleep(self._refresh_s)
-            now = time.time()
-            to_delete = []
-            to_refresh = []
-            with self._lock:
-                for uid, entry in list(self._tracks.items()):
-                    age = now - entry["last_seen"]
-                    if age > self._stale_s:
-                        to_delete.append(uid)
-                    else:
-                        to_refresh.append((uid, entry["track"], entry["sidc"]))
-                for uid in to_delete:
-                    del self._tracks[uid]
+    def _snapshot(self) -> list[tuple[str, str]]:
+        now = self._clock()
+        with self._lock:
+            expired = [
+                uid for uid, (_, seen_at, stale_s) in self._items.items()
+                if now - seen_at > stale_s
+            ]
+            for uid in expired:
+                del self._items[uid]
+            return sorted((uid, xml) for uid, (xml, _, _) in self._items.items())
 
-            for uid in to_delete:
-                self._client.delete_item(uid)
-                if self._verbose:
-                    print("NVG DEL stale", uid, flush=True)
+    def document(self) -> tuple[bytes, int]:
+        snapshot = self._snapshot()
+        ET.register_namespace("", NVG_NS)
+        root = ET.Element("{%s}nvg" % NVG_NS, {"version": NVG_VERSION})
+        count = 0
+        for _, item_xml in snapshot:
+            # This XML was generated locally by track_to_nvg_item; no external
+            # or user-supplied XML is parsed here.
+            try:
+                item_root = ET.fromstring(item_xml)
+            except ET.ParseError:
+                continue
+            for child in item_root:
+                root.append(child)
+                count += 1
+        body = b'<?xml version="1.0" encoding="UTF-8"?>' + ET.tostring(
+            root, encoding="utf-8"
+        )
+        return body, count
 
-            live = 0
-            for uid, track, sidc in to_refresh:
-                result = track_to_nvg_item(track, sidc)
-                if result:
-                    self._client.put_item(uid, result[1])
-                    live += 1
-            if to_refresh or to_delete:
-                print("NVG refresh: {} live, {} expired".format(live, len(to_delete)), flush=True)
+
+def basic_authorized(header: str | None, username: str, password: str) -> bool:
+    if not header or not username or not password:
+        return False
+    token = base64.b64encode(f"{username}:{password}".encode("utf-8")).decode("ascii")
+    expected = "Basic " + token
+    return hmac.compare_digest(header, expected)
 
 
-# ---------------------------------------------------------------------------
-# Zenoh subscriber callbacks
-# ---------------------------------------------------------------------------
+class NVGFeedServer(ThreadingHTTPServer):
+    daemon_threads = True
+    allow_reuse_address = True
 
-def make_handler(sidc, cache: TrackCache):
-    def handler(sample):
-        # Objects publish four views (sapient/json/proto/raw); the wildcards
-        # match all of them and the NVG item is built from the flat JSON.
-        if not str(sample.key_expr).endswith("/json"):
+    def __init__(
+        self,
+        address: tuple[str, int],
+        cache: NVGFeedCache,
+        feed_path: str,
+        username: str,
+        password: str,
+        allow_anonymous: bool,
+        verbose: bool,
+    ) -> None:
+        self.cache = cache
+        self.feed_path = feed_path
+        self.username = username
+        self.password = password
+        self.allow_anonymous = allow_anonymous
+        self.verbose = verbose
+        self._request_lock = threading.Lock()
+        self._successful_requests = 0
+        self._unauthorized_requests = 0
+        self._last_successful_request: float | None = None
+        self._last_unauthorized_request: float | None = None
+        self._last_access_log = {"successful": 0.0, "unauthorized": 0.0}
+        super().__init__(address, NVGFeedHandler)
+
+    @staticmethod
+    def _timestamp(value: float | None) -> str | None:
+        if value is None:
+            return None
+        return datetime.fromtimestamp(value, timezone.utc).isoformat(timespec="seconds").replace(
+            "+00:00", "Z"
+        )
+
+    def record_feed_request(self, authorized: bool) -> bool:
+        """Record one feed request and return whether it should be logged."""
+        now = time.time()
+        monotonic_now = time.monotonic()
+        outcome = "successful" if authorized else "unauthorized"
+        with self._request_lock:
+            if authorized:
+                self._successful_requests += 1
+                self._last_successful_request = now
+                count = self._successful_requests
+            else:
+                self._unauthorized_requests += 1
+                self._last_unauthorized_request = now
+                count = self._unauthorized_requests
+            should_log = (
+                count == 1
+                or monotonic_now - self._last_access_log[outcome] >= _ACCESS_LOG_INTERVAL_S
+            )
+            if should_log:
+                self._last_access_log[outcome] = monotonic_now
+            return should_log
+
+    def request_stats(self) -> dict[str, int | float | str | None]:
+        now = time.time()
+        with self._request_lock:
+            last_success = self._last_successful_request
+            return {
+                "successful_requests": self._successful_requests,
+                "unauthorized_requests": self._unauthorized_requests,
+                "last_successful_request": self._timestamp(last_success),
+                "last_unauthorized_request": self._timestamp(
+                    self._last_unauthorized_request
+                ),
+                "seconds_since_last_success": (
+                    round(max(0.0, now - last_success), 1)
+                    if last_success is not None
+                    else None
+                ),
+            }
+
+
+class NVGFeedHandler(BaseHTTPRequestHandler):
+    server: NVGFeedServer
+    server_version = "EFDI-NVG/1.0"
+    sys_version = ""
+
+    def _authorized(self) -> bool:
+        return self.server.allow_anonymous or basic_authorized(
+            self.headers.get("Authorization"),
+            self.server.username,
+            self.server.password,
+        )
+
+    def _headers(self, status: int, content_type: str, length: int) -> None:
+        self.send_response(status)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(length))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.end_headers()
+
+    def _reject_unauthorized(self) -> None:
+        body = b"Authentication required\n"
+        self.send_response(401)
+        self.send_header("WWW-Authenticate", 'Basic realm="EFDI NVG feed", charset="UTF-8"')
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.end_headers()
+        if self.command != "HEAD":
+            self.wfile.write(body)
+
+    def _route(self, include_body: bool) -> None:
+        path = urllib.parse.urlsplit(self.path).path
+        if path not in {self.server.feed_path, "/healthz"}:
+            body = b"Not found\n"
+            self._headers(404, "text/plain; charset=utf-8", len(body))
+            if include_body:
+                self.wfile.write(body)
             return
+        authorized = self._authorized()
+        if not authorized:
+            if path == self.server.feed_path and self.server.record_feed_request(False):
+                print(
+                    "NVG feed rejected unauthorized request from {}".format(
+                        self.client_address[0]
+                    ),
+                    flush=True,
+                )
+            self._reject_unauthorized()
+            return
+
+        if path == "/healthz":
+            _, count = self.server.cache.document()
+            body = json.dumps(
+                {
+                    "status": "ok",
+                    "tracks": count,
+                    "feed_requests": self.server.request_stats(),
+                },
+                separators=(",", ":"),
+            ).encode()
+            content_type = "application/json; charset=utf-8"
+        else:
+            body, count = self.server.cache.document()
+            if self.server.record_feed_request(True):
+                print(
+                    "NVG feed served {} tracks to {}".format(
+                        count, self.client_address[0]
+                    ),
+                    flush=True,
+                )
+            content_type = "application/xml; charset=utf-8"
+        etag = '"' + hashlib.sha256(body).hexdigest() + '"'
+        self.send_response(200)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("ETag", etag)
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.end_headers()
+        if include_body:
+            self.wfile.write(body)
+
+    def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
+        self._route(include_body=True)
+
+    def do_HEAD(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
+        self._route(include_body=False)
+
+    def do_POST(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
+        body = b"Method not allowed\n"
+        self.send_response(405)
+        self.send_header("Allow", "GET, HEAD")
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, fmt: str, *args) -> None:
+        if self.server.verbose:
+            print("NVG HTTP {} - {}".format(self.client_address[0], fmt % args), flush=True)
+
+
+def make_handler(
+    sidc,
+    cache: NVGFeedCache,
+    verbose: bool,
+    stale_s: float | None = None,
+):
+    def handler(sample) -> None:
         try:
-            track = json.loads(bytes(sample.payload).decode())
-        except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
+            payload = bytes(sample.payload)
+            if len(payload) > MAX_ZENOH_PAYLOAD:
+                raise ValueError("payload exceeds 1 MB")
+            track = json.loads(payload.decode("utf-8"))
+            if not isinstance(track, dict):
+                raise ValueError("track payload is not an object")
+        except (json.JSONDecodeError, UnicodeDecodeError, ValueError) as exc:
+            if verbose:
+                print("NVG feed ignored invalid Zenoh sample: {}".format(exc), flush=True)
             return
         if track.get("_delete"):
-            cache.remove(track)
+            uid = cache.remove(track)
+            if verbose:
+                print("NVG feed removed {}".format(uid), flush=True)
             return
-        cache.upsert(track, _resolve_sidc(sidc, track))
+        uid = cache.upsert(track, _resolve_sidc(sidc, track), stale_s=stale_s)
+        if verbose and uid:
+            print("NVG feed cached {}".format(uid), flush=True)
+
     return handler
 
 
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
-
-def run(args):
-    if not args.url:
-        raise SystemExit("SITAWARE_NVG_URL not set — pass --url https://host:port or set env var")
-    if not args.url.lower().startswith("https://"):
-        raise SystemExit("SITAWARE_NVG_URL must use https://")
-    if not args.user or not args.password:
-        raise SystemExit("SITAWARE_NVG_USER / SITAWARE_NVG_PASS not set")
-
-    client = NvgClient(args.url, args.source, args.user, args.password)
-    cache  = TrackCache(client, stale_s=STALE_S, refresh_s=REFRESH_S, verbose=args.verbose)
-
-    print("NVG push endpoint: {}  source: {}".format(args.url, args.source), flush=True)
-
-    while True:
-        try:
-            session = zenoh.open(make_config())
-            break
-        except zenoh.ZError as exc:
-            print("SitaWare NVG Zenoh connect failed: {} — retry in {}s".format(exc, ZENOH_RETRY_S), flush=True)
-            time.sleep(ZENOH_RETRY_S)
-    subs = []
-    for suffix, sidc in _TOPIC_SIDC.items():
-        key = "{}/{}".format(TOPIC_ROOT, suffix)
-        subs.append(session.declare_subscriber(key, make_handler(sidc, cache)))
-        print(
-            "SUB {} → SIDC {}".format(key, getattr(sidc, "__name__", sidc)),
-            flush=True,
+def _validate_args(args, password: str) -> None:
+    if not args.path.startswith("/") or "?" in args.path or "#" in args.path:
+        raise SystemExit("SITAWARE_HQ_NVG_PATH must be an absolute path without query/fragment")
+    if not (1 <= args.port <= 65535):
+        raise SystemExit("SITAWARE_HQ_NVG_PORT must be between 1 and 65535")
+    if bool(args.tls_cert) != bool(args.tls_key):
+        raise SystemExit("Set both SITAWARE_HQ_NVG_TLS_CERT and SITAWARE_HQ_NVG_TLS_KEY")
+    if not args.allow_anonymous and (not args.user or not password):
+        raise SystemExit(
+            "Set SITAWARE_HQ_NVG_USER and SITAWARE_HQ_NVG_PASS, or explicitly "
+            "set SITAWARE_HQ_NVG_ALLOW_ANONYMOUS=1"
+        )
+    non_loopback = args.bind not in {"127.0.0.1", "::1", "localhost"}
+    if non_loopback and not args.tls_cert and not args.allow_insecure_http:
+        raise SystemExit(
+            "Refusing a non-loopback plain-HTTP feed. Configure TLS, or explicitly "
+            "set SITAWARE_HQ_NVG_ALLOW_INSECURE_HTTP=1 for an isolated lab network."
         )
 
-    print("Bridge running — Ctrl-C to stop", flush=True)
+
+def run(args) -> None:
+    password = os.environ.get("SITAWARE_HQ_NVG_PASS", "")
+    _validate_args(args, password)
+
+    cache = NVGFeedCache(args.stale_s, args.max_tracks)
+    server = NVGFeedServer(
+        (args.bind, args.port),
+        cache,
+        args.path,
+        args.user,
+        password,
+        args.allow_anonymous,
+        args.verbose,
+    )
+    scheme = "http"
+    if args.tls_cert:
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.minimum_version = ssl.TLSVersion.TLSv1_2
+        context.load_cert_chain(args.tls_cert, args.tls_key)
+        server.socket = context.wrap_socket(server.socket, server_side=True)
+        scheme = "https"
+
+    session = zenoh.open(make_config())
+    subscribers = []
     try:
-        while True:
-            time.sleep(1)
+        for suffix, sidc in _TOPIC_SIDC.items():
+            key = "{}/{}".format(TOPIC_ROOT, suffix)
+            item_stale_s = max(args.stale_s, _TOPIC_STALE_S.get(suffix, args.stale_s))
+            subscribers.append(
+                session.declare_subscriber(
+                    key,
+                    make_handler(sidc, cache, args.verbose, stale_s=item_stale_s),
+                )
+            )
+            print(
+                "SUB {} -> SIDC {}".format(
+                    key, getattr(sidc, "__name__", sidc)
+                ),
+                flush=True,
+            )
+
+        print(
+            "SitaWare HQ NVG feed listening on {}://{}:{}{} (stale={}s, max={})".format(
+                scheme, args.bind, args.port, args.path, args.stale_s, args.max_tracks
+            ),
+            flush=True,
+        )
+        if scheme == "http" and args.user:
+            print(
+                "WARNING: Basic Auth is being sent over plain HTTP. Use only on an "
+                "isolated lab network and migrate the feed to HTTPS.",
+                flush=True,
+            )
+        server.serve_forever(poll_interval=0.5)
     except KeyboardInterrupt:
         pass
     finally:
-        for sub in subs:
-            sub.undeclare()
+        server.shutdown()
+        server.server_close()
+        for subscriber in subscribers:
+            subscriber.undeclare()
         session.close()
 
 
-def main():
-    ap = argparse.ArgumentParser(description="Zenoh tracks → NVG push bridge")
-    ap.add_argument("--url",      default=os.environ.get("SITAWARE_NVG_URL", ""),
-                    help="NVG base URL, e.g. https://192.168.1.10:8080")
-    ap.add_argument("--user",     default=os.environ.get("SITAWARE_NVG_USER", ""),
-                    help="NVG username")
-    ap.add_argument("--password", default=os.environ.get("SITAWARE_NVG_PASS", ""),
-                    help="NVG password")
-    ap.add_argument("--source",   default=os.environ.get("SITAWARE_NVG_SOURCE", "efdi-live"),
-                    help="NVG source name (default: efdi-live)")
-    ap.add_argument("--verbose", "-v", action="store_true",
-                    help="Print each NVG PUT/DELETE")
-    args = ap.parse_args()
-    run(args)
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Zenoh tracks -> SitaWare HQ NVG pull feed")
+    parser.add_argument("--bind", default=os.environ.get("SITAWARE_HQ_NVG_BIND", "127.0.0.1"))
+    parser.add_argument(
+        "--port", type=int, default=int(os.environ.get("SITAWARE_HQ_NVG_PORT", "8088"))
+    )
+    parser.add_argument("--path", default=os.environ.get("SITAWARE_HQ_NVG_PATH", "/nvg"))
+    parser.add_argument("--user", default=os.environ.get("SITAWARE_HQ_NVG_USER", ""))
+    parser.add_argument(
+        "--tls-cert", default=os.environ.get("SITAWARE_HQ_NVG_TLS_CERT", "")
+    )
+    parser.add_argument("--tls-key", default=os.environ.get("SITAWARE_HQ_NVG_TLS_KEY", ""))
+    parser.add_argument(
+        "--stale-s",
+        type=float,
+        default=float(os.environ.get("SITAWARE_HQ_NVG_STALE_S", "120")),
+    )
+    parser.add_argument(
+        "--max-tracks",
+        type=int,
+        default=int(os.environ.get("SITAWARE_HQ_NVG_MAX_TRACKS", "10000")),
+    )
+    parser.add_argument(
+        "--allow-anonymous",
+        action="store_true",
+        default=_env_true("SITAWARE_HQ_NVG_ALLOW_ANONYMOUS"),
+    )
+    parser.add_argument(
+        "--allow-insecure-http",
+        action="store_true",
+        default=_env_true("SITAWARE_HQ_NVG_ALLOW_INSECURE_HTTP"),
+    )
+    parser.add_argument("--verbose", "-v", action="store_true")
+    run(parser.parse_args())
 
 
 if __name__ == "__main__":

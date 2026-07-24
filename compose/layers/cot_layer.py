@@ -41,6 +41,7 @@ import re
 import socket
 import ssl
 import struct
+import signal
 import threading
 import time
 import xml.etree.ElementTree as ET
@@ -68,7 +69,13 @@ _CERT_DIR = os.environ.get("EFDI_CERT_DIR", HERE)
 # inside the compose stack. Falls back to the remote router for standalone use.
 _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", "tcp/127.0.0.1:7448")
 
-AIR_STALE_S    = 30      # aircraft: ADS-B every 5-15s, 30s gives 2-6× margin
+# Matches the 120s the SitaWare HQ NVG feed holds an item for
+# (SITAWARE_HQ_NVG_STALE_S), so the two C2 systems show the same aircraft at the
+# same time. At 30s TAK dropped each contact four times sooner than SitaWare and
+# looked far emptier from the identical fabric. 30s also assumed a 5-15s update
+# rate, which only adsblol meets — airplaneslive polls every 900s, so its
+# aircraft appeared for 30s and then vanished for the next 14 minutes.
+AIR_STALE_S    = 120
 SEA_STALE_S    = 300     # vessels: Class B sends every 30-180s; 5 min covers worst case
 LAND_STALE_S   = 120     # ground vehicles and APRS mobiles
 COT_STALE_S    = AIR_STALE_S  # default (air)
@@ -179,11 +186,18 @@ def _sensor_alert_cot_type(track: dict) -> str:
 # track_fusion_bridge first so the marker contains merged data.
 #
 # ADS-B relay sources: identity-only enrichment inputs, blocked until fused.
-_ADS_B_RELAY_SOURCES = frozenset({"adsblol", "airplaneslive"})
-# Raw sensor sources: kinematics are good but no identity; fusion adds REG/ICAO/SQWK.
-# Blocked here because fusion ALWAYS re-publishes every radar track to
-# air/trackfusion/fused/**, so every contact still appears — just once, with
-# merged data.
+# Raw sensor sources: kinematics are good but no identity; fusion adds
+# REG/ICAO/SQWK. Blocked here because fusion re-keys them — a CAT-48 track is
+# EFDI-RAD-<sac/sic/num> raw but EFDI-ICAO-<hex> once identified, so letting
+# both through really would draw the same contact twice.
+#
+# ADS-B relays (adsblol, airplaneslive) used to be blocked the same way, on the
+# assumption that fusion re-published everything under air/trackfusion/fused/**.
+# It does not re-emit uncorrelated ADS-B, so with no radar feed to correlate
+# against, TAK got no aircraft at all while SitaWare — which has no such rule —
+# showed hundreds. The duplicate argument does not apply to them either: _uid()
+# is source-agnostic, so a raw and a fused report of one aircraft share the
+# EFDI-ICAO-<hex> uid and update a single marker.
 _RAW_SENSOR_SOURCES = frozenset({"ASTERIX CAT-48", "ASTERIX CAT-20"})
 
 # Schema: {domain}/{source}/{modality}/{affiliation}/{entity}/{type}/{id}/{view}
@@ -234,7 +248,11 @@ _TOPIC_COT = {
     # ENV — weather stations and air quality sensors show as ground icons
     "env/weather/station/**":    ("a-n-G-I-R",   ENV_STALE_S),
     # RADAR SENSOR SITES — CAT-34 status publishes here; rendered as radar marker + stat card
-    "land/**/neutral/radar/**":  ("a-f-G-E-S-R", LAND_STALE_S * 2),
+    # Neutral in the topic, so neutral in the symbol. This said a-f- (friend),
+    # which drew civil ATC radar sites blue in TAK while SitaWare drew the same
+    # sites green from SNGPESR — the two C2 systems disagreeing about the
+    # affiliation of one object. The topic is the authority.
+    "land/**/neutral/radar/**":  ("a-n-G-E-S-R", LAND_STALE_S * 2),
     # ACOUSTIC / RF SENSOR SITES — sensor box; recolors green/yellow/red by
     # last_detection_ts (see _sensor_alert_cot_type), same icon throughout
     "land/**/neutral/sensor/**": (_sensor_alert_cot_type, LAND_STALE_S * 2),
@@ -364,6 +382,12 @@ _RED    = (220, 20,  20)  # 2525C hostile red
 # b64image fallback — used when ATAK doesn't have the iconset installed.
 # ATAK CIV 5.x ignores b64image for recognised 2525C types, so we also set
 # iconsetpath (below) which is honoured regardless of the CoT type.
+#
+# Off by default: WinTAK cannot resolve an icon from b64image alone and both
+# mis-draws and crashes on hover (see track_to_cot). Set COT_USERICON=1 for an
+# ATAK-only audience that wants the custom art.
+_USERICON_ENABLED = os.environ.get("COT_USERICON", "") == "1"
+
 _COT_ICON_B64 = {
     # Civil aircraft — T-shaped commercial silhouette, neutral green
     "a-n-A-C-F":   _icon_png_b64("aircraft", _GREEN),
@@ -1399,11 +1423,18 @@ def track_to_cot(track: dict, cot_type: str, stale_s: float = COT_STALE_S) -> st
                 line = ET.SubElement(shape, "line")
                 for coordinate in (lines[0] if isinstance(lines[0], list) else [])[:256]:
                     shape_point(line, coordinate)
-    icon_b64 = _COT_ICON_B64.get(cot_type)
-    if icon_b64:
-        # b64image only — ATAK ignores b64image when iconsetpath is also present
-        # but the iconsetpath file doesn't exist, falling back to the MIL-STD symbol.
-        ET.SubElement(detail, "usericon", {"b64image": icon_b64})
+    # Custom marker art is opt-in because it is not portable across clients.
+    # ATAK reads <usericon b64image>, but WinTAK does not resolve an icon from
+    # b64image alone (it wants an iconsetpath into an installed iconset). The
+    # marker then draws as a featureless black diamond, and hovering it throws
+    # System.NullReferenceException in CotMapMarker.OnHoverChanged because the
+    # icon it dereferences was never resolved. Without the element, both clients
+    # fall back to the MIL-STD symbol implied by the event type, which always
+    # renders. The icons themselves are fine — 25 valid 32x32 RGBA PNGs.
+    if _USERICON_ENABLED:
+        icon_b64 = _COT_ICON_B64.get(cot_type)
+        if icon_b64:
+            ET.SubElement(detail, "usericon", {"b64image": icon_b64})
     ET.SubElement(detail, "contact", {"callsign": cs})
     spd_cot = _speed_ms(track)
     crs_cot = _course(track)
@@ -1447,15 +1478,11 @@ def track_to_cot(track: dict, cot_type: str, stale_s: float = COT_STALE_S) -> st
             "displayMagneticReference": "0",
             "stockTool": "false",
         })
-    elif spd_cot > 0:
-        ET.SubElement(detail, "sensor", {
-            "vfov": "45", "hfov": "360",
-            "range": "0", "azimuth": str(int(crs_cot)),
-            "model": "Generic", "ranges": "0",
-            "type": "radar",
-            "displayMagneticReference": "0",
-            "stockTool": "false",
-        })
+    # Anything that merely MOVES used to get a <sensor> too — an airliner, a
+    # car, an APRS station all claimed to be a 360° radar with range="0". That
+    # is wrong on its face (a moving contact is not a sensor) and a zero-range
+    # sensor cone is a degenerate shape for a client to draw. <sensor> is now
+    # emitted only for things that actually sense.
     ET.SubElement(detail, "remarks").text = _build_remarks(track, cot_type)
     snapshot_url = track.get("snapshot_url")
     if isinstance(snapshot_url, str) and snapshot_url.startswith("https://") \
@@ -1628,7 +1655,7 @@ def make_handler(cot_type_or_fn, sender, verbose: bool, stale_s: float = COT_STA
             if verbose:
                 print("CoT expired offline sensor {}".format(uid), flush=True)
             return
-        if "/fused/" not in key and (src in _ADS_B_RELAY_SOURCES or src in _RAW_SENSOR_SOURCES):
+        if "/fused/" not in key and src in _RAW_SENSOR_SOURCES:
             return
         # ATC towers / ground vehicles show up in ADS-B with "TWR", "GND" etc.
         # Reclassify as neutral ground radar/radio station instead of aircraft.
@@ -1784,12 +1811,30 @@ def run(args):
                 make_radar_status_handler(sender, args.verbose)))
     print("SUB {} → [radar sensor sites]".format(radar_key), flush=True)
 
+    # The subscribers run on Zenoh's threads; this thread exists only to hold
+    # the process open. It used to do that by waking once a second to sleep
+    # again — 86400 no-op wakeups a day, and worse, nothing was watching for
+    # the signal that actually ends this process. Python's default SIGTERM
+    # disposition kills the interpreter with no traceback and no log line,
+    # which is why every one of these exits looked like an unexplained
+    # disappearance. Block until told to stop, and say who told us.
+    stop = threading.Event()
+
+    def _on_signal(signum, _frame):
+        print("shutting down on {}".format(signal.Signals(signum).name), flush=True)
+        stop.set()
+
+    for _sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+        try:
+            signal.signal(_sig, _on_signal)
+        except (OSError, ValueError):
+            pass  # not the main thread, or the platform lacks this signal
+
     print("Bridge running — Ctrl-C to stop", flush=True)
     try:
-        while True:
-            time.sleep(1)
+        stop.wait()
     except KeyboardInterrupt:
-        pass
+        print("shutting down on KeyboardInterrupt", flush=True)
     finally:
         for sub in subs:
             sub.undeclare()

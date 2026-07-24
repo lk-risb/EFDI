@@ -68,7 +68,7 @@ _SOURCE_BRIDGES=(airplaneslive adsblol aprs meteolt
 _PROTOCOLS=(asterix-cat10 asterix-cat20 asterix-cat21 asterix-cat34
             asterix-cat48 asterix-cat62 stanag5516 mavlink opendroneid vmf sapient
             nffi stanag4586 stanag4609)
-_LAYERS=(cot_layer nvg_layer)
+_LAYERS=(cot_layer nvg_bridge nvg_layer)
 
 case "$MODE" in
     all)
@@ -105,7 +105,7 @@ case "$MODE" in
         ;;
     *)
         case "$MODE" in
-            admin-control|cert-renewer|airplaneslive|adsblol|aprs|meteolt|dronuradaras|dji-cloud|utm-ans|sitaware|tak-bridge|asterix|asterix-udp|track-fusion|asterix-cat10|asterix-cat20|asterix-cat21|asterix-cat34|asterix-cat48|asterix-cat62|stanag5516|mavlink|opendroneid|vmf|sapient|nffi|stanag4586|stanag4609|mavlink-raw|stanag5516-raw|vmf-raw|sapient-raw|stanag4586-raw|stanag4609-raw|cap|geojson|mqtt|mqtt-raw|sensorthings|sensorthings-raw|sparkplug|spectrum|sensor-health|mission-route|cot_layer|nvg_layer)
+            admin-control|cert-renewer|airplaneslive|adsblol|aprs|meteolt|dronuradaras|dji-cloud|utm-ans|sitaware|tak-bridge|asterix|asterix-udp|track-fusion|asterix-cat10|asterix-cat20|asterix-cat21|asterix-cat34|asterix-cat48|asterix-cat62|stanag5516|mavlink|opendroneid|vmf|sapient|nffi|stanag4586|stanag4609|mavlink-raw|stanag5516-raw|vmf-raw|sapient-raw|stanag4586-raw|stanag4609-raw|cap|geojson|mqtt|mqtt-raw|sensorthings|sensorthings-raw|sparkplug|spectrum|sensor-health|mission-route|cot_layer|nvg_bridge|nvg_layer)
                 echo "=== Stopping $MODE ==="
                 stop_scripts "$MODE"
                 echo "Done."

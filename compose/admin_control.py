@@ -25,6 +25,7 @@ import ssl
 import subprocess
 import tempfile
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib import request as urllib_request
@@ -120,7 +121,11 @@ SERVICE_SPECS = [
     ("cot_layer", "C2 outputs", "CoT → TAK Server (mTLS)"),
     ("tak-bridge", "C2 inputs", "TAK Server CoT ingress"),
     ("sitaware", "C2 inputs", "SitaWare HQ REST input"),
-    ("nvg_layer", "C2 outputs", "NVG → SitaWare"),
+    # A _bridge brings a C2 system's data INTO the fabric, a _layer writes the
+    # fabric OUT to a C2 system. Which side opens the socket is a transport
+    # detail: SitaWare polls nvg_layer's feed, and that still makes it egress.
+    ("nvg_bridge", "C2 inputs", "SitaWare NVG export → Zenoh"),
+    ("nvg_layer", "C2 outputs", "NVG feed → SitaWare (SitaWare polls)"),
 ]
 SERVICE_NAMES = {name for name, _, _ in SERVICE_SPECS}
 
@@ -170,6 +175,7 @@ SERVICE_SOURCES = {
     "cot_layer": "layers/cot_layer.py",
     "tak-bridge": "bridges/tak_bridge.py",
     "sitaware": "bridges/sitaware_bridge.py",
+    "nvg_bridge": "bridges/nvg_bridge.py",
     "nvg_layer": "layers/nvg_layer.py",
 }
 
@@ -449,6 +455,58 @@ def _pid_is_service(pid: int, name: str) -> bool:
     return source in cmdline
 
 
+_PREREQ_TTL_S = 10.0
+_prereq_cache: dict = {"at": 0.0, "data": {}}
+
+
+def _prereqs() -> dict:
+    """{service: (ready, hint)} as reported by start.sh's own guards.
+
+    start.sh already knows which services cannot run — svc_ready/svc_hint skip
+    them with a reason instead of launching something that would exit at once.
+    The UI did not, so it offered Start on an unconfigured service, the process
+    died immediately, and the result showed up as CRASHED with nothing to act
+    on. Asking start.sh keeps one copy of those rules; re-deriving them here
+    would give two that drift.
+
+    Cached briefly: the status endpoint is polled, and this is a subprocess.
+    Failures are non-fatal — an unavailable report just means no service is
+    reported blocked, which is the pre-existing behaviour.
+    """
+    now = time.monotonic()
+    if now - _prereq_cache["at"] < _PREREQ_TTL_S:
+        return _prereq_cache["data"]
+    data: dict = {}
+    try:
+        env = os.environ.copy()
+        env["EFDI_NONINTERACTIVE"] = "1"
+        result = subprocess.run(
+            [str(START_SCRIPT), "--check-all"], cwd=str(ROOT), env=env,
+            capture_output=True, text=True, timeout=30, check=False,
+        )
+        if result.returncode == 0:
+            for line in result.stdout.splitlines():
+                parts = line.split("\t")
+                if len(parts) >= 2:
+                    data[parts[0]] = (parts[1] == "ready",
+                                      parts[2].strip() if len(parts) > 2 else "")
+    except (OSError, subprocess.SubprocessError):
+        data = {}
+    _prereq_cache["at"] = now
+    _prereq_cache["data"] = data
+    return data
+
+
+def _blocked_reason(name: str) -> str:
+    """Why this service cannot start, or "" if nothing is blocking it."""
+    ready, hint = _prereqs().get(name, (True, ""))
+    if ready:
+        return ""
+    # svc_hint's text is only meaningful for a service that is NOT ready; the
+    # ready-state hints describe the configured endpoint instead.
+    return hint or "required configuration is missing"
+
+
 def _service_status(name: str) -> dict:
     pid, pid_file_present = _pid_record(name)
     values = _read_env()
@@ -457,6 +515,12 @@ def _service_status(name: str) -> dict:
         required = ()
     if required and not all(values.get(key, "") for key in required):
         return {"name": name, "running": False, "status": "needs-config", "pid": None}
+    # A blocked service that is somehow still running is reported as running:
+    # the live process is the more useful fact, and stopping it stays possible.
+    reason = _blocked_reason(name)
+    if reason and not (pid is not None and Path(f"/proc/{pid}").exists()):
+        return {"name": name, "running": False, "status": "needs-config",
+                "pid": None, "details": {"reason": reason}}
     if name == "zenoh":
         try:
             result = subprocess.run(
@@ -551,6 +615,13 @@ def _action(name: str, action: str) -> dict:
                 "output": "infrastructure services cannot be stopped from the control API"}
     if name == "admin-control" and action == "restart":
         return {"ok": False, "returncode": 409, "output": "restart the control agent from the host launcher"}
+    if action in ("start", "restart"):
+        # Refuse rather than spawn something that exits immediately and then
+        # reports CRASHED with no explanation. The reason names the missing key.
+        reason = _blocked_reason(name)
+        if reason:
+            return {"ok": False, "returncode": 409,
+                    "output": f"{name} is not configured: {reason}"}
     if action == "start":
         result = _run_script(START_SCRIPT, ["--service", name])
         if result["ok"] and _service_status(name)["running"]:
