@@ -66,6 +66,7 @@ import ssl
 import zenoh
 from zenoh_auth import apply_zenoh_auth
 from namespace_prefix import topic_root
+from protocols.protobuf_codec import semantic_topic
 
 ORG       = os.environ.get("PARTNER_NAMESPACE", "")
 TOPIC_ROOT = topic_root()
@@ -337,7 +338,11 @@ def normalise_unit(raw: dict) -> dict | None:
 # ---------------------------------------------------------------------------
 
 def publish_unit(session: "zenoh.Session", track: dict, verbose: bool):
-    topic = sidc_to_topic(track.get("sidc", ""))
+    # Publish on the object key's /json view — the form both output layers
+    # consume. A bare put on the semantic prefix (no {type}/{id}, no /json view)
+    # is silently dropped by cot_layer and nvg_layer, which only forward samples
+    # whose key ends in /json.
+    topic = semantic_topic(sidc_to_topic(track.get("sidc", "")), track) + "/json"
     session.put(topic, json.dumps(track).encode(),
                 encoding=zenoh.Encoding.APPLICATION_JSON)
     if verbose:

@@ -243,15 +243,9 @@ start_bridges() {
         echo "  [skip] utm-ans — set UTM_ANS_API_URL to an authorized JSON/GeoJSON feed"
     fi
 
-    if skip_if_no_key AISSTREAM_KEY; then
-        echo "  [skip] aisstream — AISSTREAM_KEY not set"
-    else
-        start aisstream bridges/aisstream_ws_bridge.py
-    fi
 
     start aprs bridges/aprsis_bridge.py
 
-    start openmeteo bridges/openmeteo_forecast_bridge.py
     start meteolt bridges/meteolt_forecast_bridge.py
 
     if [[ "${SITAWARE_URL:-}" ]]; then
@@ -273,8 +267,8 @@ start_bridges() {
     if [[ "${MAVLINK_RAW_PORT:-}" ]]; then
         start mavlink-raw bridges/mavlink_raw_bridge.py --port "$MAVLINK_RAW_PORT"
     fi
-    if [[ "${LINK16_RAW_PORT:-}" ]]; then
-        start link16-raw bridges/link16_jreap_bridge.py --port "$LINK16_RAW_PORT"
+    if [[ "${STANAG5516_RAW_PORT:-}" ]]; then
+        start stanag5516-raw bridges/5516_bridge.py --port "$STANAG5516_RAW_PORT"
     fi
     if [[ "${VMF_RAW_PORT:-}" ]]; then
         start vmf-raw bridges/vmf_bridge.py --port "$VMF_RAW_PORT"
@@ -283,7 +277,7 @@ start_bridges() {
         start sapient-raw bridges/sapient_flex335_bridge.py --tcp --port "$SAPIENT_RAW_PORT"
     fi
     if [[ "${STANAG4586_RAW_PORT:-}" ]]; then
-        start stanag4586-raw bridges/stanag4586_bridge.py --tcp --port "$STANAG4586_RAW_PORT"
+        start stanag4586-raw bridges/4586_bridge.py --tcp --port "$STANAG4586_RAW_PORT"
     fi
 }
 
@@ -302,7 +296,9 @@ start_protocols() {
 
     start cap protocols/random/cap.py
     start geojson protocols/random/geojson_features.py
-    start ais-nmea protocols/random/ais_nmea.py
+    start mqtt protocols/random/mqtt_json.py
+    start sensorthings protocols/random/sensorthings.py
+    start sparkplug protocols/vendors/sparkplug/sparkplug.py
     start spectrum protocols/random/spectrum_observation.py
     start sensor-health protocols/random/sensor_health.py
     start mission-route protocols/random/mission_route.py
@@ -339,12 +335,12 @@ start_protocols() {
         echo "  [skip] vmf — set VMF_PORT in .env to enable"
     fi
 
-    if [[ "${LINK16_ZENOH_RAW:-}" == "1" ]]; then
-        start link16 protocols/random/link16.py --zenoh-raw --raw-topic "${LINK16_RAW_TOPIC:-}"
-    elif [[ "${LINK16_PORT:-}" ]]; then
-        start link16 protocols/random/link16.py --port "$LINK16_PORT"
+    if [[ "${STANAG5516_ZENOH_RAW:-}" == "1" ]]; then
+        start stanag5516 protocols/vendors/stanag/5516.py --zenoh-raw --raw-topic "${STANAG5516_RAW_TOPIC:-}"
+    elif [[ "${STANAG5516_PORT:-}" ]]; then
+        start stanag5516 protocols/vendors/stanag/5516.py --port "$STANAG5516_PORT"
     else
-        echo "  [skip] link16 — set LINK16_PORT in .env to enable"
+        echo "  [skip] stanag5516 — set STANAG5516_PORT in .env to enable"
     fi
 
     if [[ "${STANAG4586_PROFILE:-}" == "legacy_ed3_approx" && "${STANAG4586_ZENOH_RAW:-}" == "1" ]]; then
@@ -357,7 +353,7 @@ start_protocols() {
     fi
 
     if [[ "${STANAG4609_SRT_URL:-}" ]]; then
-        start stanag4609 protocols/vendors/stanag/4609.py
+        start stanag4609 protocols/vendors/stanag/4609.py --zenoh-raw
     else
         echo "  [skip] stanag4609 — set STANAG4609_SRT_URL in .env to enable"
     fi
@@ -419,10 +415,10 @@ start_giraffe_bridges() {
     start_asterix_udp_bridge
     start_asterix_protocols
 
-    if [[ "${LINK16_PORT:-}" ]]; then
-        start link16 protocols/random/link16.py --port "$LINK16_PORT"
+    if [[ "${STANAG5516_PORT:-}" ]]; then
+        start stanag5516 protocols/vendors/stanag/5516.py --port "$STANAG5516_PORT"
     else
-        echo "  [skip] link16 — set LINK16_PORT in .env to enable"
+        echo "  [skip] stanag5516 — set STANAG5516_PORT in .env to enable"
     fi
 
     if [[ "${MAVLINK_PORT:-}" ]]; then

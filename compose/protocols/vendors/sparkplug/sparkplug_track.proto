@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package efdi.data.v2;
+
+// One positioned Eclipse Sparkplug B metric set, normalized for the fabric.
+message SparkplugRecord {
+  double timestamp = 1;
+  string source = 2;
+  string uid = 3;
+  double lat_deg = 4;
+  double lon_deg = 5;
+  optional string group_id = 6;
+  optional string edge_node_id = 7;
+  optional string device_id = 8;
+  optional string message_type = 9;
+  optional uint64 seq = 10;
+  optional double geo_alt_m = 11;
+  optional double speed_ms = 12;
+  optional double heading_deg = 13;
+  optional string metrics_json = 14;
+}

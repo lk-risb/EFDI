@@ -51,9 +51,7 @@ Read `CLAUDE.md` first; its project constraints apply to every agent and tool.
   poll reports `is_online=true`. Preserve the offline tombstone path: it evicts
   old markers from CoT, SitaWare Edge, and the SitaWare HQ NVG snapshot.
 - CoT and SitaWare NVG share the same RU/BY ICAO/MMSI affiliation classifiers;
-  do not regress ADS-B/AIS topics to one static affiliation. Full vessel traffic
-  requires the native `aisstream` bridge and a runtime-only `AISSTREAM_KEY`.
-  `start.sh` prompts for that key without saving it or placing it in argv.
+  do not regress ADS-B/AIS topics to one static affiliation.
 - ADS-B emitter categories `C1`/`C2` are airport surface emergency/service
   vehicles. Keep them as `a-n-G-E-V` in CoT and `SNGPEV----*****` in NVG;
   never use `on_ground` alone because it also describes taxiing aircraft.

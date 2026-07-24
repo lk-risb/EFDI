@@ -19,6 +19,7 @@ import os
 import pty
 import re
 import secrets
+import signal
 import socketserver
 import ssl
 import subprocess
@@ -85,39 +86,41 @@ SERVICE_SPECS = [
     ("cert-renewer", "Infrastructure", "Short-lived transport certificate renewal"),
     ("airplaneslive", "Open-data bridges", "Airplanes.live ADS-B"),
     ("adsblol", "Open-data bridges", "ADSB.lol aircraft"),
-    ("aisstream", "Open-data bridges", "AISstream vessels"),
     ("aprs", "Open-data bridges", "APRS-IS"),
-    ("openmeteo", "Open-data bridges", "Open-Meteo weather"),
     ("meteolt", "Open-data bridges", "meteo.lt weather"),
     ("dronuradaras", "Sensor bridges", "dronuradaras.lt sensors"),
     ("dji-cloud", "Sensor bridges", "DJI Cloud MQTT"),
     ("utm-ans", "Open-data bridges", "Oro navigacija UTM"),
     ("asterix", "Sensor bridges", "ASTERIX family bundle"),
     ("track-fusion", "Sensor bridges", "Track correlation"),
-    ("link16", "Protocols", "Link-16 JREAP-C"),
+    ("stanag5516", "Protocols", "STANAG 5516 (Link-16 J-series)"),
     ("mavlink", "Protocols", "MAVLink / Remote ID"),
     ("opendroneid", "Protocols", "OpenDroneID translator"),
     ("vmf", "Protocols", "VMF MIL-STD-47001C"),
     ("nffi", "Protocols", "NFFI / STANAG 4677"),
     ("sapient", "Protocols", "SAPIENT / FLEX 335"),
-    ("stanag", "Protocols", "STANAG family bundle"),
+    ("stanag4586", "Protocols", "STANAG 4586 UAV control (VSM)"),
+    ("stanag4609", "Protocols", "STANAG 4609 KLV decoder"),
     ("cap", "Protocols", "CAP 1.2 alerts"),
     ("geojson", "Protocols", "GeoJSON / OGC Features"),
-    ("ais-nmea", "Protocols", "AIS NMEA"),
+    ("mqtt", "Protocols", "MQTT sensor JSON"),
+    ("sensorthings", "Protocols", "OGC SensorThings observations"),
+    ("sparkplug", "Protocols", "Eclipse Sparkplug B (MQTT)"),
     ("spectrum", "Protocols", "Spectrum observations"),
     ("sensor-health", "Protocols", "Sensor health"),
     ("mission-route", "Protocols", "Mission routes"),
     ("mavlink-raw", "Raw ingress", "MAVLink raw socket"),
-    ("link16-raw", "Raw ingress", "Link-16 raw socket"),
+    ("stanag5516-raw", "Raw ingress", "STANAG 5516 JREAP-C raw socket"),
     ("vmf-raw", "Raw ingress", "VMF raw socket"),
     ("sapient-raw", "Raw ingress", "SAPIENT raw socket"),
     ("stanag4586-raw", "Raw ingress", "STANAG 4586 raw socket"),
-    ("cot-udp", "C2 outputs", "CoT multicast"),
-    ("cot-udp-tak", "C2 outputs", "CoT UDP client"),
-    ("cot-bridge", "C2 outputs", "TAK Server CoT TCP"),
+    ("stanag4609-raw", "Raw ingress", "STANAG 4609 SRT/KLV ingest"),
+    ("mqtt-raw", "Raw ingress", "MQTT broker ingress"),
+    ("sensorthings-raw", "Raw ingress", "OGC SensorThings polling ingress"),
+    ("cot_layer", "C2 outputs", "CoT → TAK Server (mTLS)"),
     ("tak-bridge", "C2 inputs", "TAK Server CoT ingress"),
-    ("sitaware", "C2 outputs", "SitaWare HQ REST input"),
-    ("sitaware-hq-nvg", "C2 outputs", "SitaWare HQ NVG feed"),
+    ("sitaware", "C2 inputs", "SitaWare HQ REST input"),
+    ("nvg_layer", "C2 outputs", "NVG → SitaWare"),
 ]
 SERVICE_NAMES = {name for name, _, _ in SERVICE_SPECS}
 
@@ -125,7 +128,7 @@ SERVICE_NAMES = {name for name, _, _ in SERVICE_SPECS}
 # ambiguous: `_bridge.py` under bridges/ owns an external connection, a module
 # under protocols/ decodes an already-published wire format, and layers/ writes
 # out to a C2 system. Several services share one script with different
-# arguments (cot_layer.py is both cot-udp and cot-udp-tak), which is exactly the
+# arguments (asterix runs cat.py once per --category), which is exactly the
 # case the name alone cannot express.
 SERVICE_SOURCES = {
     "zenoh": "(container) efdi-pod-zenoh-router",
@@ -133,54 +136,65 @@ SERVICE_SOURCES = {
     "cert-renewer": "(managed) step-ca certificate renewal",
     "airplaneslive": "bridges/airplaneslive_adsb_bridge.py",
     "adsblol": "bridges/adsblol_bridge.py",
-    "aisstream": "bridges/aisstream_ws_bridge.py",
     "aprs": "bridges/aprsis_bridge.py",
-    "openmeteo": "bridges/openmeteo_forecast_bridge.py",
     "meteolt": "bridges/meteolt_forecast_bridge.py",
     "dronuradaras": "bridges/dronuradaras_bridge.py",
     "dji-cloud": "bridges/dji_cloud_api_bridge.py",
     "utm-ans": "bridges/utm_ans_bridge.py",
     "asterix": "protocols/vendors/asterix/cat.py",
     "track-fusion": "bridges/track_fusion_bridge.py",
-    "link16": "protocols/random/link16.py",
+    "stanag5516": "protocols/vendors/stanag/5516.py",
     "mavlink": "protocols/random/mavlink.py",
     "opendroneid": "protocols/random/opendroneid.py",
     "vmf": "protocols/random/vmf.py",
     "nffi": "protocols/random/nffi.py",
     "sapient": "protocols/vendors/sapient/flex335.py",
-    "stanag": "protocols/vendors/stanag/ (4586 + 4609 bundle)",
+    "stanag4586": "protocols/vendors/stanag/4586.py",
+    "stanag4609": "protocols/vendors/stanag/4609.py",
     "cap": "protocols/random/cap.py",
     "geojson": "protocols/random/geojson_features.py",
-    "ais-nmea": "protocols/random/ais_nmea.py",
+    "mqtt": "protocols/random/mqtt_json.py",
+    "sensorthings": "protocols/random/sensorthings.py",
+    "sparkplug": "protocols/vendors/sparkplug/sparkplug.py",
     "spectrum": "protocols/random/spectrum_observation.py",
     "sensor-health": "protocols/random/sensor_health.py",
     "mission-route": "protocols/random/mission_route.py",
     "mavlink-raw": "bridges/mavlink_raw_bridge.py",
-    "link16-raw": "bridges/link16_jreap_bridge.py",
+    "stanag5516-raw": "bridges/5516_bridge.py",
     "vmf-raw": "bridges/vmf_bridge.py",
     "sapient-raw": "bridges/sapient_flex335_bridge.py",
-    "stanag4586-raw": "bridges/stanag4586_bridge.py",
-    "cot-udp": "layers/cot_layer.py",
-    "cot-udp-tak": "layers/cot_layer.py",
-    "cot-bridge": "bridges/cot_bridge.py",
+    "stanag4586-raw": "bridges/4586_bridge.py",
+    "stanag4609-raw": "bridges/4609_bridge.py",
+    "mqtt-raw": "bridges/mqtt_bridge.py",
+    "sensorthings-raw": "bridges/sensorthings_bridge.py",
+    "cot_layer": "layers/cot_layer.py",
     "tak-bridge": "bridges/tak_bridge.py",
     "sitaware": "bridges/sitaware_bridge.py",
-    "sitaware-hq-nvg": "bridges/nvg_bridge.py",
+    "nvg_layer": "layers/nvg_layer.py",
 }
 
 
-def _service_kind(source: str) -> str:
-    """One-word role derived from where the file lives."""
-    if source.startswith("bridges/"):
-        return "bridge"
+# A service's role is the DIRECTION its data flows, which its folder now
+# encodes correctly:
+#   bridge   — brings data INTO the fabric  (bridges/, owns an inbound source)
+#   protocol — decodes one in-fabric format into another (protocols/, fabric->fabric)
+#   layer    — lays data OUT to a C2 app     (layers/, owns the outbound connection)
+# The two C2 layers (cot_layer -> TAK, nvg_layer -> SitaWare) live in layers/,
+# so the folder is the truth; no per-name override is needed.
+_C2_EGRESS: set[str] = set()
+
+
+def _service_kind(name: str, source: str) -> str:
+    """One-word role, by data direction (see note above)."""
+    if name in _C2_EGRESS or source.startswith("layers/"):
+        return "layer"
     if source.startswith("protocols/"):
         return "protocol"
-    if source.startswith("layers/"):
-        return "layer"
+    if source.startswith("bridges/"):
+        return "bridge"
     return "infrastructure"
 
 _SERVICE_REQUIRED_KEYS = {
-    "aisstream": ("AISSTREAM_KEY",),
     "sitaware": ("SITAWARE_URL", "SITAWARE_API_PATH"),
 }
 
@@ -201,15 +215,16 @@ EDITABLE_EXACT = {
     "ASTERIX_PORT", "ASTERIX_BIND", "ASTERIX_CATEGORIES", "ASTERIX_MULTICAST_GROUP",
     "ASTERIX_MULTICAST_INTERFACE", "ASTERIX_ALLOW_SOURCE",
     "TAK_HOST", "TAK_HOST_FALLBACK", "TAK_PORT", "TAK_TLS", "TAK_CERT", "TAK_KEY", "TAK_CA",
-    "TAK_UDP_HOST", "TAK_UDP_HOST_FALLBACK", "TAK_UDP_PORT",
     "SITAWARE_URL", "SITAWARE_URL_FALLBACK", "SITAWARE_API_PATH", "SITAWARE_USER", "SITAWARE_PASS", "SITAWARE_POLL_S",
     "SITAWARE_TLS_VERIFY", "SITAWARE_DISCOVER",
-    "SITAWARE_HQ_NVG_ENABLE", "SITAWARE_HQ_NVG_BIND", "SITAWARE_HQ_NVG_PORT", "SITAWARE_HQ_NVG_PATH",
-    "SITAWARE_HQ_NVG_USER", "SITAWARE_HQ_NVG_PASS",
-    "SITAWARE_HQ_NVG_TLS_CERT", "SITAWARE_HQ_NVG_TLS_KEY", "SITAWARE_HQ_NVG_ALLOW_ANONYMOUS",
-    "SITAWARE_HQ_NVG_ALLOW_INSECURE_HTTP", "SITAWARE_HQ_NVG_STALE_S", "SITAWARE_HQ_NVG_MAX_TRACKS",
+    "SITAWARE_NVG_URL", "SITAWARE_NVG_USER", "SITAWARE_NVG_PASS", "SITAWARE_NVG_SOURCE",
     "UTM_ANS_API_URL", "UTM_ANS_API_TOKEN", "UTM_ANS_POLL_S", "UTM_ANS_TLS_VERIFY",
-    "AISSTREAM_KEY", "APRSIS_HOST", "APRSIS_PORT", "APRSIS_FILTER",
+    "APRSIS_HOST", "APRSIS_PORT", "APRSIS_FILTER",
+    "MQTT_HOST", "MQTT_PORT", "MQTT_TOPIC", "MQTT_USER", "MQTT_PASS", "MQTT_TLS",
+    "MQTT_QOS", "MQTT_CLIENT_ID", "MQTT_INPUT_TOPIC",
+    "SENSORTHINGS_URL", "SENSORTHINGS_POLL_S", "SENSORTHINGS_PAGE_LIMIT",
+    "SENSORTHINGS_TOKEN", "SENSORTHINGS_INPUT_TOPIC",
+    "SPARKPLUG_INPUT_TOPIC", "SPARKPLUG_MAX_NODES",
     "DJI_MQTT_HOST", "DJI_MQTT_PORT", "DJI_MQTT_TOPIC", "DJI_MQTT_TLS",
     "DJI_MQTT_USERNAME", "DJI_MQTT_PASSWORD", "DJI_MQTT_CA", "DJI_MQTT_CERT", "DJI_MQTT_KEY", "DJI_MQTT_CLIENT_ID",
     "OPENDRONEID_INPUT_TOPIC", "OPENDRONEID_FRIENDLY_IDS", "OPENDRONEID_STALE_S",
@@ -217,12 +232,12 @@ EDITABLE_EXACT = {
     "CAP_INPUT_TOPIC", "CAP_ACTIVE_ONLY", "GEOJSON_INPUT_TOPIC", "AIS_NMEA_INPUT_TOPIC",
     "SPECTRUM_INPUT_TOPIC", "SENSOR_HEALTH_INPUT_TOPIC", "MISSION_ROUTE_INPUT_TOPIC",
     "MAVLINK_PORT", "MAVLINK_TCP", "MAVLINK_ZENOH_RAW", "MAVLINK_RAW_PORT", "MAVLINK_RAW_TOPIC",
-    "LINK16_PORT", "LINK16_ZENOH_RAW", "LINK16_RAW_PORT", "LINK16_RAW_TOPIC",
+    "STANAG5516_PORT", "STANAG5516_ZENOH_RAW", "STANAG5516_RAW_PORT", "STANAG5516_RAW_TOPIC",
     "VMF_PORT", "VMF_TCP", "VMF_ZENOH_RAW", "VMF_RAW_PORT", "VMF_RAW_TOPIC",
     "SAPIENT_HOST", "SAPIENT_PORT", "SAPIENT_LISTEN_PORT", "SAPIENT_BIND", "SAPIENT_ALLOW_PEER",
     "SAPIENT_ZENOH_RAW", "SAPIENT_RAW_PORT", "SAPIENT_RAW_TOPIC",
     "STANAG4586_HOST", "STANAG4586_PORT", "STANAG4586_PROFILE", "STANAG4586_ZENOH_RAW", "STANAG4586_RAW_PORT", "STANAG4586_RAW_TOPIC",
-    "VMF_RAW_PORT", "STANAG4586_RAW_PORT", "LINK16_RAW_PORT", "MAVLINK_RAW_PORT",
+    "VMF_RAW_PORT", "STANAG4586_RAW_PORT", "STANAG5516_RAW_PORT", "MAVLINK_RAW_PORT",
 }
 EDITABLE_PREFIXES = ("CAT10_", "CAT20_", "CAT21_", "CAT34_", "CAT48_", "CAT62_", "NFFI_")
 SECRET_MARKERS = ("PASS", "PASSWORD", "TOKEN", "SECRET", "_KEY", "PRIVATE_KEY")
@@ -412,6 +427,28 @@ def _probe_sitaware_hq_nvg(values: dict[str, str]) -> object | None:
         return None
 
 
+def _pid_is_service(pid: int, name: str) -> bool:
+    """True only when /proc/{pid} is really THIS service's process.
+
+    A pidfile records a PID, not an identity. When a service crashes, the OS is
+    free to hand that same PID to an unrelated process; a bare /proc/{pid}
+    existence check would then report the dead service as running (PID reuse).
+    start.sh guards against this by matching the process cmdline against the
+    service's script — the status endpoint must do the same or the UI drifts
+    from the runtime. File-backed services are validated here; non-file
+    services (the Docker router, the agent itself) are handled elsewhere.
+    """
+    source = SERVICE_SOURCES.get(name, "")
+    if not source.endswith(".py"):
+        return True
+    try:
+        raw = Path(f"/proc/{pid}/cmdline").read_bytes()
+    except OSError:
+        return False
+    cmdline = raw.replace(b"\x00", b" ").decode("utf-8", "replace")
+    return source in cmdline
+
+
 def _service_status(name: str) -> dict:
     pid, pid_file_present = _pid_record(name)
     values = _read_env()
@@ -432,7 +469,7 @@ def _service_status(name: str) -> dict:
             return {"name": name, "running": running, "status": status, "pid": None}
         except (OSError, subprocess.TimeoutExpired):
             return {"name": name, "running": False, "status": "unavailable", "pid": None}
-    pid_alive = pid is not None and Path(f"/proc/{pid}").exists()
+    pid_alive = pid is not None and Path(f"/proc/{pid}").exists() and _pid_is_service(pid, name)
     if pid_alive:
         if name == "sitaware-hq-nvg":
             status, details = _classify_sitaware_hq_nvg_health(
@@ -506,6 +543,12 @@ def _run_script(script: Path, args: list[str]) -> dict:
 def _action(name: str, action: str) -> dict:
     if name not in SERVICE_NAMES:
         return {"ok": False, "returncode": 400, "output": "unknown service"}
+    # Stopping the router or the control agent severs the very connection this
+    # request arrived on — you would turn yourself off and lose all control.
+    # The UI hides the button; refuse it here too so a direct API call cannot.
+    if action == "stop" and _service_kind(name, SERVICE_SOURCES.get(name, "")) == "infrastructure":
+        return {"ok": False, "returncode": 409,
+                "output": "infrastructure services cannot be stopped from the control API"}
     if name == "admin-control" and action == "restart":
         return {"ok": False, "returncode": 409, "output": "restart the control agent from the host launcher"}
     if action == "start":
@@ -842,11 +885,18 @@ class Handler(BaseHTTPRequestHandler):
 
     def _json(self, status: int, payload: object) -> None:
         body = json.dumps(payload, separators=(",", ":")).encode()
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError):
+            # The auto-refreshing UI routinely hangs up mid-response. The server
+            # survives it, but if the error reaches socketserver.handle_error it
+            # dumps a full traceback per disconnect — noise that would bury the
+            # real cause the next time the agent actually dies.
+            self.close_connection = True
 
     def _body(self) -> dict:
         try:
@@ -873,7 +923,7 @@ class Handler(BaseHTTPRequestHandler):
                     "group": group,
                     "description": description,
                     "source": SERVICE_SOURCES.get(name, ""),
-                    "kind": _service_kind(SERVICE_SOURCES.get(name, "")),
+                    "kind": _service_kind(name, SERVICE_SOURCES.get(name, "")),
                 }
                 for name, group, description in SERVICE_SPECS
             ]})
@@ -899,7 +949,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/v1/pki/status":
             self._json(200, _pki_status())
             return
-        match = re.fullmatch(r"/v1/logs/([a-z0-9-]+)", path)
+        match = re.fullmatch(r"/v1/logs/([a-z0-9_-]+)", path)
         if match and match.group(1) in SERVICE_NAMES:
             lines = _tail_lines(LOG_DIR / f"{match.group(1)}.log")
             self._json(200, {"name": match.group(1), "lines": lines})
@@ -1006,7 +1056,7 @@ class Handler(BaseHTTPRequestHandler):
             except (ValueError, json.JSONDecodeError) as exc:
                 self._json(400, {"detail": str(exc)})
             return
-        match = re.fullmatch(r"/v1/services/([a-z0-9-]+)/(start|stop|restart)", path)
+        match = re.fullmatch(r"/v1/services/([a-z0-9_-]+)/(start|stop|restart)", path)
         if not match:
             self._json(404, {"detail": "not found"})
             return
@@ -1117,11 +1167,39 @@ def main() -> None:
     else:
         print("[admin-control] EFDI_CONTROL_TOKEN is unset — control and shell endpoints disabled", flush=True)
     print(f"[admin-control] listening on http://{CONTROL_HOST}:{CONTROL_PORT}", flush=True)
+
+    # Make every exit observable. The agent was dying silently — an external
+    # SIGTERM leaves no traceback, so the log could not tell a kill from a crash,
+    # which is why the outage kept recurring without explanation. Now a signal
+    # logs its name and a serve-loop crash logs its exception; either way there
+    # is a breadcrumb, and the control port is closed cleanly instead of leaving
+    # a half-open socket behind a stale pidfile.
+    stop = threading.Event()
+
+    def _handle_signal(signum: int, _frame) -> None:
+        print(f"[admin-control] received {signal.Signals(signum).name} — shutting down",
+              flush=True)
+        stop.set()
+
+    for _sig in (signal.SIGTERM, signal.SIGINT):
+        signal.signal(_sig, _handle_signal)
+
+    def _serve() -> None:
+        try:
+            server.serve_forever()
+        except Exception as exc:  # noqa: BLE001 — a crash here must be logged, not silent
+            print(f"[admin-control] control server exited abnormally: {exc!r}", flush=True)
+        finally:
+            stop.set()
+
+    control_thread = threading.Thread(target=_serve, daemon=True)
+    control_thread.start()
+
     try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        pass
+        stop.wait()
     finally:
+        print("[admin-control] stopped", flush=True)
+        server.shutdown()
         server.server_close()
         if shell_server is not None:
             shell_server.shutdown()
