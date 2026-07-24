@@ -32,7 +32,7 @@ from translation_common import TOPIC_ROOT, make_config, payload_bytes
 
 Payload = import_module("protocols.vendors.sparkplug.sparkplug_b_pb2").Payload
 SparkplugRecord = import_module(
-    "protocols.vendors.sparkplug.sparkplug_track_pb2").SparkplugRecord
+    "protocols.vendors.sparkplug.sparkplug_pb2").SparkplugRecord
 
 INPUT_TOPIC = os.environ.get("SPARKPLUG_INPUT_TOPIC") or TOPIC_ROOT + "/raw/mqtt/spBv1.0/**"
 OUTPUT_TOPIC = TOPIC_ROOT + "/land/sparkplug/iot/unknown/sensor"

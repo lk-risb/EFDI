@@ -8,17 +8,17 @@ import {notify} from '@/lib/notify'
 import {useAuth} from '@/store/auth'
 import {useUiSettings} from '@/store/ui'
 import {
-    Activity,
-    FileText,
-    KeyRound,
-    Play,
-    RefreshCw,
-    Save,
-    Search,
-    Settings2,
-    Square,
-    Terminal,
-    Wrench,
+  Activity,
+  FileText,
+  KeyRound,
+  Play,
+  RefreshCw,
+  Save,
+  Search,
+  Settings2,
+  Square,
+  Terminal,
+  Wrench,
 } from 'lucide-react'
 
 export const Route = createFileRoute('/runtime')({
@@ -46,6 +46,7 @@ type ServiceDetails = {
   last_successful_request?: string | null
   last_unauthorized_request?: string | null
   seconds_since_last_success?: number | null
+  reason?: string
 }
 type ServiceState = {
   name: string
@@ -95,6 +96,9 @@ function serviceTelemetry(state: ServiceState | undefined) {
   const details = state?.details
   if (!details) return ''
   const parts: string[] = []
+  // Name the missing setting instead of leaving a service that cannot start
+  // looking like one that merely happens to be down.
+  if (state?.status === 'needs-config' && details.reason) parts.push(details.reason)
   if (details.tracks !== undefined) parts.push(`${details.tracks} tracks`)
   if (state?.status === 'waiting-for-client') parts.push('no successful HQ pulls')
   if (state?.status === 'auth-failed') parts.push(`${details.unauthorized_requests ?? 0} rejected pulls`)
@@ -354,6 +358,11 @@ function RuntimePage() {
                 const action = busy?.startsWith(`${item.name}:`) ? busy.split(':')[1] : null
                 const selected = selectedServices.has(item.name)
                 const presentation = servicePresentation(state, selected)
+                // Set only while the service genuinely cannot start. A running
+                // service is never blocked, whatever its configuration says.
+                const blockedReason = !state?.running && state?.status === 'needs-config'
+                  ? (state.details?.reason || 'required configuration is missing')
+                  : ''
                 return (
                   <div
                     key={item.name}
@@ -392,9 +401,9 @@ function RuntimePage() {
                         )}
                       </div>
                       <span className={`hidden text-[10px] uppercase tracking-[0.18em] sm:inline ${presentation.text}`}>{presentation.label}</span>
-                      <button title="Start" disabled={!canWrite || !!action || state?.running} onClick={() => serviceAction(item.name, 'start')} className="rounded p-1.5 text-zinc-500 transition hover:bg-emerald-500/10 hover:text-emerald-500 disabled:opacity-30"><Play size={13} /></button>
+                      <button title={blockedReason ? `Cannot start — ${blockedReason}` : 'Start'} disabled={!canWrite || !!action || state?.running || !!blockedReason} onClick={() => serviceAction(item.name, 'start')} className="rounded p-1.5 text-zinc-500 transition hover:bg-emerald-500/10 hover:text-emerald-500 disabled:opacity-30"><Play size={13} /></button>
                       <button title={item.kind === 'infrastructure' ? 'Infrastructure cannot be stopped from here' : 'Stop'} disabled={!canWrite || !!action || !state?.running || item.kind === 'infrastructure'} onClick={() => serviceAction(item.name, 'stop')} className="rounded p-1.5 text-zinc-500 transition hover:bg-red-500/10 hover:text-red-500 disabled:opacity-30"><Square size={12} /></button>
-                      <button title="Restart" disabled={!canWrite || !!action || item.name === 'admin-control'} onClick={() => serviceAction(item.name, 'restart')} className="rounded p-1.5 text-zinc-500 transition hover:bg-accent-ring/10 hover:text-accent-ring disabled:opacity-30"><RefreshCw size={13} className={action === 'restart' ? 'animate-spin' : ''} /></button>
+                      <button title={blockedReason ? `Cannot restart — ${blockedReason}` : 'Restart'} disabled={!canWrite || !!action || item.name === 'admin-control' || !!blockedReason} onClick={() => serviceAction(item.name, 'restart')} className="rounded p-1.5 text-zinc-500 transition hover:bg-accent-ring/10 hover:text-accent-ring disabled:opacity-30"><RefreshCw size={13} className={action === 'restart' ? 'animate-spin' : ''} /></button>
                       <button title="Show logs" onClick={() => showLogs(item.name)} className="rounded p-1.5 text-zinc-500 transition hover:bg-zinc-200 dark:hover:bg-white/10"><FileText size={13} /></button>
                     </div>
                     {openLogs === item.name && <pre className="relative z-10 mt-2 max-h-40 overflow-auto rounded bg-zinc-950 p-2 font-mono text-[10px] leading-4 text-zinc-300">{logLines.join('\n') || 'No log output yet.'}</pre>}
