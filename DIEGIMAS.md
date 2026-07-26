@@ -195,11 +195,10 @@ SITAWARE_API_PATH=              # privalomas konkretus diegimo REST resursas
 # ── NATO NFFI / ADatP-36 (STANAG 5527) XML jau perduodamas per Zenoh ───────
 NFFI_INPUT_TOPIC=               # neprivaloma; numatyta: …/raw/nffi/*
 
-# ── SitaWare legacy NVG push adapter (retained for compatibility) ───────────
-SITAWARE_NVG_URL=
-SITAWARE_NVG_USER=
-SITAWARE_NVG_PASS=
-SITAWARE_NVG_SOURCE=efdi-live
+# ── SitaWare HQ NVG importas (HQ NVG eksportas → Zenoh, nvg_bridge) ─────────
+SITAWARE_NVG_IMPORT_URL=
+SITAWARE_NVG_IMPORT_CA=
+SITAWARE_NVG_IMPORT_POLL_S=10
 
 # ── SitaWare HQ (siunčiamas NVG srautas, kurį periodiškai ima HQ) ───────────
 SITAWARE_HQ_NVG_ENABLE=0
@@ -289,7 +288,7 @@ Interaktyvus paleidiklis rodo visas paslaugas su jų parengties būsena. Įjunki
   [36] [✓] cot-udp        CoT → ATAK UDP multicast 239.2.3.1:6969
   [37] [ ] cot-udp-tak    CoT → WinTAK/ATAK UDP unicast
   [38] [✓] cot-bridge        CoT → TAK Server TCP
-  [39] [ ] sitaware-nvg   EFDI tracks → legacy NVG push adapter  will prompt for address+login
+  [39] [ ] nvg_bridge     SitaWare NVG eksportas → Zenoh       will prompt for URL+login
   [40] [ ] sitaware-hq-nvg EFDI tracks → SitaWare HQ pull feed   SITAWARE_HQ_NVG_ENABLE=0
 ```
 
@@ -310,7 +309,7 @@ Interaktyvus paleidiklis rodo visas paslaugas su jų parengties būsena. Įjunki
 | Giraffe CAT-34/48 + ATAK multicast | `1 17 18 40` |
 | Giraffe + drono aptikimai + ATAK | `1 10 17 18 40` |
 | Giraffe + SitaWare + ATAK multicast | `1 9 17 18 40` |
-| EFDI takeliai siunčiami į legacy NVG push adapterį | `1 43` |
+| SitaWare NVG eksportas įtraukiamas į Zenoh | `1 43` |
 | SitaWare HQ periodiškai ima EFDI takelius | `1 44` |
 | Visi parengti šaltiniai + TAK serveris | `a`, tada atžymėkite `40` (cot-udp) |
 | Tik radaras be TAK išvesties (derinimui) | `1 12 17 18` |
@@ -397,7 +396,7 @@ SITAWARE_HQ_NVG_SOURCE=efdi-live    # NVG šaltinio pavadinimas, sukuriamas auto
 
 ### SitaWare Headquarters (siunčiamas NVG srautas, kurį ima HQ)
 
-`sitaware-hq-nvg` yra natyvus Python išvesties procesas, skirtas HQ diegimui. Jis prenumeruoja EFDI takelius, laiko riboto dydžio gyvą momentinę būseną ir pateikia NVG 2.0.2 per tik skaitymui skirtą HTTP(S) adresą. SitaWare Headquarters jį periodiškai ima per **SitaWare Communication → NVG → NVG Import Subscriptions**. Tai nėra aukščiau aprašytas legacy NVG push adapteris.
+`sitaware-hq-nvg` yra natyvus Python išvesties procesas, skirtas HQ diegimui. Jis prenumeruoja EFDI takelius, laiko riboto dydžio gyvą momentinę būseną ir pateikia NVG 2.0.2 per tik skaitymui skirtą HTTP(S) adresą. SitaWare Headquarters jį periodiškai ima per **SitaWare Communication → NVG → NVG Import Subscriptions**. Atvirkštinį kelią — HQ NVG eksportą atgal į Zenoh — atlieka `nvg_bridge` (`bridges/nvg_bridge.py`).
 
 Pirmiausia HQ sukurkite sluoksnį:
 
@@ -491,14 +490,14 @@ Adresas priima tik GET/HEAD, pagal nutylėjimą reikalauja Basic autentifikavimo
 | `dji-cloud` | `bridges/dji_cloud_api_bridge.py` | `…/air/dji/telemetry/friendly/uav/{type}/{id}/sapient` | DJI šaltiniui skirtas autentifikuotas MQTT 5 tiltas |
 | `cot-udp` | `layers/cot_layer.py` | Prenumeratorius — visos temos | Įvykio valdomas |
 | `cot-bridge` | `layers/cot_layer.py` | Prenumeratorius — visos temos | Įvykio valdomas |
-| `sitaware-nvg` | `layers/nato_nvg_layer.py` | Prenumeratorius — visos takelių temos | Legacy NVG push adapteris |
+| `nvg_bridge` | `bridges/nvg_bridge.py` | SitaWare NVG eksportas → Zenoh | Periodinis |
 | `sitaware-hq-nvg` | `layers/sitaware_hq_nvg_feed.py` | Prenumeratorius — visos takelių temos | HQ periodiškai ima NVG būseną |
 | `track-fusion` | `bridges/track_fusion_bridge.py` | CAT-48 + CAT-21 prenumeratorius | Įvykio valdomas |
 
 ### TAK naudotojai ir SitaWare HQ technika
 
-Aktyvus CoT kelias yra `bridges/cot_bridge.py`: jis prenumeruoja normalizuotas
-Zenoh temas ir siunčia CoT į `cot-bridge` paskirties TAK Server. Naudokite TAK
+Aktyvus CoT kelias yra `layers/cot_layer.py`: jis prenumeruoja normalizuotas
+Zenoh temas ir siunčia CoT į `cot_layer` paskirties TAK Server. Naudokite TAK
 išduotą kliento sertifikatą, kai įjungtas `TAK_TLS=1`. Dabartiniame EFDI
 runtime nėra atskiro TAK arba SitaWare CoT priėmimo tilto. Jei konkretus
 diegimas teikia NFFI, pilnus XML dokumentus skelbkite į
@@ -609,9 +608,8 @@ naudokite konkretaus diegimo NFFI arba CoT Gateway.
 
 Nerašykite į kito partnerio vardų sritį. Leiskite pradinę vardų sritį
 maršrutizatoriaus/federacijos politikoje, o gavėjo pusėje prenumeruokite ją.
-Gavėjo `cot-*`, `sitaware-nvg` ar `sitaware-hq-nvg` sluoksniai leidžiamas
-normalizuotas temas išvers taip pat kaip vietinius sensorių duomenis. `sitaware-nvg`
-čia reiškia tik paliktą legacy NVG push adapterį.
+Gavėjo `cot-*` ar `sitaware-hq-nvg` sluoksniai leidžiamas
+normalizuotas temas išvers taip pat kaip vietinius sensorių duomenis.
 
 ### 8. Operacinių naudotojų testas
 
@@ -880,9 +878,70 @@ SERVICES=(... <pavadinimas> ...)
 
 ## 10. Zenoh administravimo GUI
 
-Web GUI stebėti routerio būseną ir redaguoti `zenoh/config.json5` be SSH prieigos, stiliaus pavyzdys — TAK admin panelė (reticle kampų kortelės, stiklinis šoninis meniu, akcento švytėjimas, techninio tinklelio fonas).
+Web GUI podui valdyti be SSH: routerio ir sistemos būsena, bridge'ų ir sluoksnių paleidimas/stabdymas, konfigūracijos ir prisijungimo duomenų redagavimas, sertifikatų įstaiga (CA) ir prekės ženklas. Naudoja modernią minimalistinę tamsią temą (vientisos tamsios kortelės, savarankiškai talpinamas Inter šriftas, žalsvas akcentas), kurią superadmin gali perbrandinti per WebUI Settings.
 
 Skydelio "Connected routers" panelė rodo kiekvieną kitą zenoh egzempliorių (router ar peer), su kuriuo šis routeris turi gyvą ryšį — gaunama iš routerio pačio admin space, tas pats šaltinis kaip prenumeratorių/queryable temų sąrašai, tad papildomos konfigūracijos nereikia be jau esamos `pod-admin-introspect` ACL taisyklės.
+
+### Panelės apžvalga
+
+Panelė veikia adresu `http://127.0.0.1:8890` (arba pod'o adresu) ir valdo vieną
+EFDI podą. Jei tik pradedate, tai orientacinė apžvalga; išsamesni poskyriai
+(*Runtime Control skydelis*, *Rolės*, *Konfigūracijos skirtuko laukai*) pateikti
+žemiau.
+
+**Pirmojo karto eiga.** Prisijunkite administratoriaus paskyra, sukurta diegimo
+metu (pirmą kartą gali paprašyti pakeisti slaptažodį). Atsidaro Dashboard —
+patikrinkite, ar podas sveikas. Toliau kasdienė eiga paprasta: **Runtime Control**
+paslaugoms paleisti, **Config** joms sukonfigūruoti, **Dashboard** būsenai
+patikrinti.
+
+**Puslapiai** (šoninio meniu tvarka):
+
+- **Dashboard** — būsenos apžvalga: CPU/RAM/disko/veikimo laiko/apkrovos/tinklo
+  rodikliai, pagrindinių paslaugų būsena, federacijos peržiūra ir gyvi Zenoh
+  rodikliai (prenumeratoriai, queryable, saugyklos, prijungti routeriai).
+- **Network** — *Managed Router Network*. Aktualu tik kai šis podas yra HQ/šaknis,
+  valdanti filialų routerius: topologija, tiesioginiai vaikai, pasitikėjimo būsena
+  ir **Apply trust ACL**. Vienas savarankiškas podas rodys „0 direct children" ir
+  gali šį puslapį ignoruoti.
+- **Config** — du sluoksniai viename puslapyje. **Zenoh Config** redaguoja patį
+  routerį (vietiniai prievadai, fabric endpoint'ai ir sertifikato tapatybė, vardų
+  sritis, ryšio politika — žr. *Konfigūracijos skirtuko laukai* žemiau).
+  **Integration Settings** redaguoja paslaugų aplinką be SSH: TAK host/port,
+  SitaWare HQ NVG importas/tiekimas ir REST keliai, UTM, MQTT/SensorThings,
+  ASTERIX prievadai, DJI. Slaptažodžiai — tik įrašomi. Išsaugoję perkraukite
+  atitinkamą paslaugą per Runtime Control.
+- **Runtime Control** — paleisti / stabdyti / perkrauti kiekvieną bridge (jutiklio
+  įvestį), protokolą (vertėją) ir sluoksnį (C2 išvestį); filtruoti pagal kategoriją
+  ar rolę; pasirinkti paleidimo rinkinį (įsimenamas tarp perkrovimų); skaityti
+  žurnalus vietoje. Žr. *Runtime Control skydelis* žemiau.
+- **Changes** — Zenoh konfigūracijos revizijų istorija ir jų rezultatas
+  (applied / rejected / rolled-back) — įrašomas rezultatas ir maiša, ne pati
+  konfigūracija.
+- **Admin Users** — panelės paskyrų ir jų rolių valdymas (tik superadmin).
+- **Certificates** — *Certificate Authority*: kurti vienkartinius kvietimus
+  vaikams federacijai (vaikas pats susigeneruoja raktus ir pateikia tik CSR) ir
+  stebėti sertifikatų galiojimą. Savarankiškiems podams nereikia.
+- **Publish Script** — sudaryti Zenoh publish komandą testavimui ar duomenų
+  tiekimui, be rankinio raktų išraiškų rašymo.
+- **Shell** — apribotas, audituojamas shell'as į routerio konteinerį diagnostikai.
+- **Logs** — gyvas bet kurios paslaugos žurnalo srautas.
+- **Audit Logs** — privilegijuotų veiksmų įrašas (konfigūracija, prekės ženklas,
+  naudotojai, prisijungimai).
+- **WebUI Settings** (paskyros meniu viršuje dešinėje) — **Branding**
+  (organizacijos pavadinimas, akcento spalva ir logotipas — superadmin),
+  **Appearance** (eilučių animacijos, tankios eilutės), **Live behavior**
+  (atnaujinimo intervalas) ir šviesios/tamsios temos jungiklis.
+
+**Dvi apsaugos, kurias galite sutikti — abi tyčinės.** EFDI atsisako veiksmų,
+kurie galėtų tyliai sugriauti pasitikėjimo ribas:
+
+1. *„Apply trust ACL" užblokuota — nevaldomas fabric uplink.* Šaknis vis dar
+   jungiasi prie išorinio fabric peer, kuris nėra užregistruotas vaikas. Arba
+   užregistruokite tą peer, arba pašalinkite uplink per **Config → Fabric
+   endpoints → „Root / no upstream"**.
+2. *Valdomo routerio ištrynimas išjungtas.* Vietoje to jį decommission/quarantine,
+   kad pašalintas routeris negrįžtų kaip nepatikimas peer.
 
 ### Nustatymas
 

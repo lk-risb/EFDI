@@ -175,7 +175,6 @@ than a free token.
 |---|---|---|
 | CoT/TAK output | Subscribes to matching normalized Zenoh topics | TAK TCP/mTLS host, or ATAK/WinTAK UDP destination |
 | CoT receiver | Converts an attached TAK or SitaWare CoT stream into Zenoh | Listen port or remote host; TAK uses TAK-issued mTLS credentials |
-| SitaWare Edge NVG | Subscribes to matching normalized Zenoh topics | Edge NVG URL and credentials |
 | SitaWare HQ NVG | Maintains an automatic normalized-track snapshot | HQ is configured to poll the EFDI URL; TLS and dedicated credentials are required outside an isolated lab |
 
 ## C2 to Zenoh and back
@@ -185,17 +184,19 @@ not silently enable the reverse path.
 
 ### TAK Server
 
-For Zenoh → TAK, configure `TAK_HOST/TAK_PORT` and select `cot-bridge`. The active
-CoT bridge is `bridges/cot_bridge.py`; it subscribes to normalized Zenoh topics
-and emits CoT to the configured TAK endpoint. TAK-issued client credentials are
-required when `TAK_TLS=1`. There is no EFDI-managed TAK receive bridge in the
-current runtime catalog.
+For Zenoh → TAK, configure `TAK_HOST/TAK_PORT` and select `cot_layer`
+(`layers/cot_layer.py`). It subscribes to normalized Zenoh topics and emits CoT
+two ways: UDP multicast to `239.2.3.1:6969` for LAN ATAK clients, and TCP/mTLS to
+a TAK Server. TAK-issued client credentials are required when `TAK_TLS=1`. For
+TAK → Zenoh, select `tak-bridge` (`bridges/tak_bridge.py`), which normalizes an
+inbound CoT stream back onto the fabric.
 
 ### SitaWare
 
-For Zenoh → SitaWare Edge, select `sitaware-nvg`. For Zenoh → SitaWare HQ,
-select `sitaware-hq-nvg` and configure an HQ NVG Import Subscription to poll the
-authenticated feed.
+For Zenoh → SitaWare HQ, select `nvg_layer` (`layers/nvg_layer.py`) and configure
+an HQ NVG Import Subscription to poll the authenticated NVG 2.0.2 feed it serves.
+For SitaWare HQ → Zenoh over NVG, select `nvg_bridge` (`bridges/nvg_bridge.py`),
+which polls an HQ NVG Export Endpoint and normalizes it onto the fabric.
 
 For SitaWare HQ → Zenoh, obtain the real REST resource from the deployment ICD:
 

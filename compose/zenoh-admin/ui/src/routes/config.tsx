@@ -1,13 +1,14 @@
-import { createFileRoute, redirect } from '@tanstack/react-router'
-import { useEffect, useState } from 'react'
-import { Layout } from '@/components/Layout'
-import { PageHeader } from '@/components/PageHeader'
-import { apiJson, apiFetch, errorMessage } from '@/lib/api'
-import { useAuth } from '@/store/auth'
-import { notify } from '@/lib/notify'
-import { CheckCircle2, FileCode2, Network, Plus, RotateCw, Save, ShieldCheck, Trash2, Waypoints } from 'lucide-react'
-import { HudCorners } from '@/components/HudCorners'
-import { fetchTopology } from '@/lib/topology'
+import {createFileRoute, redirect} from '@tanstack/react-router'
+import {useEffect, useState} from 'react'
+import {Layout} from '@/components/Layout'
+import {PageHeader} from '@/components/PageHeader'
+import {apiFetch, apiJson, errorMessage} from '@/lib/api'
+import {useAuth} from '@/store/auth'
+import {notify} from '@/lib/notify'
+import {CheckCircle2, FileCode2, Network, Plus, RotateCw, Save, ShieldCheck, Trash2, Waypoints} from 'lucide-react'
+import {HudCorners} from '@/components/HudCorners'
+import {IntegrationSettings} from '@/components/IntegrationSettings'
+import {fetchTopology} from '@/lib/topology'
 
 export const Route = createFileRoute('/config')({
   beforeLoad: () => {
@@ -83,14 +84,14 @@ function ConfigSection({
   className?: string
 }) {
   return (
-    <section className={`hud-frame relative hud-enter rounded-md border border-zinc-200 bg-white p-5 dark:border-white/10 dark:bg-[#0c0c0e] ${className}`}>
+    <section className={`hud-frame relative hud-enter rounded-md border border-zinc-200 hud-glass p-5 dark:border-white/10 ${className}`}>
       <HudCorners />
       <div className="mb-5 flex items-start gap-3 border-b border-zinc-200 pb-4 dark:border-white/10">
         <div className="mt-0.5 rounded-md border border-accent-ring/30 bg-accent-ring/10 p-2 text-accent-ring">
           {icon}
         </div>
         <div>
-          <h2 className="hud-label text-sm font-semibold text-zinc-800 dark:text-zinc-200">{title}</h2>
+          <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{title}</h2>
           <p className="mt-1 text-xs text-zinc-500">{description}</p>
         </div>
       </div>
@@ -513,6 +514,9 @@ function ConfigPage() {
             </ConfigSection>
           </div>
         )}
+        <div className="mt-5">
+          <IntegrationSettings />
+        </div>
       </div>
     </Layout>
   )

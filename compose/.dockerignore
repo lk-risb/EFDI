@@ -7,8 +7,6 @@
 # Runtime state and secrets — never belong in an image.
 certs/
 state/
-state-child/
-state-grandchild/
 .env
 
 # Local tooling and build output (regenerated inside the image).

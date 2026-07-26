@@ -1,14 +1,14 @@
-import { createFileRoute, redirect } from '@tanstack/react-router'
-import { useEffect, useState } from 'react'
-import { CheckCircle2, Copy, KeyRound, Network, Plus, ShieldAlert, ShieldCheck } from 'lucide-react'
-import { Layout } from '@/components/Layout'
-import { PageHeader } from '@/components/PageHeader'
-import { HudCorners } from '@/components/HudCorners'
-import { Skeleton } from '@/components/Skeleton'
-import { apiFetch, apiJson, errorMessage } from '@/lib/api'
-import { notify } from '@/lib/notify'
-import { useAuth } from '@/store/auth'
-import { cn } from '@/lib/utils'
+import {createFileRoute, redirect} from '@tanstack/react-router'
+import {useEffect, useState} from 'react'
+import {CheckCircle2, Copy, KeyRound, Network, Plus, ShieldAlert, ShieldCheck} from 'lucide-react'
+import {Layout} from '@/components/Layout'
+import {PageHeader} from '@/components/PageHeader'
+import {HudCorners} from '@/components/HudCorners'
+import {Skeleton} from '@/components/Skeleton'
+import {apiFetch, apiJson, errorMessage} from '@/lib/api'
+import {notify} from '@/lib/notify'
+import {useAuth} from '@/store/auth'
+import {cn} from '@/lib/utils'
 
 export const Route = createFileRoute('/certificates')({
   beforeLoad: () => {
@@ -201,7 +201,7 @@ function CertificatesPage() {
         </div>
 
         <h2 className="enterprise-section-title">Enrollment activity</h2>
-        <div className="hud-frame relative overflow-hidden rounded-md border border-zinc-200 bg-white dark:border-white/10 dark:bg-[#0c0c0e]">
+        <div className="hud-frame relative overflow-hidden rounded-md border border-zinc-200 hud-glass dark:border-white/10">
           <HudCorners />
           {invitations === null ? <p className="p-5 text-sm text-zinc-500">Loading invitations…</p> : invitations.length === 0 ? <p className="p-5 text-sm text-zinc-500">No router invitations created.</p> : invitations.map(invitation => (
             <div key={invitation.id} className="grid gap-3 border-b border-zinc-100 p-4 last:border-0 sm:grid-cols-[minmax(10rem,1fr)_8rem_8rem_9rem] dark:border-white/5">

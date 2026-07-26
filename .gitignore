@@ -3,8 +3,6 @@ register_topics.sh
 compose/.env
 compose/certs/
 compose/state/
-compose/state-child/
-compose/state-grandchild/
 logs/
 .pids/
 *.cbor

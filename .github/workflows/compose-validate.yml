@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Validate primary, child, and grandchild Compose files
+      - name: Validate Compose file renders
         working-directory: compose
         env:
           POD_STATE_DIR: /tmp/efdi-state
@@ -25,25 +25,5 @@ jobs:
           ZENOH_ADMIN_FIRST_USER: admin
           ZENOH_ADMIN_FIRST_PASS: admin-password
           EFDI_CONTROL_TOKEN: ci-control-token
-          PARTNER_NAMESPACE_CHILD: ci-child
-          ZENOH_ADMIN_DB_USER_CHILD: child
-          ZENOH_ADMIN_DB_PASSWORD_CHILD: child-password
-          ZENOH_ADMIN_DB_ROOT_PASSWORD_CHILD: child-root-password
-          ZENOH_ADMIN_SECRET_KEY_CHILD: child-secret
-          ZENOH_ADMIN_FIRST_USER_CHILD: admin
-          ZENOH_ADMIN_FIRST_PASS_CHILD: child-password
-          ZENOH_ADMIN_TRUSTED_PARENT_CERT_PATH_CHILD: /certs/parent.pem
-          ZENOH_ADMIN_TRUSTED_PARENT_CN_CHILD: ci-root
-          ZENOH_ADMIN_TRUSTED_ROOT_CERT_PATHS_CHILD: /certs/root.pem
-          ZENOH_ADMIN_TRUSTED_ROOT_CNS_CHILD: ci-root
-          PARTNER_NAMESPACE_GRANDCHILD: ci-grandchild
-          ZENOH_ADMIN_DB_USER_GRANDCHILD: grandchild
-          ZENOH_ADMIN_DB_PASSWORD_GRANDCHILD: grandchild-password
-          ZENOH_ADMIN_DB_ROOT_PASSWORD_GRANDCHILD: grandchild-root-password
-          ZENOH_ADMIN_SECRET_KEY_GRANDCHILD: grandchild-secret
-          ZENOH_ADMIN_FIRST_USER_GRANDCHILD: admin
-          ZENOH_ADMIN_FIRST_PASS_GRANDCHILD: grandchild-password
         run: |
           docker compose -f docker-compose.yml config -q
-          docker compose -f docker-compose.child.yml config -q
-          docker compose -f docker-compose.grandchild.yml config -q

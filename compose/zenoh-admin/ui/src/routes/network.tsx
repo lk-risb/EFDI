@@ -1,14 +1,26 @@
-import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router'
-import { useEffect, useState } from 'react'
-import { Layout } from '@/components/Layout'
-import { PageHeader } from '@/components/PageHeader'
-import { apiJson, apiFetch, errorMessage } from '@/lib/api'
-import { useAuth } from '@/store/auth'
-import { notify } from '@/lib/notify'
-import { ArrowRight, Ban, Cable, CheckCircle2, GitBranch, KeyRound, RefreshCw, Router, ShieldCheck, ShieldOff, WifiOff } from 'lucide-react'
-import { HudCorners } from '@/components/HudCorners'
-import { TopologyMap } from '@/components/TopologyMap'
-import { fetchTopology, type TopologyNode, type TopologyTransportEdge } from '@/lib/topology'
+import {createFileRoute, redirect, useNavigate} from '@tanstack/react-router'
+import {useEffect, useState} from 'react'
+import {Layout} from '@/components/Layout'
+import {PageHeader} from '@/components/PageHeader'
+import {apiFetch, apiJson, errorMessage} from '@/lib/api'
+import {useAuth} from '@/store/auth'
+import {notify} from '@/lib/notify'
+import {
+    ArrowRight,
+    Ban,
+    Cable,
+    CheckCircle2,
+    GitBranch,
+    KeyRound,
+    RefreshCw,
+    Router,
+    ShieldCheck,
+    ShieldOff,
+    WifiOff
+} from 'lucide-react'
+import {HudCorners} from '@/components/HudCorners'
+import {TopologyMap} from '@/components/TopologyMap'
+import {fetchTopology, type TopologyNode, type TopologyTransportEdge} from '@/lib/topology'
 
 export const Route = createFileRoute('/network')({
   beforeLoad: () => {
@@ -192,7 +204,7 @@ function NetworkPage() {
         <div className="hud-frame relative hud-enter mb-6">
           <HudCorners />
           <div className="rounded-md border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#0c0c0e] p-4">
-            <h2 className="hud-label text-sm font-semibold text-zinc-600 dark:text-zinc-400 mb-3">Topology</h2>
+            <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-3">Topology</h2>
             <TopologyMap nodes={topology} transportEdges={transportEdges} selected={selectedNamespace} onSelect={setSelectedNamespace} />
           </div>
         </div>

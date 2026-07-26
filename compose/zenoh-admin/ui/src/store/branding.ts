@@ -1,5 +1,13 @@
-import { create } from 'zustand'
-import { apiJson } from '@/lib/api'
+import {create} from 'zustand'
+import {apiFetch, apiJson} from '@/lib/api'
+
+export interface BrandingFields {
+  org_name: string
+  accent_fill: string
+  accent_fill_hover: string
+  accent_text: string
+  accent_ring: string
+}
 
 interface BrandingState {
   orgName: string
@@ -10,6 +18,8 @@ interface BrandingState {
   logoUrl: string | null
   loaded: boolean
   fetchBranding: () => Promise<void>
+  updateBranding: (fields: Partial<BrandingFields>) => Promise<void>
+  uploadLogo: (file: File) => Promise<void>
 }
 
 const DEFAULTS = {
@@ -28,9 +38,23 @@ function applyAccentVars(accentFill: string, accentFillHover: string, accentText
   document.documentElement.style.setProperty('--brand-accent-ring', accentRing)
 }
 
-export const useBranding = create<BrandingState>()((set) => ({
+export const useBranding = create<BrandingState>()((set, get) => ({
   ...DEFAULTS,
   loaded: false,
+  updateBranding: async (fields) => {
+    await apiJson('/api/branding', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(fields),
+    })
+    await get().fetchBranding()
+  },
+  uploadLogo: async (file) => {
+    const form = new FormData()
+    form.append('file', file)
+    await apiFetch('/api/branding/logo', { method: 'POST', body: form })
+    await get().fetchBranding()
+  },
   fetchBranding: async () => {
     try {
       const data = await apiJson<{
