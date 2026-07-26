@@ -7,19 +7,7 @@ import {apiJson, errorMessage} from '@/lib/api'
 import {notify} from '@/lib/notify'
 import {useAuth} from '@/store/auth'
 import {useUiSettings} from '@/store/ui'
-import {
-  Activity,
-  FileText,
-  KeyRound,
-  Play,
-  RefreshCw,
-  Save,
-  Search,
-  Settings2,
-  Square,
-  Terminal,
-  Wrench,
-} from 'lucide-react'
+import {Activity, FileText, Play, RefreshCw, Search, Square,} from 'lucide-react'
 
 export const Route = createFileRoute('/runtime')({
   beforeLoad: () => {
@@ -108,57 +96,9 @@ function serviceTelemetry(state: ServiceState | undefined) {
   return parts.length ? ` · ${parts.join(' · ')}` : ''
 }
 
-const FIELD_GROUPS: { title: string; description: string; fields: { key: string; label: string; secret?: boolean; placeholder?: string }[] }[] = [
-  { title: 'Router and namespace', description: 'Native-process endpoint and namespace defaults. Use Zenoh Config for live router listener changes.', fields: [
-    { key: 'ZENOH_LOCAL_ENDPOINT', label: 'Local Zenoh endpoint', placeholder: 'tcp/127.0.0.1:7448' },
-    { key: 'PARTNER_NAMESPACE', label: 'Partner namespace', placeholder: 'partner-a' },
-  ] },
-  { title: 'TAK and CoT', description: 'Authenticated CoT feed to the TAK Server over mTLS.', fields: [
-    { key: 'TAK_HOST', label: 'TAK Server host / IP', placeholder: '192.168.20.6' },
-    { key: 'TAK_PORT', label: 'TAK Server TLS port', placeholder: '8087' },
-    { key: 'TAK_TLS', label: 'TAK TLS enabled (1/0)', placeholder: '1' },
-  ] },
-  { title: 'SitaWare and UTM', description: 'HTTPS endpoints and polling settings. Passwords and tokens are write-only.', fields: [
-    { key: 'SITAWARE_URL', label: 'SitaWare HQ URL', placeholder: 'https://host.example' },
-    { key: 'SITAWARE_API_PATH', label: 'SitaWare API path', placeholder: '/deployment-specific/path' },
-    { key: 'SITAWARE_USER', label: 'SitaWare username' }, { key: 'SITAWARE_PASS', label: 'SitaWare password', secret: true },
-    { key: 'SITAWARE_POLL_S', label: 'SitaWare poll seconds', placeholder: '10' },
-    { key: 'SITAWARE_NVG_URL', label: 'NVG push endpoint (nvg_layer)', placeholder: 'https://sitaware.example:8080' },
-    { key: 'SITAWARE_NVG_USER', label: 'NVG push username' },
-    { key: 'SITAWARE_NVG_PASS', label: 'NVG push password', secret: true },
-    { key: 'SITAWARE_NVG_SOURCE', label: 'NVG source name', placeholder: 'efdi-live' },
-    { key: 'UTM_ANS_API_URL', label: 'UTM JSON/GeoJSON URL', placeholder: 'https://authorized-feed.example' },
-    { key: 'UTM_ANS_API_TOKEN', label: 'UTM API token', secret: true },
-  ] },
-  { title: 'Video and metadata ingest', description: 'SRT/KLV sources and source naming for the STANAG 4609 bridge.', fields: [
-    { key: 'STANAG4609_SRT_URL', label: 'STANAG 4609 SRT URL', placeholder: 'srt://host:port?mode=listener' },
-    { key: 'STANAG4609_SOURCE', label: 'STANAG 4609 source label', placeholder: 'stanag_4609' },
-  ] },
-  { title: 'MQTT and IoT sensor feeds', description: 'MQTT broker ingress and OGC SensorThings polling. The MQTT bridge forwards payloads verbatim; the mqtt translator reads JSON only.', fields: [
-    { key: 'MQTT_HOST', label: 'MQTT broker host', placeholder: 'broker.example' },
-    { key: 'MQTT_PORT', label: 'MQTT broker port', placeholder: '1883' },
-    { key: 'MQTT_TOPIC', label: 'MQTT subscription filters', placeholder: 'sensors/#' },
-    { key: 'MQTT_USER', label: 'MQTT username' },
-    { key: 'MQTT_PASS', label: 'MQTT password', secret: true },
-    { key: 'MQTT_TLS', label: 'MQTT TLS enabled (1/0)', placeholder: '0' },
-    { key: 'SENSORTHINGS_URL', label: 'SensorThings service root', placeholder: 'https://host/FROST-Server/v1.1' },
-    { key: 'SENSORTHINGS_POLL_S', label: 'SensorThings poll seconds', placeholder: '30' },
-    { key: 'SENSORTHINGS_TOKEN', label: 'SensorThings bearer token', secret: true },
-  ] },
-  { title: 'Sensors and data sources', description: 'Common partner endpoints. Protocol-specific CAT and raw-port settings are available under Advanced.', fields: [
-    { key: 'ASTERIX_PORT', label: 'Mixed ASTERIX UDP port', placeholder: '50000' }, { key: 'ASTERIX_CATEGORIES', label: 'ASTERIX categories', placeholder: '34,48' },
-    { key: 'CAT10_PORT', label: 'CAT-010 port', placeholder: '50010' }, { key: 'CAT21_PORT', label: 'CAT-021 port', placeholder: '50021' },
-    { key: 'CAT34_PORT', label: 'CAT-034 port', placeholder: '50034' }, { key: 'CAT48_PORT', label: 'CAT-048 port', placeholder: '50048' },
-    { key: 'CAT62_PORT', label: 'CAT-062 port', placeholder: '50062' }, { key: 'MAVLINK_PORT', label: 'MAVLink port' },
-    { key: 'DJI_MQTT_HOST', label: 'DJI Cloud MQTT host' }, { key: 'DJI_MQTT_PORT', label: 'DJI MQTT port', placeholder: '8883' },
-    { key: 'DJI_MQTT_USERNAME', label: 'DJI MQTT username' }, { key: 'DJI_MQTT_PASSWORD', label: 'DJI MQTT password', secret: true },
-  ] },
-]
-
-const KNOWN_KEYS = new Set(FIELD_GROUPS.flatMap(group => group.fields.map(field => field.key)))
 
 function Card({ children, className = '' }: { children: React.ReactNode; className?: string }) {
-  return <section className={`hud-frame relative rounded-md border border-zinc-200 bg-white p-5 dark:border-white/10 dark:bg-[#0c0c0e] ${className}`}><HudCorners />{children}</section>
+  return <section className={`hud-frame hud-glass relative rounded-md border border-zinc-200 p-5 dark:border-white/10 ${className}`}><HudCorners />{children}</section>
 }
 
 function RuntimePage() {
@@ -167,20 +107,13 @@ function RuntimePage() {
   const [runtime, setRuntime] = useState<RuntimeData | null>(null)
   const [catalog, setCatalog] = useState<CatalogItem[]>([])
   const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
   const [filter, setFilter] = useState('')
   const [group, setGroup] = useState('All')
   const [kind, setKind] = useState('All')
-  const [values, setValues] = useState<Record<string, string>>({})
-  const [secrets, setSecrets] = useState<Record<string, boolean>>({})
-  const [editableKeys, setEditableKeys] = useState<string[]>([])
-  const [advancedKey, setAdvancedKey] = useState('')
-  const [advancedValue, setAdvancedValue] = useState('')
   const [openLogs, setOpenLogs] = useState<string | null>(null)
   const [logLines, setLogLines] = useState<string[]>([])
   const [busy, setBusy] = useState<string | null>(null)
   const [selectionBusy, setSelectionBusy] = useState<string | null>(null)
-  const showCorners = useUiSettings((s) => s.showCorners)
   const rowAnimations = useUiSettings((s) => s.rowAnimations)
   const denseRows = useUiSettings((s) => s.denseRows)
   const refreshIntervalMs = useUiSettings((s) => s.refreshIntervalMs)
@@ -194,15 +127,6 @@ function RuntimePage() {
       ])
       setRuntime(data)
       setCatalog(catalogData.services)
-      setEditableKeys(data.editable_keys ?? [])
-      const nextValues: Record<string, string> = {}
-      const nextSecrets: Record<string, boolean> = {}
-      for (const [key, value] of Object.entries(data.config)) {
-        if (typeof value === 'string') nextValues[key] = value
-        else nextSecrets[key] = value.configured
-      }
-      setValues(nextValues)
-      setSecrets(nextSecrets)
     } catch (e) {
       notify.error(errorMessage(e))
     } finally { setLoading(false) }
@@ -243,19 +167,6 @@ function RuntimePage() {
   const selectedServices = useMemo(() => new Set(runtime?.selected_services ?? []), [runtime?.selected_services])
   const selectedList = runtime?.selected_services ?? []
 
-  function setValue(key: string, value: string) { setValues(current => ({ ...current, [key]: value })) }
-
-  async function saveConfig() {
-    if (!canWrite) return
-    setSaving(true)
-    try {
-      const payload: Record<string, string> = { ...values }
-      for (const [key, configured] of Object.entries(secrets)) if (configured && !values[key]) delete payload[key]
-      await apiJson('/api/runtime/config', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ values: payload }) })
-      notify.success('Runtime settings saved. Restart affected services to apply them.')
-      await load()
-    } catch (e) { notify.error(errorMessage(e)) } finally { setSaving(false) }
-  }
 
   async function serviceAction(name: string, action: 'start' | 'stop' | 'restart') {
     if (!canWrite) return
@@ -301,40 +212,8 @@ function RuntimePage() {
     } catch (e) { notify.error(errorMessage(e)) }
   }
 
-  function addAdvanced() {
-    const key = advancedKey.trim().toUpperCase()
-    if (!/^[A-Z][A-Z0-9_]{0,63}$/.test(key) || (!key.startsWith('CAT') && !key.startsWith('NFFI_') && !KNOWN_KEYS.has(key) && !editableKeys.includes(key))) {
-      notify.error('Use an allowed protocol setting such as CAT48_TCP or NFFI_INPUT_TOPIC')
-      return
-    }
-    setValue(key, advancedValue); setAdvancedKey(''); setAdvancedValue('')
-  }
 
-  const configuredKeys = useMemo(() => {
-    const known = new Set(FIELD_GROUPS.flatMap(groupDef => groupDef.fields.map(field => field.key)))
-    return Array.from(new Set([...Object.keys(values), ...Object.keys(secrets)]))
-      .filter(key => !known.has(key))
-      .sort()
-  }, [values, secrets])
 
-  function renderSetting(key: string) {
-    const secret = secrets[key] !== undefined
-    return <label key={key} className="space-y-1">
-      <span className="flex items-center gap-1 text-xs text-zinc-600 dark:text-zinc-400">
-        <span className="font-mono">{key}</span>
-        {secret && <KeyRound size={11} className="text-amber-500" />}
-        {secret && secrets[key] && <span className="ml-auto text-[10px] text-emerald-500">configured</span>}
-      </span>
-      <input
-        type={secret ? 'password' : 'text'}
-        disabled={!canWrite}
-        value={values[key] ?? ''}
-        onChange={e => setValue(key, e.target.value)}
-        placeholder={secret && secrets[key] ? 'Leave blank to keep current value' : ''}
-        className="w-full rounded-md border border-zinc-300 bg-zinc-100 px-2.5 py-2 font-mono text-xs text-zinc-900 focus:outline-none focus:ring-2 focus:ring-accent-ring disabled:opacity-50 dark:border-white/10 dark:bg-[#141416] dark:text-white"
-      />
-    </label>
-  }
 
   return (
     <Layout>
@@ -343,16 +222,15 @@ function RuntimePage() {
         {!canWrite && <div className="mb-5 rounded-md border border-yellow-500/30 bg-yellow-500/10 px-4 py-3 text-xs text-yellow-700 dark:text-yellow-300">Read-only view. A superadmin is required to change settings or control processes.</div>}
 
         <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-5">
-          {[['CONTROL AGENT', runtime ? `127.0.0.1:${runtime.control_port}` : 'offline'], ['RUNNING SERVICES', `${runningCount}/${runtime?.services.length ?? 0}`], ['SAVED SETTINGS', `${configuredCount}`], ['SAVED SELECTION', `${selectedList.length}`], ['CONFIG FILE', runtime?.env_file ?? '—']].map(([label, value]) => <Card key={label} className="p-4"><span className="hud-label text-[10px] text-zinc-500">{label}</span><p className="mt-2 truncate font-mono text-sm text-zinc-800 dark:text-zinc-200" title={value}>{value}</p></Card>)}
+          {[['CONTROL AGENT', runtime ? `127.0.0.1:${runtime.control_port}` : 'offline'], ['RUNNING SERVICES', `${runningCount}/${runtime?.services.length ?? 0}`], ['SAVED SETTINGS', `${configuredCount}`], ['SAVED SELECTION', `${selectedList.length}`], ['CONFIG FILE', runtime?.env_file ?? '—']].map(([label, value]) => <Card key={label} className="p-5"><span className="hud-label text-[10px] text-zinc-500">{label}</span><p className="mt-2 truncate text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100" title={value}>{value}</p></Card>)}
         </div>
         {selectedList.length > 0 && <Card className="mb-5 p-4"><div className="mb-2 flex items-center justify-between"><span className="hud-label text-[11px] font-semibold text-zinc-600 dark:text-zinc-300">Saved selection</span><span className="text-[10px] text-zinc-500">Restored automatically on the next launcher run</span></div><div className="flex flex-wrap gap-2">{selectedList.map(name => <span key={name} className="rounded-full border border-zinc-300 bg-zinc-100 px-2.5 py-1 font-mono text-[10px] text-zinc-700 dark:border-white/10 dark:bg-[#141416] dark:text-zinc-300">{name}</span>)}</div></Card>}
 
-        <div className="grid items-start gap-5 xl:grid-cols-[1.1fr_1fr]">
-          <Card>
-            <div className="mb-4 flex items-start justify-between gap-3 border-b border-zinc-200 pb-4 dark:border-white/10"><div><h2 className="hud-label flex items-center gap-2 text-sm font-semibold"><Activity size={16} className="text-accent-ring" /> Bridge and layer control</h2><p className="mt-1 text-xs text-zinc-500">Start, stop, restart, and inspect every host-managed integration.</p></div><div className="relative"><Search size={14} className="absolute left-2.5 top-2.5 text-zinc-500" /><input value={filter} onChange={e => setFilter(e.target.value)} placeholder="Filter" className="w-32 rounded-md border border-zinc-300 bg-zinc-100 py-2 pl-8 pr-2 text-xs dark:border-white/10 dark:bg-[#141416]" /></div></div>
+        <Card>
+            <div className="mb-4 flex items-start justify-between gap-3 border-b border-zinc-200 pb-4 dark:border-white/10"><div><h2 className="flex items-center gap-2 text-base font-semibold text-zinc-900 dark:text-zinc-100"><Activity size={16} className="text-accent-ring" /> Bridge and layer control</h2><p className="mt-1 text-xs text-zinc-500">Start, stop, restart, and inspect every host-managed integration.</p></div><div className="relative"><Search size={14} className="absolute left-2.5 top-2.5 text-zinc-500" /><input value={filter} onChange={e => setFilter(e.target.value)} placeholder="Filter" className="w-32 rounded-md border border-zinc-300 bg-zinc-100 py-2 pl-8 pr-2 text-xs dark:border-white/10 dark:bg-[#141416]" /></div></div>
             <div className="mb-4 flex gap-1 overflow-x-auto pb-1">{groups.map(item => <button key={item} onClick={() => setGroup(item)} className={`whitespace-nowrap rounded-full border px-2.5 py-1 text-[10px] ${group === item ? 'border-accent-ring bg-accent-ring/10 text-accent-ring' : 'border-zinc-300 text-zinc-500 dark:border-zinc-700'}`}>{item}</button>)}</div>
             <div className="mb-4 flex items-center gap-1 overflow-x-auto pb-1"><span className="shrink-0 text-[10px] uppercase tracking-wider text-zinc-500">Role</span>{kinds.map(item => <button key={item} onClick={() => setKind(item)} className={`whitespace-nowrap rounded-full border px-2.5 py-1 text-[10px] ${kind === item ? 'border-accent-ring bg-accent-ring/10 text-accent-ring' : 'border-zinc-300 text-zinc-500 dark:border-zinc-700'}`}>{item}</button>)}</div>
-            <div className={`max-h-[680px] space-y-1.5 overflow-auto pr-1 ${denseRows ? 'text-[11px]' : ''}`}>
+            <div className={`-mx-2 divide-y divide-zinc-200/60 dark:divide-white/[0.05] ${denseRows ? 'text-[11px]' : ''}`}>
               {filtered.map((item, index) => {
                 const state = runtime?.services.find(service => service.name === item.name)
                 const action = busy?.startsWith(`${item.name}:`) ? busy.split(':')[1] : null
@@ -366,11 +244,10 @@ function RuntimePage() {
                 return (
                   <div
                     key={item.name}
-                    className={`hud-frame hud-card relative overflow-hidden rounded-md border border-zinc-200 bg-white px-3 ${denseRows ? 'py-2' : 'py-2.5'} transition duration-150 hover:-translate-y-px hover:border-accent-ring/30 dark:border-white/10 dark:bg-[#0c0c0e] ${rowAnimations ? 'hud-enter' : ''}`}
+                    className={`group relative px-3 ${denseRows ? 'py-2.5' : 'py-3'} transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.03] ${rowAnimations ? 'hud-enter' : ''}`}
                     style={{ animationDelay: rowAnimations ? `${Math.min(index, 16) * 18}ms` : undefined }}
                   >
-                    {showCorners && <HudCorners />}
-                    <div className="relative z-10 flex items-center gap-2">
+                    <div className="flex items-center gap-3">
                       <input
                         type="checkbox"
                         checked={selected || item.kind === 'infrastructure'}
@@ -384,14 +261,14 @@ function RuntimePage() {
                       <span className={`h-2 w-2 shrink-0 rounded-full ${presentation.dot}`} />
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5">
-                          <p className="truncate font-mono text-xs text-zinc-800 dark:text-zinc-200">{item.name}</p>
+                          <p className="truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">{item.name}</p>
                           {item.kind && (
-                            <span className={`shrink-0 rounded border px-1 text-[9px] uppercase tracking-wider ${KIND_STYLE[item.kind] ?? KIND_STYLE.infrastructure}`}>
+                            <span className={`shrink-0 rounded px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide ${KIND_STYLE[item.kind] ?? KIND_STYLE.infrastructure}`}>
                               {item.kind}
                             </span>
                           )}
                         </div>
-                        <p className="truncate text-[10px] text-zinc-500">
+                        <p className="mt-0.5 truncate text-xs text-zinc-500 dark:text-zinc-400">
                           {item.description}{state?.pid ? ` · PID ${state.pid}` : ''}{serviceTelemetry(state)}
                         </p>
                         {item.source && (
@@ -413,43 +290,7 @@ function RuntimePage() {
             </div>
           </Card>
 
-          <Card>
-            <div className="mb-4 flex items-start justify-between gap-3 border-b border-zinc-200 pb-4 dark:border-white/10"><div><h2 className="hud-label flex items-center gap-2 text-sm font-semibold"><Settings2 size={16} className="text-accent-ring" /> Integration settings</h2><p className="mt-1 text-xs text-zinc-500">Edit endpoints, ports, topics, and credentials without opening `.env` over SSH.</p></div><button disabled={!canWrite || saving} onClick={saveConfig} className="flex items-center gap-2 rounded-md bg-accent-fill px-3 py-2 text-xs text-accent-text disabled:opacity-50"><Save size={13} /> {saving ? 'Saving…' : 'Save settings'}</button></div>
-            <div className="space-y-5">
-              {FIELD_GROUPS.map(groupDef => (
-                <div key={groupDef.title}>
-                  <h3 className="hud-label text-[11px] font-semibold text-zinc-600 dark:text-zinc-300">{groupDef.title}</h3>
-                  <p className="mb-3 mt-1 text-[11px] text-zinc-500">{groupDef.description}</p>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    {groupDef.fields.map(field => {
-                      const secret = field.secret || secrets[field.key] !== undefined
-                      return (
-                        <label key={field.key} className="space-y-1">
-                          <span className="flex items-center gap-1 text-xs text-zinc-600 dark:text-zinc-400">
-                            {field.label}
-                            {secret && <KeyRound size={11} className="text-amber-500" />}
-                            {secret && secrets[field.key] && <span className="ml-auto text-[10px] text-emerald-500">configured</span>}
-                          </span>
-                          <input
-                            type={secret ? 'password' : 'text'}
-                            disabled={!canWrite}
-                            value={values[field.key] ?? ''}
-                            onChange={e => setValue(field.key, e.target.value)}
-                            placeholder={secret && secrets[field.key] ? 'Leave blank to keep current value' : field.placeholder}
-                            className="w-full rounded-md border border-zinc-300 bg-zinc-100 px-2.5 py-2 font-mono text-xs text-zinc-900 focus:outline-none focus:ring-2 focus:ring-accent-ring disabled:opacity-50 dark:border-white/10 dark:bg-[#141416] dark:text-white"
-                          />
-                        </label>
-                      )
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="mt-5 border-t border-zinc-200 pt-4 dark:border-white/10"><h3 className="hud-label flex items-center gap-2 text-[11px] font-semibold text-zinc-600 dark:text-zinc-300"><Wrench size={13} /> Advanced protocol setting</h3><p className="mb-2 mt-1 text-[11px] text-zinc-500">Use this for CATxx_TCP, raw ports, input topics, and other documented `.env` fields.</p><div className="flex gap-2"><input value={advancedKey} onChange={e => setAdvancedKey(e.target.value)} placeholder="CAT48_TCP" className="w-32 rounded-md border border-zinc-300 bg-zinc-100 px-2.5 py-2 font-mono text-xs dark:border-white/10 dark:bg-[#141416]" /><input value={advancedValue} onChange={e => setAdvancedValue(e.target.value)} placeholder="value" className="min-w-0 flex-1 rounded-md border border-zinc-300 bg-zinc-100 px-2.5 py-2 font-mono text-xs dark:border-white/10 dark:bg-[#141416]" /><button disabled={!canWrite} onClick={addAdvanced} className="rounded-md border border-accent-ring/50 px-3 text-xs text-accent-ring disabled:opacity-40">Add</button></div></div>
-            {configuredKeys.length > 0 && <div className="mt-5 border-t border-zinc-200 pt-4 dark:border-white/10"><h3 className="hud-label text-[11px] font-semibold text-zinc-600 dark:text-zinc-300">Additional deployment settings</h3><p className="mb-3 mt-1 text-[11px] text-zinc-500">These fields are present in the deployment environment but are not tied to a fixed partner form.</p><div className="grid gap-3 sm:grid-cols-2">{configuredKeys.map(renderSetting)}</div></div>}
-            <div className="mt-5 rounded-md border border-amber-500/20 bg-amber-500/10 p-3 text-[11px] text-amber-700 dark:text-amber-300"><Terminal size={13} className="mb-1" />Saving changes updates the deployment environment. Restart only the affected service after checking its log; secrets are write-only and never displayed.</div>
-          </Card>
-        </div>
+
       </div>
     </Layout>
   )

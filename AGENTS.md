@@ -49,7 +49,7 @@ Read `CLAUDE.md` first; its project constraints apply to every agent and tool.
   categories visually and semantically distinct.
 - Publish dronuradaras.lt devices only when the latest successful public API
   poll reports `is_online=true`. Preserve the offline tombstone path: it evicts
-  old markers from CoT, SitaWare Edge, and the SitaWare HQ NVG snapshot.
+  old markers from CoT and the SitaWare HQ NVG snapshot.
 - CoT and SitaWare NVG share the same RU/BY ICAO/MMSI affiliation classifiers;
   do not regress ADS-B/AIS topics to one static affiliation.
 - ADS-B emitter categories `C1`/`C2` are airport surface emergency/service
@@ -61,10 +61,10 @@ Read `CLAUDE.md` first; its project constraints apply to every agent and tool.
   selections and non-secret endpoints. The Zenoh Config route uses TAK's
   PageHeader/HUD card design while preserving EFDI transport, namespace,
   federation-target, and policy fields.
-- TAK Server output uses the mTLS `cot-bridge` service and the
-  `bridges/cot_bridge.py` entrypoint with a TAK-issued certificate, not the
-  Zenoh certificate. There is no EFDI-managed TAK/SitaWare CoT receive bridge
-  in the current runtime catalog.
+- TAK Server output uses the `cot_layer` service (`layers/cot_layer.py`) with a
+  TAK-issued certificate, not the Zenoh certificate. The reverse path is the
+  `tak_bridge` service (`bridges/tak_bridge.py`), which normalizes an inbound TAK
+  CoT stream back onto the fabric.
 - The 2026-07-23 protocol conformance pass targets the official standard UAPs:
   CAT-020 1.11, CAT-021 2.7, CAT-034 1.29, CAT-048 1.32, and CAT-062 1.21.
   It fixes CAT-034 compound/status fields and CAT-062 CNF decoding, and pins

@@ -223,7 +223,10 @@ EDITABLE_EXACT = {
     "TAK_HOST", "TAK_HOST_FALLBACK", "TAK_PORT", "TAK_TLS", "TAK_CERT", "TAK_KEY", "TAK_CA",
     "SITAWARE_URL", "SITAWARE_URL_FALLBACK", "SITAWARE_API_PATH", "SITAWARE_USER", "SITAWARE_PASS", "SITAWARE_POLL_S",
     "SITAWARE_TLS_VERIFY", "SITAWARE_DISCOVER",
-    "SITAWARE_NVG_URL", "SITAWARE_NVG_USER", "SITAWARE_NVG_PASS", "SITAWARE_NVG_SOURCE",
+    "SITAWARE_NVG_IMPORT_URL", "SITAWARE_NVG_IMPORT_USER", "SITAWARE_NVG_IMPORT_PASS",
+    "SITAWARE_NVG_IMPORT_POLL_S", "SITAWARE_NVG_IMPORT_CA",
+    "SITAWARE_HQ_NVG_ENABLE", "SITAWARE_HQ_NVG_BIND", "SITAWARE_HQ_NVG_PORT", "SITAWARE_HQ_NVG_PATH",
+    "SITAWARE_HQ_NVG_USER", "SITAWARE_HQ_NVG_PASS", "SITAWARE_HQ_NVG_TLS_CERT", "SITAWARE_HQ_NVG_TLS_KEY",
     "UTM_ANS_API_URL", "UTM_ANS_API_TOKEN", "UTM_ANS_POLL_S", "UTM_ANS_TLS_VERIFY",
     "APRSIS_HOST", "APRSIS_PORT", "APRSIS_FILTER",
     "MQTT_HOST", "MQTT_PORT", "MQTT_TOPIC", "MQTT_USER", "MQTT_PASS", "MQTT_TLS",
@@ -550,6 +553,34 @@ def _service_status(name: str) -> dict:
     if pid_file_present:
         return {"name": name, "running": False, "status": "crashed", "pid": pid}
     return {"name": name, "running": False, "status": "stopped", "pid": None}
+
+
+def _prometheus_metrics() -> str:
+    """Prometheus text-format snapshot of host-managed service state.
+
+    Reuses _service_status so the scrape sees exactly what Runtime Control does.
+    Served behind the same bearer token as the rest of the control API — a
+    scraper configures `authorization: Bearer <EFDI_CONTROL_TOKEN>`.
+    """
+    lines = [
+        "# HELP efdi_up Control agent liveness.",
+        "# TYPE efdi_up gauge",
+        "efdi_up 1",
+        "# HELP efdi_service_up Service running state (1=running, 0=not).",
+        "# TYPE efdi_service_up gauge",
+    ]
+    statuses = [(name, _service_status(name)) for name, _, _ in SERVICE_SPECS]
+    for name, status in statuses:
+        kind = _service_kind(name, SERVICE_SOURCES.get(name, ""))
+        up = 1 if status.get("running") else 0
+        lines.append(f'efdi_service_up{{service="{name}",kind="{kind}"}} {up}')
+    lines.append("# HELP efdi_service_tracks Live tracks reported by the service.")
+    lines.append("# TYPE efdi_service_tracks gauge")
+    for name, status in statuses:
+        tracks = (status.get("details") or {}).get("tracks")
+        if isinstance(tracks, (int, float)) and not isinstance(tracks, bool):
+            lines.append(f'efdi_service_tracks{{service="{name}"}} {tracks}')
+    return "\n".join(lines) + "\n"
 
 
 def _selected() -> list[str]:
@@ -969,6 +1000,18 @@ class Handler(BaseHTTPRequestHandler):
             # real cause the next time the agent actually dies.
             self.close_connection = True
 
+    def _text(self, status: int, body: str,
+              content_type: str = "text/plain; charset=utf-8") -> None:
+        data = body.encode("utf-8")
+        try:
+            self.send_response(status)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+        except (BrokenPipeError, ConnectionResetError):
+            self.close_connection = True
+
     def _body(self) -> dict:
         try:
             length = int(self.headers.get("Content-Length", "0"))
@@ -1019,6 +1062,10 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/v1/pki/status":
             self._json(200, _pki_status())
+            return
+        if path == "/metrics":
+            self._text(200, _prometheus_metrics(),
+                       "text/plain; version=0.0.4; charset=utf-8")
             return
         match = re.fullmatch(r"/v1/logs/([a-z0-9_-]+)", path)
         if match and match.group(1) in SERVICE_NAMES:
