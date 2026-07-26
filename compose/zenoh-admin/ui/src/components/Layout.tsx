@@ -1,15 +1,31 @@
-import { useEffect, useState } from 'react'
-import { Link, useNavigate, useRouterState } from '@tanstack/react-router'
-import { useAuth } from '@/store/auth'
-import { useRoute } from '@/store/route'
-import { cn } from '@/lib/utils'
-import { apiFetch, errorMessage } from '@/lib/api'
-import { notify } from '@/lib/notify'
-import { useBranding } from '@/store/branding'
-import { useTheme } from '@/store/theme'
-import { useNotifications } from '@/store/notifications'
+import {useEffect, useState} from 'react'
+import {Link, useNavigate, useRouterState} from '@tanstack/react-router'
+import {useAuth} from '@/store/auth'
+import {useRoute} from '@/store/route'
+import {cn} from '@/lib/utils'
+import {apiFetch, errorMessage} from '@/lib/api'
+import {notify} from '@/lib/notify'
+import {useBranding} from '@/store/branding'
+import {useTheme} from '@/store/theme'
+import {useNotifications} from '@/store/notifications'
 import {
-  LayoutDashboard, FileCog, ShieldUser, LogOut, Users, Sun, Moon, Bell, ShieldCheck, Radio, Network, SlidersHorizontal, Settings2, ScrollText, Terminal, History, GitPullRequestDraft
+    Bell,
+    FileCog,
+    GitPullRequestDraft,
+    History,
+    LayoutDashboard,
+    LogOut,
+    Moon,
+    Network,
+    Radio,
+    ScrollText,
+    Settings2,
+    ShieldCheck,
+    ShieldUser,
+    SlidersHorizontal,
+    Sun,
+    Terminal,
+    Users
 } from 'lucide-react'
 
 // Three-bar icon that morphs into an X on open — plain CSS transitions on
@@ -173,7 +189,7 @@ function UserSettingsModal({ onClose }: { onClose: () => void }) {
         </div>
 
         <div>
-          <h3 className="hud-label text-sm font-semibold text-zinc-600 dark:text-zinc-400 mb-2">Change Username</h3>
+          <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-2">Change Username</h3>
           {usernameOk ? (
             <p className="text-green-600 dark:text-green-400 text-sm">Username changed successfully.</p>
           ) : (
@@ -189,7 +205,7 @@ function UserSettingsModal({ onClose }: { onClose: () => void }) {
         </div>
 
         <div className="border-t border-zinc-300 dark:border-white/10 pt-6">
-          <h3 className="hud-label text-sm font-semibold text-zinc-600 dark:text-zinc-400 mb-2">Change Password</h3>
+          <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-2">Change Password</h3>
           <ChangePasswordFields onClose={onClose} />
         </div>
       </div>
@@ -246,7 +262,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <header className="fixed top-0 left-0 right-0 z-50 h-14 pl-16 pr-4 flex items-center gap-2 min-w-0 border-b border-zinc-200 dark:border-white/10 bg-white/97 dark:bg-[#0c0c0e]/97 backdrop-blur-xl">
         <button
           onClick={() => setSidebarOpen(v => !v)}
-          className="fixed top-3 left-3 z-50 p-2.5 rounded-md bg-zinc-100 dark:bg-[#0c0c0e] border border-zinc-200 dark:border-white/10 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white transition-colors"
+          className="fixed top-2.5 left-3 z-50 flex items-center justify-center p-2.5 rounded-md bg-zinc-100 dark:bg-[#0c0c0e] border border-zinc-200 dark:border-white/10 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white transition-colors"
           aria-label="Toggle menu"
           aria-expanded={sidebarOpen}
         >

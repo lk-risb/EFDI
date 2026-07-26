@@ -390,7 +390,7 @@ start_layers() {
         if [[ "${TAK_TLS:-}" == "1" ]]; then
             _cot_args+=(--tls --cert "${TAK_CERT}" --key "${TAK_KEY}" --ca "${TAK_CA}")
         fi
-        start cot-bridge bridges/cot_bridge.py "${_cot_args[@]}"
+        start cot-bridge layers/cot_layer.py "${_cot_args[@]}"
     else
         echo "  [skip] cot-bridge — TAK Server not reachable at ${TAK_HOST:-127.0.0.1}:${TAK_PORT:-8087}"
     fi
@@ -459,7 +459,7 @@ start_giraffe_layers() {
         if [[ "${TAK_TLS:-}" == "1" ]]; then
             _cot_args+=(--tls --cert "${TAK_CERT}" --key "${TAK_KEY}" --ca "${TAK_CA}")
         fi
-        start cot-bridge bridges/cot_bridge.py "${_cot_args[@]}"
+        start cot-bridge layers/cot_layer.py "${_cot_args[@]}"
     else
         echo "  [skip] cot-bridge — TAK Server not reachable at ${TAK_HOST:-127.0.0.1}:${TAK_PORT:-8087}"
     fi

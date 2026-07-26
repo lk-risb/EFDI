@@ -357,7 +357,7 @@ function PublishBuilderPage() {
           <section className={cardClass('hud-enter')}>
             <HudCorners />
             <div className="mb-4 border-b border-zinc-200 pb-4 dark:border-white/10">
-              <h2 className="hud-label text-sm font-semibold text-zinc-800 dark:text-zinc-200">Publish script builder</h2>
+              <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Publish script builder</h2>
               <p className="mt-1 text-xs text-zinc-500">
                 Add rows, then generate a ready-to-run publish script. Message boxes accept multi-line content (JSON, XML, any structured payload).
               </p>
@@ -536,7 +536,7 @@ function PublishBuilderPage() {
             <HudCorners />
             <div className="mb-4 flex items-start justify-between gap-3 border-b border-zinc-200 pb-4 dark:border-white/10">
               <div>
-                <h2 className="hud-label text-sm font-semibold text-zinc-800 dark:text-zinc-200">Router configs</h2>
+                <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Router configs</h2>
                 <p className="mt-1 text-xs text-zinc-500">View/edit config.json5 across all known routers</p>
               </div>
               <button
@@ -634,7 +634,7 @@ function PublishBuilderPage() {
           <section className={cardClass('hud-enter')}>
             <HudCorners />
             <div className="mb-4 border-b border-zinc-200 pb-4 dark:border-white/10">
-              <h2 className="hud-label text-sm font-semibold text-zinc-800 dark:text-zinc-200">Router control</h2>
+              <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Router control</h2>
               <p className="mt-1 text-xs text-zinc-500">Start / stop / check status across all known routers</p>
             </div>
 

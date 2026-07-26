@@ -7,67 +7,67 @@
    external font host. Latin + Latin Extended-A only (covers Lithuanian
    diacritics); other scripts fall back to the system font. */
 @font-face {
-  font-family: "Chakra Petch";
+  font-family: "Inter";
   font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: url("./assets/fonts/ChakraPetch-400-latin.woff2") format("woff2");
+  src: url("./assets/fonts/Inter-400-latin.woff2") format("woff2");
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122;
 }
 @font-face {
-  font-family: "Chakra Petch";
+  font-family: "Inter";
   font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: url("./assets/fonts/ChakraPetch-400-latin-ext.woff2") format("woff2");
+  src: url("./assets/fonts/Inter-400-latin-ext.woff2") format("woff2");
   unicode-range: U+0100-024F, U+0300-0331, U+1E00-1EFF;
 }
 @font-face {
-  font-family: "Chakra Petch";
+  font-family: "Inter";
   font-style: normal;
   font-weight: 500;
   font-display: swap;
-  src: url("./assets/fonts/ChakraPetch-500-latin.woff2") format("woff2");
+  src: url("./assets/fonts/Inter-500-latin.woff2") format("woff2");
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122;
 }
 @font-face {
-  font-family: "Chakra Petch";
+  font-family: "Inter";
   font-style: normal;
   font-weight: 500;
   font-display: swap;
-  src: url("./assets/fonts/ChakraPetch-500-latin-ext.woff2") format("woff2");
+  src: url("./assets/fonts/Inter-500-latin-ext.woff2") format("woff2");
   unicode-range: U+0100-024F, U+0300-0331, U+1E00-1EFF;
 }
 @font-face {
-  font-family: "Chakra Petch";
+  font-family: "Inter";
   font-style: normal;
   font-weight: 600;
   font-display: swap;
-  src: url("./assets/fonts/ChakraPetch-600-latin.woff2") format("woff2");
+  src: url("./assets/fonts/Inter-600-latin.woff2") format("woff2");
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122;
 }
 @font-face {
-  font-family: "Chakra Petch";
+  font-family: "Inter";
   font-style: normal;
   font-weight: 600;
   font-display: swap;
-  src: url("./assets/fonts/ChakraPetch-600-latin-ext.woff2") format("woff2");
+  src: url("./assets/fonts/Inter-600-latin-ext.woff2") format("woff2");
   unicode-range: U+0100-024F, U+0300-0331, U+1E00-1EFF;
 }
 @font-face {
-  font-family: "Chakra Petch";
+  font-family: "Inter";
   font-style: normal;
   font-weight: 700;
   font-display: swap;
-  src: url("./assets/fonts/ChakraPetch-700-latin.woff2") format("woff2");
+  src: url("./assets/fonts/Inter-700-latin.woff2") format("woff2");
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122;
 }
 @font-face {
-  font-family: "Chakra Petch";
+  font-family: "Inter";
   font-style: normal;
   font-weight: 700;
   font-display: swap;
-  src: url("./assets/fonts/ChakraPetch-700-latin-ext.woff2") format("woff2");
+  src: url("./assets/fonts/Inter-700-latin-ext.woff2") format("woff2");
   unicode-range: U+0100-024F, U+0300-0331, U+1E00-1EFF;
 }
 @font-face {
@@ -103,17 +103,17 @@
   --color-hud-3: #232326;
   --color-hud-4: #2b2b2f;
 
-  --font-display: "Chakra Petch", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
   /* 2026 restyle. The app uses `rounded-md` in 104 places, so the radius SCALE
      is redefined here rather than editing every call site — every existing
      utility picks up the softer geometry automatically. */
-  --radius-sm: 0.5rem;    /* 8px  — chips, tight inputs */
-  --radius-md: 0.75rem;   /* 12px — the app-wide default */
-  --radius-lg: 1rem;      /* 16px — cards, panels */
-  --radius-xl: 1.25rem;   /* 20px — modals, hero surfaces */
-  --radius-2xl: 1.5rem;
+  --radius-sm: 0.625rem;  /* 10px — chips, tight inputs */
+  --radius-md: 0.875rem;  /* 14px — the app-wide default */
+  --radius-lg: 1.25rem;   /* 20px — cards, panels */
+  --radius-xl: 1.5rem;    /* 24px — modals, hero surfaces */
+  --radius-2xl: 1.75rem;
 
   /* Elevation. Dark mode leans on depth + a hairline rather than heavy shadow,
      which would be invisible on a near-black canvas anyway. */
@@ -135,23 +135,19 @@
   letter-spacing: 0.08em;
 }
 
-/* Glass panel — floating HUD surfaces (sidebar, cards, modals). Dark mode
-   only; light mode keeps the flat white/zinc surfaces already in place. */
+/* Card surface — modern-minimal. A solid panel one shade above the canvas with
+   a near-invisible hairline and a soft shadow. No blur: the reference language
+   is solid soft-dark cards separated by fill contrast and space, not glass. */
 .hud-glass {
-  /* Mica: a translucent surface that samples the canvas behind it, with a
-     hairline top highlight so the panel edge catches "light". Saturation is
-     boosted so the accent stays vivid through the blur. */
-  background: color-mix(in srgb, #ffffff 72%, transparent);
-  backdrop-filter: blur(20px) saturate(150%);
-  -webkit-backdrop-filter: blur(20px) saturate(150%);
-  box-shadow: var(--shadow-e2), inset 0 1px 0 rgb(255 255 255 / 0.6);
+  background: #ffffff;
+  box-shadow: var(--shadow-e2);
 }
 .dark .hud-glass {
-  background: rgba(255, 255, 255, 0.045);
-  backdrop-filter: blur(20px) saturate(140%);
-  -webkit-backdrop-filter: blur(20px) saturate(140%);
-  box-shadow: 0 8px 32px rgb(0 0 0 / 0.45), inset 0 1px 0 rgb(255 255 255 / 0.06);
+  background: #141518;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.4), 0 8px 24px rgb(0 0 0 / 0.25);
 }
+.dark .hud-card,
+.dark .hud-glass { border-color: rgb(255 255 255 / 0.06); }
 
 /* Every accent-colored primary action (buttons using bg-accent-fill) gets an
    ambient glow tied to the runtime branding accent color, not a fixed hex —
@@ -177,24 +173,20 @@
 /* Floating card lift + accent-glow border on hover — applied via the
    hud-card utility class on Dashboard/table container cards. Light mode
    gets a softer lift/border cue; dark mode adds the full accent glow. */
+/* Container cards are calm and static in the minimal language — a soft shadow,
+   a whisper of border warming on hover, no lift. (z-index base kept so any
+   animated child still layers correctly.) */
 .hud-card {
+  position: relative;
+  z-index: 0;
   box-shadow: var(--shadow-e1);
-  transition: border-color 260ms var(--ease-out-soft),
-              box-shadow 260ms var(--ease-out-soft),
-              transform 260ms var(--ease-spring);
+  transition: border-color 200ms var(--ease-out-soft), box-shadow 200ms var(--ease-out-soft);
 }
 .hud-card:hover {
-  border-color: color-mix(in srgb, var(--color-accent-fill) 30%, transparent);
-  box-shadow: var(--shadow-e3);
-  transform: translateY(-3px);
+  border-color: rgb(255 255 255 / 0.10);
 }
 .dark .hud-card {
-  box-shadow: 0 1px 2px rgb(0 0 0 / 0.4);
-}
-.dark .hud-card:hover {
-  border-color: color-mix(in srgb, var(--color-accent-fill) 45%, transparent);
-  box-shadow: 0 10px 30px rgb(0 0 0 / 0.5),
-              0 0 28px color-mix(in srgb, var(--color-accent-fill) 14%, transparent);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.4), 0 8px 24px rgb(0 0 0 / 0.25);
 }
 
 /* Respect users who ask the OS for less motion: keep the colour/elevation
@@ -213,8 +205,14 @@
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 .hud-enter {
+  position: relative;
+  z-index: 1;
   animation: hud-fade-in-up 0.45s var(--ease-spring) both;
 }
+/* Accent primary actions sit above resting surfaces so their hover glow is
+   never clipped by a later-painted sibling. */
+.bg-accent-fill { position: relative; }
+.bg-accent-fill:hover { z-index: 20; }
 .hud-enter-delay-1 { animation-delay: 0.05s; }
 .hud-enter-delay-2 { animation-delay: 0.1s; }
 
@@ -226,14 +224,14 @@
   animation: hud-pulse-dot 2s ease-in-out infinite;
 }
 
-/* Technical grid texture — faint surveillance/schematic backdrop behind the
-   app's black canvas. Dark mode only, applied to the app's root surface. */
+/* Canvas — modern-minimal. A clean near-black surface with a single soft brand
+   glow bleeding from the top-left, the way the reference dashboards give depth
+   without a busy grid or multi-hue aurora. */
 .dark .hud-grid-bg {
-  background-image:
-    linear-gradient(to right, color-mix(in srgb, #ffffff 2%, transparent) 1px, transparent 1px),
-    linear-gradient(to bottom, color-mix(in srgb, #ffffff 2%, transparent) 1px, transparent 1px);
-  background-size: 32px 32px;
-  background-position: 0 24px;
+  background-color: #0a0b0d;
+  background-image: radial-gradient(55rem 40rem at 12% -10%, color-mix(in srgb, var(--color-accent-fill) 8%, transparent), transparent 62%);
+  background-repeat: no-repeat;
+  background-attachment: fixed;
 }
 
 /* `hud-frame` still establishes the positioning context panels rely on. The
@@ -248,11 +246,10 @@
    A faint tinted wash keeps large light surfaces from glaring under the panel
    grid, and matches the softer geometry. */
 .hud-grid-bg:not(.dark .hud-grid-bg) {
-  background-image:
-    linear-gradient(to right, rgb(9 9 11 / 0.028) 1px, transparent 1px),
-    linear-gradient(to bottom, rgb(9 9 11 / 0.028) 1px, transparent 1px);
-  background-size: 32px 32px;
-  background-position: 0 24px;
+  background-color: #fafafb;
+  background-image: radial-gradient(55rem 40rem at 12% -10%, color-mix(in srgb, var(--color-accent-fill) 5%, transparent), transparent 62%);
+  background-repeat: no-repeat;
+  background-attachment: fixed;
 }
 
 /* Dense management-console primitives used by router hierarchy and PKI views. */
@@ -296,7 +293,7 @@
 .dark .enterprise-chip { border-color: rgb(255 255 255 / 0.1); background: rgb(255 255 255 / 0.04); color: rgb(161 161 170); }
 .dark .enterprise-chip-ok { border-color: rgb(34 197 94 / 0.35); background: rgb(34 197 94 / 0.1); color: rgb(74 222 128); }
 .dark .enterprise-chip-warn { border-color: rgb(245 158 11 / 0.35); background: rgb(245 158 11 / 0.1); color: rgb(251 191 36); }
-.dark .enterprise-panel { border-color: rgb(255 255 255 / 0.1); background: rgb(20 20 22); }
+.dark .enterprise-panel { border-color: rgb(255 255 255 / 0.06); background: #141518; }
 .dark .enterprise-panel-title,
 .dark .enterprise-section-title,
 .dark .enterprise-kv dd { color: rgb(228 228 231); }

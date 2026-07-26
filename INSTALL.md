@@ -374,7 +374,7 @@ NFFI_INPUT_TOPIC=               # optional; default: …/raw/nffi/*
 
 ### SitaWare Headquarters (outbound NVG pull feed)
 
-`sitaware-hq-nvg` is the native Python output for an HQ-only deployment. It subscribes to EFDI tracks, keeps a bounded live snapshot, and exposes NVG 2.0.2 over a read-only HTTP(S) endpoint. SitaWare Headquarters polls it through **SitaWare Communication → NVG → NVG Import Subscriptions**. This is separate from the legacy outbound NVG adapter above.
+`sitaware-hq-nvg` is the native Python output for an HQ-only deployment. It subscribes to EFDI tracks, keeps a bounded live snapshot, and exposes NVG 2.0.2 over a read-only HTTP(S) endpoint. SitaWare Headquarters polls it through **SitaWare Communication → NVG → NVG Import Subscriptions**. The reverse path — HQ's NVG Export Endpoint back into Zenoh — is the `nvg_bridge` service (`bridges/nvg_bridge.py`).
 
 Create an HQ layer first:
 
@@ -444,8 +444,7 @@ To remove those legacy objects without mixing them with live tracks:
 5. Confirm current EFDI objects appear and carry recent timestamps, then delete
    the old layer containing the legacy objects.
 
-Do not clear a shared operational layer, and do not point the SitaWare Edge
-per-item push adapter at an HQ endpoint to work around this limitation.
+Do not clear a shared operational layer to work around this limitation.
 
 ### Icon reference
 
@@ -495,9 +494,9 @@ per-item push adapter at an HQ endpoint to work around this limitation.
 | `spectrum` / `sensor-health` / `mission-route` | Matching `protocols/random/*.py` | `…/land/spectrum/**`, `…/land/health/**`, `…/air/mission/**` | JSON on their `…/raw/**` topics |
 | `dji-cloud` | `bridges/dji_cloud_api_bridge.py` | `…/air/dji/telemetry/friendly/uav/{type}/{id}/sapient` | Source-specific authenticated DJI MQTT 5 bridge |
 | `cot-udp` | `layers/cot_layer.py` | Subscriber — all topics | Event-driven |
-| `cot-bridge` | `bridges/cot_bridge.py` | Subscriber — all topics | Event-driven |
+| `cot_layer` | `layers/cot_layer.py` | Subscriber — all topics | Event-driven |
 | `tak-bridge` | `bridges/tak_bridge.py` | Subscriber — all topics | TAK-visible CoT ingress |
-| `sitaware-hq-nvg` | `bridges/nvg_bridge.py` | Subscriber — all track topics | Pull-based NVG snapshot |
+| `sitaware-hq-nvg` | `layers/nvg_layer.py` | Subscriber — all track topics | Pull-based NVG snapshot |
 | `track-fusion` | `bridges/track_fusion_bridge.py` | CAT-48 + CAT-21 subscriber | Event-driven |
 
 ### TAK users and external CoT sources
@@ -984,9 +983,66 @@ In `layers/cot_layer.py`, add to `_TOPIC_COT`:
 
 ## 10. Zenoh Admin GUI
 
-A web GUI for viewing router status and editing `zenoh/config.json5` without SSH access, styled after the TAK admin panel (reticle-corner cards, glass sidebar, accent glow, technical grid backdrop).
+A web GUI for operating the pod without SSH: router and system status, starting and stopping bridges and layers, editing configuration and credentials, the certificate authority, and branding. It uses a modern-minimal dark theme (solid soft-dark cards, self-hosted Inter, a teal accent) that a superadmin can rebrand from WebUI Settings.
 
 The Dashboard's "Connected routers" panel lists every other zenoh instance (router or peer) this router has a live link to — pulled from the router's own admin space, same source as the subscriber/queryable topic lists, so it needs no separate configuration beyond the existing `pod-admin-introspect` ACL rule.
+
+### Panel walkthrough
+
+The panel runs at `http://127.0.0.1:8890` (or the pod's address) and manages one
+EFDI pod. If you are new to it, this is the orientation; the deeper subsections
+(*Runtime Control page*, *Roles*, *Config tab fields*) follow below.
+
+**First-time flow.** Log in with the admin account created during install (the
+first login may prompt a password change). The Dashboard opens — confirm the pod
+is healthy. From there the everyday loop is simple: **Runtime Control** to run
+services, **Config** to configure them, **Dashboard** to confirm health.
+
+**The pages** (sidebar order):
+
+- **Dashboard** — health overview: CPU/RAM/disk/uptime/load/network, core-service
+  status, a small federation preview, and live Zenoh stats (subscribers,
+  queryables, storages, connected routers). Start here to answer "is everything
+  up?".
+- **Network** — *Managed Router Network*. Only relevant when this pod is an
+  HQ/root managing branch routers: topology, direct children, trust status, and
+  **Apply trust ACL**. A single standalone pod shows "0 direct children" and can
+  ignore this page.
+- **Config** — two layers on one page. **Zenoh Config** edits the router itself
+  (local ports, fabric uplink endpoints and certificate identity, namespace,
+  connection policy — see *Config tab fields* below). **Integration Settings**
+  edits the services' environment without SSH: TAK host/port, SitaWare HQ NVG
+  import/feed and REST paths, UTM, MQTT/SensorThings, ASTERIX ports, DJI.
+  Passwords are write-only. Save, then restart the affected service from Runtime
+  Control for it to take effect.
+- **Runtime Control** — start / stop / restart every bridge (sensor input),
+  protocol (translator), and layer (C2 output); filter by category or role;
+  choose the launch set (remembered across restarts); read logs inline. See
+  *Runtime Control page* below.
+- **Changes** — history of Zenoh-config revisions and their applied / rejected /
+  rolled-back outcome (it records the outcome and a hash, not the config body).
+- **Admin Users** — manage panel accounts and their roles (superadmin only).
+- **Certificates** — *Certificate Authority*: create single-use child invitations
+  for federation (the child generates its own keys and submits only signing
+  requests) and track certificate expiry. Standalone pods do not need this.
+- **Publish Script** — assemble a Zenoh publish command for testing or feeding
+  data in, without hand-writing key expressions.
+- **Shell** — a scoped, audited shell into the router container for diagnostics.
+- **Logs** — live log tail for any host-managed service.
+- **Audit Logs** — a record of privileged actions taken through the panel (config
+  changes, branding, user changes, logins).
+- **WebUI Settings** (top-right account menu) — **Branding** (organisation name,
+  accent colour, and logo — superadmin), **Appearance** (row animations, dense
+  rows), **Live behavior** (refresh interval), and the light/dark theme toggle.
+
+**Two guards you may meet — both intentional.** EFDI's federation layer refuses
+actions that could silently break trust boundaries:
+
+1. *"Apply trust ACL" blocked — unmanaged fabric uplink.* The root still dials an
+   outbound fabric peer that is not an enrolled child. Either enroll that peer, or
+   clear the uplink under **Config → Fabric endpoints → "Root / no upstream"**.
+2. *Deleting a managed router is disabled.* You decommission or quarantine it
+   instead, so a removed router cannot re-appear as an untrusted peer.
 
 ### Setup
 
