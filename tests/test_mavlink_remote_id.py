@@ -94,12 +94,14 @@ class MAVLinkRemoteIDTests(unittest.TestCase):
         # Tiered publish: JSON on /v1, per-protocol protobuf on /v2, and the
         # SAPIENT interop view on /sapient.
         by_topic = {topic: payload for topic, payload, _e in session.messages}
-        topic = next(t for t in by_topic if t.endswith("/json"))
+        _views = ("/proto/tracks/v1", "/sapient/tracks/v1", "/raw/tracks/v1")
+        topic = next(t for t in by_topic
+                     if t.endswith("/tracks/v1") and not t.endswith(_views))
         payload = by_topic[topic]
-        base = topic
-        self.assertIn(topic[: -len("/json")] + "/proto", by_topic)
-        self.assertIn(topic[: -len("/json")] + "/sapient", by_topic)
-        self.assertGreater(len(by_topic[topic[: -len("/json")] + "/proto"]), 0)
+        base = topic[: -len("/tracks/v1")]
+        self.assertIn(base + "/proto/tracks/v1", by_topic)
+        self.assertIn(base + "/sapient/tracks/v1", by_topic)
+        self.assertGreater(len(by_topic[base + "/proto/tracks/v1"]), 0)
         track = __import__("json").loads(payload)
         self.assertIn("/air/mavlink/telemetry/unknown/uav/", topic)  # {type}/{id} follow
         self.assertEqual(track["callsign"], "LT-REMOTE-123")

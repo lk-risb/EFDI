@@ -136,9 +136,6 @@ def sweep(state: dict, start_stopped: bool, dry_run: bool, verbose: bool) -> Non
     now = time.time()
 
     for name in supervisable():
-        if name not in selected:
-            continue
-
         status = ac._service_status(name)
         entry = state.setdefault(name, {"failures": 0, "next_attempt": 0.0, "started_at": 0.0})
 
@@ -152,7 +149,19 @@ def sweep(state: dict, start_stopped: bool, dry_run: bool, verbose: bool) -> Non
                 entry["started_at"] = 0.0
             continue
 
-        wanted = status["status"] == "crashed" or (start_stopped and status["status"] == "stopped")
+        # A crashed service (pidfile present, process gone) was running and died —
+        # recover it whether or not it is in the launcher's saved selection. The
+        # pidfile is the "was meant to be running" signal; also requiring the
+        # selection meant an ad-hoc `start.sh --service X` (which does not update
+        # the saved selection) was left dead forever. A stopped service (no
+        # pidfile) is only (re)started on an explicit boot sweep, and only when
+        # the launcher actually wants it.
+        if status["status"] == "crashed":
+            wanted = True
+        elif start_stopped and status["status"] == "stopped" and name in selected:
+            wanted = True
+        else:
+            wanted = False
         if not wanted:
             if verbose:
                 log("{} is {} — not a crash, leaving alone".format(name, status["status"]))

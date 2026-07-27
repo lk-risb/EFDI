@@ -20,7 +20,7 @@ to discover which categories you need to enable.
 python3 tools/asterix_probe.py --port 30001
 ```
 
-Referenced from the setup guides: `INSTALL.md`, `DIEGIMAS.md`, `INTEGRATIONS.md`.
+Referenced from the setup guides: `docs/INSTALL.md`, `docs/DIEGIMAS.md`, `docs/INTEGRATIONS.md`.
 
 ## `asterix_relay.py` — "the radar can't reach the pod directly"
 

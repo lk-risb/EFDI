@@ -54,19 +54,19 @@ the servlet mapping; obtain the resource path from the deployment's API/ICD.
 """
 
 import argparse
-import json
-import os
-import time
-import urllib.request
-import urllib.error
 import base64
+import json
 import math
+import os
 import ssl
+import time
+import urllib.error
+import urllib.request
 
 import zenoh
-from zenoh_auth import apply_zenoh_auth
 from namespace_prefix import topic_root
-from protocols.protobuf_codec import semantic_topic
+from protocols.protobuf_codec import semantic_topic, add_version
+from zenoh_auth import apply_zenoh_auth
 
 ORG       = os.environ.get("PARTNER_NAMESPACE", "")
 TOPIC_ROOT = topic_root()
@@ -342,7 +342,7 @@ def publish_unit(session: "zenoh.Session", track: dict, verbose: bool):
     # consume. A bare put on the semantic prefix (no {type}/{id}, no /json view)
     # is silently dropped by cot_layer and nvg_layer, which only forward samples
     # whose key ends in /json.
-    topic = semantic_topic(sidc_to_topic(track.get("sidc", "")), track) + "/json"
+    topic = add_version(semantic_topic(sidc_to_topic(track.get("sidc", "")), track))
     session.put(topic, json.dumps(track).encode(),
                 encoding=zenoh.Encoding.APPLICATION_JSON)
     if verbose:

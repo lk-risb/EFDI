@@ -11,7 +11,8 @@ __pycache__/
 compose/zenoh-admin/ui/dist/
 compose/zenoh-admin/ui/src/routeTree.gen.ts
 compose/generated/
-docs/
+# docs/ is tracked (public guides + design notes). Only local/scratch stays out.
+docs/superpowers/
 
 # Local dev environment (dev.sh) — zenoh-admin panel preview only
 dev.env

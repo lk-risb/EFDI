@@ -47,39 +47,62 @@ def source_track_to_message(message_class, track: dict):
 _FORMATS = ("json", "sapient", "proto", "raw")
 
 
-def _sibling(topic: str, fmt: str) -> str:
-    """Swap the view of an object key, or append one if it has none.
+_VERSION_TAIL = "tracks/v1"
 
-    ONLY the final segment is considered. Scanning the whole key would be wrong:
-    `sapient` is both a format name and the name of a SOURCE, so a key like
-    .../air/sapient/unknown/aircraft/... would have its source rewritten and the
-    track would be published under a different sensor.
-    """
+
+def strip_version(topic: str) -> str:
+    """Drop a trailing /tracks/vN.
+
+    The fabric version tail is appended AFTER the format segment, so any code
+    that reads the format (or matches the object key) must strip it first."""
     parts = topic.split("/")
+    if (len(parts) >= 2 and parts[-2] == "tracks"
+            and parts[-1][:1] == "v" and parts[-1][1:].isdigit()):
+        return "/".join(parts[:-2])
+    return topic
+
+
+def add_version(topic: str) -> str:
+    """Append the fabric version tail /tracks/v1 unless already present.
+
+    The goat-side boundary only admits keys that end /tracks/v1 (confirmed: the
+    one bridge that reached the fabric was the one already ending this way)."""
+    return topic if strip_version(topic) != topic else topic + "/" + _VERSION_TAIL
+
+
+def view_key(topic: str, fmt: str) -> str:
+    """Versioned key for the `fmt` view of an object, always ending /tracks/v1.
+
+    json is the canonical view and carries NO format segment
+    (…/{id}/tracks/v1); the other views add a named segment
+    (…/{id}/sapient/tracks/v1). Idempotent: any existing view segment and
+    version tail are stripped first.
+
+    ONLY the terminal (pre-version) segment is treated as a format. Scanning the
+    whole key would be wrong: `sapient` is also a SOURCE name, so a key like
+    .../air/sapient/unknown/aircraft/... must not have its source rewritten.
+    """
+    parts = strip_version(topic).split("/")
     if parts and parts[-1] in _FORMATS:
-        parts[-1] = fmt
-        return "/".join(parts)
-    return topic + "/" + fmt
+        parts = parts[:-1]
+    base = "/".join(parts)
+    stem = base if fmt == "json" else base + "/" + fmt
+    return stem + "/" + _VERSION_TAIL
 
 
 def _has_format(topic: str) -> bool:
-    """A view suffix is always terminal — see _sibling for why only the last
-    segment may be tested."""
-    return topic.rsplit("/", 1)[-1] in _FORMATS
+    """True if the object key carries an explicit (non-json) format segment."""
+    return strip_version(topic).rsplit("/", 1)[-1] in _FORMATS
 
 
 def dual_topic(topic: str) -> str:
-    """Per-protocol protobuf view of an object key (.../{id} -> .../{id}/proto)."""
-    if topic.endswith("/proto"):
-        return topic
-    return _sibling(topic, "proto") if _has_format(topic) else topic + "/proto"
+    """Per-protocol protobuf view (…/{id} -> …/{id}/proto/tracks/v1)."""
+    return view_key(topic, "proto")
 
 
 def native_topic(topic: str) -> str:
-    """Verbatim-source-bytes view of an object key (.../{id} -> .../{id}/raw)."""
-    if topic.endswith("/raw"):
-        return topic
-    return _sibling(topic, "raw") if _has_format(topic) else topic + "/raw"
+    """Verbatim-source-bytes view (…/{id} -> …/{id}/raw/tracks/v1)."""
+    return view_key(topic, "raw")
 
 
 def publish_native(session, topic: str, payload: bytes, protocol: str, zenoh,
@@ -243,7 +266,10 @@ def semantic_topic(prefix: str, track: dict) -> str:
     Tolerates prefixes still carrying a legacy trailing segment (a format name
     or `tracks`) so publishers can be migrated one at a time without a flag day.
     """
-    parts = [p for p in prefix.split("/") if p != ""]
+    # Some still-migrating callers pass a versioned collection key. Strip the
+    # complete two-segment tail before removing legacy single markers; leaving
+    # it in place would produce .../tracks/v1/{type}/{id}/tracks/v1.
+    parts = [p for p in strip_version(prefix).split("/") if p != ""]
     while parts and parts[-1] in _LEGACY_TAIL:
         parts.pop()
     parts.append(object_type(track))
@@ -281,7 +307,7 @@ def publish_dual(
         print("sapient view failed for {}: {}".format(key, exc), flush=True)
 
     session.put(
-        key + "/json",
+        view_key(key, "json"),
         json.dumps(track, separators=(",", ":")).encode(),
         encoding=zenoh.Encoding.APPLICATION_JSON,
     )
@@ -301,7 +327,57 @@ def publish_dual(
     except Exception as exc:  # noqa: BLE001 — never break the JSON path
         print("protobuf encode failed for {}: {}".format(key, exc), flush=True)
         return
-    session.put(key + "/proto", payload, encoding=zenoh.Encoding.APPLICATION_PROTOBUF)
+    session.put(dual_topic(key), payload, encoding=zenoh.Encoding.APPLICATION_PROTOBUF)
+
+
+def publish_collection(
+    session,
+    topic: str,
+    track: dict,
+    message_class,
+    zenoh,
+    wrapper_field: str = "track",
+) -> None:
+    """Publish all typed views on stable, registry-friendly collection keys.
+
+    Some fabrics require every inspectable topic to be registered as an exact
+    key and reject Zenoh wildcards in the registry. High-cardinality object
+    keys therefore cannot be catalogued there. Collection publishers use this
+    variant: identity stays in the payload while JSON, SAPIENT and protocol
+    protobuf remain separate sibling keys with one encoding per key.
+    """
+    key = strip_version(topic)
+    if key.rsplit("/", 1)[-1] in _FORMATS:
+        key = key.rsplit("/", 1)[0]
+
+    try:
+        from protocols.sapient_encode import publish_sapient
+        publish_sapient(session, key, track, zenoh)
+    except Exception as exc:  # noqa: BLE001
+        print("sapient collection view failed for {}: {}".format(key, exc), flush=True)
+
+    session.put(
+        view_key(key, "json"),
+        json.dumps(track, separators=(",", ":")).encode(),
+        encoding=zenoh.Encoding.APPLICATION_JSON,
+    )
+
+    try:
+        fields = message_class.DESCRIPTOR.fields_by_name
+        if wrapper_field in fields and fields[wrapper_field].message_type is not None:
+            message = wrapped_track_message(
+                message_class,
+                track,
+                str(track.get("affiliation", "unknown")),
+                wrapper_field=wrapper_field,
+            )
+        else:
+            message = source_track_to_message(message_class, track)
+        payload = message.SerializeToString()
+    except Exception as exc:  # noqa: BLE001
+        print("protobuf collection encode failed for {}: {}".format(key, exc), flush=True)
+        return
+    session.put(dual_topic(key), payload, encoding=zenoh.Encoding.APPLICATION_PROTOBUF)
 
 
 def source_message_to_track(message) -> dict:

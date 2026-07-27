@@ -29,11 +29,9 @@ import urllib.error
 import urllib.request
 
 import zenoh
-from zenoh_auth import apply_zenoh_auth
-
 from http_json import read_json_response
 from namespace_prefix import topic_root
-
+from zenoh_auth import apply_zenoh_auth
 
 ORG = os.environ.get("PARTNER_NAMESPACE", "")
 TOPIC_ROOT = topic_root()
@@ -41,7 +39,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 _CERT_DIR = os.environ.get("EFDI_CERT_DIR", HERE)
 _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", "tcp/127.0.0.1:7448")
 
-TOPIC_UAV = "{}/air/utm_ans/c2/unknown/uav".format(TOPIC_ROOT)
+TOPIC_UAV = "{}/air/utm_ans/c2/unknown/uav/tracks/v1".format(TOPIC_ROOT)
 SOURCE = "utm_ans"
 MAX_TEXT = 256
 MAX_RESPONSE_BYTES = 10_000_000

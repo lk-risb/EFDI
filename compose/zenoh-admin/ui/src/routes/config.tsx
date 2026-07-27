@@ -103,9 +103,9 @@ function ConfigSection({
 // Known-good fabric endpoints seen in this pod's history — one-click fill,
 // still just host/port under the hood (scheme is always tls, never exposed).
 const FABRIC_PRESETS = [
-  { label: 'EFDI backbone · EFDI mTLS', host: 'zenoh.efdi.netbird.efdi-backbone.net', port: 7447, profile: 'efdi' },
-  { label: 'EFDI backbone sandbox · legacy mTLS', host: 'zenoh.efdi.netbird.efdi-backbone.net', port: 7447, profile: 'sandbox' },
-  { label: 'Legacy sandbox (nbio.fairytail.eu)', host: 'nbio.fairytail.eu', port: 7447, profile: 'sandbox' },
+  { label: 'Local mesh · EFDI mTLS', host: 'zenoh.efdi.netbird.efdi-backbone.net', port: 7447, profile: 'efdi' },
+  { label: 'Backbone · Desert Bread mTLS', host: 'zenoh.efdi.netbird.efdi-backbone.net', port: 7447, profile: 'backbone' },
+  { label: 'Legacy sandbox (nbio.fairytail.eu)', host: 'nbio.fairytail.eu', port: 7447, profile: 'backbone' },
 ]
 
 function parseFabricEndpoint(v: string): { host: string; port: number } {
@@ -437,8 +437,8 @@ function ConfigPage() {
                 <Field label="Fabric mTLS identity" help="The selected certificate, private key, and trust roots are used for every TLS link in this router. Choose the profile that belongs to the selected federation endpoint.">
                   <select disabled={!canWrite} className={inputClass} value={fields.fabric_tls_profile}
                     onChange={e => set('fabric_tls_profile', e.target.value)}>
-                    <option value="efdi">EFDI backbone (EFDI CA)</option>
-                    <option value="sandbox">EFDI backbone sandbox (Desert Bread CA)</option>
+                    <option value="efdi">Local mesh (EFDI CA)</option>
+                    <option value="backbone">Backbone (Desert Bread CA)</option>
                   </select>
                 </Field>
                 <div className="space-y-2">

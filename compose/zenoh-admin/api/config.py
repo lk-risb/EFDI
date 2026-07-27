@@ -1,23 +1,23 @@
 import asyncio
+import docker
 import hashlib
+import json5
 import os
 import re
 import stat
 import tempfile
 import threading
 import time
+from docker.errors import DockerException, NotFound
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
-import json5
-import docker
-import zenoh
-from docker.errors import DockerException, NotFound
 from sqlalchemy.ext.asyncio import AsyncSession
 
+import zenoh
+from .config_revisions import create_revision, set_revision_state
+from .control import _control
 from .db import get_db
 from .deps import require_role, write_audit
-from .control import _control
-from .config_revisions import create_revision, set_revision_state
 
 router = APIRouter(prefix="/api/config", tags=["config"])
 
@@ -45,7 +45,7 @@ ZENOH_ROUTER_SERVICE_LABEL = os.environ.get("ZENOH_ROUTER_CONTAINER", "efdi-pod-
 # router processes.
 _TLS_PROFILES = {
     "efdi": {
-        "label": "EFDI backbone (EFDI CA)",
+        "label": "Local mesh (EFDI CA)",
         "publish_cert_dir": "efdi",
         "publish_root_ca": "efdi-ca-root.pem",
         "publish_client_cert": "{client_cn}-cert.pem",
@@ -56,8 +56,8 @@ _TLS_PROFILES = {
         "connect_private_key": "/etc/zenoh/tls/pod-key.pem",
         "root_ca": "/etc/zenoh/tls/ca-roots.pem",
     },
-    "sandbox": {
-        "label": "EFDI backbone sandbox (Desert Bread CA)",
+    "backbone": {
+        "label": "Backbone (Desert Bread CA)",
         "publish_cert_dir": "zenoh-sandbox",
         "publish_root_ca": "ca-roots.pem",
         "publish_client_cert": "cert.pem",

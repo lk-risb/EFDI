@@ -138,7 +138,7 @@ EFDI treats ATAK/TAK and SitaWare HQ as first-class, co-equal consumers. Each ha
 | SitaWare HQ → Zenoh | `nvg_bridge` | `SITAWARE_NVG_IMPORT_URL` (+ pinned CA); an HQ NVG Export Endpoint |
 | SitaWare HQ → Zenoh | `sitaware` | Deployment-documented REST resource, schema, URL and credentials |
 
-SitaWare's REST resource path is **not** assumed — there is no universal `/rest/v2/units`; confirm it against the deployment's ICD. Full commands and the operator-side HQ subscription fields are in [INSTALL.md](INSTALL.md#c2--zenoh-bidirectional-runbook).
+SitaWare's REST resource path is **not** assumed — there is no universal `/rest/v2/units`; confirm it against the deployment's ICD. Full commands and the operator-side HQ subscription fields are in [INSTALL.md](docs/INSTALL.md#c2--zenoh-bidirectional-runbook).
 
 Inbound C2 records are written under this pod's normal `{NAMESPACE_PREFIX}/{PARTNER_NAMESPACE}/…` namespace, becoming ordinary Zenoh data for authorized subscribers and federated partner routers; the router ACL and federation policy — not the C2 adapter — decide which pods receive them.
 
@@ -164,7 +164,7 @@ Every pod dials a single fabric endpoint over mutual TLS — it writes only with
 | TCP `<SITAWARE_HQ_NVG_PORT>` (default 8088) | inbound | SitaWare HQ polls the EFDI NVG feed |
 | HTTPS | outbound | SitaWare HQ, dronuradaras.lt, and any explicitly authorized UTM export API |
 
-See [INSTALL.md](INSTALL.md) for the full network prerequisites table.
+See [INSTALL.md](docs/INSTALL.md) for the full network prerequisites table.
 
 ---
 
@@ -194,10 +194,14 @@ See [INSTALL.md](INSTALL.md) for the full network prerequisites table.
 ```
 EFDI/
 ├── README.md                    this file
-├── INSTALL.md                   English deployment guide (incl. panel walkthrough)
-├── DIEGIMAS.md                  Lithuanian deployment guide (incl. panel walkthrough)
-├── INTEGRATIONS.md              per-source integration reference
-├── SECURITY.md                  vulnerability reporting policy
+├── CLAUDE.md, AGENTS.md         agent / contributor instructions
+├── docs/                        guides + reference (tracked)
+│   ├── INSTALL.md               English deployment guide (incl. panel walkthrough)
+│   ├── DIEGIMAS.md              Lithuanian deployment guide (incl. panel walkthrough)
+│   ├── INTEGRATIONS.md          per-source integration reference
+│   ├── SECURITY.md              vulnerability reporting policy
+│   ├── CONTRIBUTING.md          contribution guide
+│   └── superpowers/             (gitignored) design specs, working notes
 ├── compose/
 │   ├── docker-compose.yml       Zenoh router + zenoh-admin containers
 │   ├── .env.example             configuration template
@@ -208,7 +212,6 @@ EFDI/
 │   ├── bridges/                 source/socket + C2-ingress bridge scripts
 │   ├── protocols/               protocol translators and .proto contracts
 │   └── layers/                  C2-egress output layers (cot_layer, nvg_layer)
-├── docs/                        (gitignored) design specs, working notes
 ├── start.sh                     interactive service launcher
 ├── stop.sh                      service teardown
 └── dev.sh                       disposable local MariaDB + API for admin UI preview
@@ -218,14 +221,14 @@ EFDI/
 
 ## Deployment
 
-See **[INSTALL.md](INSTALL.md)** for the full English deployment guide, or **[DIEGIMAS.md](DIEGIMAS.md)** for the Lithuanian version. Both cover prerequisites, certificate setup, configuration reference, and troubleshooting.
+See **[INSTALL.md](docs/INSTALL.md)** for the full English deployment guide, or **[DIEGIMAS.md](docs/DIEGIMAS.md)** for the Lithuanian version. Both cover prerequisites, certificate setup, configuration reference, and troubleshooting.
 
 ---
 
 ## Operations
 
-New to the admin panel? **[INSTALL.md § 10](INSTALL.md#10-zenoh-admin-gui)** has a
-plain-language, page-by-page walkthrough of every tab (Lithuanian: **[DIEGIMAS.md § 10](DIEGIMAS.md)**).
+New to the admin panel? **[INSTALL.md § 10](docs/INSTALL.md#10-zenoh-admin-gui)** has a
+plain-language, page-by-page walkthrough of every tab (Lithuanian: **[DIEGIMAS.md § 10](docs/DIEGIMAS.md)**).
 
 ```bash
 ./start.sh                            # interactive launcher — pick services, prompts for missing config
