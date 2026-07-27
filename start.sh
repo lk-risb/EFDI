@@ -78,7 +78,7 @@ fi
 SERVICES=(
     zenoh
     admin-control
-    cert-renewer
+    cert-renewer supervisor
     airplaneslive adsblol aprs meteolt
     sitaware dronuradaras dji-cloud utm-ans asterix track-fusion
     stanag5516 mavlink opendroneid vmf nffi sapient stanag4586 stanag4609
@@ -147,6 +147,7 @@ declare -A SVC_CAT=(
     [zenoh]="Infrastructure"
     [admin-control]="Infrastructure"
     [cert-renewer]="Infrastructure"
+    [supervisor]="Infrastructure"
     [airplaneslive]="Open-data bridges" [adsblol]="Open-data bridges"
     [aprs]="Open-data bridges"
     [meteolt]="Open-data bridges"
@@ -173,6 +174,7 @@ declare -A SVC_DESC=(
     [zenoh]="Zenoh message router (Docker)"
     [admin-control]="Web UI host control agent"
     [cert-renewer]="Automatic short-lived transport certificate renewal"
+    [supervisor]="Auto-restarts crashed bridges, protocols, and layers"
     [airplaneslive]="Airplanes.live ADS-B aircraft"
     [adsblol]="ADSB.lol open-data aircraft"
     [aprs]="APRS-IS stations, vehicles, and vessels"
@@ -489,6 +491,18 @@ launch() {
                 >> "$LOG_DIR/admin-control.log" 2>&1 ) &
             echo $! > "$PID_DIR/admin-control.pid"
             printf "  ${GREEN}[start]${R} %-16s pid %s\n" "admin-control" "$!"
+            ;;
+
+        supervisor)
+            if is_running "supervisor" "supervisor.py"; then
+                printf "  ${DIM}[skip]${R}  %-16s already running (pid %s)\n" "supervisor" "$(cat "$PID_DIR/supervisor.pid")"
+                return
+            fi
+            rm -f "$PID_DIR/supervisor.pid"
+            ( exec setsid "$PYTHON" "$COMPOSE_DIR/supervisor.py" \
+                >> "$LOG_DIR/supervisor.log" 2>&1 ) &
+            echo $! > "$PID_DIR/supervisor.pid"
+            printf "  ${GREEN}[start]${R} %-16s pid %s\n" "supervisor" "$!"
             ;;
 
         cert-renewer)
@@ -891,6 +905,7 @@ fi
 # The web UI's native-process control plane is always kept selected so an old
 # launcher-state file cannot leave Runtime Control disconnected after upgrade.
 sel[admin-control]=1
+sel[supervisor]=1
 svc_ready cert-renewer && sel[cert-renewer]=1 || true
 
 draw_menu() {

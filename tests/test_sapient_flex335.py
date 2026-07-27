@@ -4,12 +4,11 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 import socket
 import struct
 import sys
 import unittest
-
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, os.fspath(ROOT / "compose" / "protocols"))
@@ -19,7 +18,7 @@ import json  # noqa: E402
 
 import zenoh  # noqa: E402
 
-from protocols.protobuf_codec import dual_topic, native_topic  # noqa: E402
+from protocols.protobuf_codec import dual_topic  # noqa: E402
 from protocols.random.raw_envelope_pb2 import RawEnvelope  # noqa: E402
 from protocols.vendors.sapient.flex335_pb2 import SapientFlex335Track  # noqa: E402
 
@@ -272,9 +271,9 @@ class NativeProtobufEgressTests(unittest.TestCase):
     flattened JSON view published alongside during the transition."""
 
     def test_topic_for_frame_delegates_to_native(self):
-        self.assertEqual(topic_for_frame("root/air/x/id/json"), "root/air/x/id/raw")
-        # No /v1 suffix to swap — still gets a distinct protobuf topic.
-        self.assertEqual(topic_for_frame("root/other"), "root/other/raw")
+        self.assertEqual(topic_for_frame("root/air/x/id/json"), "root/air/x/id/raw/tracks/v1")
+        # Even a bare object key gains the raw view and the /tracks/v1 tail.
+        self.assertEqual(topic_for_frame("root/other"), "root/other/raw/tracks/v1")
 
     def test_publish_emits_all_three_tiers(self):
         """SAPIENT follows the same tier contract as every other protocol:
@@ -296,7 +295,8 @@ class NativeProtobufEgressTests(unittest.TestCase):
         # tier that every protocol now emits.
         by_topic = {topic: (payload, encoding) for topic, payload, encoding in session.puts}
         self.assertGreaterEqual(len(by_topic), 3)
-        json_topic = next(t for t in by_topic if t.endswith("/json"))
+        json_topic = next(t for t in by_topic
+                          if by_topic[t][1] == zenoh.Encoding.APPLICATION_JSON)
 
         json_payload, json_encoding = by_topic[json_topic]
         self.assertEqual(json_encoding, zenoh.Encoding.APPLICATION_JSON)
@@ -313,7 +313,7 @@ class NativeProtobufEgressTests(unittest.TestCase):
 
         # /native — the untouched SapientMessage, so nothing the decoder does
         # not model is lost on the way out.
-        raw_key = next((k for k in by_topic if k.endswith("/raw")), None)
+        raw_key = next((k for k in by_topic if k.endswith("/raw/tracks/v1")), None)
         self.assertIsNotNone(raw_key, f"no /raw view in {sorted(by_topic)}")
         native_payload, native_encoding = by_topic[raw_key]
         self.assertEqual(native_encoding, zenoh.Encoding.APPLICATION_PROTOBUF)

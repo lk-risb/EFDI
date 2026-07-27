@@ -38,6 +38,7 @@ import json
 import math
 import os
 import re
+import queue
 import socket
 import ssl
 import struct
@@ -83,6 +84,7 @@ SAT_STALE_S    = 300     # satellites: polled every 60s, 5 min gives 5× margin
 ENV_STALE_S    = 3600    # weather stations: polled every 15–30 min, 1 h gives plenty of margin
 RECONNECT_S    = 5
 SEND_TIMEOUT_S = 10
+TAK_QUEUE_MAX  = 10000   # bounded CoT backlog; drops oldest when a link stalls
 
 # Dead-reckoning — extrapolate position forward when sensor updates stop
 _DR_TICK_S   = 2.0   # extrapolation interval (seconds)
@@ -1525,88 +1527,132 @@ def _enable_keepalive(sock: socket.socket) -> None:
 
 
 class TcpSender:
-    """Thread-safe TCP writer with reconnect. Supports plaintext and mutual TLS.
+    """CoT writer with a single-writer reconnect loop. Plaintext or mutual TLS.
 
     Accepts multiple (host, port) candidates — e.g. a LAN IP and a NetBird mesh
-    IP for the same TAK Server. Tries them in round-robin order on each connect
-    attempt, so it converges on whichever network path is actually reachable.
+    IP for one TAK Server — and rotates through them when a *connect* fails,
+    converging on whichever path is reachable.
+
+    All socket I/O runs on ONE background thread that owns the socket. Callers
+    only enqueue; send() never touches the socket. That is deliberate: it closes
+    the native use-after-free that core-dumped the process whenever the TAK link
+    flapped — a zenoh callback thread doing an OpenSSL write on a socket another
+    thread had just replaced mid-reconnect. An unreachable host now degrades to
+    "drop CoT until reconnected" instead of crashing. The queue is bounded and
+    drops the oldest on overflow: CoT is state, so a newer update supersedes a
+    dropped one, and a stalled link never blocks the callbacks or grows memory.
     """
 
     def __init__(self, hosts: list[tuple[str, int]], tls: bool = False,
                  certfile: str | None = None, keyfile: str | None = None,
                  cafile: str | None = None):
         self.hosts     = hosts
-        self._idx      = 0
         self._tls      = tls
         self._certfile = certfile
         self._keyfile  = keyfile
         self._cafile   = cafile
         self.drop_tak_ingress = True
-        self._sock: socket.socket | None = None
-        self._lock = threading.Lock()
-        self._connect()
+        self._q: "queue.Queue[str]" = queue.Queue(maxsize=TAK_QUEUE_MAX)
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._run, name="tak-writer", daemon=True)
+        self._thread.start()
 
-    def _connect(self):
-        host, port = self.hosts[self._idx % len(self.hosts)]
-        try:
-            raw = socket.create_connection((host, port), timeout=SEND_TIMEOUT_S)
-            _enable_keepalive(raw)
-            if self._tls:
-                ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-                # Server identity is anchored by mutual TLS (client cert + shared CA),
-                # not hostname — we deliberately dial multiple candidate addresses
-                # (LAN IP, NetBird IP) for the same server, so no single hostname/IP
-                # could ever match the server cert's SAN. Chain verification stays on.
-                ctx.check_hostname = False
-                ctx.load_verify_locations(self._cafile)  # cafile required; enforced in run()
-                if self._certfile and self._keyfile:
-                    ctx.load_cert_chain(self._certfile, self._keyfile)
-                s = ctx.wrap_socket(raw, server_hostname=host)
-            else:
-                s = raw
-            s.settimeout(SEND_TIMEOUT_S)
-            with self._lock:
-                self._sock = s
-            mode = "TLS" if self._tls else "TCP"
-            print("TAK {} connected → {}:{}".format(mode, host, port), flush=True)
-        except OSError as exc:
-            print("TAK connect failed ({}:{}) — {}, trying next candidate in {}s".format(
-                host, port, exc, RECONNECT_S), flush=True)
-            self._sock = None
-            self._idx += 1
-            threading.Timer(RECONNECT_S, self._connect).start()
+    def send(self, xml: str) -> None:
+        # Hand off to the writer thread; never blocks the caller. On overflow,
+        # drop the oldest queued CoT so the freshest still gets through.
+        while not self._stop.is_set():
+            try:
+                self._q.put_nowait(xml)
+                return
+            except queue.Full:
+                try:
+                    self._q.get_nowait()
+                except queue.Empty:
+                    pass
 
-    def send(self, xml: str):
-        data = (xml + "\n").encode("utf-8")
-        with self._lock:
-            sock = self._sock
-        if sock is None:
-            return
-        try:
-            sock.sendall(data)
-        except OSError:
-            # Reconnect to the SAME candidate — do not advance _idx here. A
-            # failed write means the server closed an established stream, not
-            # that this network path is down. The candidates are alternate
-            # addresses of one TAK Server, which identifies streaming clients
-            # by their certificate, so coming back on a different address makes
-            # it drop the previous session — which fails the next write and
-            # rotates again. Rotation belongs to the connect-failure path.
-            with self._lock:
-                self._sock = None
-            threading.Timer(RECONNECT_S, self._connect).start()
+    def _open(self, host: str, port: int) -> socket.socket:
+        raw = socket.create_connection((host, port), timeout=SEND_TIMEOUT_S)
+        _enable_keepalive(raw)
+        if not self._tls:
+            raw.settimeout(SEND_TIMEOUT_S)
+            return raw
+        # Server identity is anchored by mutual TLS (client cert + shared CA),
+        # not hostname — we deliberately dial multiple candidate addresses for
+        # one server, so no single IP matches the cert SAN. Chain verification
+        # stays on.
+        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        ctx.check_hostname = False
+        ctx.load_verify_locations(self._cafile)  # cafile required; enforced in run()
+        if self._certfile and self._keyfile:
+            ctx.load_cert_chain(self._certfile, self._keyfile)
+        s = ctx.wrap_socket(raw, server_hostname=host)
+        s.settimeout(SEND_TIMEOUT_S)
+        return s
 
-    def close(self):
-        with self._lock:
-            if self._sock:
-                self._sock.close()
-                self._sock = None
+    def _run(self) -> None:
+        sock: socket.socket | None = None
+        idx = 0
+        while not self._stop.is_set():
+            if sock is None:
+                host, port = self.hosts[idx % len(self.hosts)]
+                try:
+                    sock = self._open(host, port)
+                    print("TAK {} connected → {}:{}".format(
+                        "TLS" if self._tls else "TCP", host, port), flush=True)
+                except OSError as exc:
+                    # Connect failed → this path is down; rotate to the next
+                    # candidate and back off. One thread, so no reconnect storm.
+                    print("TAK connect failed ({}:{}) — {}, next candidate in {}s".format(
+                        host, port, exc, RECONNECT_S), flush=True)
+                    idx += 1
+                    self._stop.wait(RECONNECT_S)
+                    continue
+            try:
+                xml = self._q.get(timeout=1.0)
+            except queue.Empty:
+                continue  # idle: loop back to re-check the stop flag
+            try:
+                sock.sendall((xml + "\n").encode("utf-8"))
+            except OSError:
+                # A failed write means the server closed an established stream,
+                # not that the path is down — reconnect to the SAME candidate.
+                # The candidates are alternate addresses of one TAK Server, which
+                # identifies clients by certificate, so returning on a different
+                # address would drop the prior session and churn. If the path is
+                # genuinely down, the next connect fails and rotation happens there.
+                try:
+                    sock.close()
+                except OSError:
+                    pass
+                sock = None
+                self._stop.wait(RECONNECT_S)
+        if sock is not None:
+            try:
+                sock.close()
+            except OSError:
+                pass
+
+    def close(self) -> None:
+        self._stop.set()
 
 
 # Views that carry the same object as the flat JSON and must not be processed
 # twice. Anything else — including a bare topic with no view suffix — is treated
 # as the JSON payload.
 _NON_JSON_VIEWS = frozenset({"sapient", "proto", "raw"})
+
+
+def _terminal_view(key: str) -> str:
+    """The view segment, ignoring a trailing /tracks/vN version tail.
+
+    Every object key ends with the fabric version (…/tracks/v1), so the format
+    sits one segment back: …/{id}/sapient/tracks/v1. Reading the literal last
+    segment would only ever see "v1" and never skip a non-JSON view."""
+    parts = key.split("/")
+    if (len(parts) >= 2 and parts[-2] == "tracks"
+            and parts[-1][:1] == "v" and parts[-1][1:].isdigit()):
+        parts = parts[:-2]
+    return parts[-1] if parts else ""
 
 
 # ---------------------------------------------------------------------------
@@ -1625,7 +1671,7 @@ def make_handler(cot_type_or_fn, sender, verbose: bool, stale_s: float = COT_STA
         # sample on a bare topic with no view suffix at all. Requiring "/json"
         # silently discarded every one of them, so TAK stayed empty while the
         # SitaWare feed — which has no such filter — showed them all.
-        if str(sample.key_expr).rsplit("/", 1)[-1] in _NON_JSON_VIEWS:
+        if _terminal_view(str(sample.key_expr)) in _NON_JSON_VIEWS:
             return
         try:
             track = json.loads(bytes(sample.payload).decode())
@@ -1741,7 +1787,7 @@ def make_radar_status_handler(sender, verbose: bool):
     def handler(sample):
         # CAT-34 status also ships in several views; consume the flat JSON only
         # (bare-topic publishers have no view suffix — see make_handler).
-        if str(sample.key_expr).rsplit("/", 1)[-1] in _NON_JSON_VIEWS:
+        if _terminal_view(str(sample.key_expr)) in _NON_JSON_VIEWS:
             return
         try:
             track = json.loads(bytes(sample.payload).decode())

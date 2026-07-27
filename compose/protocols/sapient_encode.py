@@ -23,7 +23,6 @@ from __future__ import annotations
 import os
 import time
 import uuid
-
 from sapient_msg.bsi_flex_335_v2_0.detection_report_pb2 import DetectionReport
 from sapient_msg.bsi_flex_335_v2_0.location_pb2 import (
     LocationCoordinateSystem,
@@ -176,14 +175,14 @@ def track_to_sapient(track: dict, node_id: str = "") -> SapientMessage | None:
 
 
 def sapient_topic(topic: str) -> str:
-    """SAPIENT view of an object key (.../{id} -> .../{id}/sapient).
+    """SAPIENT view of an object key (.../{id} -> .../{id}/sapient/tracks/v1).
 
     Named like every other view so no format is implicit — a consumer reading
-    the key always knows what the bytes are.
+    the key always knows what the bytes are — and versioned like every other
+    view so the goat boundary admits it.
     """
-    if topic.endswith("/sapient"):
-        return topic
-    return topic + "/sapient"
+    from protocols.protobuf_codec import view_key
+    return view_key(topic, "sapient")
 
 
 def publish_sapient(session, topic: str, track: dict, zenoh, node_id: str = "") -> None:

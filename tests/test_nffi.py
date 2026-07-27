@@ -70,8 +70,10 @@ class NffiProtocolTests(unittest.TestCase):
 
         # JSON /v1 + per-protocol /v2 + SAPIENT /sapient
         self.assertGreaterEqual(len(session.publications), 2)
+        _views = ("/proto/tracks/v1", "/sapient/tracks/v1", "/raw/tracks/v1")
         topic, payload, kwargs = next(
-            x for x in session.publications if x[0].endswith("/json")
+            x for x in session.publications
+            if x[0].endswith("/tracks/v1") and not x[0].endswith(_views)
         )
         track = json.loads(payload)
         self.assertTrue(topic.startswith(OUTPUT_TOPIC))

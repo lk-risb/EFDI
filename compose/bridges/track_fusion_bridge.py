@@ -72,13 +72,13 @@ import math
 import os
 import threading
 import time
+from protocols.random.normalized_track_pb2 import NormalizedTrack
 
 import zenoh
 from google.protobuf.message import DecodeError
-from zenoh_auth import apply_zenoh_auth
 from namespace_prefix import topic_root
-from protocols.random.normalized_track_pb2 import NormalizedTrack
-from protocols.protobuf_codec import normalized_track_message
+from protocols.protobuf_codec import publish_collection, strip_version
+from zenoh_auth import apply_zenoh_auth
 
 ORG       = os.environ.get("PARTNER_NAMESPACE", "")
 TOPIC_ROOT = topic_root()
@@ -94,8 +94,7 @@ _RADAR_PREF      = os.environ.get("FUSION_RADAR_PREF", "1") != "0"
 _HANDOFF_NM      = float(os.environ.get("FUSION_HANDOFF_NM",  "2.0"))  # spatial tolerance
 _HANDOFF_HDG_TOL = 45.0   # heading difference tolerance in degrees
 
-TOPIC_FUSED  = "{}/air/trackfusion/fused/{}/aircraft"
-TOPIC_FUSED_V2 = "{}/air/trackfusion/fused/{}/aircraft"
+TOPIC_FUSED = "{}/air/trackfusion/fused/{}/aircraft"
 
 # Everything this bridge publishes lives under here — used to reject our own
 # output when re-subscribing by modality.
@@ -228,7 +227,10 @@ class TrackFuser:
         # A track is published in four views; the fusion model is dict-based, so
         # only the JSON view is consumed. The `**` subscription matches all four,
         # so the other three are skipped here rather than left to fail json.loads.
-        if not topic.endswith("/json"):
+        if not topic.endswith("/tracks/v1"):
+            return
+        base = strip_version(topic)
+        if base.rsplit("/", 1)[-1] in {"sapient", "proto", "raw"}:
             return
         # _RADAR_TOPICS matches `/air/*/fused/**` to pick up ASTERIX CAT-062
         # system tracks — which also matches THIS bridge's own output, so a
@@ -379,13 +381,7 @@ class TrackFuser:
             # seamlessly (same ICAO-based UID, same marker in ATAK).
             affiliation = "mil" if track.get("is_military") else "civ"
             pub_topic = TOPIC_FUSED.format(TOPIC_ROOT, affiliation)
-            self._session.put(pub_topic, json.dumps(track).encode(),
-                              encoding=zenoh.Encoding.APPLICATION_JSON)
-            self._session.put(
-                TOPIC_FUSED_V2.format(TOPIC_ROOT, affiliation),
-                normalized_track_message(NormalizedTrack, track, affiliation).SerializeToString(),
-                encoding=zenoh.Encoding.APPLICATION_PROTOBUF,
-            )
+            publish_collection(self._session, pub_topic, track, NormalizedTrack, zenoh)
             if self._verbose:
                 ident = track.get("callsign") or track.get("icao24") or "?"
                 print("ADSB fallback [no radar] {}".format(ident), flush=True)
@@ -409,13 +405,7 @@ class TrackFuser:
         else:
             aff_slot = "mil" if adsb.get("is_military") else "civ"
         topic = TOPIC_FUSED.format(TOPIC_ROOT, aff_slot)
-        self._session.put(topic, json.dumps(fused).encode(),
-                          encoding=zenoh.Encoding.APPLICATION_JSON)
-        self._session.put(
-            TOPIC_FUSED_V2.format(TOPIC_ROOT, aff_slot),
-            normalized_track_message(NormalizedTrack, fused, aff_slot).SerializeToString(),
-            encoding=zenoh.Encoding.APPLICATION_PROTOBUF,
-        )
+        publish_collection(self._session, topic, fused, NormalizedTrack, zenoh)
         if self._verbose:
             ident = (fused.get("callsign") or fused.get("icao24") or
                      fused.get("radar_id") or "?")

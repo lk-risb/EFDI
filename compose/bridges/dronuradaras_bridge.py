@@ -295,7 +295,7 @@ def main():
 
     session = zenoh.open(make_config())
 
-    topic_dev = "{}/land/dronuradaras/acoustic/neutral/sensor".format(TOPIC_ROOT)
+    topic_dev = "{}/land/dronuradaras/acoustic/neutral/sensor/tracks/v1".format(TOPIC_ROOT)
     pub_dev = session.declare_publisher(topic_dev)
 
     print("dronuradaras bridge starting", flush=True)

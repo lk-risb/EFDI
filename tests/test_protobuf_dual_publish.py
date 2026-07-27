@@ -11,10 +11,9 @@ from __future__ import annotations
 
 import json
 import os
-from pathlib import Path
 import sys
 import unittest
-
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, os.fspath(ROOT / "compose" / "protocols"))
@@ -34,6 +33,7 @@ from protocols.protobuf_codec import (  # noqa: E402
     asterix_data_block,
     dual_topic,
     native_topic,
+    publish_collection,
     publish_dual,
     publish_native,
     wrapped_track_message,
@@ -62,10 +62,10 @@ class RecordingSession:
 
 class DualTopicTests(unittest.TestCase):
     def test_format_segment_is_rewritten_in_place(self):
-        self.assertEqual(dual_topic("root/air/x/id/json"), "root/air/x/id/proto")
+        self.assertEqual(dual_topic("root/air/x/id/json"), "root/air/x/id/proto/tracks/v1")
 
     def test_topic_without_a_format_segment_gains_one(self):
-        self.assertEqual(dual_topic("root/air/x/id"), "root/air/x/id/proto")
+        self.assertEqual(dual_topic("root/air/x/id"), "root/air/x/id/proto/tracks/v1")
 
 
 class WrappedTrackMessageTests(unittest.TestCase):
@@ -119,10 +119,14 @@ class PublishDualTests(unittest.TestCase):
         publish_dual(session, "root/air/mavlink/json", dict(TRACK), MavlinkTrack, zenoh)
 
         by_topic = {topic: (payload, encoding) for topic, payload, encoding in session.puts}
-        # The key now carries {type}/{id}: root/air/mavlink/quadrotor/uav-1/...
-        json_topic = next(k for k in by_topic if k.endswith("/json"))
-        pb_topic = next(k for k in by_topic if k.endswith("/proto"))
+        # The key now carries {type}/{id} and ends /tracks/v1:
+        # root/air/mavlink/quadrotor/uav-1/tracks/v1  (json, canonical)
+        # root/air/mavlink/quadrotor/uav-1/proto/tracks/v1  (per-protocol)
+        json_topic = next(k for k, (p, e) in by_topic.items()
+                          if e == zenoh.Encoding.APPLICATION_JSON)
+        pb_topic = dual_topic(json_topic)
         self.assertTrue(json_topic.startswith("root/air/mavlink/quadrotor/uav-1"))
+        self.assertTrue(json_topic.endswith("/tracks/v1"))
         json_payload, json_encoding = by_topic[json_topic]
         pb_payload, pb_encoding = by_topic[pb_topic]
         self.assertEqual(json_encoding, zenoh.Encoding.APPLICATION_JSON)
@@ -140,7 +144,7 @@ class PublishDualTests(unittest.TestCase):
 
         by_topic = {topic: payload for topic, payload, _e in session.puts}
         decoded = NormalizedTrack()
-        decoded.ParseFromString(next(v for k, v in by_topic.items() if k.endswith("/proto")))
+        decoded.ParseFromString(next(v for k, v in by_topic.items() if k.endswith("/proto/tracks/v1")))
         self.assertAlmostEqual(decoded.lat_deg, 54.6872)
 
     def test_protobuf_failure_never_blocks_the_json_leg(self):
@@ -150,8 +154,24 @@ class PublishDualTests(unittest.TestCase):
         publish_dual(session, "root/air/mavlink/json", {"callsign": "NO-POS"}, MavlinkTrack, zenoh)
 
         self.assertEqual(len(session.puts), 1)
-        self.assertTrue(session.puts[0][0].endswith("/json"))
+        self.assertTrue(session.puts[0][0].endswith("/tracks/v1"))
         self.assertEqual(json.loads(session.puts[0][1].decode())["callsign"], "NO-POS")
+
+    def test_collection_views_use_stable_exact_keys(self):
+        session = RecordingSession()
+        publish_collection(
+            session,
+            "root/air/adsb/civ/aircraft/tracks/v1",
+            dict(TRACK),
+            MavlinkTrack,
+            zenoh,
+        )
+
+        topics = {topic for topic, _payload, _encoding in session.puts}
+        self.assertIn("root/air/adsb/civ/aircraft/tracks/v1", topics)
+        self.assertIn("root/air/adsb/civ/aircraft/sapient/tracks/v1", topics)
+        self.assertIn("root/air/adsb/civ/aircraft/proto/tracks/v1", topics)
+        self.assertFalse(any("/tracks/v1/" in topic for topic in topics))
 
 
 class NativeFrameEgressTests(unittest.TestCase):
@@ -161,9 +181,9 @@ class NativeFrameEgressTests(unittest.TestCase):
     def test_native_topic_rewrites_the_format_segment(self):
         self.assertEqual(
             native_topic("root/air/asterix/x/aircraft/b738/ly-abc/json"),
-            "root/air/asterix/x/aircraft/b738/ly-abc/raw",
+            "root/air/asterix/x/aircraft/b738/ly-abc/raw/tracks/v1",
         )
-        self.assertEqual(native_topic("root/other"), "root/other/raw")
+        self.assertEqual(native_topic("root/other"), "root/other/raw/tracks/v1")
 
     def test_asterix_data_block_rebuilds_a_standalone_block(self):
         record = bytes(range(10))
@@ -248,9 +268,10 @@ class SapientEgressTests(unittest.TestCase):
         publish_dual(session, "root/air/mavlink/json", dict(TRACK), MavlinkTrack, zenoh)
 
         topics = [topic for topic, _payload, _encoding in session.puts]
-        self.assertTrue(any(t.endswith("/json") for t in topics))
-        self.assertTrue(any(t.endswith("/proto") for t in topics))
-        self.assertTrue(any(t.endswith("/sapient") for t in topics))
+        # json is the canonical view (no format segment); every key ends /tracks/v1.
+        self.assertTrue(any(t.endswith("/tracks/v1") for t in topics))
+        self.assertTrue(any(t.endswith("/proto/tracks/v1") for t in topics))
+        self.assertTrue(any(t.endswith("/sapient/tracks/v1") for t in topics))
 
     def test_sapient_failure_never_blocks_the_other_tiers(self):
         session = RecordingSession()

@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 """Open Drone ID Zenoh protocol translation tests."""
 
-import pathlib
 import base64
 import json
+import pathlib
 import struct
 import sys
 import unittest
 import xml.etree.ElementTree as ET
-
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "compose"))
@@ -154,7 +153,7 @@ class OpenDroneIDProtocolTests(unittest.TestCase):
 
             def put(self, topic, payload, **_kwargs):
                 # Dual publish: /v1 carries JSON, /v2 the protobuf sibling.
-                if topic.endswith(("/proto", "/sapient", "/raw")):
+                if topic.endswith(("/proto/tracks/v1", "/sapient/tracks/v1", "/raw/tracks/v1")):
                     self.protobuf.append((topic, payload))
                 else:
                     self.publications.append((topic, json.loads(payload)))
@@ -166,8 +165,9 @@ class OpenDroneIDProtocolTests(unittest.TestCase):
         self.assertGreaterEqual(len(session.protobuf), 1)
         self.assertGreater(len(session.protobuf[0][1]), 0)
         topic, track = session.publications[0]
-        self.assertIn(topic[: -len("/json")] + "/proto", [x[0] for x in session.protobuf])
-        self.assertTrue("/air/opendroneid/" in topic and topic.endswith("/json"))
+        self.assertIn(topic[: -len("/tracks/v1")] + "/proto/tracks/v1",
+                      [x[0] for x in session.protobuf])
+        self.assertTrue("/air/opendroneid/" in topic and topic.endswith("/tracks/v1"))
         self.assertEqual(track["remote_id_receiver"], "sensor-7")
         self.assertEqual(track["remote_id_transmitter"], "aa:bb:cc:dd:ee:ff")
 

@@ -22,9 +22,8 @@ import ssl
 import time
 
 import zenoh
-from zenoh_auth import apply_zenoh_auth
 from namespace_prefix import topic_root
-
+from zenoh_auth import apply_zenoh_auth
 
 ORG = os.environ.get("PARTNER_NAMESPACE", "")
 TOPIC_ROOT = topic_root()
@@ -32,7 +31,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 _CERT_DIR = os.environ.get("EFDI_CERT_DIR", HERE)
 _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", "tcp/127.0.0.1:7448")
 
-ZENOH_TOPIC = "{}/air/dji/telemetry/friendly/uav".format(TOPIC_ROOT)
+ZENOH_TOPIC = "{}/air/dji/telemetry/friendly/uav/tracks/v1".format(TOPIC_ROOT)
 MAX_MQTT_PAYLOAD = 1_048_576
 _OSD_TOPIC = re.compile(r"(?:^|/)thing/product/([A-Za-z0-9._:-]{1,128})/osd$")
 _AIRCRAFT_HINTS = frozenset(

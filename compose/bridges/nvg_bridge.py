@@ -35,12 +35,12 @@ import urllib.request
 import xml.etree.ElementTree as ET
 
 import zenoh
-from zenoh_auth import apply_zenoh_auth
-from namespace_prefix import topic_root
-from protocols.protobuf_codec import semantic_topic
 # One SIDC -> topic mapping for both SitaWare ingress paths; a second copy would
 # drift and land the same unit on two different keys.
 from bridges.sitaware_bridge import sidc_to_topic
+from namespace_prefix import topic_root
+from protocols.protobuf_codec import semantic_topic, add_version
+from zenoh_auth import apply_zenoh_auth
 
 ORG        = os.environ.get("PARTNER_NAMESPACE", "")
 TOPIC_ROOT = topic_root()
@@ -184,8 +184,8 @@ def run(args) -> None:
             if document is not None:
                 tracks = parse_nvg(document)
                 for track in tracks:
-                    topic = semantic_topic(
-                        sidc_to_topic(track.get("sidc", "")), track) + "/json"
+                    topic = add_version(semantic_topic(
+                        sidc_to_topic(track.get("sidc", "")), track))
                     session.put(topic, json.dumps(track).encode(),
                                 encoding=zenoh.Encoding.APPLICATION_JSON)
                     if args.verbose:
