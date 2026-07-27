@@ -109,7 +109,7 @@ def run(args):
     session = zenoh.open(make_config())
     publishers = {
         place: session.declare_publisher(
-            "{}/env/weather/station/meteolt/forecast/{}".format(TOPIC_ROOT, place)
+            "{}/env/weather/station/meteolt/forecast/{}/tracks/v1".format(TOPIC_ROOT, place)
         )
         for place in args.places
     }

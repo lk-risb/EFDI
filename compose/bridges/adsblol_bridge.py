@@ -21,14 +21,13 @@ import os
 import time
 import urllib.error
 import urllib.request
+from protocols.random.adsblol_track_pb2 import AdsbLolTrack
 
 import zenoh
-from zenoh_auth import apply_zenoh_auth
-
 from http_json import read_json_response
 from namespace_prefix import topic_root
-from protocols.random.adsblol_track_pb2 import AdsbLolTrack
-from protocols.protobuf_codec import source_track_to_message
+from protocols.protobuf_codec import publish_collection
+from zenoh_auth import apply_zenoh_auth
 
 ORG = os.environ.get("PARTNER_NAMESPACE", "")
 TOPIC_ROOT = topic_root()
@@ -215,18 +214,8 @@ def run(args) -> None:
         raise SystemExit("--interval must be at least 5 seconds")
 
     session = zenoh.open(make_config())
-    civil = session.declare_publisher(
-        "{}/air/adsblol/adsb/civ/aircraft".format(TOPIC_ROOT)
-    )
-    military = session.declare_publisher(
-        "{}/air/adsblol/adsb/mil/aircraft".format(TOPIC_ROOT)
-    )
-    civil_v2 = session.declare_publisher(
-        "{}/air/adsblol/adsb/civ/aircraft".format(TOPIC_ROOT)
-    )
-    military_v2 = session.declare_publisher(
-        "{}/air/adsblol/adsb/mil/aircraft".format(TOPIC_ROOT)
-    )
+    civil = "{}/air/adsblol/adsb/civ/aircraft".format(TOPIC_ROOT)
+    military = "{}/air/adsblol/adsb/mil/aircraft".format(TOPIC_ROOT)
     print(
         "ADSB.lol: {} centers radius={}nm interval={}s".format(
             len(POLL_CENTERS), args.radius, args.interval
@@ -248,26 +237,14 @@ def run(args) -> None:
                     track = normalize(aircraft)
                     if track is None:
                         continue
-                    publisher = military if track["is_military"] else civil
-                    publisher.put(
-                        json.dumps(track, separators=(",", ":")).encode(),
-                        encoding=zenoh.Encoding.APPLICATION_JSON,
-                    )
-                    publisher_v2 = military_v2 if track["is_military"] else civil_v2
-                    publisher_v2.put(
-                        source_track_to_message(AdsbLolTrack, track).SerializeToString(),
-                        encoding=zenoh.Encoding.APPLICATION_PROTOBUF,
-                    )
+                    topic = military if track["is_military"] else civil
+                    publish_collection(session, topic, track, AdsbLolTrack, zenoh)
                     published += 1
             print("ADSB.lol tracks published: {}".format(published), flush=True)
             time.sleep(args.interval)
     except KeyboardInterrupt:
         pass
     finally:
-        civil.undeclare()
-        military.undeclare()
-        civil_v2.undeclare()
-        military_v2.undeclare()
         session.close()
 
 

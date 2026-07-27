@@ -117,6 +117,28 @@ All four views sit under the pod's first-party publish prefix, so the existing
 `${DATA_TOPIC_ROOT}/**` router ACL already covers them — adding a view needs no
 ACL change.
 
+### External catalog compatibility
+
+Some upstream portals distinguish the certificate-backed slot from a
+human-readable vendor alias. Treat the authenticated `whoami`/identity response
+as authoritative: the alias is display metadata and must not replace the
+certificate slot in Zenoh keys unless the upstream ACL explicitly says so.
+
+The trial portal registry accepts exact topic keys, not Zenoh `*` or `**`
+expressions. High-rate collection publishers therefore keep object identity in
+the payload and use stable sibling keys:
+
+```text
+.../aircraft/tracks/v1          JSON
+.../aircraft/sapient/tracks/v1  BSI FLEX 335 v2 SAPIENT protobuf
+.../aircraft/proto/tracks/v1    source-specific protobuf
+```
+
+`publish_collection()` enforces one encoding per exact key for ADS-B and fused
+aircraft collections. Per-object topics remain useful inside fabrics whose
+catalog supports patterns, but must not be the only output when the external
+catalog requires exact registration.
+
 ## Source-specific bridges
 
 | Bridge | Endpoint behavior | Configuration needed |

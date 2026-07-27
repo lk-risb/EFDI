@@ -41,7 +41,7 @@ and where it legitimately lives.
 - **Keep it runnable.** `tests/check-images-public.sh` must pass (every image anonymously
   pullable), and the smoke test in `tests/smoke/` should keep describing a real bidirectional
   round-trip.
-- **License.** Contributions are under Apache-2.0 (see [`LICENSE`](LICENSE)).
+- **License.** Contributions are under Apache-2.0 (see [`LICENSE`](../LICENSE)).
 
 ## Where things live
 
