@@ -20,12 +20,6 @@ clients, then asserts:
 
 This is the gate that runs in CI and uses only disposable keys below `mktemp`.
 
-`managed-three-router.sh` is the second CI gate. It starts disposable root,
-child, and grandchild Zenoh 1.9 routers with identity-bound direct-link ACLs and
-asserts that scoped grandchild data reaches root, namespace escape is denied,
-the branch continues while root is offline, and the chain recovers when root
-returns.
-
 ### 2. Live EFDI-sandbox validation (slow step, on the validation host)
 
 Run the real `first-boot.sh` (as root, after populating `compose/.env`) against the **live EFDI

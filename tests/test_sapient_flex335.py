@@ -306,7 +306,8 @@ class NativeProtobufEgressTests(unittest.TestCase):
 
         # /v2 — typed EFDI contract, not the raw frame.
         typed_payload, typed_encoding = by_topic[dual_topic(json_topic)]
-        self.assertEqual(typed_encoding, zenoh.Encoding.APPLICATION_PROTOBUF)
+        self.assertEqual(typed_encoding, zenoh.Encoding.APPLICATION_PROTOBUF.with_schema(
+            SapientFlex335Track.DESCRIPTOR.full_name))
         typed = SapientFlex335Track()
         typed.ParseFromString(typed_payload)
         self.assertAlmostEqual(typed.track.lat_deg, 54.6872, places=4)
@@ -316,7 +317,8 @@ class NativeProtobufEgressTests(unittest.TestCase):
         raw_key = next((k for k in by_topic if k.endswith("/raw/tracks/v1")), None)
         self.assertIsNotNone(raw_key, f"no /raw view in {sorted(by_topic)}")
         native_payload, native_encoding = by_topic[raw_key]
-        self.assertEqual(native_encoding, zenoh.Encoding.APPLICATION_PROTOBUF)
+        self.assertEqual(native_encoding, zenoh.Encoding.APPLICATION_PROTOBUF.with_schema(
+            RawEnvelope.DESCRIPTOR.full_name))
         envelope_message = RawEnvelope()
         envelope_message.ParseFromString(native_payload)
         self.assertEqual(envelope_message.payload, frame)

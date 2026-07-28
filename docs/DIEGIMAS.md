@@ -76,7 +76,6 @@ compose/certs/
 ├── efdi/                     # EFDI Zenoh CA ir pod'ų identitetai
 ├── sitaware/                 # SitaWare tiekimo CA ir serverio identitetas
 ├── tak/                      # TAK Serverio identitetas
-├── tests/                    # testinių child/grandchild identitetai
 └── zenoh-sandbox/             # seno sandbox Zenoh identitetas
 ```
 
