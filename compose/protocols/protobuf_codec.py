@@ -171,7 +171,7 @@ def wrapped_track_message(
     protocol-specific scalar fields alongside it.
 
     Every per-protocol contract in compose/protocols/*.proto follows this shape
-    (see mavlink.proto, vmf.proto, vendor sapient/flex335.proto). Some contracts use
+    (see vmf.proto and vendor sapient/flex335.proto). Some contracts use
     a different nested field name such as `sensor` or `normalized`; callers can
     override `wrapper_field` for those cases.
     """
@@ -252,7 +252,7 @@ def _slug(value, fallback: str = "unknown") -> str:
 def object_type(track: dict) -> str:
     """Specific type when the sensor knows it, `unknown` when it cannot.
 
-    Cooperative sources (ADS-B, Remote ID) carry a real type; a radar return
+    Cooperative sources and platform telemetry carry a real type; a radar return
     does not, and publishes `unknown` rather than inventing one.
     """
     for key in ("aircraft_type", "type", "vehicle_type", "sapient_class",

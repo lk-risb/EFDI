@@ -21,9 +21,9 @@ sys.path.insert(0, os.fspath(ROOT / "compose"))
 
 import zenoh  # noqa: E402
 
-from protocols.random.mavlink_pb2 import MavlinkTrack  # noqa: E402
 from protocols.random.normalized_track_pb2 import NormalizedTrack  # noqa: E402
 from protocols.random.raw_envelope_pb2 import RawEnvelope  # noqa: E402
+from protocols.random.vmf_pb2 import VmfTrack  # noqa: E402
 from protocols.sapient_encode import (  # noqa: E402
     publish_sapient,
     track_to_sapient,
@@ -42,13 +42,13 @@ from protocols.protobuf_codec import (  # noqa: E402
 
 TRACK = {
     "_ts": 1_700_000_000.0,
-    "_src": "mavlink",
+    "_src": "vmf",
     "lat_deg": 54.6872,
     "lon_deg": 25.2797,
     "callsign": "UAV-1",
     "speed_ms": 12.5,
-    "system_id": 7,
-    "vehicle_type": "quadrotor",
+    "message_key": "K04.4",
+    "originator_urn": 7,
 }
 
 
@@ -72,15 +72,15 @@ class WrappedTrackMessageTests(unittest.TestCase):
     def test_inner_normalized_track_is_populated(self):
         """Regression: reflection alone left `track` empty, so the /v2 sample
         carried protocol extras and no position."""
-        message = wrapped_track_message(MavlinkTrack, TRACK)
+        message = wrapped_track_message(VmfTrack, TRACK)
         self.assertAlmostEqual(message.track.lat_deg, 54.6872)
         self.assertAlmostEqual(message.track.lon_deg, 25.2797)
         self.assertEqual(message.track.callsign, "UAV-1")
 
     def test_protocol_specific_fields_sit_alongside_the_track(self):
-        message = wrapped_track_message(MavlinkTrack, TRACK)
-        self.assertEqual(message.system_id, 7)
-        self.assertEqual(message.vehicle_type, "quadrotor")
+        message = wrapped_track_message(VmfTrack, TRACK)
+        self.assertEqual(message.message_key, "K04.4")
+        self.assertEqual(message.originator_urn, 7)
 
     def test_repeated_fields_are_extended_not_assigned(self):
         """Regression: a repeated field rejects `msg.f = [...]`. Assigning it
@@ -109,32 +109,32 @@ class WrappedTrackMessageTests(unittest.TestCase):
 
     def test_values_the_contract_cannot_hold_are_skipped(self):
         track = dict(TRACK, nested={"a": 1}, unmodelled="x")
-        message = wrapped_track_message(MavlinkTrack, track)
+        message = wrapped_track_message(VmfTrack, track)
         self.assertAlmostEqual(message.track.lat_deg, 54.6872)
 
 
 class PublishDualTests(unittest.TestCase):
     def test_publishes_json_and_protobuf_with_correct_encodings(self):
         session = RecordingSession()
-        publish_dual(session, "root/air/mavlink/json", dict(TRACK), MavlinkTrack, zenoh)
+        publish_dual(session, "root/air/vmf/json", dict(TRACK), VmfTrack, zenoh)
 
         by_topic = {topic: (payload, encoding) for topic, payload, encoding in session.puts}
         # The key now carries {type}/{id} and ends /tracks/v1:
-        # root/air/mavlink/quadrotor/uav-1/tracks/v1  (json, canonical)
-        # root/air/mavlink/quadrotor/uav-1/proto/tracks/v1  (per-protocol)
+        # root/air/vmf/track/uav-1/tracks/v1  (json, canonical)
+        # root/air/vmf/track/uav-1/proto/tracks/v1  (per-protocol)
         json_topic = next(k for k, (p, e) in by_topic.items()
                           if e == zenoh.Encoding.APPLICATION_JSON)
         pb_topic = dual_topic(json_topic)
-        self.assertTrue(json_topic.startswith("root/air/mavlink/quadrotor/uav-1"))
+        self.assertTrue(json_topic.startswith("root/air/vmf/track/uav-1"))
         self.assertTrue(json_topic.endswith("/tracks/v1"))
         json_payload, json_encoding = by_topic[json_topic]
         pb_payload, pb_encoding = by_topic[pb_topic]
         self.assertEqual(json_encoding, zenoh.Encoding.APPLICATION_JSON)
         self.assertEqual(pb_encoding, zenoh.Encoding.APPLICATION_PROTOBUF.with_schema(
-            MavlinkTrack.DESCRIPTOR.full_name))
+            VmfTrack.DESCRIPTOR.full_name))
 
         self.assertEqual(json.loads(json_payload.decode())["callsign"], "UAV-1")
-        decoded = MavlinkTrack()
+        decoded = VmfTrack()
         decoded.ParseFromString(pb_payload)
         self.assertAlmostEqual(decoded.track.lat_deg, 54.6872)
 
@@ -152,7 +152,7 @@ class PublishDualTests(unittest.TestCase):
         """A track missing the mandatory position must not stop JSON delivery —
         JSON is the live path until consumers migrate to /v2."""
         session = RecordingSession()
-        publish_dual(session, "root/air/mavlink/json", {"callsign": "NO-POS"}, MavlinkTrack, zenoh)
+        publish_dual(session, "root/air/vmf/json", {"callsign": "NO-POS"}, VmfTrack, zenoh)
 
         self.assertEqual(len(session.puts), 1)
         self.assertTrue(session.puts[0][0].endswith("/tracks/v1"))
@@ -164,7 +164,7 @@ class PublishDualTests(unittest.TestCase):
             session,
             "root/air/adsb/civ/aircraft/tracks/v1",
             dict(TRACK),
-            MavlinkTrack,
+            VmfTrack,
             zenoh,
         )
 
@@ -267,7 +267,7 @@ class SapientEgressTests(unittest.TestCase):
 
     def test_publish_dual_emits_the_sapient_tier_alongside_the_others(self):
         session = RecordingSession()
-        publish_dual(session, "root/air/mavlink/json", dict(TRACK), MavlinkTrack, zenoh)
+        publish_dual(session, "root/air/vmf/json", dict(TRACK), VmfTrack, zenoh)
 
         topics = [topic for topic, _payload, _encoding in session.puts]
         # json is the canonical view (no format segment); every key ends /tracks/v1.

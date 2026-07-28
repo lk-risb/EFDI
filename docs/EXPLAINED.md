@@ -15,7 +15,7 @@ EFDI is a **sensor-to-C2 translator with a shared message fabric in the middle.*
 
 On one side are *sensors and data sources* that each speak their own dialect —
 radars speaking ASTERIX, aircraft transponders speaking ADS-B, drones speaking
-Open Drone ID, weather stations, AIS receivers, and so on. On the other side are
+Open Drone ID, weather stations, partner feeds, and so on. On the other side are
 *command-and-control (C2) systems* that operators actually look at — **TAK**
 (ATAK/WinTAK) which speaks Cursor-on-Target (CoT), and **SitaWare HQ** which
 speaks NVG.
@@ -30,6 +30,16 @@ EFDI runs as a **"moon-pod"**: a self-contained bundle a partner runs on their
 own hardware, on their own network, that connects to a shared **backbone fabric**
 so many partners exchange tracks without anyone surrendering custody of their
 data.
+
+**Where it sits — this is important.** EFDI is meant primarily as an *addition*
+alongside your existing C2 stack, not a replacement for it. It runs next to (or
+at least in direct network reach of) the TAK Server and SitaWare HQ servers
+themselves, and speaks their native wire protocols directly — CoT over the TAK
+TCP port, NVG over SitaWare's HTTP feed. That direct-to-the-server placement is
+the entire reason the translation layers exist: EFDI carries the burden of
+speaking each C2 system's dialect so the operators' tools receive exactly what
+they already expect, with EFDI adding fused, multi-source tracks into that
+picture rather than asking anyone to change how they work.
 
 ## 2. The one-sentence model
 
@@ -46,9 +56,9 @@ supervisor — exists to make that one sentence reliable, secure, and operable.
 flowchart LR
   subgraph Sources["Sensors & data sources"]
     R[Radars / ASTERIX]
-    A[ADS-B / ADSB.lol / airplanes.live]
+    A[Partner ADS-B / CAT-21]
     D[Drones / Open Drone ID / dronuradaras]
-    W[Weather / AIS / APRS / …]
+    W[Weather / APRS / …]
   end
 
   subgraph Pod["EFDI moon-pod (native Python + Docker infra)"]
@@ -131,16 +141,17 @@ Take a radar as the worked example:
    `protocols/protobuf_codec.py`, which assemble the taxonomy key and publish
    **several views of the same track** (§6.4).
 
-Other sources are simpler — `adsblol_bridge.py` polls a JSON HTTP API and calls
-the same publish helpers directly; `aprsis_bridge.py` reads the APRS-IS stream
-and `put`s JSON. The pattern is always **decode → track dict → publish helper.**
+Other sources are simpler — `aprsis_bridge.py` reads the APRS-IS stream and
+`put`s JSON, while partner ADS-B arrives through registered fabric topics or
+ASTERIX CAT-021. The pattern is always
+**decode → track dict → publish helper.**
 
 ### 6.2 The normalized track
 
 Every decoder produces the same shape — a flat dict such as:
 
 ```json
-{ "_ts": 1730000000.0, "_src": "ADSB.lol", "uid": "4ca7b3",
+{ "_ts": 1730000000.0, "_src": "partner-adsb", "uid": "4ca7b3",
   "lat_deg": 54.68, "lon_deg": 25.28, "geo_alt_m": 10668,
   "callsign": "RYR1AB", "affiliation": "civ", "heading_deg": 91.0 }
 ```
@@ -158,7 +169,7 @@ The key is where the intelligence lives. Full form (see `topic-taxonomy.md`):
 
 - **prefix** — your slot (UUID on backbone).
 - **domain** — `air` / `land` / `sea` / `space`.
-- **source** — *who* observed it (`adsblol`, radar `SAC-SIC`). Provenance.
+- **source** — *who* observed it (`partner-adsb`, radar `SAC-SIC`). Provenance.
 - **modality** — *how* it was observed (`radar`, `adsb`, `acoustic`). What a C2
   consumer filters on.
 - **affiliation** — `civ` / `mil` / `friendly` / `hostile` / `neutral` / `unknown`.
@@ -201,9 +212,27 @@ automatically) and convert:
 - **`tak_bridge.py`** reads CoT XML from TAK and republishes normalized tracks to
   Zenoh, tagged so `cot_layer` doesn't echo them straight back.
 - **`nvg_bridge.py`** polls SitaWare's NVG export and republishes items.
+- **`sitaware_bridge.py`** polls SitaWare's REST API for unit positions and
+  republishes them (a second SitaWare ingress transport alongside NVG).
 
-*(Merging each C2 system's two files into one bidirectional gateway is the
-proposal in `docs/superpowers/plans/2026-07-27-c2-gateway-unification.md`.)*
+### 6.7 Unified gateways (one process per C2 system)
+
+Reading a whole C2 integration used to mean opening several files split by
+direction. **`c2/tak_gateway.py`** and **`c2/sitaware_gateway.py`** each run one
+C2 system's *ingress + egress in a single process/service* — the egress leg on
+the main thread (it owns clean shutdown), the ingress leg(s) on supervised
+daemon threads. An ingress exception or unexpected exit wakes the main thread
+and fails the whole gateway, so Runtime Control cannot report a healthy process
+whose receive side has silently died. SitaWare starts only the feed, NVG import,
+and REST legs that have enough configuration; an entirely unconfigured gateway
+fails immediately with a useful error.
+The translation itself still lives in the layer modules (`cot_layer`, `nvg_layer`
+are imported and kept as standalone, independently runnable modules for later
+development); the gateways only orchestrate them. Run a gateway *instead of* the
+split services it replaces, never alongside (that would double-send).
+`start.sh` enforces that mutual exclusion for interactive and Runtime Control
+starts. See
+`docs/superpowers/plans/2026-07-27-c2-gateway-unification.md`.
 
 ## 7. The fabric contract — why "am I in panoscope?" is a thing
 
@@ -270,9 +299,9 @@ supervisor is always running; a crashed feed comes back on its own.
 
 | Category | Examples | Role |
 |---|---|---|
-| **Open-data bridges** | `airplaneslive`, `adsblol`, `aprs`, `meteolt`, `utm-ans` | Poll public feeds → tracks |
+| **Open-data bridges** | `aprs`, `meteolt` | Poll explicitly retained feeds → tracks |
 | **Sensor bridges** | `asterix`, `sitaware`, `dronuradaras`, `dji-cloud`, `track-fusion`, `*-raw` | Ingest sensors / raw sockets |
-| **Protocols** | `sapient`, `stanag4586/4609/5516`, `mavlink`, `opendroneid`, `vmf`, `cap`, `geojson`, `mqtt`, `sensorthings`, `sparkplug`, `nffi` | Decode a wire protocol on a raw Zenoh topic → tracks |
+| **Protocols** | `sapient`, `stanag4586/4609/5516`, `mavlink`, `vmf`, `cap`, `geojson`, `mqtt`, `sensorthings`, `sparkplug`, `nffi` | Decode a wire protocol on a raw Zenoh topic → tracks |
 | **Output layers** | `cot_layer`, `nvg_layer` | Egress tracks → TAK / SitaWare |
 | **C2 inputs** | `tak-bridge`, `nvg_bridge` | Ingress from TAK / SitaWare |
 | **Infrastructure** | `zenoh`, `admin-control`, `supervisor`, `presence`, `cert-renewer` | Router, web UI, keep-alive, presence, cert rotation |

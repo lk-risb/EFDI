@@ -60,6 +60,12 @@ interface ManagedTarget {
   fields: ConfigFields | null
 }
 
+interface EndpointStatus {
+  endpoint: string
+  state: 'connected' | 'degraded' | 'disconnected'
+  detail: string
+}
+
 function Field({ label, help, children }: { label: string; help?: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1">
@@ -100,12 +106,26 @@ function ConfigSection({
   )
 }
 
-// Known-good fabric endpoints seen in this pod's history — one-click fill,
-// still just host/port under the hood (scheme is always tls, never exposed).
+// One-click fabric targets: each bundles the endpoint AND the mTLS identity
+// profile that endpoint expects, so switching networks is a single pill + Save.
+// Still just host/port under the hood (scheme is always tls, never exposed).
+// The CA profile MUST match the endpoint — an efdi cert to the backbone (or a
+// Desert Bread cert to the sandbox) fails the mTLS handshake.
 const FABRIC_PRESETS = [
-  { label: 'Local mesh · EFDI mTLS', host: 'zenoh.efdi.netbird.efdi-backbone.net', port: 7447, profile: 'efdi' },
-  { label: 'Backbone · Desert Bread mTLS', host: 'zenoh.efdi.netbird.efdi-backbone.net', port: 7447, profile: 'backbone' },
-  { label: 'Legacy sandbox (nbio.fairytail.eu)', host: 'nbio.fairytail.eu', port: 7447, profile: 'backbone' },
+  {
+    label: 'LTU sandbox',
+    endpoints: [
+      'tls/zenoh1.efdi.ltu:7447',
+      'tls/zenoh2.efdi.ltu:7447',
+      'tls/zenoh3.efdi.ltu:7447',
+    ],
+    profile: 'ltu-local',
+  },
+  {
+    label: 'Backbone',
+    endpoints: ['tls/zenoh.efdi.netbird.efdi-backbone.net:7447'],
+    profile: 'backbone',
+  },
 ]
 
 function parseFabricEndpoint(v: string): { host: string; port: number } {
@@ -147,6 +167,7 @@ function ConfigPage() {
   const [targets, setTargets] = useState<ManagedTarget[]>([])
   const [target, setTarget] = useState<string>('local')
   const [localFields, setLocalFields] = useState<ConfigFields>(EMPTY_FIELDS)
+  const [endpointStatuses, setEndpointStatuses] = useState<Record<string, EndpointStatus>>({})
 
   async function load() {
     setLoading(true)
@@ -171,6 +192,34 @@ function ConfigPage() {
   }
 
   useEffect(() => { load() }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    let timer: number | undefined
+    async function refreshEndpointStatuses() {
+      if (target !== 'local') {
+        setEndpointStatuses({})
+        return
+      }
+      try {
+        const data = await apiJson<{ fabric_endpoints?: EndpointStatus[] }>('/api/status')
+        if (!cancelled) {
+          setEndpointStatuses(Object.fromEntries(
+            (data.fabric_endpoints ?? []).map(item => [item.endpoint, item]),
+          ))
+        }
+      } catch {
+        if (!cancelled) setEndpointStatuses({})
+      } finally {
+        if (!cancelled) timer = window.setTimeout(refreshEndpointStatuses, 5000)
+      }
+    }
+    refreshEndpointStatuses()
+    return () => {
+      cancelled = true
+      if (timer !== undefined) window.clearTimeout(timer)
+    }
+  }, [target])
 
   useEffect(() => {
     Promise.all([
@@ -238,6 +287,24 @@ function ConfigPage() {
     setFields(f => ({ ...f, [key]: value }))
   }
 
+  // Which one-click fabric target is currently selected — drives the active
+  // highlight so switching networks reads as "pick the lit pill, then Save".
+  const isRootTarget = fields.fabric_endpoints.length === 0 && !fields.fabric_endpoint
+  const isActivePreset = (p: { endpoints: string[]; profile: string }) => {
+    const current = fields.fabric_endpoints.length > 0
+      ? fields.fabric_endpoints
+      : fields.fabric_endpoint ? [fields.fabric_endpoint] : []
+    return current.length === p.endpoints.length
+      && current.every((endpoint, index) => endpoint === p.endpoints[index])
+      && fields.fabric_tls_profile === p.profile
+  }
+  const pillCls = (active: boolean) =>
+    `rounded-full border px-2.5 py-1 text-xs transition-colors disabled:opacity-50 ${
+      active
+        ? 'border-accent-ring bg-accent-ring/10 font-medium text-accent-ring'
+        : 'border-zinc-300 text-zinc-600 hover:border-zinc-500 hover:text-zinc-900 dark:border-zinc-700 dark:text-zinc-400 dark:hover:text-white'
+    }`
+
   function endpointValues(): string[] {
     if (fields.fabric_endpoints.length > 0) return fields.fabric_endpoints
     return fields.fabric_endpoint ? [fields.fabric_endpoint] : ['']
@@ -294,7 +361,7 @@ function ConfigPage() {
       if (target === 'local') {
         const result = body.restarted ? 'Config validated, applied, and router restarted' : `Config activation status: ${body.status}`
         notify.success(body.native_process_restart_required
-          ? `${result}. Restart native bridge scripts to apply the new namespace prefix.`
+          ? `${result}. Native bridge scripts were restarted for the new namespace prefix.`
           : result)
       } else {
         notify.success(`Validated config sent via ${body.delivery} path (version ${body.version})`)
@@ -420,17 +487,24 @@ function ConfigPage() {
                 </Field>
               </div>
               <Field label="Fabric endpoints" help="Explicit Zenoh peers this pod dials over mTLS. Use two or more for redundant uplinks or same-level links.">
-                <div className="mb-2 flex flex-wrap gap-2">
+                <div className="mb-2 flex flex-wrap items-center gap-2">
+                  <span className="text-xs text-zinc-500">Switch fabric:</span>
                   <button type="button" disabled={!canWrite}
                     onClick={() => setFields(f => ({ ...f, fabric_endpoint: '', fabric_endpoints: [], fabric_tls_profile: 'efdi' }))}
-                    className="rounded-full border border-zinc-300 px-2.5 py-1 text-xs text-zinc-600 transition-colors hover:border-zinc-500 hover:text-zinc-900 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-400 dark:hover:text-white">
+                    className={pillCls(isRootTarget)}>
                     Root / no upstream
                   </button>
                   {FABRIC_PRESETS.map(p => (
                     <button key={p.label} type="button" disabled={!canWrite}
-                      onClick={() => setFields(f => ({ ...f, fabric_endpoint: `tls/${p.host}:${p.port}`, fabric_endpoints: [`tls/${p.host}:${p.port}`], fabric_tls_profile: p.profile }))}
-                      className="rounded-full border border-zinc-300 px-2.5 py-1 text-xs text-zinc-600 transition-colors hover:border-zinc-500 hover:text-zinc-900 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-400 dark:hover:text-white">
-                      {p.label}
+                      onClick={() => setFields(f => ({
+                        ...f,
+                        fabric_endpoint: p.endpoints[0],
+                        fabric_endpoints: [...p.endpoints],
+                        fabric_tls_profile: p.profile,
+                        verify_name_on_connect: true,
+                      }))}
+                      className={pillCls(isActivePreset(p))}>
+                      {isActivePreset(p) ? '● ' : ''}{p.label}
                     </button>
                   ))}
                 </div>
@@ -438,15 +512,35 @@ function ConfigPage() {
                   <select disabled={!canWrite} className={inputClass} value={fields.fabric_tls_profile}
                     onChange={e => set('fabric_tls_profile', e.target.value)}>
                     <option value="efdi">Local mesh (EFDI CA)</option>
+                    <option value="ltu-local">LTU sandbox (EFDI LTU CA)</option>
                     <option value="backbone">Backbone (Desert Bread CA)</option>
                   </select>
                 </Field>
                 <div className="space-y-2">
                   {endpointValues().map((endpoint, index) => {
                     const parsed = parseFabricEndpoint(endpoint)
+                    const status = target === 'local' ? endpointStatuses[endpoint] : undefined
+                    const statusColor = status?.state === 'connected'
+                      ? 'bg-emerald-500'
+                      : status?.state === 'degraded'
+                        ? 'bg-amber-500'
+                        : status?.state === 'disconnected'
+                          ? 'bg-red-500'
+                          : 'bg-zinc-500'
+                    const statusBorder = status?.state === 'connected'
+                      ? 'border-emerald-500/60'
+                      : status?.state === 'degraded'
+                        ? 'border-amber-500/60'
+                        : status?.state === 'disconnected'
+                          ? 'border-red-500/60'
+                          : 'border-zinc-300 dark:border-white/10'
                     return (
                       <div key={index} className="flex gap-2">
-                        <div className="flex flex-1 items-center gap-2 rounded-md border border-zinc-300 bg-zinc-200 px-3 focus-within:ring-2 focus-within:ring-accent-ring dark:border-white/10 dark:bg-[#141416]">
+                        <div
+                          className={`flex flex-1 items-center gap-2 rounded-md border bg-zinc-200 px-3 focus-within:ring-2 focus-within:ring-accent-ring dark:bg-[#141416] ${statusBorder}`}
+                          title={status?.detail ?? 'Endpoint status is available after saving'}
+                        >
+                          <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${statusColor}`} />
                           <span className="shrink-0 text-sm text-zinc-500">tls://</span>
                           <input type="text" disabled={!canWrite} placeholder="host or NetBird name"
                             className="flex-1 bg-transparent py-2 font-mono text-sm text-zinc-900 focus:outline-none disabled:opacity-50 dark:text-white"
@@ -506,7 +600,7 @@ function ConfigPage() {
               description="Certificate verification and retained-value plugin behavior."
             >
             <Toggle label="Verify name on connect" disabled={!canWrite}
-              help="Verify the fabric endpoint's cert SAN against the DNS name dialed. Off by default: the gateway cert SAN binds the mesh IP, not the DNS name — turning this on can break the fabric connection."
+              help="Verify each fabric certificate SAN against the DNS name dialed. Keep this enabled for the built-in DNS presets; disable it only for a documented IP-SAN deployment."
               checked={fields.verify_name_on_connect} onChange={v => set('verify_name_on_connect', v)} />
             <Toggle label="Storage plugin loading" disabled={!canWrite}
               help="Whether the storage_manager plugin loads at all. Off means new subscribers no longer get a last-known value via get() — publish/subscribe still works."

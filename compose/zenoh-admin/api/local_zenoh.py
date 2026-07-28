@@ -14,9 +14,8 @@ import os
 from pathlib import Path
 
 import zenoh
-from .zenoh_auth import apply_zenoh_auth
-
 from .config import CONFIG_PATH, _extract_fields
+from .zenoh_auth import apply_zenoh_auth
 
 
 def _fields():
@@ -59,9 +58,10 @@ def open_local_session() -> "zenoh.Session":
     conf.insert_json5("connect/endpoints", json.dumps([endpoint]))
     apply_zenoh_auth(conf)
 
-    # The local listener always uses the EFDI pod identity.  The selected
-    # federation profile is the router's outbound identity and must not be
-    # substituted for a local mTLS client certificate.
+    # Host-native processes normally use the plaintext loopback listener below.
+    # If an installation selects a TLS loopback endpoint, keep using the pod's
+    # local EFDI client identity rather than assuming the active fabric profile
+    # also issued credentials for every local process.
     if endpoint.startswith("tls"):
         cert_dir = os.environ.get("EFDI_CERT_DIR", "")
         namespace = os.environ.get("PARTNER_NAMESPACE", "")

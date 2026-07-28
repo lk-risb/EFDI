@@ -17,7 +17,7 @@ jobs:
           python-version: "3.12"
       - name: Compile bridge, layer, and protocol modules
         run: |
-          python3 -m compileall -q compose/bridges compose/protocols compose/layers
+          python3 -m compileall -q compose/bridges compose/c2 compose/protocols compose/layers
       - name: Verify launcher service paths resolve
         run: |
           python3 tools/check_service_paths.py

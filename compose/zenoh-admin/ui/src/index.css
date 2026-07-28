@@ -297,3 +297,11 @@
 .dark .enterprise-panel-title,
 .dark .enterprise-section-title,
 .dark .enterprise-kv dd { color: rgb(228 228 231); }
+
+/* SVG node surfaces must set an explicit opaque fill. Tailwind's dark fill
+   utility was not reliably emitted for this dynamic SVG class, which allowed
+   transport edges to show through the router cards. */
+.topology-node-surface { fill: rgb(250 250 250); }
+.topology-node-surface-selected { fill: rgb(240 253 250); }
+.dark .topology-node-surface { fill: #141518; }
+.dark .topology-node-surface-selected { fill: #102a2a; }

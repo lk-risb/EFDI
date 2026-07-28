@@ -11,7 +11,7 @@ aptikimus, Link-16, MAVLink ir SitaWare duomenis, tada per vietinę Zenoh
 magistralę pateikia juos TAK ir SitaWare klientams.
 Pasirinktinai jis gali priimti deklaruotus Lietuvos UTM skrydžius, jei Oro
 navigacija suteikia autorizuotą JSON/GeoJSON eksportą. Tai nėra nacionalinis
-gyvas Remote ID srautas.
+gyvas civilinis UTM srautas.
 
 ---
 
@@ -50,7 +50,7 @@ ATAK įrenginiai turi būti tame pačiame L2 tinklo segmente kaip serveris (mult
 
 Zenoh mTLS sertifikatai išduodami savarankiškai — jokio išorinio CA ar vendor bundle. `scripts/gen-certs.sh <namespace>` sugeneruoja (vieną kartą) EFDI root CA kataloge `compose/certs/efdi/`, tada pasirašo lapo sertifikatą+raktą nurodytam namespace; tas pats root CA naudojamas visiems vėlesniems namespace'ams.
 
-Sugeneruota medžiaga (`efdi-ca-root.pem`, `<NAMESPACE>-cert.pem`, `<NAMESPACE>-key.pem`) saugoma `compose/certs/efdi/` — įtraukta į `.gitignore`, niekada nekomituojama. Kataloge taip pat atskirai laikomi `tak/`, `sitaware/`, `tests/` ir `zenoh-sandbox` identitetai. Numatytasis kelias nustatomas `start.sh`; jei norite laikyti jį visai už repozitorijos ribų, perrašykite per `BUNDLE_DIR` faile `compose/.env`.
+Sugeneruota medžiaga (`efdi-ca-root.pem`, `<NAMESPACE>-cert.pem`, `<NAMESPACE>-key.pem`) saugoma `compose/certs/efdi/` — įtraukta į `.gitignore`, niekada nekomituojama. Kataloge taip pat atskirai laikomi `tak/`, `sitaware/`, `efdi-backbone/` (goat backbone, Desert Bread CA) ir `efdi-ltu/` (LTU sandbox) identitetai — žr. `compose/certs/README.md`. Numatytasis kelias nustatomas `start.sh`; jei norite laikyti jį visai už repozitorijos ribų, perrašykite per `BUNDLE_DIR` faile `compose/.env`.
 
 ---
 
@@ -66,18 +66,29 @@ cd EFDI
 ### 2.2 Sertifikatų generavimas
 
 ```bash
-scripts/gen-certs.sh <namespace>   # pvz. scripts/gen-certs.sh 1851281db70ccc0409dad4ecfc874cf5
+scripts/gen-certs.sh <namespace>   # pvz. scripts/gen-certs.sh 0123456789abcdef0123456789abcdef
 ```
 
 Tai sukuria:
 
 ```text
 compose/certs/
-├── efdi/                     # EFDI Zenoh CA ir pod'ų identitetai
+├── efdi/                     # šio podo nuosavas EFDI CA + identitetas (neperv.)
+├── efdi-ltu/                 # LTU sandbox: asusrog klientinis cert + EFDI LTU Root CA
+├── efdi-backbone/                 # goat backbone identitetas (Desert Bread CA)
 ├── sitaware/                 # SitaWare tiekimo CA ir serverio identitetas
-├── tak/                      # TAK Serverio identitetas
-└── zenoh-sandbox/             # seno sandbox Zenoh identitetas
+└── tak/                      # TAK Serverio identitetas
 ```
+
+Pilnas paaiškinimas (kuris cert kuriam fabric) — `compose/certs/README.md`. Visas
+katalogas yra `.gitignore`.
+
+LTU dalyvio raktas yra užšifruotas, o jo lapo sertifikato faile nėra tarpinio CA.
+Pereinant į šį fabric terminale paleiskite `scripts/connect-ltu.sh`: slaptažodis
+įvedamas paslėptai, viešas tarpinis CA patikrinamas pagal prisegtą LTU root, o
+pilna kliento grandinė ir neužšifruotas vykdymo raktas rašomi tik į ignoruojamą
+`compose/state/zenoh/tls/ltu/`. Zenoh neturi privataus rakto slaptažodžio
+nustatymo, todėl negali tiesiogiai naudoti užšifruoto šaltinio rakto.
 
 `<NAMESPACE>` turi sutapti su `PARTNER_NAMESPACE` faile `compose/.env`.
 
@@ -239,11 +250,8 @@ Interaktyvus paleidiklis rodo visas paslaugas su jų parengties būsena. Įjunki
 
   Open-data bridges
   ──────────────────────────────────────────────────────────
-  [ 2] [✓] airplaneslive  Airplanes.live ADS-B aircraft          ready
-  [ 3] [✓] adsblol        ADSB.lol open-data aircraft            ready
-  [ 4] [✓] aprs           APRS-IS stations, vehicles, vessels    ready
+  [ 2] [✓] aprs           APRS-IS stations, vehicles, vessels    ready
   [ 6] [✓] meteolt        meteo.lt weather stations              ready
-  [ 7] [ ] utm-ans        Lithuanian UTM declared UAV flights    UTM_ANS_API_URL not set
 
   Sensor bridges
   ──────────────────────────────────────────────────────────
@@ -263,7 +271,6 @@ Interaktyvus paleidiklis rodo visas paslaugas su jų parengties būsena. Įjunki
   [18] [✓] asterix-cat62  ASTERIX CAT-062 system tracks          UDP 50062
   [19] [ ] stanag5516     Link-16 JREAP-C datalink               STANAG5516_PORT not set
   [20] [ ] mavlink        MAVLink UAV telemetry                  MAVLINK_PORT not set
-  [21] [✓] opendroneid    Raw Open Drone ID Zenoh translator     ready
   [22] [ ] vmf            VMF MIL-STD-47001C messages            VMF_PORT not set
   [23] [✓] nffi           NATO NFFI XML Zenoh translator         ready
   [24] [ ] sapient        SAPIENT / BSI Flex 335                 will prompt for address
@@ -345,7 +352,7 @@ Palikite `SITAWARE_URL`/`SITAWARE_USER`/`SITAWARE_PASS` tuščius faile `.env` i
 
 ```bash
 SITAWARE_URL=https://<sitaware-serveris>
-SITAWARE_URL_FALLBACK=https://<netbird-mesh-ip>   # neprivaloma — antras kelias
+SITAWARE_URL_FALLBACK=https://swhq.efdi.ltu:10006 # neprivalomas stabilus mesh-DNS kelias
 SITAWARE_USER=<vartotojo vardas>
 SITAWARE_PASS=<slaptažodis>
 SITAWARE_API_PATH=/<dokumentuotas-resurso-kelias>
@@ -480,8 +487,6 @@ Adresas priima tik GET/HEAD, pagal nutylėjimą reikalauja Basic autentifikavimo
 | `asterix-udp` | `bridges/asterix_udp_bridge.py` | `…/raw/asterix/catNN` | Vienas bendras unicast/multicast UDP srautas |
 | `asterix-cat10/20/21/34/48/62` | `protocols/vendors/asterix/cat.py --category NN` | ASTERIX kategorijai skirta normali tema | Tiesioginis UDP/TCP arba viena neapdorota Zenoh kategorijos tema procesui |
 | `dronuradaras` | `bridges/dronuradaras_bridge.py` | `…/land/dronuradaras/acoustic/neutral/sensor/{type}/{id}/sapient` | Tik prisijungusių įrenginių apklausa 60 s ir atsijungusių pašalinimas / aptikimų apklausa 10 s |
-| `utm-ans` | `bridges/utm_ans_bridge.py` | `…/air/utm_ans/c2/unknown/uav/{type}/{id}/sapient` | Autorizuotų JSON/GeoJSON deklaruotų skrydžių apklausa; būtinas `UTM_ANS_API_URL` |
-| `opendroneid` | `protocols/random/opendroneid.py` | `…/air/opendroneid/passive_rf/*/uav/{type}/{id}/sapient` | Neapdoroti imtuvų pranešimai `…/raw/opendroneid/**`; maršrutizatoriaus mazgui radijo nereikia |
 | `sitaware` | `bridges/sitaware_bridge.py` | `…/land/sitaware/c2/friendly/unit/{type}/{id}/sapient` | Konfigūruojama REST apklausa |
 | `nffi` | `protocols/random/nffi.py` | `…/land/nato/c2/friendly/unit/{type}/{id}/sapient` | Pilni XML dokumentai Zenoh temoje `…/raw/nffi/*` |
 | `stanag5516` | `protocols/vendors/stanag/5516.py` | `…/air/stanag_5516/c2/*/aircraft/{type}/{id}/sapient` | Srautinis UDP |
@@ -504,7 +509,7 @@ diegimas teikia NFFI, pilnus XML dokumentus skelbkite į
 
 CoT ir abi SitaWare NVG išvestys naudoja tą pačią scenarijaus priklausomybės
 taisyklę: orlaiviai iš nustatytų RU/BY ICAO adresų intervalų bei laivai su RU/BY
-MMSI MID žymimi kaip priešiški, o kiti vieši ADS-B/AIS kontaktai — neutralūs.
+MMSI MID žymimi kaip priešiški, o kiti partnerių oro/jūros kontaktai — neutralūs.
 Vien šalies pavadinimas nepakeičia trūkstamo arba negaliojančio atsakiklio ID.
 
 ## C2 ↔ Zenoh abikryptė prijungimo instrukcija
@@ -541,13 +546,16 @@ TAK Server administravimo sąsajoje:
 TAK_HOST=<tak-serveris>
 TAK_PORT=8089
 TAK_TLS=1
+TAK_TLS_SERVER_NAME=<tak-serverio-sertifikato-dns-san>
 TAK_CERT=/runtime/kelias/tak-client.pem
 TAK_KEY=/runtime/kelias/tak-client-key.pem
 TAK_CA=/runtime/kelias/tak-ca.pem
 ```
 
 `./start.sh` pasirinkite `cot-bridge`. Tai turi būti TAK, ne Zenoh, išduotas
-sertifikatas.
+sertifikatas. `TAK_HOST` yra stabilus prisijungimo vardas; jei senesnio TAK
+serverio sertifikate įrašytas kitas DNS SAN, jį nurodykite
+`TAK_TLS_SERVER_NAME`, o ne išjunkite vardo tikrinimą.
 
 ### 3. Zenoh → SitaWare HQ
 
@@ -1097,9 +1105,8 @@ Tai pagauna sintaksės klaidas, TypeScript klaidas ir Dockerfile lūžimus prie�
 | 2026-07-10 | Zenoh admin GUI: pridėta "Connected routers" panelė — nuskaito `router/transport/unicast/*` įrašus, jau esančius admin space užklausoje, naudojamoje prenumeratorių/queryable sąrašams, jokios naujos ACL ar užklausos nereikia |
 | 2026-07-10 | Zenoh admin GUI: perkeltas TAK-hud vizualinis stilius (`hud-card`, `hud-frame`/reticle kampai, `hud-glass` šoninis meniu, `hud-grid-bg` fonas, akcento švytėjimo mygtukai, laipsniškas atsiradimo animacijos) į `index.css`/`Layout.tsx`/skydelį |
 | 2026-07-15 | `dronuradaras_bridge.py` dabar publikuoja tik įrenginius, kurių API būsena yra `is_online=true`; atsijungę įrenginiai siunčia pašalinimo įvykį, todėl CoT, SitaWare Edge ir HQ NVG talpykla ištrina senus žymeklius |
-| 2026-07-17 | FlightRadar24 ir OpenSky pakeisti nemokamu atvirų duomenų ADSB.lol bridge'u |
 | 2026-07-17 | Pridėti deterministiniai ASTERIX kategorijų listener'ių susitarimai: CAT-010/020/021/034/048/062 pagal nutylėjimą naudoja UDP 50010/50020/50021/50034/50048/50062; tai EFDI, ne gamintojų numatytieji prievadai |
-| 2026-07-17 | Pridėti Zenoh-native CAP, GeoJSON/OGC, AIS NMEA, spektro, jutiklių būklės, misijų maršrutų ir neapdoroto įėjimo vertimo keliai |
+| 2026-07-17 | Pridėti Zenoh-native CAP, GeoJSON/OGC, spektro, jutiklių būklės, misijų maršrutų ir neapdoroto įėjimo vertimo keliai |
 | 2026-07-17 | Saugumo atnaujinimas: atnaujintas Vite, prisegti/atnaujinti Compose image'ai, atnaujinti Python image'ų OS paketai, o autentifikuoti SitaWare/UTM endpoint'ai apriboti iki HTTPS |
 | 2026-07-18 | Pridėtas TAK stiliaus Runtime Control: host bridge/protokolų/sluoksnių lifecycle veiksmai, apriboti log'ai, endpoint/temų/portų redagavimas, write-only kredencialai, localhost admin-control agent ir veikiantis Vite dev stack su suderintais API/Vite portais |
 
