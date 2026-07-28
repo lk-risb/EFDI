@@ -30,11 +30,12 @@ import ssl
 import time
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
+from protocols.random.normalized_track_pb2 import NormalizedTrack
 
 import zenoh
-
+from defusedxml import ElementTree as SafeET
+from defusedxml.common import DefusedXmlException
 from namespace_prefix import topic_root
-from protocols.random.normalized_track_pb2 import NormalizedTrack
 from protocols.protobuf_codec import publish_dual
 from protocols.translation_common import base_record, make_config
 
@@ -131,6 +132,12 @@ def _describe_detail(detail: ET.Element | None) -> dict[str, object]:
     return out
 
 
+def _is_fabric_reflection(event: ET.Element) -> bool:
+    detail = _child(event, "detail")
+    marker = _child(detail, "efdi")
+    return marker is not None and marker.get("role") == "fabric-export"
+
+
 def _affiliation_from_cot(cot_type: str) -> str:
     parts = cot_type.split("-")
     if len(parts) >= 2:
@@ -197,6 +204,13 @@ def _normalize_event(event: ET.Element) -> tuple[str, dict[str, object]] | None:
     cot_start = _text(event.get("start"))
     cot_stale = _text(event.get("stale"))
 
+    # TAK Server broadcasts a client's own CoT back over that client's receive
+    # stream. cot_layer marks those frames explicitly. Keep the exact frame on
+    # the raw audit topic, but do not turn that reflected copy into a second
+    # normalized object. Unmarked TAK objects remain valid regardless of UID.
+    if _is_fabric_reflection(event):
+        return None
+
     point = _child(event, "point")
     if point is None and uid is None and not cot_type:
         return None
@@ -206,7 +220,10 @@ def _normalize_event(event: ET.Element) -> tuple[str, dict[str, object]] | None:
 
     record = base_record(
         _TAK_SOURCE,
-        uid or hashlib.sha1(ET.tostring(event, encoding="utf-8")).hexdigest()[:16],
+        uid
+        or hashlib.sha1(
+            ET.tostring(event, encoding="utf-8"), usedforsecurity=False
+        ).hexdigest()[:16],
         _ingress="tak_server",
         cot_type=cot_type or None,
         cot_how=how or None,
@@ -265,7 +282,24 @@ def _normalize_event(event: ET.Element) -> tuple[str, dict[str, object]] | None:
     return topic, record
 
 
-def _connect(host: str, port: int, tls: bool, certfile: str | None, keyfile: str | None, cafile: str | None) -> socket.socket:
+def _parse_event_xml(xml: str) -> ET.Element | None:
+    """Parse an untrusted CoT frame without resolving entities or DTDs."""
+
+    try:
+        return SafeET.fromstring(xml)
+    except (SafeET.ParseError, DefusedXmlException):
+        return None
+
+
+def _connect(
+    host: str,
+    port: int,
+    tls: bool,
+    certfile: str | None,
+    keyfile: str | None,
+    cafile: str | None,
+    server_name: str | None = None,
+) -> socket.socket:
     raw = socket.create_connection((host, port), timeout=30)
     raw.settimeout(60.0)
     # Detect a silently-dropped TAK peer (a NetBird tunnel dying mid-stream)
@@ -281,13 +315,11 @@ def _connect(host: str, port: int, tls: bool, certfile: str | None, keyfile: str
         pass
     if not tls:
         return raw
-    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-    ctx.check_hostname = False
-    if cafile:
-        ctx.load_verify_locations(cafile)
+    ctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH, cafile=cafile)
+    ctx.check_hostname = True
     if certfile and keyfile:
         ctx.load_cert_chain(certfile, keyfile)
-    return ctx.wrap_socket(raw, server_hostname=host)
+    return ctx.wrap_socket(raw, server_hostname=server_name or host)
 
 
 def _raw_topic_message(xml: str) -> bytes:
@@ -323,6 +355,8 @@ def run(args) -> None:
         hosts = [h for h in env_hosts if h]
     if not hosts:
         raise SystemExit("Set TAK_HOST or pass one or more --host values")
+    if args.tls and not args.ca:
+        raise SystemExit("--ca / TAK_CA is required when --tls is specified")
 
     session = zenoh.open(make_config())
     raw_pub = session.declare_publisher(_RAW_TOPIC)
@@ -338,7 +372,15 @@ def run(args) -> None:
         idx += 1
         sock = None
         try:
-            sock = _connect(host, args.port, args.tls, args.cert, args.key, args.ca)
+            sock = _connect(
+                host,
+                args.port,
+                args.tls,
+                args.cert,
+                args.key,
+                args.ca,
+                args.tls_server_name,
+            )
             mode = "mTLS" if args.tls else "TCP"
             print("TAK {} connected → {}:{}".format(mode, host, args.port), flush=True)
             text_buffer = [""]
@@ -348,9 +390,8 @@ def run(args) -> None:
                     break
                 text_buffer[0] += chunk.decode("utf-8", errors="replace")
                 for xml in _extract_events(text_buffer):
-                    try:
-                        elem = ET.fromstring(xml)
-                    except ET.ParseError:
+                    elem = _parse_event_xml(xml)
+                    if elem is None:
                         continue
                     if _local_name(elem.tag) != "event":
                         continue
@@ -380,7 +421,7 @@ def run(args) -> None:
     session.close()
 
 
-def main() -> None:
+def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description="TAK CoT → Zenoh bridge")
     parser.add_argument("--host", action="append", default=[], help="TAK host / IP (repeatable; fallback path supported)")
     parser.add_argument("--port", type=int, default=int(os.environ.get("TAK_PORT", "8089")))
@@ -388,8 +429,13 @@ def main() -> None:
     parser.add_argument("--cert", default=os.environ.get("TAK_CERT"))
     parser.add_argument("--key", default=os.environ.get("TAK_KEY"))
     parser.add_argument("--ca", default=os.environ.get("TAK_CA"))
+    parser.add_argument(
+        "--tls-server-name",
+        default=os.environ.get("TAK_TLS_SERVER_NAME"),
+        help="DNS SAN expected in the TAK server certificate; defaults to the dial host",
+    )
     parser.add_argument("--verbose", "-v", action="store_true")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     run(args)
 
 

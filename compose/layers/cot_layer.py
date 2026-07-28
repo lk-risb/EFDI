@@ -37,12 +37,12 @@ import base64
 import json
 import math
 import os
-import re
 import queue
+import re
+import signal
 import socket
 import ssl
 import struct
-import signal
 import threading
 import time
 import xml.etree.ElementTree as ET
@@ -51,8 +51,8 @@ from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 import zenoh
-from zenoh_auth import apply_zenoh_auth
 from namespace_prefix import topic_root
+from zenoh_auth import apply_zenoh_auth
 
 try:
     import mgrs as _mgrs_lib
@@ -70,12 +70,7 @@ _CERT_DIR = os.environ.get("EFDI_CERT_DIR", HERE)
 # inside the compose stack. Falls back to the remote router for standalone use.
 _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", "tcp/127.0.0.1:7448")
 
-# Matches the 120s the SitaWare HQ NVG feed holds an item for
-# (SITAWARE_HQ_NVG_STALE_S), so the two C2 systems show the same aircraft at the
-# same time. At 30s TAK dropped each contact four times sooner than SitaWare and
-# looked far emptier from the identical fabric. 30s also assumed a 5-15s update
-# rate, which only adsblol meets — airplaneslive polls every 900s, so its
-# aircraft appeared for 30s and then vanished for the next 14 minutes.
+# Base lifetime for high-rate sources.
 AIR_STALE_S    = 120
 SEA_STALE_S    = 300     # vessels: Class B sends every 30-180s; 5 min covers worst case
 LAND_STALE_S   = 120     # ground vehicles and APRS mobiles
@@ -110,7 +105,6 @@ _MODE1_LABEL = {
 }
 # AIS nav status values that indicate vessel distress
 _DISTRESS_NAV = frozenset({"aground", "not_under_command", "not under command"})
-
 # Module-level stores — initialised once, shared across all handler threads
 _dr_lock     = threading.Lock()
 _dr_store:   dict[str, dict] = {}
@@ -193,13 +187,6 @@ def _sensor_alert_cot_type(track: dict) -> str:
 # EFDI-RAD-<sac/sic/num> raw but EFDI-ICAO-<hex> once identified, so letting
 # both through really would draw the same contact twice.
 #
-# ADS-B relays (adsblol, airplaneslive) used to be blocked the same way, on the
-# assumption that fusion re-published everything under air/trackfusion/fused/**.
-# It does not re-emit uncorrelated ADS-B, so with no radar feed to correlate
-# against, TAK got no aircraft at all while SitaWare — which has no such rule —
-# showed hundreds. The duplicate argument does not apply to them either: _uid()
-# is source-agnostic, so a raw and a fused report of one aircraft share the
-# EFDI-ICAO-<hex> uid and update a single marker.
 _RAW_SENSOR_SOURCES = frozenset({"ASTERIX CAT-48", "ASTERIX CAT-20"})
 
 # Schema: {domain}/{source}/{modality}/{affiliation}/{entity}/{type}/{id}/{view}
@@ -207,11 +194,11 @@ _RAW_SENSOR_SOURCES = frozenset({"ASTERIX CAT-48", "ASTERIX CAT-20"})
 # any source+modality combination under civil air, and absorbs the trailing
 # {type}/{id}/{view} without naming them.
 # NOTE: air/trackfusion/fused/** is caught by the broad air/** wildcards below —
-# no separate fused entries needed. They also catch SAPIENT and Link-16, which
+# no separate fused entries needed. They also catch SAPIENT, which
 # do not go through the radar fusion path.
 _TOPIC_COT = {
     # AIR — affiliation slot drives CoT type; ICAO24 classifier overrides for RU/BY
-    # Covers fused tracks (air/trackfusion/fused/**) + SAPIENT + Link-16.
+    # Covers fused tracks (air/trackfusion/fused/**) + SAPIENT.
     # Raw CAT-48 / CAT-20 are dropped by _RAW_SENSOR_SOURCES check in make_handler.
     "air/**/civ/aircraft/**":    (_civ_air_type,  AIR_STALE_S),
     "air/**/mil/aircraft/**":    (_mil_air_type,  AIR_STALE_S),
@@ -1319,7 +1306,7 @@ def _hae(track: dict) -> float:
 def _speed_ms(track: dict) -> float:
     for key, scale in (
         ("speed_ms",        1.0),
-        ("ground_speed_kts", 0.514444),  # airplaneslive
+        ("ground_speed_kts", 0.514444),  # generic ADS-B source
         ("speed_kts",        0.514444),  # generic knots-based source fallback
         ("sog_ms",           1.0),       # AIS
     ):
@@ -1389,6 +1376,11 @@ def track_to_cot(track: dict, cot_type: str, stale_s: float = COT_STALE_S) -> st
         "le":  "9999999.0",
     })
     detail = ET.SubElement(event, "detail")
+    # Provenance marker for bidirectional C2 gateways. TAK Server sends a
+    # client's own CoT back on its receive stream; tak_bridge retains that raw
+    # frame for audit but does not normalize this exact fabric-export copy.
+    # This avoids a C2 feedback loop without filtering unrelated UID prefixes.
+    ET.SubElement(detail, "efdi", {"role": "fabric-export"})
     # CoT shapes are optional detail.  Keep the point anchor for consumers
     # that do not render shapes, then add polygon/line points for airspace,
     # routes, and sensor areas.
@@ -1545,12 +1537,13 @@ class TcpSender:
 
     def __init__(self, hosts: list[tuple[str, int]], tls: bool = False,
                  certfile: str | None = None, keyfile: str | None = None,
-                 cafile: str | None = None):
+                 cafile: str | None = None, server_name: str | None = None):
         self.hosts     = hosts
         self._tls      = tls
         self._certfile = certfile
         self._keyfile  = keyfile
         self._cafile   = cafile
+        self._server_name = server_name
         self.drop_tak_ingress = True
         self._q: "queue.Queue[str]" = queue.Queue(maxsize=TAK_QUEUE_MAX)
         self._stop = threading.Event()
@@ -1576,16 +1569,14 @@ class TcpSender:
         if not self._tls:
             raw.settimeout(SEND_TIMEOUT_S)
             return raw
-        # Server identity is anchored by mutual TLS (client cert + shared CA),
-        # not hostname — we deliberately dial multiple candidate addresses for
-        # one server, so no single IP matches the cert SAN. Chain verification
-        # stays on.
-        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-        ctx.check_hostname = False
-        ctx.load_verify_locations(self._cafile)  # cafile required; enforced in run()
+        # Dial and identity names are deliberately separate: redundant IP/DNS
+        # paths may all reach one TAK server certificate. The configured TLS
+        # server name must still match that certificate's SAN.
+        ctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH, cafile=self._cafile)
+        ctx.check_hostname = True
         if self._certfile and self._keyfile:
             ctx.load_cert_chain(self._certfile, self._keyfile)
-        s = ctx.wrap_socket(raw, server_hostname=host)
+        s = ctx.wrap_socket(raw, server_hostname=self._server_name or host)
         s.settimeout(SEND_TIMEOUT_S)
         return s
 
@@ -1834,7 +1825,8 @@ def run(args):
                        tls=tls,
                        certfile=getattr(args, "cert", None),
                        keyfile=getattr(args, "key", None),
-                       cafile=getattr(args, "ca", None))
+                       cafile=getattr(args, "ca", None),
+                       server_name=getattr(args, "tls_server_name", None))
     mode = "TLS mTLS" if tls else "TCP plaintext"
     print("CoT → {} candidates: {} (TAK Server, first reachable wins)".format(
         mode, ", ".join("{}:{}".format(h, p) for h, p in hosts)), flush=True)
@@ -1888,7 +1880,7 @@ def run(args):
         sender.close()
 
 
-def main():
+def main(argv=None):
     ap = argparse.ArgumentParser(description="Zenoh tracks → TAK Server / ATAK CoT bridge")
     ap.add_argument("--host", action="append", default=None,
                     help="TAK Server host — repeatable (e.g. --host <lan-ip> --host <netbird-ip>) "
@@ -1905,11 +1897,20 @@ def main():
                     help="Client private key PEM (mTLS Option B)")
     ap.add_argument("--ca", default=os.environ.get("TAK_CA"),
                     help="CA certificate PEM (mTLS Option B)")
+    ap.add_argument("--tls-server-name", default=os.environ.get("TAK_TLS_SERVER_NAME"),
+                    help="DNS SAN expected in the TAK server certificate; defaults to the dial host")
     ap.add_argument("--verbose", "-v", action="store_true",
                     help="Print each CoT message sent")
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
     if not args.host:
-        args.host = [os.environ.get("TAK_HOST", "127.0.0.1")]
+        args.host = [
+            host
+            for host in (
+                os.environ.get("TAK_HOST", "").strip(),
+                os.environ.get("TAK_HOST_FALLBACK", "").strip(),
+            )
+            if host
+        ] or ["127.0.0.1"]
     run(args)
 
 

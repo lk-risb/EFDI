@@ -12,7 +12,7 @@ example below:
   `…/{id}/tracks/v1`. Every other view inserts its name first —
   `…/{id}/sapient/tracks/v1`, `…/{id}/proto/tracks/v1`, `…/{id}/raw/tracks/v1`.
 - **On the backbone the `{prefix}` is the org UUID** (e.g.
-  `1851281db70ccc0409dad4ecfc874cf5`), bare. The `LTU/CISB` prefix in the
+  `0123456789abcdef0123456789abcdef`), bare. The `LTU/CISB` prefix in the
   examples below is the **local sandbox** only. The prefix is deployment-
   configured; nothing else in the key changes with it.
 
@@ -36,10 +36,9 @@ Protobuf views are published **self-describing**: the Zenoh `Encoding` is
 ```
 
 ```
-LTU/CISB/hq/air/adsblol/adsb/civ/aircraft/b738/ly-abc/sapient
+LTU/CISB/hq/air/partner-adsb/adsb/civ/aircraft/b738/ly-abc/sapient
 LTU/CISB/hq/air/010-042/radar/unknown/aircraft/unknown/cat48-010-042-4211/json
 LTU/CISB/hq/land/dronuradaras/acoustic/unknown/drone/unknown/1/sapient
-LTU/CISB/hq/sea/aisstream/ais/civ/vessel/cargo/276000000/raw
 ```
 
 | Segment | Meaning | Example |
@@ -47,7 +46,7 @@ LTU/CISB/hq/sea/aisstream/ais/civ/vessel/cargo/276000000/raw
 | `prefix` | Org prefix, deployment-configured | `LTU/CISB` |
 | `pod` | Which pod published it | `hq` |
 | `domain` | Physical domain | `air` · `land` · `sea` · `space` |
-| `source` | WHO observed it — the sensor or feed identity | `010-042` · `adsblol` · `dronuradaras` |
+| `source` | WHO observed it — the sensor or feed identity | `010-042` · `partner-adsb` · `dronuradaras` |
 | `modality` | HOW it was observed | `radar` · `acoustic` · `adsb` |
 | `affiliation` | Friend/foe posture | `civ` · `mil` · `friendly` · `hostile` · `neutral` · `unknown` |
 | `entity` | What kind of thing | `aircraft` · `uav` · `vessel` · `person` · `vehicle` |
@@ -88,7 +87,6 @@ because EFDI has to route on them:
 |---|---|
 | `adsb` | Aircraft self-reporting, relayed by a ground station |
 | `mlat` | Position computed from time differences of arrival |
-| `ais` | Vessel self-reporting over AIS |
 | `c2` | Arrived via a command-and-control or battle-management system |
 | `telemetry` | The platform reporting its own state (own UAV, MAVLink, DJI) |
 | `fused` | Output of a tracker that already combined several sensors |
@@ -195,9 +193,9 @@ Collisions worth knowing about, all handled:
 - **`object_id` must be fully identity-derived.** Deriving only the random half
   of the ULID leaves the timestamp half moving, so two reports for one aircraft
   milliseconds apart would key differently and read as two contacts.
-- **Source and modality must not be the same word.** `fused/fused` and
-  `ais/ais` are meaningless; the source is named for the node
-  (`trackfusion`, `nmea`) and the modality stays the method.
+- **Source and modality must not be the same word.** `fused/fused` is
+  meaningless; the source is named for the node and the modality stays the
+  method.
 - **Subscribing by modality can match your own output.** `track_fusion_bridge`
   subscribes to `…/air/*/fused/**` to ingest ASTERIX CAT-062 — which also
   matches its own published tracks. It rejects its own prefix explicitly;

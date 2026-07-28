@@ -54,6 +54,30 @@ ZENOH_TLS_DIR="${POD_STATE_DIR}/zenoh/tls"
 mkdir -p "${POD_STATE_DIR}/zenoh/rocksdb" "${ZENOH_TLS_DIR}"
 chmod 700 "${POD_STATE_DIR}"
 
+validate_runtime_identity() {
+  local certificate="$1"
+  local private_key="$2"
+  local label="$3"
+  command -v openssl >/dev/null 2>&1 || {
+    echo "required tool not found on PATH: openssl (${label} profile is present)"
+    exit 2
+  }
+  command -v cmp >/dev/null 2>&1 || {
+    echo "required tool not found on PATH: cmp (${label} profile is present)"
+    exit 2
+  }
+  openssl pkey -in "$private_key" -passin pass: -noout >/dev/null 2>&1 || {
+    echo "${label} runtime key is encrypted or invalid: ${private_key}"
+    exit 1
+  }
+  cmp -s \
+    <(openssl pkey -in "$private_key" -passin pass: -pubout 2>/dev/null) \
+    <(openssl x509 -in "$certificate" -pubkey -noout 2>/dev/null) || {
+      echo "${label} certificate and private key do not match"
+      exit 1
+    }
+}
+
 # --- [1/4] Lay this pod's Zenoh mTLS certs --------------------------------------------------------
 echo "==> [1/4] laying Zenoh mTLS certs"
 CERT_BUNDLE_DIR="${BUNDLE_DIR}/efdi"
@@ -74,6 +98,51 @@ done
 install -m 600 "$CERT_PATH" "${ZENOH_TLS_DIR}/pod-cert.pem"
 install -m 600 "$KEY_PATH"  "${ZENOH_TLS_DIR}/pod-key.pem"
 install -m 644 "$CA_PATH"   "${ZENOH_TLS_DIR}/ca-roots.pem"
+
+# Stage the optional Backbone client profile when its fixed-name bundle is
+# present. The WebUI can then switch profiles without exposing source keys to
+# the admin container or depending on machine-specific filenames.
+BACKBONE_SOURCE="${BUNDLE_DIR}/efdi-backbone"
+BACKBONE_RUNTIME="${ZENOH_TLS_DIR}/backbone"
+if [ -e "${BACKBONE_SOURCE}/cert.pem" ] \
+    || [ -e "${BACKBONE_SOURCE}/key.pem" ] \
+    || [ -e "${BACKBONE_SOURCE}/ca-roots.pem" ]; then
+  for f in cert.pem key.pem ca-roots.pem; do
+    [ -f "${BACKBONE_SOURCE}/${f}" ] || {
+      echo "incomplete Backbone bundle: missing ${BACKBONE_SOURCE}/${f}"
+      exit 1
+    }
+  done
+  validate_runtime_identity \
+    "${BACKBONE_SOURCE}/cert.pem" "${BACKBONE_SOURCE}/key.pem" "Backbone"
+  install -d -m 700 "${BACKBONE_RUNTIME}"
+  install -m 644 "${BACKBONE_SOURCE}/cert.pem" "${BACKBONE_RUNTIME}/cert.pem"
+  install -m 600 "${BACKBONE_SOURCE}/key.pem" "${BACKBONE_RUNTIME}/key.pem"
+  install -m 644 "${BACKBONE_SOURCE}/ca-roots.pem" "${BACKBONE_RUNTIME}/ca-roots.pem"
+  echo "    staged optional Backbone profile"
+fi
+
+# An LTU profile can also be discovered without a helper when the operator
+# supplies a runtime-ready full chain and an unencrypted key. Encrypted source
+# bundles still go through scripts/connect-ltu.sh so the passphrase is entered
+# interactively and never stored in compose/.env or tracked files.
+LTU_SOURCE="${BUNDLE_DIR}/efdi-ltu"
+LTU_RUNTIME="${ZENOH_TLS_DIR}/ltu"
+if [ -e "${LTU_SOURCE}/client-chain.pem" ]; then
+  for f in client-chain.pem client.key ca.crt; do
+    [ -f "${LTU_SOURCE}/${f}" ] || {
+      echo "incomplete runtime-ready LTU bundle: missing ${LTU_SOURCE}/${f}"
+      exit 1
+    }
+  done
+  validate_runtime_identity \
+    "${LTU_SOURCE}/client-chain.pem" "${LTU_SOURCE}/client.key" "LTU"
+  install -d -m 700 "${LTU_RUNTIME}"
+  install -m 644 "${LTU_SOURCE}/client-chain.pem" "${LTU_RUNTIME}/client-chain.pem"
+  install -m 600 "${LTU_SOURCE}/client.key" "${LTU_RUNTIME}/client.key"
+  install -m 644 "${LTU_SOURCE}/ca.crt" "${LTU_RUNTIME}/ca.crt"
+  echo "    staged optional runtime-ready LTU profile"
+fi
 
 # --- [2/4] Render the pod Zenoh router config ----------------------------------------------------
 echo "==> [2/4] rendering Zenoh router config"

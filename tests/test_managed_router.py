@@ -48,6 +48,21 @@ def configure_state_paths(monkeypatch, tmp_path):
     return current
 
 
+def test_atomic_write_handles_single_file_bind_mount(monkeypatch, tmp_path):
+    target = tmp_path / "mounted-config"
+    target.write_text("old")
+
+    def busy_replace(_source, _target):
+        raise OSError(config.errno.EBUSY, "mount point is busy")
+
+    monkeypatch.setattr(config.os, "replace", busy_replace)
+
+    config.atomic_write(str(target), "new")
+
+    assert target.read_text() == "new"
+    assert list(tmp_path.iterdir()) == [target]
+
+
 def test_safe_apply_activates_only_after_preflight_and_health(monkeypatch, tmp_path):
     current = configure_state_paths(monkeypatch, tmp_path)
     monkeypatch.setattr(config, "restart_router_container", lambda: (True, None))
@@ -58,6 +73,36 @@ def test_safe_apply_activates_only_after_preflight_and_health(monkeypatch, tmp_p
     assert result["status"] == "applied"
     assert current.read_text() == "new-config"
     assert (tmp_path / "config.last-known-good").read_text() == "old-config"
+
+
+def test_ltu_profile_uses_canonical_runtime_paths(monkeypatch):
+    monkeypatch.setattr(
+        config,
+        "TEMPLATE_PATH",
+        str(ROOT / "host" / "zenoh-router.json5.tmpl"),
+    )
+    ltu = fields()
+    ltu.fabric_tls_profile = "ltu-local"
+    rendered = config._render_config(ltu)
+    assert rendered.count(
+        'certificate: "/etc/zenoh/tls/ltu/client-chain.pem"'
+    ) == 2
+    assert rendered.count(
+        'private_key: "/etc/zenoh/tls/ltu/client.key"'
+    ) == 2
+
+    parsed = config._extract_fields(rendered)
+
+    assert parsed.fabric_tls_profile == "ltu-local"
+
+
+def test_remote_fabric_requires_link_recovery():
+    remote = fields()
+    remote.fabric_endpoint = "tls/parent:7447"
+    remote.fabric_endpoints = ["tls/parent:7447"]
+
+    assert config._requires_remote_link(remote) is True
+    assert config._requires_remote_link(fields()) is False
 
 
 def test_safe_apply_restores_last_known_good_when_candidate_is_unhealthy(monkeypatch, tmp_path):

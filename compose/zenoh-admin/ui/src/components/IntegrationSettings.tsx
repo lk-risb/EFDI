@@ -24,12 +24,15 @@ const FIELD_GROUPS: { title: string; description: string; fields: { key: string;
     { key: 'PARTNER_NAMESPACE', label: 'Partner namespace', placeholder: 'partner-a' },
   ] },
   { title: 'TAK and CoT', description: 'Authenticated CoT feed to the TAK Server over mTLS.', fields: [
-    { key: 'TAK_HOST', label: 'TAK Server host / IP', placeholder: '192.168.20.6' },
+    { key: 'TAK_HOST', label: 'TAK Server hostname / IP', placeholder: 'tak.efdi.ltu' },
+    { key: 'TAK_HOST_FALLBACK', label: 'TAK fallback hostname / IP' },
     { key: 'TAK_PORT', label: 'TAK Server TLS port', placeholder: '8089' },
     { key: 'TAK_TLS', label: 'TAK TLS enabled (1/0)', placeholder: '1' },
+    { key: 'TAK_TLS_SERVER_NAME', label: 'TAK certificate DNS name', placeholder: 'takserver' },
   ] },
   { title: 'SitaWare HQ', description: 'Bidirectional HQ integration over NVG 2.0.2 and REST. Passwords are write-only.', fields: [
-    { key: 'SITAWARE_URL', label: 'SitaWare HQ base URL', placeholder: 'https://host.example:10006' },
+    { key: 'SITAWARE_URL', label: 'SitaWare HQ base URL', placeholder: 'https://swhq.efdi.ltu:10006' },
+    { key: 'SITAWARE_URL_FALLBACK', label: 'SitaWare HQ fallback URL', placeholder: 'https://swhq.efdi.ltu:10006' },
     { key: 'SITAWARE_USER', label: 'SitaWare HQ username' }, { key: 'SITAWARE_PASS', label: 'SitaWare HQ password', secret: true },
     { key: 'SITAWARE_NVG_IMPORT_URL', label: 'NVG import URL — HQ export → Zenoh (nvg_bridge)', placeholder: 'https://host:10006/.../nvg' },
     { key: 'SITAWARE_NVG_IMPORT_CA', label: 'NVG import pinned CA path', placeholder: '/.../sitaware-hq-server.pem' },
@@ -39,10 +42,6 @@ const FIELD_GROUPS: { title: string; description: string; fields: { key: string;
     { key: 'SITAWARE_HQ_NVG_USER', label: 'NVG feed username' }, { key: 'SITAWARE_HQ_NVG_PASS', label: 'NVG feed password', secret: true },
     { key: 'SITAWARE_API_PATH', label: 'REST friendly-force path (sitaware_bridge)', placeholder: '/deployment-specific/path' },
     { key: 'SITAWARE_POLL_S', label: 'REST poll seconds', placeholder: '10' },
-  ] },
-  { title: 'UTM', description: 'Authorized UTM JSON/GeoJSON export feed.', fields: [
-    { key: 'UTM_ANS_API_URL', label: 'UTM JSON/GeoJSON URL', placeholder: 'https://authorized-feed.example' },
-    { key: 'UTM_ANS_API_TOKEN', label: 'UTM API token', secret: true },
   ] },
   { title: 'Video and metadata ingest', description: 'SRT/KLV sources and source naming for the STANAG 4609 bridge.', fields: [
     { key: 'STANAG4609_SRT_URL', label: 'STANAG 4609 SRT URL', placeholder: 'srt://host:port?mode=listener' },
@@ -63,9 +62,7 @@ const FIELD_GROUPS: { title: string; description: string; fields: { key: string;
     { key: 'ASTERIX_PORT', label: 'Mixed ASTERIX UDP port', placeholder: '50000' }, { key: 'ASTERIX_CATEGORIES', label: 'ASTERIX categories', placeholder: '34,48' },
     { key: 'CAT10_PORT', label: 'CAT-010 port', placeholder: '50010' }, { key: 'CAT21_PORT', label: 'CAT-021 port', placeholder: '50021' },
     { key: 'CAT34_PORT', label: 'CAT-034 port', placeholder: '50034' }, { key: 'CAT48_PORT', label: 'CAT-048 port', placeholder: '50048' },
-    { key: 'CAT62_PORT', label: 'CAT-062 port', placeholder: '50062' }, { key: 'MAVLINK_PORT', label: 'MAVLink port' },
-    { key: 'DJI_MQTT_HOST', label: 'DJI Cloud MQTT host' }, { key: 'DJI_MQTT_PORT', label: 'DJI MQTT port', placeholder: '8883' },
-    { key: 'DJI_MQTT_USERNAME', label: 'DJI MQTT username' }, { key: 'DJI_MQTT_PASSWORD', label: 'DJI MQTT password', secret: true },
+    { key: 'CAT62_PORT', label: 'CAT-062 port', placeholder: '50062' },
   ] },
 ]
 

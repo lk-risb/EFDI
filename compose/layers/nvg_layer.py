@@ -27,12 +27,12 @@ The SitaWare subscription URL is then https://<efdi-host>:8088/nvg.
 
 import argparse
 import base64
-import json
-import math
 import hashlib
 import hmac
-import ssl
+import json
+import math
 import os
+import ssl
 import threading
 import time
 import urllib.parse
@@ -42,7 +42,8 @@ from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import zenoh
-from zenoh_auth import apply_zenoh_auth
+from defusedxml import ElementTree as SafeET
+from defusedxml.common import DefusedXmlException
 from layers.cot_layer import (
     _build_remarks,
     _callsign as _cot_callsign,
@@ -54,6 +55,7 @@ from layers.cot_layer import (
     _uid as _cot_uid,
 )
 from namespace_prefix import topic_root
+from zenoh_auth import apply_zenoh_auth
 
 ORG    = os.environ.get("PARTNER_NAMESPACE", "")
 TOPIC_ROOT = topic_root()
@@ -702,6 +704,7 @@ def track_to_nvg_item(
         time_span = ET.SubElement(point, "{%s}TimeSpan" % NVG_NS)
         ET.SubElement(time_span, "{%s}end" % NVG_NS).text = expiry
     extended_fields = _nvg_extended_data(track, uid, sidc)
+    extended_fields.append(("EFDI provenance", "fabric-export"))
     if extended_fields:
         extended_data = ET.SubElement(point, "{%s}ExtendedData" % NVG_NS)
         for key, value in extended_fields:
@@ -795,8 +798,8 @@ class NVGFeedCache:
             # This XML was generated locally by track_to_nvg_item; no external
             # or user-supplied XML is parsed here.
             try:
-                item_root = ET.fromstring(item_xml)
-            except ET.ParseError:
+                item_root = SafeET.fromstring(item_xml)
+            except (SafeET.ParseError, DefusedXmlException):
                 continue
             for child in item_root:
                 root.append(child)
@@ -1014,12 +1017,21 @@ def make_handler(
             if verbose:
                 print("NVG feed ignored invalid Zenoh sample: {}".format(exc), flush=True)
             return
+        # SitaWare-originated objects remain on Zenoh and are forwarded to TAK,
+        # but must not be written straight back into the same SitaWare import
+        # subscription. The matching ingress bridge preserves the raw export.
+        if track.get("_ingress") == "sitaware_nvg":
+            return
         if track.get("_delete"):
             uid = cache.remove(track)
             if verbose:
                 print("NVG feed removed {}".format(uid), flush=True)
             return
-        uid = cache.upsert(track, _resolve_sidc(sidc, track), stale_s=stale_s)
+        uid = cache.upsert(
+            track,
+            _resolve_sidc(sidc, track),
+            stale_s=stale_s if stale_s is not None else STALE_S,
+        )
         if verbose and uid:
             print("NVG feed cached {}".format(uid), flush=True)
 
@@ -1110,7 +1122,7 @@ def run(args) -> None:
         session.close()
 
 
-def main() -> None:
+def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description="Zenoh tracks -> SitaWare HQ NVG pull feed")
     parser.add_argument("--bind", default=os.environ.get("SITAWARE_HQ_NVG_BIND", "127.0.0.1"))
     parser.add_argument(
@@ -1143,7 +1155,7 @@ def main() -> None:
         default=_env_true("SITAWARE_HQ_NVG_ALLOW_INSECURE_HTTP"),
     )
     parser.add_argument("--verbose", "-v", action="store_true")
-    run(parser.parse_args())
+    run(parser.parse_args(argv))
 
 
 if __name__ == "__main__":

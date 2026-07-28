@@ -1,19 +1,20 @@
 import asyncio
-import docker
+import errno
 import hashlib
-import json5
 import os
 import re
 import stat
 import tempfile
 import threading
 import time
+
+import docker
+import json5
+import zenoh
 from docker.errors import DockerException, NotFound
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
-
-import zenoh
 from .config_revisions import create_revision, set_revision_state
 from .control import _control
 from .db import get_db
@@ -58,18 +59,41 @@ _TLS_PROFILES = {
     },
     "backbone": {
         "label": "Backbone (Desert Bread CA)",
-        "publish_cert_dir": "zenoh-sandbox",
+        "publish_cert_dir": "efdi-backbone",
         "publish_root_ca": "ca-roots.pem",
         "publish_client_cert": "cert.pem",
         "publish_client_key": "key.pem",
         # The recovered hackathon identity is a client certificate. Keep the
         # EFDI server-capable identity on the local listener and use the
-        # sandbox identity only when dialing the remote router.
+        # backbone identity only when dialing the remote router.
+        # host/first-boot.sh stages the fixed-name source bundle into the
+        # router's protected runtime directory.
         "listen_certificate": "/etc/zenoh/tls/pod-cert.pem",
         "listen_private_key": "/etc/zenoh/tls/pod-key.pem",
-        "connect_certificate": "/etc/zenoh/tls/zenoh-sandbox/cert.pem",
-        "connect_private_key": "/etc/zenoh/tls/zenoh-sandbox/key.pem",
-        "root_ca": "/etc/zenoh/tls/zenoh-sandbox/ca-roots.pem",
+        "connect_certificate": "/etc/zenoh/tls/backbone/cert.pem",
+        "connect_private_key": "/etc/zenoh/tls/backbone/key.pem",
+        "root_ca": "/etc/zenoh/tls/backbone/ca-roots.pem",
+    },
+    "ltu-local": {
+        "label": "LTU sandbox (EFDI LTU CA)",
+        # Source bundle: compose/certs/efdi-ltu/. connect-ltu.sh validates and
+        # stages the fixed-name client identity and LTU trust root.
+        "publish_cert_dir": "efdi-ltu",
+        "publish_root_ca": "ca.crt",
+        "publish_client_cert": "client.pem",
+        "publish_client_key": "client.key",
+        # This certificate permits both TLS serverAuth and clientAuth. Use it
+        # in both directions: LTU peers that dial this router otherwise reject
+        # the unrelated pod-local EFDI listener certificate with UnknownCA.
+        "listen_certificate": "/etc/zenoh/tls/ltu/client-chain.pem",
+        "listen_private_key": "/etc/zenoh/tls/ltu/client.key",
+        # connect-ltu.sh prepares a complete leaf+intermediate chain and a
+        # runtime-only unencrypted key. Zenoh has no private-key passphrase
+        # setting, so pointing it at the source bundle's encrypted key can
+        # never establish a link.
+        "connect_certificate": "/etc/zenoh/tls/ltu/client-chain.pem",
+        "connect_private_key": "/etc/zenoh/tls/ltu/client.key",
+        "root_ca": "/etc/zenoh/tls/ltu/ca.crt",
     },
 }
 
@@ -91,7 +115,7 @@ _CONFIG_APPLY_LOCK = threading.RLock()
 _LAST_KNOWN_GOOD_PATH = CONFIG_PATH + ".last-known-good"
 _HEALTH_CHECK_TIMEOUT_S = 30
 _HEALTH_CHECK_INTERVAL_S = 2
-_MANAGEMENT_LINK_TIMEOUT_S = 20
+_MANAGEMENT_LINK_TIMEOUT_S = 60
 
 
 def _read_prefix_file() -> str:
@@ -126,6 +150,10 @@ def _write_data_prefix_file(value: str) -> None:
 
 def _data_topic_root(prefix: str, partner_namespace: str) -> str:
     return "/".join(part for part in (prefix.strip("/"), partner_namespace.strip("/")) if part)
+
+
+def _requires_remote_link(fields: "ConfigFields") -> bool:
+    return bool(fields.fabric_endpoints or fields.fabric_endpoint)
 
 
 class ConfigFields(BaseModel):
@@ -253,8 +281,15 @@ def _extract_fields(raw: str) -> ConfigFields:
     )
     fabric_tls_profile = next(
         (
-            name for name, profile in _TLS_PROFILES.items()
-            if tls_paths == (profile["connect_certificate"], profile["connect_private_key"], profile["root_ca"])
+            name
+            for name, profile in _TLS_PROFILES.items()
+            if tls_paths
+            == (
+                profile["connect_certificate"],
+                profile["connect_private_key"],
+                profile["root_ca"],
+            )
+            or tls_paths in profile.get("legacy_tls_paths", [])
         ),
         None,
     )
@@ -343,7 +378,20 @@ def atomic_write(path: str, content: str) -> None:
             f.write(content)
             f.flush()
             os.fsync(f.fileno())
-        os.replace(temporary_path, path)
+        try:
+            os.replace(temporary_path, path)
+        except OSError as exc:
+            # A single-file bind-mount cannot be renamed over — its target is a
+            # mountpoint, so os.replace() raises EBUSY. mkstemp already proved
+            # the directory is writable, so fall back to an in-place rewrite of
+            # the mounted file (not atomic, but the only option for a mount).
+            if exc.errno != errno.EBUSY or not os.path.exists(path):
+                raise
+            with open(path, "w") as f:
+                f.write(content)
+                f.flush()
+                os.fsync(f.fileno())
+            os.unlink(temporary_path)
     except Exception:
         try:
             os.close(fd)
@@ -649,6 +697,7 @@ async def put_config(
             rendered,
             fields,
             restart_native=True,
+            preserve_management=_requires_remote_link(fields),
         )
     except Exception as exc:
         await set_revision_state(db, revision, "failed", str(exc))
@@ -667,8 +716,15 @@ async def put_config(
            if result["native_process_restart_failures"] else ""),
     )
 
-    if result["status"] in {"rejected", "failed"}:
-        raise HTTPException(status_code=422 if result["status"] == "rejected" else 500, detail=result["error"])
+    if result["status"] in {"rejected", "rolled_back", "failed"}:
+        status_code = (
+            422
+            if result["status"] == "rejected"
+            else 409
+            if result["status"] == "rolled_back"
+            else 500
+        )
+        raise HTTPException(status_code=status_code, detail=result["error"])
     return {**result, "version": version, "revision_id": revision.id}
 
 

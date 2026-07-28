@@ -8,7 +8,7 @@ CAT-010, CAT-020, CAT-021, CAT-034, CAT-048, and CAT-062), plus
 dronuradaras.lt acoustic detections, Link-16, MAVLink, and SitaWare. An
 optional bridge can also ingest declared Lithuanian UTM flights when an
 authorized Oro navigacija JSON/GeoJSON export is supplied. This is not a
-national live Remote ID feed. All markers are routed through a local Zenoh
+live civilian UTM feed. All markers are routed through a local Zenoh
 fabric to TAK and SitaWare clients.
 
 ---
@@ -52,7 +52,7 @@ an EFDI development root CA under `compose/certs/efdi/`, then signs a leaf
 cert+key for the given namespace. Do not distribute that development root key
 to managed routers.
 
-The generated material (`efdi-ca-root.pem`, `<NAMESPACE>-cert.pem`, `<NAMESPACE>-key.pem`) lives at `compose/certs/efdi/` — gitignored, never committed. The ignored bundle directory also keeps `tak/`, `sitaware/`, `tests/`, and `zenoh-sandbox/` identities separate. Default path is set by `start.sh`; override with `BUNDLE_DIR` in `compose/.env` if you'd rather keep it outside the repo entirely. Managed deployments use the delegated-CA workflow in section 10 and keep CA private keys under a separate mode-700 runtime directory.
+The generated material (`efdi-ca-root.pem`, `<NAMESPACE>-cert.pem`, `<NAMESPACE>-key.pem`) lives at `compose/certs/efdi/` — gitignored, never committed. The ignored bundle directory also keeps `tak/`, `sitaware/`, `efdi-backbone/` (goat backbone, Desert Bread CA), and `efdi-ltu/` (LTU sandbox) identities separate — see `compose/certs/README.md`. Default path is set by `start.sh`; override with `BUNDLE_DIR` in `compose/.env` if you'd rather keep it outside the repo entirely. Managed deployments use the delegated-CA workflow in section 10 and keep CA private keys under a separate mode-700 runtime directory.
 
 ---
 
@@ -68,18 +68,30 @@ cd EFDI
 ### 2.2 Generate certificates
 
 ```bash
-scripts/gen-certs.sh <namespace>   # e.g. scripts/gen-certs.sh 1851281db70ccc0409dad4ecfc874cf5
+scripts/gen-certs.sh <namespace>   # e.g. scripts/gen-certs.sh 0123456789abcdef0123456789abcdef
 ```
 
 This produces:
 
 ```text
 compose/certs/
-├── efdi/                     # EFDI Zenoh CA and pod identities
+├── efdi/                     # this pod's own EFDI CA + identity (do not rename)
+├── efdi-ltu/                 # LTU sandbox: asusrog client cert + EFDI LTU Root CA
+├── efdi-backbone/                 # goat backbone identity (Desert Bread CA)
 ├── sitaware/                 # SitaWare feed CA and server identity
-├── tak/                      # TAK Server identity
-└── zenoh-sandbox/             # legacy sandbox Zenoh identity
+└── tak/                      # TAK Server identity
 ```
+
+See `compose/certs/README.md` for the full legend (which cert authenticates to
+which fabric). The whole directory is gitignored.
+
+The LTU participant key is encrypted and its leaf file does not contain the
+intermediate CA. Run `scripts/connect-ltu.sh` from a terminal when switching to
+that fabric. It asks for the key passphrase with hidden input, verifies the
+downloaded public intermediate against the pinned LTU root, and writes only a
+full client chain plus an unencrypted runtime key under ignored
+`compose/state/zenoh/tls/ltu/`. Zenoh has no private-key passphrase setting; do
+not point the router directly at the encrypted source key.
 
 `<NAMESPACE>` must match `PARTNER_NAMESPACE` in `compose/.env`.
 
@@ -236,11 +248,8 @@ The interactive launcher displays all services with their readiness state. Toggl
 
   Open-data bridges
   ──────────────────────────────────────────────────────────
-  [ 2] [✓] airplaneslive  Airplanes.live ADS-B aircraft          ready
-  [ 3] [✓] adsblol        ADSB.lol open-data aircraft            ready
-  [ 4] [✓] aprs           APRS-IS stations, vehicles, vessels    ready
+  [ 2] [✓] aprs           APRS-IS stations, vehicles, vessels    ready
   [ 6] [✓] meteolt        meteo.lt weather stations              ready
-  [ 7] [ ] utm-ans        Lithuanian UTM declared UAV flights    UTM_ANS_API_URL not set
 
   Sensor bridges
   ──────────────────────────────────────────────────────────
@@ -254,7 +263,6 @@ The interactive launcher displays all services with their readiness state. Toggl
   ──────────────────────────────────────────────────────────
   [13] [ ] stanag5516     Link-16 JREAP-C datalink               STANAG5516_PORT not set
   [14] [ ] mavlink        MAVLink UAV telemetry                  MAVLINK_PORT not set
-  [15] [✓] opendroneid    Raw Open Drone ID Zenoh translator     ready
   [16] [ ] vmf            VMF MIL-STD-47001C messages            VMF_PORT not set
   [17] [✓] nffi           NATO NFFI XML Zenoh translator         ready
   [18] [ ] sapient        SAPIENT / BSI Flex 335                 will prompt for address
@@ -338,7 +346,7 @@ Leave `SITAWARE_URL`/`SITAWARE_USER`/`SITAWARE_PASS` unset in `.env` and the lau
 
 ```bash
 SITAWARE_URL=https://<sitaware-host>
-SITAWARE_URL_FALLBACK=https://<netbird-mesh-ip>   # optional second path
+SITAWARE_URL_FALLBACK=https://swhq.efdi.ltu:10006 # optional stable mesh-DNS path
 SITAWARE_USER=<username>
 SITAWARE_PASS=<password>
 SITAWARE_API_PATH=/<documented-resource-path>
@@ -477,8 +485,6 @@ Do not clear a shared operational layer to work around this limitation.
 | --- | --- | --- | --- |
 | `asterix` | `protocols/vendors/asterix/cat.py` | `…/raw/asterix/catNN` and category-specific normalized ASTERIX topics | ASTERIX vendor's CAT protocol bundle: mixed UDP ingress plus per-category translators |
 | `dronuradaras` | `bridges/dronuradaras_bridge.py` | `…/land/dronuradaras/acoustic/neutral/sensor/{type}/{id}/sapient` | 60 s online-only device poll with offline eviction / 10 s detection poll |
-| `utm-ans` | `bridges/utm_ans_bridge.py` | `…/air/utm_ans/c2/unknown/uav/{type}/{id}/sapient` | Authorized JSON/GeoJSON declared-flight poll; requires `UTM_ANS_API_URL` |
-| `opendroneid` | `protocols/random/opendroneid.py` | `…/air/opendroneid/passive_rf/*/uav/{type}/{id}/sapient` | Raw receiver publications under `…/raw/opendroneid/**`; no radio on the router host |
 | `sitaware` | `bridges/sitaware_bridge.py` | `…/land/sitaware/c2/friendly/unit/{type}/{id}/sapient` | Configurable REST poll |
 | `nffi` | `protocols/random/nffi.py` | `…/land/nato/c2/friendly/unit/{type}/{id}/sapient` | Complete XML documents under `…/raw/nffi/*` in Zenoh |
 | `stanag5516` | `protocols/vendors/stanag/5516.py` | `…/air/stanag_5516/c2/*/aircraft/{type}/{id}/sapient` | Streaming UDP |
@@ -528,7 +534,7 @@ the translator.
 
 CoT and SitaWare HQ NVG outputs apply the same scenario affiliation policy:
 aircraft in the configured RU/BY ICAO address ranges and vessels with RU/BY
-MMSI MIDs are hostile; other public ADS-B/AIS contacts remain neutral. An
+MMSI MIDs are hostile; other partner-provided air/sea contacts remain neutral. An
 origin-country label alone does not override an invalid or missing transponder
 identifier.
 
@@ -565,13 +571,17 @@ Configure the TAK TCP destination and select `cot-bridge`:
 TAK_HOST=<tak-server>
 TAK_PORT=8089
 TAK_TLS=1
+TAK_TLS_SERVER_NAME=<dns-san-in-tak-server-certificate>
 TAK_CERT=/runtime/path/tak-client.pem
 TAK_KEY=/runtime/path/tak-client-key.pem
 TAK_CA=/runtime/path/tak-ca.pem
 ```
 
 These must be TAK-issued credentials. The Zenoh certificate is not valid for
-TAK Server. For lab plaintext TCP use the deployment's configured TCP port and
+TAK Server. `TAK_HOST` is the stable dial hostname; when the installed TAK
+server certificate uses a different legacy DNS SAN, set
+`TAK_TLS_SERVER_NAME` to that SAN instead of disabling hostname verification.
+For lab plaintext TCP use the deployment's configured TCP port and
 leave `TAK_TLS=0`; direct `cot-udp`/`cot-udp-tak` output is one-way and does not
 provide a return feed.
 
@@ -603,6 +613,7 @@ at the TAK Server CoT endpoint:
 TAK_HOST=<tak-server>
 TAK_PORT=8089
 TAK_TLS=1
+TAK_TLS_SERVER_NAME=<dns-san-in-tak-server-certificate>
 TAK_CERT=/runtime/path/efdi-bridge.pem
 TAK_KEY=/runtime/path/efdi-bridge-key.pem
 TAK_CA=/runtime/path/tak-ca.pem
@@ -1385,9 +1396,8 @@ This catches syntax errors, TypeScript errors, and Dockerfile breakage before me
 | 2026-07-11 | Added `dev.sh`: disposable local Postgres + directly-run uvicorn for zenoh-admin UI preview only, bypassing zenoh-router/certs/fabric entirely |
 | 2026-07-11 | Removed the external "goat" vendor entirely: certs are now self-issued via `scripts/gen-certs.sh` (EFDI root CA, no portal/CBOR bundle), containers renamed `goat-moon-*` → `efdi-pod-*`, `GOAT_CERT_DIR` env var renamed `EFDI_CERT_DIR`, `host/first-boot.sh` rewritten to read `compose/.env` directly and drop the `goat-clientd` wrapper (NetBird is called natively — it was always EFDI's own asset, not vendor lock-in), `profiles/` directory removed (orphaned by the rewrite) |
 | 2026-07-15 | `dronuradaras_bridge.py` now publishes only devices explicitly reported as `is_online=true`; offline devices emit deletion events so CoT, SitaWare Edge, and the HQ NVG snapshot evict cached markers |
-| 2026-07-17 | Replaced FlightRadar24 and OpenSky with the free/open-data ADSB.lol bridge |
 | 2026-07-17 | Added deterministic ASTERIX category listener conventions: CAT-010/020/021/034/048/062 use UDP 50010/50020/50021/50034/50048/50062 by default; these are EFDI conventions, not vendor defaults |
-| 2026-07-17 | Added Zenoh-native CAP, GeoJSON/OGC, AIS NMEA, spectrum, sensor-health, mission-route, and raw-ingress translation paths |
+| 2026-07-17 | Added Zenoh-native CAP, GeoJSON/OGC, spectrum, sensor-health, mission-route, and raw-ingress translation paths |
 | 2026-07-17 | Security refresh: Vite upgraded, Compose images pinned/refreshed, Python image OS packages upgraded, and authenticated SitaWare/UTM endpoints restricted to HTTPS |
 | 2026-07-18 | Added TAK-style Runtime Control for native bridge/protocol/layer lifecycle, bounded logs, endpoint/topic/port editing, write-only credentials, a localhost admin-control agent, and a live Vite dev stack with aligned API/proxy ports |
 

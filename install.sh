@@ -129,7 +129,7 @@ if [ "$INSTALL_MODE" = "production" ]; then
 
     section "EFDI Namespace"
     echo "  Your PARTNER_NAMESPACE is the namespace you passed to scripts/gen-certs.sh."
-    echo "  Example: 1851281db70ccc0409dad4ecfc874cf5"
+    echo "  Example: 0123456789abcdef0123456789abcdef"
     echo ""
     EXISTING_NS=""
     if [ -f "$ENV_FILE" ]; then

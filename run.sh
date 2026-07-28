@@ -3,8 +3,8 @@
 # The Zenoh router is still started via Docker (single container, compiled binary).
 #
 # Usage:
-#   ./run.sh            # giraffe mode (default) — radar/Link-16 sensors + CoT-UDP only
-#   ./run.sh giraffe    # same as above — CAT-48/21/20, Link-16, cot-udp
+#   ./run.sh            # giraffe mode (default) — radar sensors + CoT-UDP only
+#   ./run.sh giraffe    # same as above — ASTERIX CAT categories + cot-udp
 #   ./run.sh all        # everything — bridges, input protocols, and output layers
 #   ./run.sh bridges    # source-specific bridges only (skip zenoh + layers)
 #   ./run.sh protocols  # reusable input protocols only
@@ -227,22 +227,7 @@ start_bridges() {
 
     start_asterix_udp_bridge
 
-    start airplaneslive bridges/airplaneslive_adsb_bridge.py
-    start adsblol bridges/adsblol_bridge.py
     start dronuradaras bridges/dronuradaras_bridge.py
-
-    if [[ "${DJI_MQTT_HOST:-}" ]]; then
-        start dji-cloud bridges/dji_cloud_api_bridge.py
-    else
-        echo "  [skip] dji-cloud — set DJI_MQTT_HOST in .env to enable"
-    fi
-
-    if [[ "${UTM_ANS_API_URL:-}" ]]; then
-        start utm-ans bridges/utm_ans_bridge.py
-    else
-        echo "  [skip] utm-ans — set UTM_ANS_API_URL to an authorized JSON/GeoJSON feed"
-    fi
-
 
     start aprs bridges/aprsis_bridge.py
 
@@ -264,12 +249,6 @@ start_bridges() {
 
     # Optional transport-only ingress.  These processes publish bytes; the
     # matching protocol translators below perform all decoding.
-    if [[ "${MAVLINK_RAW_PORT:-}" ]]; then
-        start mavlink-raw bridges/mavlink_raw_bridge.py --port "$MAVLINK_RAW_PORT"
-    fi
-    if [[ "${STANAG5516_RAW_PORT:-}" ]]; then
-        start stanag5516-raw bridges/5516_bridge.py --port "$STANAG5516_RAW_PORT"
-    fi
     if [[ "${VMF_RAW_PORT:-}" ]]; then
         start vmf-raw bridges/vmf_bridge.py --port "$VMF_RAW_PORT"
     fi
@@ -289,10 +268,6 @@ start_protocols() {
     echo "=== Input protocols ==="
 
     start_asterix_protocols
-
-    # Receiver/detection nodes publish raw ASTM/ASD-STAN messages into Zenoh.
-    # This idle-safe translator runs on the data plane and needs no radio.
-    start opendroneid protocols/random/opendroneid.py
 
     start cap protocols/random/cap.py
     start geojson protocols/random/geojson_features.py
@@ -317,15 +292,6 @@ start_protocols() {
 
     start nffi protocols/random/nffi.py
 
-    if [[ "${MAVLINK_ZENOH_RAW:-}" == "1" ]]; then
-        start mavlink protocols/random/mavlink.py --zenoh-raw --raw-topic "${MAVLINK_RAW_TOPIC:-}"
-    elif [[ "${MAVLINK_PORT:-}" ]]; then
-        mav_args=(); [[ "${MAVLINK_TCP:-}" == "1" ]] && mav_args=(--tcp)
-        start mavlink protocols/random/mavlink.py --port "$MAVLINK_PORT" "${mav_args[@]}"
-    else
-        echo "  [skip] mavlink — set MAVLINK_PORT in .env to enable"
-    fi
-
     if [[ "${VMF_ZENOH_RAW:-}" == "1" ]]; then
         start vmf protocols/random/vmf.py --zenoh-raw --raw-topic "${VMF_RAW_TOPIC:-}"
     elif [[ "${VMF_PORT:-}" ]]; then
@@ -333,14 +299,6 @@ start_protocols() {
         start vmf protocols/random/vmf.py --port "$VMF_PORT" "${vmf_args[@]}"
     else
         echo "  [skip] vmf — set VMF_PORT in .env to enable"
-    fi
-
-    if [[ "${STANAG5516_ZENOH_RAW:-}" == "1" ]]; then
-        start stanag5516 protocols/vendors/stanag/5516.py --zenoh-raw --raw-topic "${STANAG5516_RAW_TOPIC:-}"
-    elif [[ "${STANAG5516_PORT:-}" ]]; then
-        start stanag5516 protocols/vendors/stanag/5516.py --port "$STANAG5516_PORT"
-    else
-        echo "  [skip] stanag5516 — set STANAG5516_PORT in .env to enable"
     fi
 
     if [[ "${STANAG4586_PROFILE:-}" == "legacy_ed3_approx" && "${STANAG4586_ZENOH_RAW:-}" == "1" ]]; then
@@ -406,7 +364,7 @@ start_layers() {
 }
 
 # ---------------------------------------------------------------------------
-# Giraffe-only subset: ASTERIX + Link-16 inbound bridges, then CoT-UDP out
+# Giraffe-only subset: ASTERIX inbound bridges, then CoT-UDP out
 # ---------------------------------------------------------------------------
 start_giraffe_bridges() {
     echo ""
@@ -414,26 +372,6 @@ start_giraffe_bridges() {
 
     start_asterix_udp_bridge
     start_asterix_protocols
-
-    if [[ "${STANAG5516_PORT:-}" ]]; then
-        start stanag5516 protocols/vendors/stanag/5516.py --port "$STANAG5516_PORT"
-    else
-        echo "  [skip] stanag5516 — set STANAG5516_PORT in .env to enable"
-    fi
-
-    if [[ "${MAVLINK_PORT:-}" ]]; then
-        tcp_mav=""
-        [[ "${MAVLINK_TCP:-}" == "1" ]] && tcp_mav="--tcp"
-        start mavlink protocols/random/mavlink.py --port "$MAVLINK_PORT" ${tcp_mav:+"$tcp_mav"}
-    else
-        echo "  [skip] mavlink — set MAVLINK_PORT in .env to enable"
-    fi
-
-    if [[ "${DJI_MQTT_HOST:-}" ]]; then
-        start dji-cloud bridges/dji_cloud_api_bridge.py
-    else
-        echo "  [skip] dji-cloud — set DJI_MQTT_HOST in .env to enable"
-    fi
 
     if [[ "${VMF_PORT:-}" ]]; then
         tcp_vmf=""

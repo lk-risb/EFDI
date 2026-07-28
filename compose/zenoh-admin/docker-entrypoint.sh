@@ -11,4 +11,7 @@ for d in /data /zenoh-config; do
 done
 [ -f /namespace-prefix ] && chown zenohadmin:zenohadmin /namespace-prefix
 
-exec su -s /bin/sh zenohadmin -c "$*"
+# Preserve the original argv exactly. Flattening it into `su -c "$*"` lets
+# shell metacharacters and argument boundaries be reinterpreted, and can turn a
+# harmless diagnostic such as `sh -c 'set -e; ...'` into an environment dump.
+exec setpriv --reuid=10001 --regid=10001 --init-groups "$@"

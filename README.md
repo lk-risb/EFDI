@@ -47,11 +47,8 @@ This repository is the EFDI-partner collaboration surface. It carries **no partn
                   INGRESS (bridges/protocols)          FABRIC            EGRESS (layers)
 
 [Giraffe AMB]  ──mixed ASTERIX UDP──► asterix_udp_bridge ─┐
-[ADSB.lol]     ──REST/HTTPS─────────► adsblol_bridge      ─┤
-[Oro nav. UTM] ──authorized JSON────► utm_ans_bridge      ─┤                    ┌─► cot_layer ──► ATAK / TAK Server
 [dronuradaras] ──REST/HTTPS─────────► dronuradaras_bridge ─┤                    │
-[Drone RID]    ──Zenoh/raw──────────► opendroneid         ─┼─► Zenoh router ────┤
-[Link-16]      ──UDP────────────────► stanag5516          ─┤   (local, mTLS)    │
+[Link-16]      ──UDP────────────────► stanag5516          ─┼─► Zenoh router ────┤
 [MAVLink]      ──UDP/TCP────────────► mavlink             ─┤                    └─► nvg_layer ──► SitaWare HQ (HQ polls)
 [SitaWare HQ]  ──NVG 2.0.2 export───► nvg_bridge          ─┤
 [TAK Server]   ──CoT stream─────────► tak_bridge          ─┘
@@ -80,9 +77,7 @@ The live data-plane payload is JSON. The `.proto` files beside each translator u
 | `asterix` | protocol | ASTERIX family: CAT-010/020/021/034/048/062 translators |
 | `stanag` | protocol | STANAG family: 4586 feed plus 4609 SRT transport and KLV decode |
 | `dronuradaras_bridge` | → Zenoh | REST polling of currently-online acoustic sensors + drone-detection events |
-| `adsblol_bridge` / `airplaneslive_adsb_bridge` | → Zenoh | Open-data ADS-B → normalized civil/military aircraft tracks |
-| `utm_ans_bridge` | → Zenoh | Authorized Oro navigacija UTM export → declared civilian UAV tracks |
-| `opendroneid` | protocol | Raw ASTM/ASD-STAN Remote ID → normalized UAV tracks (routers need no radio) |
+| Partner ADS-B / CAT-21 | → Zenoh | Registered fabric topics or ASTERIX CAT-021 → normalized aircraft tracks |
 | `sapient_flex335_bridge` | → Zenoh | SAPIENT BSI Flex 335 v2 sensor/detection ingress |
 | `mavlink_raw_bridge` / `5516_bridge` / `vmf_bridge` / `4586_bridge` | → Zenoh | Optional socket ingress; publishes raw bytes only |
 | `nffi` | protocol | NATO NFFI / ADatP-36 (STANAG 5527) friendly-force XML translator |
@@ -176,7 +171,7 @@ See [INSTALL.md](docs/INSTALL.md) for the full network prerequisites table.
 | ASTERIX bridge + translators | ✅ | Mixed UDP demux; CAT-010/020/021/034/048/062 |
 | dronuradaras bridge | ✅ | REST polling, acoustic sensors + drone detection |
 | Oro navigacija UTM bridge | ✅ (endpoint required) | Declared/planned UAV flights from an authorized export |
-| ADS-B bridges | ✅ | ADSB.lol (ODbL) + airplanes.live open aircraft data |
+| Partner ADS-B / CAT-21 input | ✅ | Registered Zenoh topics or ASTERIX CAT-021; no public scraping bridge |
 | SAPIENT BSI Flex 335 v2 bridge | ✅ | Sensor/detection ingress |
 | CoT output layer (`cot_layer`) | ✅ | ATAK UDP multicast + TAK Server TCP/mTLS |
 | TAK ingress bridge (`tak_bridge`) | ✅ | TAK Server CoT → Zenoh |

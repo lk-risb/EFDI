@@ -144,8 +144,6 @@ catalog requires exact registration.
 | Bridge | Endpoint behavior | Configuration needed |
 |---|---|---|
 | Mixed ASTERIX UDP | Receives one unicast or multicast UDP stream and publishes exact frames by category | `ASTERIX_PORT`, categories, and optional bind/multicast/source filter |
-| Airplanes.live | Polls its fixed HTTPS API | None; optional runtime bounds/rate |
-| ADSB.lol | Polls its free/open-data v2 point API; source code BSD-3-Clause, public data ODbL 1.0 | None for public API; coordinate production use or feed data if required by the operator |
 | APRS-IS | Connects to APRS-IS | Runtime area/range; upstream connection is built in |
 | dronuradaras.lt | Polls its fixed public HTTPS API | None |
 | Oro navigacija UTM (`utm.ans.lt`) | Polls an explicitly authorized JSON/GeoJSON export or API | `UTM_ANS_API_URL`; optional bearer `UTM_ANS_API_TOKEN` |
@@ -153,6 +151,34 @@ catalog requires exact registration.
 | meteo.lt | Polls the fixed public HTTPS API | Optional places/rate |
 | SitaWare HQ REST inbound | Polls deployment-specific resource | URL, credentials, and the real `SITAWARE_API_PATH`; there is no universal units URL |
 | Track fusion | Subscribes to local Zenoh topics | No external endpoint; starts working when normalized tracks arrive |
+
+### Radar operator UDP relay
+
+Copy `scripts/radar_udp_relay.py` to the radar operator's Windows computer.
+It has no third-party dependencies. If the radar sends UDP to local port
+50048, for example, run:
+
+```powershell
+py .\radar_udp_relay.py --listen-port 50048
+```
+
+The relay forwards every datagram unchanged to `asusrog.efdi.ltu:50000`.
+Override `--destination-host` when mesh DNS is unavailable. Configure this
+router with `ASTERIX_PORT=50000` when the forwarded stream contains mixed
+ASTERIX categories. Run one relay instance per input port when protocols arrive
+on separate local ports; combining unrelated wire formats on one destination
+port requires a receiver that can distinguish their framing.
+
+On the EFDI laptop, inspect traffic without taking ownership of the UDP socket:
+
+```bash
+./scripts/capture-radar-udp.sh
+./scripts/capture-radar-udp.sh any giraffe-50000.pcap
+```
+
+The first command displays packet bytes; the second saves a full packet capture
+for offline decoder work. Both use tcpdump and can run while the ASTERIX bridge
+is bound to UDP 50000.
 
 ### Oro navigacija UTM and Lithuanian civilian UAV data
 
@@ -211,7 +237,9 @@ For Zenoh → TAK, configure `TAK_HOST/TAK_PORT` and select `cot_layer`
 two ways: UDP multicast to `239.2.3.1:6969` for LAN ATAK clients, and TCP/mTLS to
 a TAK Server. TAK-issued client credentials are required when `TAK_TLS=1`. For
 TAK → Zenoh, select `tak-bridge` (`bridges/tak_bridge.py`), which normalizes an
-inbound CoT stream back onto the fabric.
+inbound CoT stream back onto the fabric. Prefer a stable DNS `TAK_HOST`; if the
+TAK server certificate has a different legacy DNS SAN, set
+`TAK_TLS_SERVER_NAME` to that SAN so hostname verification remains enabled.
 
 ### SitaWare
 
