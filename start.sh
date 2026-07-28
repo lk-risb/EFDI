@@ -78,7 +78,7 @@ fi
 SERVICES=(
     zenoh
     admin-control
-    cert-renewer supervisor
+    cert-renewer supervisor presence
     airplaneslive adsblol aprs meteolt
     sitaware dronuradaras dji-cloud utm-ans asterix track-fusion
     stanag5516 mavlink opendroneid vmf nffi sapient stanag4586 stanag4609
@@ -148,6 +148,7 @@ declare -A SVC_CAT=(
     [admin-control]="Infrastructure"
     [cert-renewer]="Infrastructure"
     [supervisor]="Infrastructure"
+    [presence]="Infrastructure"
     [airplaneslive]="Open-data bridges" [adsblol]="Open-data bridges"
     [aprs]="Open-data bridges"
     [meteolt]="Open-data bridges"
@@ -175,6 +176,7 @@ declare -A SVC_DESC=(
     [admin-control]="Web UI host control agent"
     [cert-renewer]="Automatic short-lived transport certificate renewal"
     [supervisor]="Auto-restarts crashed bridges, protocols, and layers"
+    [presence]="Liveliness presence tokens (fabric node visibility in panoscope)"
     [airplaneslive]="Airplanes.live ADS-B aircraft"
     [adsblol]="ADSB.lol open-data aircraft"
     [aprs]="APRS-IS stations, vehicles, and vessels"
@@ -230,6 +232,7 @@ svc_ready() {
                -f "${EFDI_STEP_RENEW_KEY_PATH:-${EFDI_CERT_DIR}/${PARTNER_NAMESPACE}-key.pem}" ]]
             ;;
         asterix) return 0 ;;
+        presence) [[ -n "${PARTNER_NAMESPACE:-}" ]] ;;
         stanag5516) [[ "${STANAG5516_ZENOH_RAW:-}" == "1" || "${STANAG5516_PORT:-}" ]] ;;
         mqtt)         return 0 ;;
         sensorthings) return 0 ;;
@@ -503,6 +506,10 @@ launch() {
                 >> "$LOG_DIR/supervisor.log" 2>&1 ) &
             echo $! > "$PID_DIR/supervisor.pid"
             printf "  ${GREEN}[start]${R} %-16s pid %s\n" "supervisor" "$!"
+            ;;
+
+        presence)
+            _start presence presence.py
             ;;
 
         cert-renewer)

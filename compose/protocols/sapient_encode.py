@@ -196,4 +196,5 @@ def publish_sapient(session, topic: str, track: dict, zenoh, node_id: str = "") 
     except Exception as exc:  # noqa: BLE001 — never break the other tiers
         print("sapient encode failed for {}: {}".format(topic, exc), flush=True)
         return
-    session.put(sapient_topic(topic), payload, encoding=zenoh.Encoding.APPLICATION_PROTOBUF)
+    from protocols.protobuf_codec import proto_encoding
+    session.put(sapient_topic(topic), payload, encoding=proto_encoding(message, zenoh))

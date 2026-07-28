@@ -105,6 +105,17 @@ def native_topic(topic: str) -> str:
     return view_key(topic, "raw")
 
 
+def proto_encoding(message, zenoh):
+    """APPLICATION_PROTOBUF self-describing tag: carry the message's schema name
+    on the wire so fabric inspection tooling (the panoscope schema-viewer) can
+    pick the .proto descriptor without an out-of-band lookup. Bare
+    APPLICATION_PROTOBUF says "protobuf" but not WHICH message, leaving the view
+    unclassified in the schema-families graph. full_name is the package-qualified
+    protobuf identity (e.g. efdi.data.v2.RawEnvelope) — change here alone if the
+    boundary registry keys on the simple name instead."""
+    return zenoh.Encoding.APPLICATION_PROTOBUF.with_schema(message.DESCRIPTOR.full_name)
+
+
 def publish_native(session, topic: str, payload: bytes, protocol: str, zenoh,
                    profile: str = "", content_type: str = "application/octet-stream",
                    received_timestamp: float = 0.0) -> None:
@@ -133,7 +144,7 @@ def publish_native(session, topic: str, payload: bytes, protocol: str, zenoh,
     except Exception as exc:  # noqa: BLE001
         print("native envelope failed for {}: {}".format(topic, exc), flush=True)
         return
-    session.put(topic, data, encoding=zenoh.Encoding.APPLICATION_PROTOBUF)
+    session.put(topic, data, encoding=proto_encoding(envelope, zenoh))
 
 
 def asterix_data_block(category: int, record: bytes) -> bytes:
@@ -327,7 +338,7 @@ def publish_dual(
     except Exception as exc:  # noqa: BLE001 — never break the JSON path
         print("protobuf encode failed for {}: {}".format(key, exc), flush=True)
         return
-    session.put(dual_topic(key), payload, encoding=zenoh.Encoding.APPLICATION_PROTOBUF)
+    session.put(dual_topic(key), payload, encoding=proto_encoding(message, zenoh))
 
 
 def publish_collection(
@@ -377,7 +388,7 @@ def publish_collection(
     except Exception as exc:  # noqa: BLE001
         print("protobuf collection encode failed for {}: {}".format(key, exc), flush=True)
         return
-    session.put(dual_topic(key), payload, encoding=zenoh.Encoding.APPLICATION_PROTOBUF)
+    session.put(dual_topic(key), payload, encoding=proto_encoding(message, zenoh))
 
 
 def source_message_to_track(message) -> dict:
