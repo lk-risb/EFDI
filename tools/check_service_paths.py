@@ -8,7 +8,7 @@ pass in that case because the dead file is simply never imported; only an
 operator selecting the service at runtime discovers the break.
 
 Scans start.sh and run.sh for launch commands (`start`/`_start`) and asserts
-every literal `<bridges|layers|protocols>/<...>.py` argument resolves under
+every literal `<bridges|c2|layers|protocols>/<...>.py` argument resolves under
 compose/.
 """
 from __future__ import annotations
@@ -24,7 +24,9 @@ LAUNCHERS = ("start.sh", "run.sh")
 # Only inspect actual launch lines, so a comment mentioning an old filename is
 # not mistaken for a live invocation.
 LAUNCH_LINE = re.compile(r"^\s*_?start\s")
-MODULE_PATH = re.compile(r"(?<![\w./])((?:bridges|layers|protocols)/[A-Za-z0-9_./-]+\.py)")
+MODULE_PATH = re.compile(
+    r"(?<![\w./])((?:bridges|c2|layers|protocols)/[A-Za-z0-9_./-]+\.py)"
+)
 
 
 def main() -> int:

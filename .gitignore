@@ -1,7 +1,17 @@
 .compound-engineering/*.local.yaml
 register_topics.sh
 compose/.env
-compose/certs/
+# Keep the certificate layout and instructions reproducible while excluding
+# every credential. Only the README files below may be tracked.
+compose/certs/**
+!compose/certs/
+!compose/certs/README.md
+!compose/certs/efdi/
+!compose/certs/efdi/README.md
+!compose/certs/efdi-ltu/
+!compose/certs/efdi-ltu/README.md
+!compose/certs/efdi-backbone/
+!compose/certs/efdi-backbone/README.md
 compose/state/
 logs/
 .pids/

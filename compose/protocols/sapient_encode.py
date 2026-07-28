@@ -4,7 +4,7 @@
 flex335.py is the reading half — it decodes SAPIENT arriving from a sensor.
 This is the writing half: it turns any normalized EFDI track, whatever protocol
 produced it, into a real `SapientMessage` carrying a `DetectionReport`. A
-consumer then needs to understand SAPIENT alone rather than ASTERIX, MAVLink,
+consumer then needs to understand SAPIENT alone rather than ASTERIX,
 AIS and the rest.
 
 Encoding targets the official schema vendored at compose/vendor/sapient_msg

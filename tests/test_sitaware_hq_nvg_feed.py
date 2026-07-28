@@ -28,7 +28,6 @@ from nvg_layer import NVG_NS  # noqa: E402
 from nvg_layer import _TOPIC_SIDC  # noqa: E402
 from nvg_layer import _resolve_sidc  # noqa: E402
 from nvg_layer import track_to_nvg_item  # noqa: E402
-from airplaneslive_adsb_bridge import normalize as normalize_airplaneslive  # noqa: E402
 
 
 class FakeClock:
@@ -275,43 +274,45 @@ class NVGFeedCacheTests(unittest.TestCase):
 
 
 class AircraftEnrichmentTests(unittest.TestCase):
-    def test_airplaneslive_preserves_altitudes_and_detailed_adsb_data(self):
-        track = normalize_airplaneslive({
-            "hex": "abcdef",
-            "flight": "TST123 ",
-            "r": "LY-ABC",
-            "t": "A320",
-            "desc": "AIRBUS A-320",
-            "type": "adsb_icao",
-            "lat": 54.7,
-            "lon": 25.3,
-            "alt_baro": 35_000,
-            "alt_geom": 35_100,
-            "gs": 450,
-            "ias": 260,
-            "tas": 440,
+    def test_partner_adsb_preserves_altitudes_and_detailed_data(self):
+        track = {
+            "_ts": 1_721_000_000,
+            "_src": "partner-adsb",
+            "icao24": "abcdef",
+            "callsign": "TST123",
+            "registration": "LY-ABC",
+            "aircraft_type": "A320",
+            "aircraft_description": "AIRBUS A-320",
+            "pos_source": "adsb_icao",
+            "lat_deg": 54.7,
+            "lon_deg": 25.3,
+            "alt_baro_ft": 35_000,
+            "alt_geom_ft": 35_100,
+            "ground_speed_kts": 450,
+            "ias_kt": 260,
+            "tas_kt": 440,
             "mach": 0.78,
-            "track": 91.5,
-            "track_rate": 0.25,
-            "roll": 2.5,
-            "mag_heading": 89.0,
-            "true_heading": 94.0,
-            "baro_rate": -640,
-            "geom_rate": -576,
+            "track_deg": 91.5,
+            "turn_rate_dps": 0.25,
+            "roll_deg": 2.5,
+            "mag_heading_deg": 89.0,
+            "true_heading_deg": 94.0,
+            "baro_vr_fpm": -640,
+            "geo_vr_fpm": -576,
             "squawk": "7000",
             "emergency": "none",
-            "category": "A3",
-            "nav_qnh": 1013.2,
-            "nav_altitude_mcp": 30_000,
-            "nav_altitude_fms": 29_000,
-            "nav_heading": 90.0,
-            "nav_modes": ["autopilot", "vnav"],
+            "emitter_category": "A3",
+            "nav_qnh_hpa": 1013.2,
+            "selected_alt_ft": 30_000,
+            "fms_selected_alt_ft": 29_000,
+            "selected_heading_deg": 90.0,
+            "nav_modes": "autopilot, vnav",
             "nic": 8,
-            "rc": 185,
+            "rc_m": 185,
             "nac_p": 9,
             "nac_v": 2,
-            "rssi": -7.7,
-        }, False)
+            "rssi_dbfs": -7.7,
+        }
 
         self.assertEqual(track["alt_baro_ft"], 35_000)
         self.assertEqual(track["alt_geom_ft"], 35_100)
@@ -350,12 +351,13 @@ class AircraftEnrichmentTests(unittest.TestCase):
         self.assertEqual(values["Position source"], "adsb_icao")
         self.assertIn("ADS-B QUALITY", values)
 
-    def test_missing_airplaneslive_measurements_remain_absent(self):
-        track = normalize_airplaneslive({
-            "hex": "abcdef",
-            "lat": 54.7,
-            "lon": 25.3,
-        }, False)
+    def test_missing_partner_adsb_measurements_remain_absent(self):
+        track = {
+            "_src": "partner-adsb",
+            "icao24": "abcdef",
+            "lat_deg": 54.7,
+            "lon_deg": 25.3,
+        }
         self.assertNotIn("alt_baro_ft", track)
         self.assertNotIn("alt_geom_ft", track)
         self.assertNotIn("ground_speed_kts", track)

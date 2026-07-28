@@ -34,12 +34,12 @@ import os
 import socket
 import struct
 import time
+from protocols.random.vmf_pb2 import VmfTrack
 
 import zenoh
-from zenoh_auth import apply_zenoh_auth
 from namespace_prefix import topic_root
-from protocols.random.vmf_pb2 import VmfTrack
 from protocols.protobuf_codec import publish_dual
+from zenoh_auth import apply_zenoh_auth
 
 ORG       = os.environ.get("PARTNER_NAMESPACE", "")
 TOPIC_ROOT = topic_root()
@@ -364,7 +364,7 @@ def run_zenoh_raw(args):
 def main():
     ap = argparse.ArgumentParser(description="VMF (MIL-STD-47001C) → Zenoh bridge")
     ap.add_argument("--port", type=int,
-                    default=int(os.environ.get("VMF_PORT", "2000")))
+                    default=int(os.environ.get("VMF_PORT", "") or "2000"))
     ap.add_argument("--tcp", action="store_true",
                     default=os.environ.get("VMF_TCP", "") == "1")
     ap.add_argument("--verbose", "-v", action="store_true")

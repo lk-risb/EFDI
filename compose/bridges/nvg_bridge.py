@@ -31,13 +31,15 @@ import os
 import ssl
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
-import xml.etree.ElementTree as ET
 
 import zenoh
 # One SIDC -> topic mapping for both SitaWare ingress paths; a second copy would
 # drift and land the same unit on two different keys.
 from bridges.sitaware_bridge import sidc_to_topic
+from defusedxml import ElementTree as ET
+from defusedxml.common import DefusedXmlException
 from namespace_prefix import topic_root
 from protocols.protobuf_codec import semantic_topic, add_version
 from zenoh_auth import apply_zenoh_auth
@@ -51,6 +53,9 @@ _ENDPOINT  = os.environ.get("ZENOH_LOCAL_ENDPOINT", "tcp/127.0.0.1:7448")
 NVG_NS = "https://tide.act.nato.int/schemas/2012/10/nvg"
 MAX_DOCUMENT_BYTES = 16 * 1024 * 1024
 SOURCE = "sitaware-nvg"
+_RAW_TOPIC = "{}/raw/sitaware/nvg".format(TOPIC_ROOT)
+_EFDI_PROVENANCE_KEY = "EFDI provenance"
+_EFDI_PROVENANCE_VALUE = "fabric-export"
 
 
 def make_config() -> "zenoh.Config":
@@ -86,7 +91,23 @@ def _sidc_of(symbol: str | None) -> str:
     return symbol.split(":", 1)[1] if ":" in symbol else symbol
 
 
-def parse_nvg(document: bytes) -> list[dict]:
+def _has_fabric_provenance(point) -> bool:
+    uri = point.get("uri") or ""
+    if uri.startswith("urn:efdi:"):
+        return True
+    extended = point.find("{%s}ExtendedData" % NVG_NS)
+    if extended is None:
+        return False
+    for item in extended.findall("{%s}SimpleData" % NVG_NS):
+        if (
+            item.get("key") == _EFDI_PROVENANCE_KEY
+            and (item.text or "").strip() == _EFDI_PROVENANCE_VALUE
+        ):
+            return True
+    return False
+
+
+def _decode_nvg(document: bytes) -> tuple[list[dict], int]:
     """Decode NVG <point> elements into EFDI track dicts.
 
     Items without a usable position are skipped rather than published with a
@@ -95,12 +116,18 @@ def parse_nvg(document: bytes) -> list[dict]:
     """
     try:
         root = ET.fromstring(document)
-    except ET.ParseError:
-        return []
+    except (ET.ParseError, DefusedXmlException):
+        return [], 0
 
     tracks: list[dict] = []
+    reflected = 0
     now = time.time()
-    for point in root.iter("{%s}point" % NVG_NS):
+    # Only root-level points are independent NVG objects. Nested points are
+    # polygon/polyline vertices and must never become standalone tracks.
+    for point in root.findall("{%s}point" % NVG_NS):
+        if _has_fabric_provenance(point):
+            reflected += 1
+            continue
         lon = _number(point.get("x"))
         lat = _number(point.get("y"))
         if lat is None or lon is None:
@@ -109,16 +136,11 @@ def parse_nvg(document: bytes) -> list[dict]:
             continue
 
         uri = point.get("uri") or ""
-        # Our own items come back carrying the urn:efdi: uid we published; keep
-        # the bare uid so a round-tripped object keeps one identity on the
-        # fabric instead of appearing again under a second key.
-        uid = uri.rsplit(":", 1)[-1] if uri.startswith("urn:efdi:") else uri
-
         track = {
             "_src":     SOURCE,
             "_ts":      now,
             "_ingress": "sitaware_nvg",
-            "uid":      uid or None,
+            "uid":      uri or None,
             "sidc":     _sidc_of(point.get("symbol")),
             "lat_deg":  round(lat, 6),
             "lon_deg":  round(lon, 6),
@@ -133,7 +155,16 @@ def parse_nvg(document: bytes) -> list[dict]:
         if speed is not None:
             track["speed_ms"] = speed
         tracks.append({key: value for key, value in track.items() if value is not None})
-    return tracks
+    return tracks, reflected
+
+
+def parse_nvg(document: bytes) -> list[dict]:
+    """Return only SitaWare-originated points.
+
+    EFDI-exported reflections remain available byte-for-byte on the raw audit
+    topic, but are not normalized a second time.
+    """
+    return _decode_nvg(document)[0]
 
 
 def _tls_context(ca_file: str, insecure: bool) -> "ssl.SSLContext | None":
@@ -162,7 +193,12 @@ def fetch(url: str, auth_header: str, context: "ssl.SSLContext | None") -> bytes
         "User-Agent": "efdi-nvg-bridge/1.0",
     })
     try:
-        with urllib.request.urlopen(request, timeout=20, context=context) as response:
+        # main() restricts the operator-supplied URL to HTTP(S); file:// and
+        # custom handlers must never turn this network bridge into a local-file
+        # reader.
+        with urllib.request.urlopen(  # nosec B310
+            request, timeout=20, context=context
+        ) as response:
             return response.read(MAX_DOCUMENT_BYTES)
     except urllib.error.HTTPError as exc:
         print("NVG import HTTP {} from {}".format(exc.code, url), flush=True)
@@ -182,7 +218,12 @@ def run(args) -> None:
         while True:
             document = fetch(args.url, auth, context)
             if document is not None:
-                tracks = parse_nvg(document)
+                session.put(
+                    _RAW_TOPIC,
+                    document,
+                    encoding=zenoh.Encoding.APPLICATION_OCTET_STREAM,
+                )
+                tracks, reflected = _decode_nvg(document)
                 for track in tracks:
                     topic = add_version(semantic_topic(
                         sidc_to_topic(track.get("sidc", "")), track))
@@ -191,7 +232,21 @@ def run(args) -> None:
                     if args.verbose:
                         print("NVG in {} -> {}".format(
                             track.get("callsign") or track.get("uid"), topic), flush=True)
-                print("NVG import published {} items".format(len(tracks)), flush=True)
+                if tracks:
+                    print(
+                        "NVG import published {} items ({} fabric reflections "
+                        "retained on raw audit only)".format(len(tracks), reflected),
+                        flush=True,
+                    )
+                else:
+                    print(
+                        "NVG import published 0 items — export document contains "
+                        "no new positioned NVG points ({} bytes, {} fabric "
+                        "reflections retained on raw audit only)".format(
+                            len(document), reflected
+                        ),
+                        flush=True,
+                    )
             time.sleep(args.poll_s)
     except KeyboardInterrupt:
         pass
@@ -199,7 +254,7 @@ def run(args) -> None:
         session.close()
 
 
-def main() -> None:
+def main(argv=None) -> None:
     default_url = os.environ.get("SITAWARE_NVG_IMPORT_URL", "")
     if not default_url:
         base = os.environ.get("SITAWARE_URL", "").rstrip("/")
@@ -221,11 +276,14 @@ def main() -> None:
         default=os.environ.get("SITAWARE_TLS_VERIFY", "1") == "0",
         help="skip TLS verification (SitaWare ships a self-signed certificate)")
     parser.add_argument("--verbose", "-v", action="store_true")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     if not args.url:
         raise SystemExit(
             "set SITAWARE_NVG_IMPORT_URL, or SITAWARE_URL + SITAWARE_API_PATH")
+    parsed_url = urllib.parse.urlsplit(args.url)
+    if parsed_url.scheme.lower() not in {"http", "https"} or not parsed_url.hostname:
+        raise SystemExit("SITAWARE_NVG_IMPORT_URL must be an http:// or https:// URL")
     run(args)
 
 

@@ -7,7 +7,7 @@ tracks from multiple sensors, and publishes enriched fused tracks.
 Fusion strategy (in priority order):
   1. ICAO 24-bit key match (exact)
        Radar (CAT-48 Mode-S) already decodes ICAO hex from SSR responses.
-       ADS-B sources (airplaneslive, ADSB.lol, CAT-21) provide the same key.
+       Partner ADS-B and CAT-21 sources provide the same key.
        When both have the same ICAO hex, the fused track takes:
          • Position, speed, heading → from the radar (higher accuracy, lower latency)
          • callsign, registration, aircraft_type, squawk → from ADS-B (richer metadata)
@@ -114,9 +114,7 @@ _RADAR_TOPICS = [
     "{}/air/*/radar/**".format(TOPIC_ROOT),
     "{}/air/*/mlat/**".format(TOPIC_ROOT),
     "{}/air/*/fused/**".format(TOPIC_ROOT),
-    "{}/air/link16/c2/**".format(TOPIC_ROOT),
     "{}/air/stanag_4586/telemetry/**".format(TOPIC_ROOT),
-    "{}/air/mavlink/telemetry/**".format(TOPIC_ROOT),
 ]
 
 # Identity enrichment only

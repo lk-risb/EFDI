@@ -43,7 +43,7 @@ jobs:
           EFDI_PROTOC_PYTHON=python scripts/generate-protobuf.sh
           python -m pytest -q tests
       - name: Compile bridge, layer, and admin modules
-        run: python -m compileall -q compose/bridges compose/protocols compose/layers compose/zenoh-admin/api compose/admin_control.py
+        run: python -m compileall -q compose/bridges compose/c2 compose/protocols compose/layers compose/zenoh-admin/api compose/admin_control.py
   zenoh-loopback:
     name: Zenoh identity and ACL loopback
     runs-on: ubuntu-latest

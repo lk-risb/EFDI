@@ -22,6 +22,10 @@ fi
 }
 
 mkdir -p "$OUTPUT"
+# This directory contains generated bindings only. Remove bindings for deleted
+# contracts before regenerating so old protocol modules cannot survive a
+# source-removal cleanup.
+find "$OUTPUT" -type f \( -name '*_pb2.py' -o -name '*.pyc' \) -delete
 mapfile -t contracts < <(find "$ROOT/compose/protocols" -type f -name '*.proto' -print | sort)
 (( ${#contracts[@]} > 0 )) || { echo "No protobuf contracts found" >&2; exit 1; }
 contract_names=()

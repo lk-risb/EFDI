@@ -57,6 +57,11 @@ interface TrustInventory {
   acl: { sequence: number; sha256: string; state: string; applied_at: string | null } | null
 }
 
+interface AclReadiness {
+  ready: boolean
+  reason: string | null
+}
+
 function StatusBadge({ child }: { child: FederatedChild }) {
   if (!child.last_status) {
     return <span className="text-xs text-zinc-500">No push yet</span>
@@ -82,19 +87,31 @@ function NetworkPage() {
   const [transportEdges, setTransportEdges] = useState<TopologyTransportEdge[]>([])
   const [selectedNamespace, setSelectedNamespace] = useState<string | null>(null)
   const [trust, setTrust] = useState<TrustInventory | null>(null)
+  const [aclReadiness, setAclReadiness] = useState<AclReadiness | null>(null)
   const [changing, setChanging] = useState<string | null>(null)
+
+  async function fetchAclReadiness(): Promise<AclReadiness | null> {
+    if (!canManage) return null
+    const response = await apiFetch('/api/trust/acl/preview')
+    const body = await response.json().catch(() => ({}))
+    return response.ok
+      ? { ready: true, reason: null }
+      : { ready: false, reason: body.detail ?? response.statusText }
+  }
 
   async function load() {
     try {
-      const [topologyData, childData, trustData] = await Promise.all([
+      const [topologyData, childData, trustData, aclState] = await Promise.all([
         fetchTopology(),
         canManage ? apiJson<FederatedChild[]>('/api/federation') : Promise.resolve([]),
         canManage ? apiJson<TrustInventory>('/api/trust') : Promise.resolve(null),
+        fetchAclReadiness(),
       ])
       setChildren(childData)
       setTopology(topologyData.nodes)
       setTransportEdges(topologyData.transport_edges)
       setTrust(trustData)
+      setAclReadiness(aclState)
     } catch (e) {
       notify.error(errorMessage(e))
     }
@@ -183,7 +200,12 @@ function NetworkPage() {
           countLabel="observed"
           actions={canManage ? (
             <div className="flex gap-2">
-              <button onClick={applyAcl} disabled={changing !== null} className="flex items-center gap-2 rounded-md border border-zinc-300 px-3 py-2 text-xs disabled:opacity-50 dark:border-white/10">
+              <button
+                onClick={applyAcl}
+                disabled={changing !== null || aclReadiness?.ready === false}
+                title={aclReadiness?.reason ?? undefined}
+                className="flex items-center gap-2 rounded-md border border-zinc-300 px-3 py-2 text-xs disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10"
+              >
                 <ShieldCheck size={13} /> Apply trust ACL
               </button>
               <button onClick={() => navigate({ to: '/certificates' })} className="flex items-center gap-2 rounded-md bg-accent-fill px-3 py-2 text-xs text-accent-text hover:bg-accent-fill-hover">
@@ -200,6 +222,16 @@ function NetworkPage() {
           <span className="enterprise-chip"><ShieldCheck size={13} /> immediate-parent authority</span>
           <span className="enterprise-chip"><WifiOff size={13} /> child autonomy on disconnect</span>
         </div>
+        {aclReadiness?.ready === false && (
+          <div className="mb-5 rounded-md border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-300">
+            <p className="font-medium">Managed trust ACL is not ready to apply.</p>
+            <p className="mt-1 text-xs opacity-90">{aclReadiness.reason}</p>
+            <p className="mt-1 text-xs opacity-90">
+              Observed LTU fabric routers are transport peers, not enrolled management children.
+              Keep the current transport policy until that relationship is explicitly migrated.
+            </p>
+          </div>
+        )}
 
         <div className="hud-frame relative hud-enter mb-6">
           <HudCorners />
@@ -214,6 +246,9 @@ function NetworkPage() {
           const child = children.find(item => item.namespace === selectedNamespace)
           if (!node) return null
           const links = transportEdges.filter(edge => edge.source === node.namespace || edge.target === node.namespace)
+          const displayName = node.role === 'hq' && node.reported !== false
+            ? 'Local HQ'
+            : node.namespace.replace(/^router:/, 'Router ')
           return (
             <section className="hud-frame relative mb-6 rounded-md border border-accent-ring/40 bg-white p-5 dark:bg-[#0c0c0e]">
               <HudCorners />
@@ -221,8 +256,13 @@ function NetworkPage() {
                 <div>
                   <p className="hud-label text-[10px] text-zinc-500">Network / managed router</p>
                   <h2 className="mt-1 flex items-center gap-2 font-display text-2xl font-semibold text-zinc-900 dark:text-white">
-                    <Router size={21} className="text-accent-ring" /> {node.namespace}
+                    <Router size={21} className="text-accent-ring" /> {displayName}
                   </h2>
+                  {displayName !== node.namespace && (
+                    <p className="mt-1 break-all font-mono text-xs text-zinc-500">
+                      Organization namespace: {node.namespace}
+                    </p>
+                  )}
                   <div className="mt-2 flex flex-wrap gap-2">
                     <span className={`enterprise-chip ${node.online && node.healthy ? 'enterprise-chip-ok' : 'enterprise-chip-warn'}`}>
                       {node.online ? (node.healthy ? 'healthy' : 'degraded') : 'offline'}

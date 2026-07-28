@@ -11,7 +11,6 @@ import pytest
 from sqlalchemy.dialects.mysql import mariadb
 from sqlalchemy.schema import CreateTable
 
-
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "compose" / "zenoh-admin"))
 os.environ.setdefault("ZENOH_ADMIN_DB_USER", "test")
@@ -21,8 +20,8 @@ from api.db import DATABASE_URL, SessionLocal, engine  # noqa: E402
 from api.models import AdminUser, Base, RefreshToken, UTCDateTime  # noqa: E402
 
 
-def test_admin_database_url_uses_asyncmy_and_preserves_password_characters():
-    assert DATABASE_URL.drivername == "mysql+asyncmy"
+def test_admin_database_url_uses_aiomysql_and_preserves_password_characters():
+    assert DATABASE_URL.drivername == "mysql+aiomysql"
     assert DATABASE_URL.database == "admin"
     assert DATABASE_URL.password == os.environ["ZENOH_ADMIN_DB_PASSWORD"]
 

@@ -1,4 +1,5 @@
 import os
+
 from sqlalchemy.engine import URL
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
@@ -12,7 +13,7 @@ if not separator:
 DB_PORT = int(_port)
 
 DATABASE_URL = URL.create(
-    "mysql+asyncmy",
+    "mysql+aiomysql",
     username=DB_USER,
     password=DB_PASSWORD,
     host=DB_HOST,

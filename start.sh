@@ -79,13 +79,14 @@ SERVICES=(
     zenoh
     admin-control
     cert-renewer supervisor presence
-    airplaneslive adsblol aprs meteolt
-    sitaware dronuradaras dji-cloud utm-ans asterix track-fusion
-    stanag5516 mavlink opendroneid vmf nffi sapient stanag4586 stanag4609
-    mavlink-raw stanag5516-raw vmf-raw sapient-raw stanag4586-raw stanag4609-raw
+    aprs meteolt
+    sitaware dronuradaras asterix track-fusion
+    vmf nffi sapient stanag4586 stanag4609
+    vmf-raw sapient-raw stanag4586-raw stanag4609-raw
     mqtt-raw sensorthings-raw
     cap geojson mqtt sensorthings sparkplug spectrum sensor-health mission-route
     cot_layer tak-bridge nvg_bridge nvg_layer
+    tak-gateway sitaware-gateway
 )
 
 # Restore only non-secret launcher choices. Explicit compose/.env values win;
@@ -105,7 +106,7 @@ load_launcher_state() {
             SELECTED_SERVICES)
                 REMEMBERED_SERVICES="$val"
                 ;;
-            TAK_HOST|TAK_HOST_FALLBACK|\
+            TAK_HOST|TAK_HOST_FALLBACK|TAK_TLS_SERVER_NAME|\
             SITAWARE_URL|SITAWARE_URL_FALLBACK|STANAG4609_SRT_URL|STANAG4609_SOURCE|\
             SAPIENT_HOST|STANAG4586_HOST|STANAG4586_PROFILE)
                 if [[ -z "${!key:-}" ]]; then
@@ -129,7 +130,7 @@ save_launcher_state() {
     {
         printf '# EFDI launcher memory: selections and endpoint addresses only.\n'
         printf 'SELECTED_SERVICES=%s\n' "$selected"
-        for key in TAK_HOST TAK_HOST_FALLBACK \
+        for key in TAK_HOST TAK_HOST_FALLBACK TAK_TLS_SERVER_NAME \
                    SITAWARE_URL SITAWARE_URL_FALLBACK STANAG4609_SRT_URL STANAG4609_SOURCE \
                    SAPIENT_HOST STANAG4586_HOST STANAG4586_PROFILE; do
             # A URL with user-info may contain credentials. Use it for this run,
@@ -149,18 +150,15 @@ declare -A SVC_CAT=(
     [cert-renewer]="Infrastructure"
     [supervisor]="Infrastructure"
     [presence]="Infrastructure"
-    [airplaneslive]="Open-data bridges" [adsblol]="Open-data bridges"
     [aprs]="Open-data bridges"
     [meteolt]="Open-data bridges"
     [asterix]="Sensor bridges"
-    [stanag5516]="Protocols" [mavlink]="Protocols" [vmf]="Protocols"
+    [vmf]="Protocols"
     [mqtt]="Protocols" [sensorthings]="Protocols" [sparkplug]="Protocols"
-    [opendroneid]="Protocols" [nffi]="Protocols"
-    [sitaware]="Sensor bridges" [dronuradaras]="Sensor bridges" [dji-cloud]="Sensor bridges"
-    [utm-ans]="Open-data bridges"
+    [nffi]="Protocols"
+    [sitaware]="Sensor bridges" [dronuradaras]="Sensor bridges"
     [sapient]="Protocols" [stanag4586]="Protocols" [stanag4609]="Protocols"
     [tak-bridge]="C2 inputs"
-    [mavlink-raw]="Sensor bridges" [stanag5516-raw]="Sensor bridges"
     [mqtt-raw]="Sensor bridges" [sensorthings-raw]="Sensor bridges"
     [vmf-raw]="Sensor bridges" [sapient-raw]="Sensor bridges"
     [stanag4586-raw]="Sensor bridges" [stanag4609-raw]="Sensor bridges"
@@ -168,6 +166,7 @@ declare -A SVC_CAT=(
     [spectrum]="Protocols" [sensor-health]="Protocols" [mission-route]="Protocols"
     [cot_layer]="Output layers"   [nvg_layer]="Output layers"
     [nvg_bridge]="C2 inputs"
+    [tak-gateway]="C2 gateways"   [sitaware-gateway]="C2 gateways"
     [track-fusion]="Sensor bridges"
 )
 
@@ -177,19 +176,12 @@ declare -A SVC_DESC=(
     [cert-renewer]="Automatic short-lived transport certificate renewal"
     [supervisor]="Auto-restarts crashed bridges, protocols, and layers"
     [presence]="Liveliness presence tokens (fabric node visibility in panoscope)"
-    [airplaneslive]="Airplanes.live ADS-B aircraft"
-    [adsblol]="ADSB.lol open-data aircraft"
     [aprs]="APRS-IS stations, vehicles, and vessels"
     [meteolt]="meteo.lt weather stations"
     [asterix]="ASTERIX family bundle: UDP ingress + CAT-010/020/021/034/048/062 translators"
-    [stanag5516]="STANAG 5516 Link-16 J-series (JREAP-C)"
     [mqtt]="MQTT sensor JSON on Zenoh → sensor records"
     [sensorthings]="OGC SensorThings observations → sensor records"
     [sparkplug]="Eclipse Sparkplug B (MQTT protobuf) → sensor records"
-    [mavlink]="MAVLink UAV telemetry"
-    [opendroneid]="Raw Open Drone ID on Zenoh → normalized UAV tracks"
-    [dji-cloud]="DJI Cloud API MQTT aircraft telemetry"
-    [utm-ans]="Lithuanian UTM declared civilian UAV flights"
     [vmf]="VMF MIL-STD-47001C messages"
     [sitaware]="SitaWare HQ friendly force tracking (inbound REST)"
     [nffi]="Raw NFFI XML on Zenoh → normalized friendly-force tracks"
@@ -197,8 +189,6 @@ declare -A SVC_DESC=(
     [sapient]="SAPIENT / BSI Flex 335 sensor feed"
     [stanag4586]="STANAG 4586 UAV control (VSM)"
     [stanag4609]="STANAG 4609 KLV decoder (raw → tracks)"
-    [mavlink-raw]="MAVLink UDP/TCP → Zenoh raw"
-    [stanag5516-raw]="STANAG 5516/JREAP-C UDP → Zenoh raw"
     [mqtt-raw]="MQTT broker → Zenoh raw"
     [sensorthings-raw]="OGC SensorThings REST poll → Zenoh raw"
     [vmf-raw]="VMF UDP/TCP → Zenoh raw"
@@ -214,14 +204,16 @@ declare -A SVC_DESC=(
     [tak-bridge]="TAK Server CoT ingress"
     [nvg_bridge]="SitaWare NVG export → Zenoh"
     [nvg_layer]="EFDI tracks → SitaWare (NVG feed, SitaWare polls)"
+    [tak-gateway]="TAK: CoT ingress + egress in one process (replaces cot_layer + tak-bridge)"
+    [sitaware-gateway]="SitaWare: NVG feed + NVG/REST ingress in one process (replaces nvg_layer + nvg_bridge + sitaware)"
     [track-fusion]="Radar/ADS-B track correlation"
 )
 
 # ── Ready check — 0=can start, 1=missing config ───────────────────────────
 svc_ready() {
     case "$1" in
-        zenoh|airplaneslive|adsblol|aprs|meteolt|\
-        dronuradaras|opendroneid|nffi|cot_layer|track-fusion|\
+        zenoh|aprs|meteolt|\
+        dronuradaras|nffi|cot_layer|track-fusion|\
         cap|geojson|spectrum|sensor-health|mission-route)
             return 0 ;;
         admin-control) [[ -n "${ZENOH_ADMIN_SECRET_KEY:-}" || -n "${EFDI_CONTROL_TOKEN:-}" ]] ;;
@@ -233,16 +225,10 @@ svc_ready() {
             ;;
         asterix) return 0 ;;
         presence) [[ -n "${PARTNER_NAMESPACE:-}" ]] ;;
-        stanag5516) [[ "${STANAG5516_ZENOH_RAW:-}" == "1" || "${STANAG5516_PORT:-}" ]] ;;
         mqtt)         return 0 ;;
         sensorthings) return 0 ;;
         sparkplug)    return 0 ;;
-        mavlink)  [[ "${MAVLINK_ZENOH_RAW:-}" == "1" || "${MAVLINK_PORT:-}" ]] ;;
-        dji-cloud) [[ "${DJI_MQTT_HOST:-}" ]] ;;
-        utm-ans) [[ "${UTM_ANS_API_URL:-}" ]] ;;
         vmf)          [[ "${VMF_ZENOH_RAW:-}" == "1" || "${VMF_PORT:-}" ]] ;;
-        mavlink-raw)  [[ "${MAVLINK_RAW_PORT:-}" ]] ;;
-        stanag5516-raw) [[ "${STANAG5516_RAW_PORT:-}" ]] ;;
         mqtt-raw)     [[ "${MQTT_HOST:-}" ]] ;;
         sensorthings-raw) [[ "${SENSORTHINGS_URL:-}" ]] ;;
         vmf-raw)      [[ "${VMF_RAW_PORT:-}" ]] ;;
@@ -259,6 +245,13 @@ svc_ready() {
         # nvg_bridge reads SitaWare's export, so it needs a URL.
         nvg_layer) [[ -n "${SITAWARE_HQ_NVG_PORT:-}" ]] ;;
         nvg_bridge) [[ -n "${SITAWARE_NVG_IMPORT_URL:-}" || ( -n "${SITAWARE_URL:-}" && -n "${SITAWARE_API_PATH:-}" ) ]] ;;
+        tak-gateway) [[ "${TAK_HOST:-}" || "${TAK_HOST_FALLBACK:-}" ]] ;;
+        sitaware-gateway)
+            [[ "${SITAWARE_HQ_NVG_ENABLE:-0}" == "1" ||
+               -n "${SITAWARE_NVG_IMPORT_URL:-}" ||
+               ( ( -n "${SITAWARE_URL:-}" || -n "${SITAWARE_URL_FALLBACK:-}" ) &&
+                 ( -n "${SITAWARE_API_PATH:-}" || "${SITAWARE_DISCOVER:-0}" == "1" ) ) ]]
+            ;;
         *)        return 0 ;;
     esac
 }
@@ -267,18 +260,24 @@ svc_ready() {
 svc_hint() {
     case "$1" in
         asterix) echo "ASTERIX family bundle" ;;
-        stanag5516) echo "set STANAG5516_PORT or STANAG5516_ZENOH_RAW=1" ;;
-        mavlink)  echo "set MAVLINK_PORT or MAVLINK_ZENOH_RAW=1" ;;
-        dji-cloud) echo "DJI_MQTT_HOST not set" ;;
-        utm-ans) echo "UTM_ANS_API_URL not set (authorized JSON/GeoJSON feed required)" ;;
         vmf)      echo "set VMF_PORT or VMF_ZENOH_RAW=1" ;;
-        mavlink-raw) echo "MAVLINK_RAW_PORT not set" ;;
-        stanag5516-raw) echo "STANAG5516_RAW_PORT not set" ;;
         mqtt-raw) echo "MQTT_HOST not set" ;;
         sensorthings-raw) echo "SENSORTHINGS_URL not set" ;;
         vmf-raw) echo "VMF_RAW_PORT not set" ;;
-        sapient-raw) echo "SAPIENT_RAW_PORT not set" ;;
-        stanag4586-raw) echo "STANAG4586_RAW_PORT not set" ;;
+        sapient-raw)
+            if [[ "${SAPIENT_RAW_PORT:-}" ]]; then
+                echo "TCP port ${SAPIENT_RAW_PORT}"
+            else
+                echo "SAPIENT_RAW_PORT not set"
+            fi
+            ;;
+        stanag4586-raw)
+            if [[ "${STANAG4586_RAW_PORT:-}" ]]; then
+                echo "TCP port ${STANAG4586_RAW_PORT}"
+            else
+                echo "STANAG4586_RAW_PORT not set"
+            fi
+            ;;
         stanag4609-raw) echo "STANAG4609_SRT_URL not set" ;;
         sapient)
             # This function only DESCRIBES a service — it must never launch one.
@@ -327,6 +326,10 @@ svc_hint() {
             else
                 echo "will prompt for address"
             fi ;;
+        tak-gateway) echo "set TAK_HOST (runs ingress + egress)" ;;
+        sitaware-gateway)
+            echo "enable SITAWARE_HQ_NVG_ENABLE or configure NVG/REST ingress"
+            ;;
         *)        echo "" ;;
     esac
 }
@@ -364,14 +367,46 @@ pid_claimed_by_other() {
     return 1
 }
 
+pid_has_args() {
+    local pid="$1"
+    shift
+    local expected arg found
+    local -a actual=()
+    [[ -r "/proc/$pid/cmdline" ]] || return 1
+    while IFS= read -r -d '' arg; do
+        actual+=("$arg")
+    done < "/proc/$pid/cmdline"
+    for expected in "$@"; do
+        [[ -n "$expected" ]] || continue
+        found=1
+        for arg in "${actual[@]}"; do
+            if [[ "$arg" == "$expected" ]]; then
+                found=0
+                break
+            fi
+        done
+        (( found == 0 )) || return 1
+    done
+}
+
 is_running() {
     local f="$PID_DIR/$1.pid" pid cmd live_pid
+    if [[ "$1" == "asterix" && -z "${2:-}" ]]; then
+        local child
+        for child in asterix-udp asterix-cat10 asterix-cat20 asterix-cat21 \
+                     asterix-cat34 asterix-cat48 asterix-cat62; do
+            is_running "$child" && return 0
+        done
+        return 1
+    fi
     if [[ -f "$f" ]]; then
         IFS= read -r pid < "$f"
         # A PID another service already owns is not this service's process; the
         # pidfile is stale from a previous mis-adoption. Fall through to the
         # scan below rather than reporting a sibling's process as ours.
-        if ! pid_claimed_by_other "$pid" "$f" && is_bridge_pid "$pid" "${2:-}"; then
+        if ! pid_claimed_by_other "$pid" "$f" &&
+           is_bridge_pid "$pid" "${2:-}" &&
+           pid_has_args "$pid" "${@:3}"; then
             return 0
         fi
     fi
@@ -382,7 +417,8 @@ is_running() {
         # second service sharing a script is reported "already running" and is
         # silently never launched.
         pid_claimed_by_other "$live_pid" "$f" && continue
-        if is_bridge_pid "$live_pid" "$cmd"; then
+        if is_bridge_pid "$live_pid" "$cmd" &&
+           pid_has_args "$live_pid" "${@:3}"; then
             printf '%s\n' "$live_pid" > "$f"
             return 0
         fi
@@ -438,7 +474,7 @@ _start() {   # _start <name> <rel-script-path> [args…]
     local name="$1"; shift
     local script="$1"; shift
     local pid_file="$PID_DIR/$name.pid"
-    if is_running "$name" "$script"; then
+    if is_running "$name" "$script" "$@"; then
         printf "  ${DIM}[skip]${R}  %-16s already running (pid %s)\n" "$name" "$(cat "$pid_file")"
         return
     fi
@@ -448,8 +484,87 @@ _start() {   # _start <name> <rel-script-path> [args…]
     printf "  ${GREEN}[start]${R} %-16s pid %s\n" "$name" "$!"
 }
 
+asterix_category_uses_raw() {
+    local wanted="$1" item
+    [[ -n "${ASTERIX_PORT:-}" ]] || return 1
+    IFS=',' read -r -a _asterix_categories <<< "${ASTERIX_CATEGORIES:-34,48}"
+    for item in "${_asterix_categories[@]}"; do
+        item="${item//[[:space:]]/}"
+        [[ "$item" == "$wanted" ]] && return 0
+    done
+    return 1
+}
+
+_start_asterix_bundle() {
+    local category port tcp_var host
+    local -a tcp_args
+
+    if [[ -n "${ASTERIX_PORT:-}" ]]; then
+        _start asterix-udp bridges/asterix_udp_bridge.py
+    else
+        printf "  ${YELLOW}[skip]${R}  asterix-udp      set ASTERIX_PORT for a mixed UDP feed\n"
+    fi
+
+    for category in 10 20 21 34 48; do
+        case "$category" in
+            10) port="${CAT10_PORT:-}"; tcp_var="${CAT10_TCP:-}" ;;
+            20) port="${CAT20_PORT:-}"; tcp_var="${CAT20_TCP:-}" ;;
+            21) port="${CAT21_PORT:-}"; tcp_var="${CAT21_TCP:-}" ;;
+            34) port="${CAT34_PORT:-}"; tcp_var="${CAT34_TCP:-}" ;;
+            48) port="${CAT48_PORT:-}"; tcp_var="${CAT48_TCP:-}" ;;
+        esac
+        if asterix_category_uses_raw "$category"; then
+            _start "asterix-cat${category}" protocols/vendors/asterix/cat.py \
+                --category "$category" --zenoh-raw
+        elif [[ -n "$port" ]]; then
+            tcp_args=()
+            [[ "$tcp_var" == "1" ]] && tcp_args=(--tcp)
+            _start "asterix-cat${category}" protocols/vendors/asterix/cat.py \
+                --category "$category" --port "$port" "${tcp_args[@]}"
+        else
+            printf "  ${YELLOW}[skip]${R}  asterix-cat%-2s    set CAT%s_PORT to enable\n" \
+                "$category" "$category"
+        fi
+    done
+
+    host="${CAT62_HOST:-${RADAR_HOST:-}}"
+    if asterix_category_uses_raw 62; then
+        _start asterix-cat62 protocols/vendors/asterix/cat.py --category 62 --zenoh-raw
+    elif [[ -n "$host" && "$host" != "127.0.0.1" ]]; then
+        _start asterix-cat62 protocols/vendors/asterix/cat.py --category 62 \
+            --host "$host" --port "${CAT62_PORT:-${RADAR_PORT:-50062}}"
+    elif [[ "${CAT62_UDP:-}" == "1" ]]; then
+        _start asterix-cat62 protocols/vendors/asterix/cat.py --category 62 \
+            --udp --port "${CAT62_PORT:-50062}"
+    else
+        printf "  ${YELLOW}[skip]${R}  asterix-cat62    set CAT62_HOST or CAT62_UDP=1 to enable\n"
+    fi
+}
+
+_reject_c2_conflict() {
+    local requested="$1" conflict
+    shift
+    for conflict in "$@"; do
+        if is_running "$conflict"; then
+            printf "  ${YELLOW}[skip]${R}  %-16s conflicts with running %s; stop it first\n" \
+                "$requested" "$conflict"
+            return 1
+        fi
+    done
+}
+
 launch() {
     local name="$1"
+    case "$name" in
+        tak-gateway)
+            _reject_c2_conflict "$name" cot_layer tak-bridge || return 1 ;;
+        cot_layer|tak-bridge)
+            _reject_c2_conflict "$name" tak-gateway || return 1 ;;
+        sitaware-gateway)
+            _reject_c2_conflict "$name" nvg_layer nvg_bridge sitaware || return 1 ;;
+        nvg_layer|nvg_bridge|sitaware)
+            _reject_c2_conflict "$name" sitaware-gateway || return 1 ;;
+    esac
     case "$name" in
 
         zenoh)
@@ -534,14 +649,6 @@ launch() {
             printf "  ${GREEN}[start]${R} %-16s pid %s\n" "cert-renewer" "$!"
             ;;
 
-        airplaneslive)
-            _start airplaneslive bridges/airplaneslive_adsb_bridge.py
-            ;;
-
-        adsblol)
-            _start adsblol bridges/adsblol_bridge.py
-            ;;
-
         aprs)
             _start aprs bridges/aprsis_bridge.py
             ;;
@@ -551,43 +658,7 @@ launch() {
             ;;
 
         asterix)
-            _start asterix protocols/vendors/asterix/cat.py
-            ;;
-
-        stanag5516)
-            if [[ "${STANAG5516_ZENOH_RAW:-}" == "1" ]]; then
-                _start stanag5516 protocols/vendors/stanag/5516.py --zenoh-raw --raw-topic "${STANAG5516_RAW_TOPIC:-}"
-            elif [[ -z "${STANAG5516_PORT:-}" ]]; then
-                printf "  ${YELLOW}[skip]${R}  stanag5516       set STANAG5516_PORT or STANAG5516_ZENOH_RAW=1\n"
-                return
-            else
-                _start stanag5516 protocols/vendors/stanag/5516.py --port "$STANAG5516_PORT"
-            fi
-            ;;
-
-        mavlink)
-            if [[ "${MAVLINK_ZENOH_RAW:-}" == "1" ]]; then
-                _start mavlink protocols/random/mavlink.py --zenoh-raw --raw-topic "${MAVLINK_RAW_TOPIC:-}"
-            else
-                local tmav=(); [[ "${MAVLINK_TCP:-}" == "1" ]] && tmav=(--tcp)
-                _start mavlink protocols/random/mavlink.py --port "$MAVLINK_PORT" "${tmav[@]}"
-            fi
-            ;;
-
-        opendroneid)
-            _start opendroneid protocols/random/opendroneid.py
-            ;;
-
-        dji-cloud)
-            _start dji-cloud bridges/dji_cloud_api_bridge.py
-            ;;
-
-        utm-ans)
-            if [[ "${UTM_ANS_API_URL:-}" ]]; then
-                _start utm-ans bridges/utm_ans_bridge.py
-            else
-                printf "  ${YELLOW}[skip]${R}  utm-ans         set UTM_ANS_API_URL to an authorized JSON/GeoJSON feed\n"
-            fi
+            _start_asterix_bundle
             ;;
 
         vmf)
@@ -597,18 +668,6 @@ launch() {
                 local tvmf=(); [[ "${VMF_TCP:-}" == "1" ]] && tvmf=(--tcp)
                 _start vmf protocols/random/vmf.py --port "$VMF_PORT" "${tvmf[@]}"
             fi
-            ;;
-
-        mavlink-raw)
-            _start mavlink-raw bridges/mavlink_raw_bridge.py --port "$MAVLINK_RAW_PORT"
-            ;;
-
-        stanag5516-raw)
-            if [[ -z "${STANAG5516_RAW_PORT:-}" ]]; then
-                printf "  ${YELLOW}[skip]${R}  stanag5516-raw   set STANAG5516_RAW_PORT (JREAP-C UDP port)\n"
-                return
-            fi
-            _start stanag5516-raw bridges/5516_bridge.py --port "$STANAG5516_RAW_PORT"
             ;;
 
         mqtt-raw)
@@ -829,6 +888,18 @@ launch() {
             _start nvg_layer layers/nvg_layer.py
             ;;
 
+        tak-gateway)
+            # One process = TAK CoT egress + ingress (env-driven, no prompt).
+            # Run this INSTEAD of cot_layer + tak-bridge, not alongside them.
+            _start tak-gateway c2/tak_gateway.py
+            ;;
+
+        sitaware-gateway)
+            # One process = SitaWare NVG feed + NVG/REST ingress (env-driven).
+            # Run this INSTEAD of nvg_layer + nvg_bridge + sitaware.
+            _start sitaware-gateway c2/sitaware_gateway.py
+            ;;
+
         track-fusion)
             _start track-fusion bridges/track_fusion_bridge.py
             ;;
@@ -874,6 +945,33 @@ fi
 # ── Interactive menu ───────────────────────────────────────────────────────
 declare -A sel
 
+normalize_c2_selection() {
+    if [[ "${sel[tak-gateway]:-0}" == "1" ]]; then
+        sel[cot_layer]=0
+        sel[tak-bridge]=0
+    fi
+    if [[ "${sel[sitaware-gateway]:-0}" == "1" ]]; then
+        sel[nvg_layer]=0
+        sel[nvg_bridge]=0
+        sel[sitaware]=0
+    fi
+}
+
+select_service() {
+    local service="$1"
+    sel[$service]=1
+    case "$service" in
+        tak-gateway)
+            sel[cot_layer]=0; sel[tak-bridge]=0 ;;
+        cot_layer|tak-bridge)
+            sel[tak-gateway]=0 ;;
+        sitaware-gateway)
+            sel[nvg_layer]=0; sel[nvg_bridge]=0; sel[sitaware]=0 ;;
+        nvg_layer|nvg_bridge|sitaware)
+            sel[sitaware-gateway]=0 ;;
+    esac
+}
+
 # Restore the last valid selection. On first use, default to zenoh + the main
 # output layers, plus ASTERIX when its input is configured.
 for svc in "${SERVICES[@]}"; do sel[$svc]=0; done
@@ -881,9 +979,10 @@ restored=0
 if [[ -n "$REMEMBERED_SERVICES" ]]; then
     IFS=',' read -r -a remembered_services <<< "$REMEMBERED_SERVICES"
     for remembered in "${remembered_services[@]}"; do
-        # Migrate the former router-host radio service selection to the raw
-        # Zenoh translator; the next save drops the obsolete name.
-        [[ "$remembered" == "remote-id" ]] && remembered="opendroneid"
+        [[ "$remembered" == "remote-id" || "$remembered" == "opendroneid" ||
+           "$remembered" == "utm-ans" || "$remembered" == "mavlink" ||
+           "$remembered" == "mavlink-raw" || "$remembered" == "dji-cloud" ||
+           "$remembered" == "stanag5516" || "$remembered" == "stanag5516-raw" ]] && continue
         for svc in "${SERVICES[@]}"; do
             if [[ "$remembered" == "$svc" ]]; then
                 sel[$svc]=1
@@ -985,7 +1084,7 @@ while (( change_selection == 1 )); do
             ;;
         a|A)
             for svc in "${SERVICES[@]}"; do
-                svc_ready "$svc" && sel[$svc]=1 || true
+                svc_ready "$svc" && select_service "$svc" || true
             done
             ;;
         n|N)
@@ -1007,7 +1106,7 @@ while (( change_selection == 1 )); do
             for tok in $input; do
                 if [[ "$tok" =~ ^[0-9]+$ ]] && (( tok >= 1 && tok <= ${#SERVICES[@]} )); then
                     svc="${SERVICES[$((tok-1))]}"
-                    [[ "${sel[$svc]}" == "1" ]] && sel[$svc]=0 || sel[$svc]=1
+                    [[ "${sel[$svc]}" == "1" ]] && sel[$svc]=0 || select_service "$svc"
                 fi
             done
             ;;
@@ -1017,6 +1116,7 @@ done
 # ── Start ──────────────────────────────────────────────────────────────────
 printf "\n${BOLD}Starting selected services…${R}\n\n"
 
+normalize_c2_selection
 for svc in "${SERVICES[@]}"; do
     [[ "${sel[$svc]}" == "1" ]] || continue
     launch "$svc"

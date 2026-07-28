@@ -447,12 +447,12 @@ def run(args):
     session.close()
 
 
-def main():
+def main(argv=None):
     ap = argparse.ArgumentParser(description="SitaWare REST → Zenoh bridge")
     ap.add_argument("--discover", action="store_true",
                     help="Auto-discover API path by trying common endpoints")
     ap.add_argument("--verbose", "-v", action="store_true")
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
     run(args)
 
 
