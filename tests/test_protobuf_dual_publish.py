@@ -130,7 +130,8 @@ class PublishDualTests(unittest.TestCase):
         json_payload, json_encoding = by_topic[json_topic]
         pb_payload, pb_encoding = by_topic[pb_topic]
         self.assertEqual(json_encoding, zenoh.Encoding.APPLICATION_JSON)
-        self.assertEqual(pb_encoding, zenoh.Encoding.APPLICATION_PROTOBUF)
+        self.assertEqual(pb_encoding, zenoh.Encoding.APPLICATION_PROTOBUF.with_schema(
+            MavlinkTrack.DESCRIPTOR.full_name))
 
         self.assertEqual(json.loads(json_payload.decode())["callsign"], "UAV-1")
         decoded = MavlinkTrack()
@@ -204,7 +205,8 @@ class NativeFrameEgressTests(unittest.TestCase):
 
         self.assertEqual(len(session.puts), 1)
         topic, data, encoding = session.puts[0]
-        self.assertEqual(encoding, zenoh.Encoding.APPLICATION_PROTOBUF)
+        self.assertEqual(encoding, zenoh.Encoding.APPLICATION_PROTOBUF.with_schema(
+            RawEnvelope.DESCRIPTOR.full_name))
 
         envelope = RawEnvelope()
         envelope.ParseFromString(data)

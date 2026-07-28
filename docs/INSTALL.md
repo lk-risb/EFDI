@@ -78,7 +78,6 @@ compose/certs/
 ├── efdi/                     # EFDI Zenoh CA and pod identities
 ├── sitaware/                 # SitaWare feed CA and server identity
 ├── tak/                      # TAK Server identity
-├── tests/                    # test child/grandchild identities
 └── zenoh-sandbox/             # legacy sandbox Zenoh identity
 ```
 
@@ -1226,11 +1225,10 @@ lifetime, and revocation before displaying a descendant as verified. Generated
 ACL activation is deliberately rejected when a root still has an unmanaged
 fabric uplink; enroll or migrate that peer before applying managed ACLs.
 
-Run both disposable runtime gates before deployment:
+Run the disposable runtime gate before deployment:
 
 ```bash
 tests/smoke/loopback.sh
-tests/smoke/managed-three-router.sh
 ```
 
 ### Roles

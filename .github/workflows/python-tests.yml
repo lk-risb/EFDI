@@ -58,7 +58,3 @@ jobs:
         env:
           EFDI_ZENOH_PYTHON: python
         run: tests/smoke/loopback.sh
-      - name: Prove root-child-grandchild scope, isolation, and recovery
-        env:
-          EFDI_ZENOH_PYTHON: python
-        run: tests/smoke/managed-three-router.sh

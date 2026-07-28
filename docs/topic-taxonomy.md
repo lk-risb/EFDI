@@ -2,10 +2,37 @@
 
 Status: **implemented**.
 
+## Fabric contract (v1) — read this first
+
+The goat backbone only admits published track keys that **end `/tracks/v1`**.
+This is a hard ingress rule, not a convention. Two consequences shape every
+example below:
+
+- **`json` is the canonical view and carries no view segment** —
+  `…/{id}/tracks/v1`. Every other view inserts its name first —
+  `…/{id}/sapient/tracks/v1`, `…/{id}/proto/tracks/v1`, `…/{id}/raw/tracks/v1`.
+- **On the backbone the `{prefix}` is the org UUID** (e.g.
+  `1851281db70ccc0409dad4ecfc874cf5`), bare. The `LTU/CISB` prefix in the
+  examples below is the **local sandbox** only. The prefix is deployment-
+  configured; nothing else in the key changes with it.
+
+Two non-track key families live beside the tracks:
+
+- **Presence:** `{prefix}/_meta/alive/<service>` — a Zenoh liveliness token per
+  running feed, declared by `compose/presence.py`. This is what draws the pod as
+  a **node** in the fabric inspector (panoscope); track PUTs alone only draw
+  edges. See `EXPLAINED.md`.
+- **Control plane:** `{root}/**/@config/v1` etc. (below), which keep versions.
+
+Protobuf views are published **self-describing**: the Zenoh `Encoding` is
+`application/protobuf;<Message.full_name>` (via
+`protobuf_codec.proto_encoding`), so the inspector's schema-viewer can pick the
+`.proto` descriptor without an out-of-band lookup.
+
 ## The key
 
 ```
-{prefix}/{pod}/{domain}/{source}/{modality}/{affiliation}/{entity}/{type}/{id}/{view}
+{prefix}/{pod}/{domain}/{source}/{modality}/{affiliation}/{entity}/{type}/{id}[/{view}]/tracks/v1
 ```
 
 ```
@@ -92,12 +119,12 @@ under `/radar/`, rather than every node collapsing into one segment.
 All four views are named — nothing is implicit, so a consumer reading a key
 always knows what the bytes are:
 
-| Topic | Payload |
-|---|---|
-| `…/{id}/sapient` | BSI Flex 335 v2 `SapientMessage` — the fabric contract |
-| `…/{id}/json` | Flat JSON, readable |
-| `…/{id}/proto` | EFDI per-protocol protobuf, full sensor detail |
-| `…/{id}/raw` | Original wire bytes in a `RawEnvelope` |
+| Topic | Payload | Encoding |
+|---|---|---|
+| `…/{id}/tracks/v1` | Flat JSON, readable — the **canonical** view, no view segment | `application/json` |
+| `…/{id}/sapient/tracks/v1` | BSI Flex 335 v2 `SapientMessage` — the fabric contract | `application/protobuf;…SapientMessage` |
+| `…/{id}/proto/tracks/v1` | EFDI per-protocol protobuf, full sensor detail | `application/protobuf;…<Track>` |
+| `…/{id}/raw/tracks/v1` | Original wire bytes in a `RawEnvelope` | `application/protobuf;…RawEnvelope` |
 
 ## Control plane keeps versions
 
@@ -118,9 +145,13 @@ Control-plane contracts genuinely revise, so they keep versions:
 **/hostile/**                   all hostile contacts
 **/aircraft/**                  aircraft only
 …/aircraft/b738/**              one aircraft type
-…/{id}/sapient                  one object, SAPIENT
-**/sapient                      every object, SAPIENT only
+…/{id}/sapient/tracks/v1        one object, SAPIENT
+**/sapient/tracks/v1            every object, SAPIENT only
 ```
+
+The in-repo layers subscribe with a trailing `/**`, which already absorbs the
+`/tracks/v1` (and `/{view}/tracks/v1`) suffix — so appending the version tail
+required no subscription changes.
 
 ## Known trade-offs
 
