@@ -243,16 +243,17 @@ _TOPIC_COT = {
     "space/**/unknown/satellite/**":  ("a-u-P",   SAT_STALE_S),
     # ENV — weather stations and air quality sensors show as ground icons
     "env/weather/station/**":    ("a-n-G-I-R",   ENV_STALE_S),
-    # RADAR SENSOR SITES — CAT-34 status publishes here; rendered as radar marker + stat card
-    # Neutral in the topic, so neutral in the symbol. This said a-f- (friend),
-    # which drew civil ATC radar sites blue in TAK while SitaWare drew the same
-    # sites green from SNGPESR — the two C2 systems disagreeing about the
-    # affiliation of one object. The topic is the authority.
-    "land/**/neutral/radar/**":  ("a-n-G-E-S-R", LAND_STALE_S * 2),
     # ACOUSTIC / RF SENSOR SITES — sensor box; recolors green/yellow/red by
     # last_detection_ts (see _sensor_alert_cot_type), same icon throughout
     "land/**/neutral/sensor/**": (_sensor_alert_cot_type, LAND_STALE_S * 2),
 }
+
+# CAT-34 radar status has a dedicated subscriber below because it also updates
+# the radar-enrichment store and distinguishes the site from its sweep beam.
+# Keep it out of _TOPIC_COT: subscribing through both paths sends the same UID
+# twice with competing affiliations, which makes TAK clients flicker, replace,
+# or omit the marker depending on update order.
+_RADAR_COT_TYPE = "a-n-G-E-S-R"
 
 # ATC / ground-station callsigns that appear in ADS-B feeds.
 # Transponders belonging to ATC towers, ground vehicles, ATIS etc. show flight ID "TWR",
@@ -1454,7 +1455,7 @@ def track_to_cot(track: dict, cot_type: str, stale_s: float = COT_STALE_S) -> st
     if sweep_az is not None and rng:
         # Radar dish sweep: narrow 5° beam rotating around the site
         ET.SubElement(detail, "sensor", {
-            "vfov": "1", "hfov": "5",
+            "vfov": "1", "fov": "5", "hfov": "5",
             "range": str(rng),
             "azimuth": str(int(round(float(sweep_az)))),
             "model": "Generic", "ranges": "0",
@@ -1465,7 +1466,7 @@ def track_to_cot(track: dict, cot_type: str, stale_s: float = COT_STALE_S) -> st
     elif track.get("sensor_type") == "radar" and rng:
         # Static radar site: show full 360° coverage circle
         ET.SubElement(detail, "sensor", {
-            "vfov": "90", "hfov": "360",
+            "vfov": "90", "fov": "360", "hfov": "360",
             "range": str(rng),
             "azimuth": "0",
             "model": "Generic", "ranges": "0",
@@ -1477,7 +1478,7 @@ def track_to_cot(track: dict, cot_type: str, stale_s: float = COT_STALE_S) -> st
         # GPS jamming / EW threat area — render as a threat circle
         threat_range_m = int(float(track["radius_km"]) * 1000)
         ET.SubElement(detail, "sensor", {
-            "vfov": "90", "hfov": "360",
+            "vfov": "90", "fov": "360", "hfov": "360",
             "range": str(threat_range_m),
             "azimuth": "0",
             "model": "Generic", "ranges": "0",
@@ -1713,7 +1714,7 @@ def make_handler(cot_type_or_fn, sender, verbose: bool, stale_s: float = COT_STA
             cot_type = "a-n-G-E-V"
             stale_s_used = LAND_STALE_S
         elif _is_ground_station(track):
-            cot_type     = "a-n-G-E-S-R"
+            cot_type     = _RADAR_COT_TYPE
             stale_s_used = LAND_STALE_S
         else:
             cot_type     = cot_type_or_fn(track) if callable(cot_type_or_fn) else cot_type_or_fn
@@ -1813,15 +1814,15 @@ def make_radar_status_handler(sender, verbose: bool):
             beam_track = dict(track)
             beam_track["sensor_id"] = "BEAM-" + str(track.get("sensor_id", "RADAR"))
             beam_track["sensor_name"] = (track.get("sensor_name") or "RADAR") + " BEAM"
-            xml = track_to_cot(beam_track, "a-f-G-E-S-R", stale_s=max(rot * 0.6, 1.0))
+            xml = track_to_cot(beam_track, _RADAR_COT_TYPE, stale_s=max(rot * 0.6, 1.0))
         else:
             # Full status: site marker with permanent 360° coverage ring
-            xml = track_to_cot(track, "a-f-G-E-S-R", stale_s=LAND_STALE_S * 2)
+            xml = track_to_cot(track, _RADAR_COT_TYPE, stale_s=LAND_STALE_S * 2)
         if xml:
             sender.send(xml)
         if verbose:
-            print("CoT a-f-G-E-S-R {}  psr={} ssr={} mds={}".format(
-                track.get("sensor_name", "RADAR"),
+            print("CoT {} {}  psr={} ssr={} mds={}".format(
+                _RADAR_COT_TYPE, track.get("sensor_name", "RADAR"),
                 track.get("psr_status", "-"), track.get("ssr_status", "-"),
                 track.get("mds_status", "-")), flush=True)
     return handler

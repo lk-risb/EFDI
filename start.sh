@@ -384,7 +384,7 @@ is_running() {
     local f="$PID_DIR/$1.pid" pid cmd live_pid
     if [[ "$1" == "asterix" && -z "${2:-}" ]]; then
         local child
-        for child in udp-ingress asterix-cat10 asterix-cat20 asterix-cat21 \
+        for child in asterix-bridge udp-ingress asterix-cat10 asterix-cat20 asterix-cat21 \
                      asterix-cat34 asterix-cat48 asterix-cat62 \
                      asterix-cat10-raw asterix-cat20-raw asterix-cat21-raw \
                      asterix-cat34-raw asterix-cat48-raw asterix-cat62-raw; do
@@ -479,7 +479,8 @@ _start() {   # _start <name> <rel-script-path> [args…]
 
 asterix_category_uses_raw() {
     local wanted="$1" item
-    [[ -n "${UDP_INGRESS_PORT:-${ASTERIX_PORT:-}}" ]] || return 1
+    [[ -n "${UDP_INGRESS_PORT:-${ASTERIX_PORT:-}}" ||
+       -n "${ASTERIX_ZENOH_UPSTREAM_ENDPOINT:-}" ]] || return 1
     IFS=',' read -r -a _asterix_categories <<< "${ASTERIX_CATEGORIES:-34,48}"
     for item in "${_asterix_categories[@]}"; do
         item="${item//[[:space:]]/}"
@@ -491,6 +492,10 @@ asterix_category_uses_raw() {
 _start_asterix_bundle() {
     local category port tcp_var host
     local -a tcp_args
+
+    if [[ -n "${ASTERIX_ZENOH_UPSTREAM_ENDPOINT:-}" ]]; then
+        _start asterix-bridge bridges/asterix_bridge.py
+    fi
 
     if [[ -n "${UDP_INGRESS_PORT:-${ASTERIX_PORT:-}}" ]]; then
         _start udp-ingress bridges/udp_ingress_bridge.py

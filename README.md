@@ -46,7 +46,7 @@ This repository is the EFDI-partner collaboration surface. It carries **no partn
 ```
                   INGRESS (bridges/protocols)          FABRIC            EGRESS (layers)
 
-[Giraffe AMB]  ──UDP────────────────► udp_ingress_bridge ──┐
+[CAT-34/48 radar] ──UDP──────────────► udp_ingress_bridge ──┐
 [dronuradaras] ──REST/HTTPS─────────► dronuradaras_bridge ─┤                    │
 [SitaWare HQ]  ──NVG 2.0.2 export───► nvg_bridge          ─┤
 [TAK Server]   ──CoT stream─────────► tak_bridge          ─┘
@@ -72,6 +72,7 @@ The live data-plane payload is JSON. The `.proto` files beside each translator u
 | `nvg_bridge` | C2 → Zenoh | SitaWare HQ NVG export → normalized EFDI tracks |
 | `sitaware_bridge` | C2 → Zenoh | SitaWare HQ friendly-force REST/JSON polling (deployment-documented resource) |
 | `udp_ingress_bridge` | → Zenoh | Generic UDP ingress; preserves every datagram and safely dispatches complete ASTERIX frames |
+| `asterix_bridge` | Zenoh → local Zenoh | Relays validated `raw/asterix/catN` frames from a remote sensor-side router into this pod |
 | `asterix` | protocol | ASTERIX family: CAT-010/020/021/034/048/062 translators |
 | `stanag` | protocol | STANAG family: 4586 feed plus 4609 SRT transport and KLV decode |
 | `dronuradaras_bridge` | → Zenoh | REST polling of currently-online acoustic sensors + drone-detection events |
