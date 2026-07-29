@@ -14,7 +14,7 @@ option java_package = "uk.gov.dstl.sapientmsg.bsiflex335v2";
 option java_outer_classname = "RangeBearingProto";
 // [END java_declaration]
 
-// [START messages]        
+// [START messages]
 message RangeBearing {
     optional double elevation = 1; // Elevation in relation to node's horizon
     optional double azimuth = 2; // Azimuth in relation to the node's north
@@ -46,7 +46,7 @@ enum RangeBearingCoordinateSystem {
       RANGE_BEARING_COORDINATE_SYSTEM_UNSPECIFIED = 0; // Co-ordinate system/units not defined
       RANGE_BEARING_COORDINATE_SYSTEM_DEGREES_M = 1; // Values in decimal-degrees and meters
       RANGE_BEARING_COORDINATE_SYSTEM_RADIANS_M = 2; // Values in radians and meters
-      RANGE_BEARING_COORDINATE_SYSTEM_DEGREES_KM = 3; // Values in decimal-degrees and kilometers 
+      RANGE_BEARING_COORDINATE_SYSTEM_DEGREES_KM = 3; // Values in decimal-degrees and kilometers
       RANGE_BEARING_COORDINATE_SYSTEM_RADIANS_KM = 4; // Values in radians and kilometers
 //    RANGE_BEARING_COORDINATE_SYSTEM_DEGREES_F = 5; // Values in decimal-degrees and feet - DEPRECATED
 //    RANGE_BEARING_COORDINATE_SYSTEM_RADIANS_F = 6; // Values in radians and feet - DEPRECATED

@@ -171,7 +171,7 @@ def wrapped_track_message(
     protocol-specific scalar fields alongside it.
 
     Every per-protocol contract in compose/protocols/*.proto follows this shape
-    (see vmf.proto and vendor sapient/flex335.proto). Some contracts use
+    (see nffi.proto and vendor sapient/flex335.proto). Some contracts use
     a different nested field name such as `sensor` or `normalized`; callers can
     override `wrapper_field` for those cases.
     """

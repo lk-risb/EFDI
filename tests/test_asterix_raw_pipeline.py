@@ -1,4 +1,4 @@
-"""Mixed ASTERIX UDP ingress and per-category raw Zenoh validation."""
+"""Generic UDP ingress ASTERIX dispatch and per-category validation."""
 
 import importlib
 import struct
@@ -15,7 +15,7 @@ sys.path.insert(0, str(ROOT / "compose" / "protocols"))
 sys.path.insert(0, str(ROOT / "tools"))
 
 import asterix_probe  # noqa: E402
-import asterix_udp_bridge as bridge  # noqa: E402
+import udp_ingress_bridge as bridge  # noqa: E402
 
 
 def frame(category: int, payload: bytes) -> bytes:
@@ -83,3 +83,50 @@ def test_probe_extracts_first_frn_sac_sic():
 
 def test_probe_reports_unknown_when_first_frn_is_absent():
     assert asterix_probe.extract_sac_sic(frame(48, b"\x40\x00\x00")) is None
+
+
+def test_cat48_uses_matching_cat34_site_for_polar_geolocation():
+    module = importlib.import_module("protocols.vendors.asterix.cat")
+    sites = {}
+    site_track = {
+        "_src": "ASTERIX CAT-34 Ed.1.29",
+        "sac": 112,
+        "sic": 64,
+        "lat_deg": 54.9701357,
+        "lon_deg": 24.0824175,
+    }
+
+    assert module._cat48__cache_cat34_site(site_track, sites)
+    target = {
+        "sac": 112,
+        "sic": 64,
+        "range_nm": 1.0,
+        "azimuth_deg": 0.0,
+    }
+    assert module._cat48__geolocate_from_site(target, [None, None], sites)
+    assert target["lat_deg"] > site_track["lat_deg"]
+    assert target["lon_deg"] == pytest.approx(site_track["lon_deg"], abs=1e-5)
+
+
+def test_cat48_does_not_use_a_different_radar_site():
+    module = importlib.import_module("protocols.vendors.asterix.cat")
+    sites = {(1, 2): (54.0, 25.0)}
+    target = {
+        "sac": 112,
+        "sic": 64,
+        "range_nm": 2.0,
+        "azimuth_deg": 90.0,
+    }
+
+    assert not module._cat48__geolocate_from_site(target, [None, None], sites)
+    assert "lat_deg" not in target
+
+
+def test_cat34_advertised_coverage_precedes_operator_fallback():
+    module = importlib.import_module("protocols.vendors.asterix.cat")
+
+    assert module._cat34__coverage_range_m(
+        {"coverage_rho_end_nm": 25.0}, 200_000
+    ) == (46_300, "advertised")
+    assert module._cat34__coverage_range_m({}, 150_000) == (150_000, "configured")
+    assert module._cat34__coverage_range_m({}, 0) == (None, None)

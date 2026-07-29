@@ -84,12 +84,10 @@ SERVICE_SPECS = [
     ("zenoh", "Infrastructure", "Zenoh message router"),
     ("admin-control", "Infrastructure", "Web UI host control agent"),
     ("cert-renewer", "Infrastructure", "Short-lived transport certificate renewal"),
-    ("aprs", "Open-data bridges", "APRS-IS"),
     ("meteolt", "Open-data bridges", "meteo.lt weather"),
     ("dronuradaras", "Sensor bridges", "dronuradaras.lt sensors"),
     ("asterix", "Sensor bridges", "ASTERIX family bundle"),
     ("track-fusion", "Sensor bridges", "Track correlation"),
-    ("vmf", "Protocols", "VMF MIL-STD-47001C"),
     ("nffi", "Protocols", "NFFI / STANAG 4677"),
     ("sapient", "Protocols", "SAPIENT / FLEX 335"),
     ("stanag4586", "Protocols", "STANAG 4586 UAV control (VSM)"),
@@ -102,7 +100,6 @@ SERVICE_SPECS = [
     ("spectrum", "Protocols", "Spectrum observations"),
     ("sensor-health", "Protocols", "Sensor health"),
     ("mission-route", "Protocols", "Mission routes"),
-    ("vmf-raw", "Raw ingress", "VMF raw socket"),
     ("sapient-raw", "Raw ingress", "SAPIENT raw socket"),
     ("stanag4586-raw", "Raw ingress", "STANAG 4586 raw socket"),
     ("stanag4609-raw", "Raw ingress", "STANAG 4609 SRT/KLV ingest"),
@@ -129,12 +126,10 @@ SERVICE_SOURCES = {
     "zenoh": "(container) efdi-pod-zenoh-router",
     "admin-control": "admin_control.py",
     "cert-renewer": "(managed) step-ca certificate renewal",
-    "aprs": "bridges/aprsis_bridge.py",
     "meteolt": "bridges/meteolt_forecast_bridge.py",
     "dronuradaras": "bridges/dronuradaras_bridge.py",
     "asterix": "protocols/vendors/asterix/cat.py",
     "track-fusion": "bridges/track_fusion_bridge.py",
-    "vmf": "protocols/random/vmf.py",
     "nffi": "protocols/random/nffi.py",
     "sapient": "protocols/vendors/sapient/flex335.py",
     "stanag4586": "protocols/vendors/stanag/4586.py",
@@ -147,7 +142,6 @@ SERVICE_SOURCES = {
     "spectrum": "protocols/random/spectrum_observation.py",
     "sensor-health": "protocols/random/sensor_health.py",
     "mission-route": "protocols/random/mission_route.py",
-    "vmf-raw": "bridges/vmf_bridge.py",
     "sapient-raw": "bridges/sapient_flex335_bridge.py",
     "stanag4586-raw": "bridges/4586_bridge.py",
     "stanag4609-raw": "bridges/4609_bridge.py",
@@ -199,6 +193,7 @@ EDITABLE_EXACT = {
     "EFDI_POLICY_SIGNER_CERT_PATH", "EFDI_POLICY_SIGNER_KEY_PATH", "EFDI_STEP_CA_STATE_PATH",
     "ZENOH_LOCAL_ENDPOINT", "ZENOH_LISTEN_PORT", "ZENOH_LOCAL_TCP_PORT",
     "ZENOH_VERIFY_NAME_ON_CONNECT", "ZENOH_PLUGINS_LOADING_ENABLED",
+    "UDP_INGRESS_PORT", "UDP_INGRESS_BIND", "UDP_INGRESS_ALLOW_SOURCE",
     "ASTERIX_PORT", "ASTERIX_BIND", "ASTERIX_CATEGORIES", "ASTERIX_MULTICAST_GROUP",
     "ASTERIX_MULTICAST_INTERFACE", "ASTERIX_ALLOW_SOURCE",
     "TAK_HOST", "TAK_HOST_FALLBACK", "TAK_PORT", "TAK_TLS", "TAK_TLS_SERVER_NAME",
@@ -209,7 +204,6 @@ EDITABLE_EXACT = {
     "SITAWARE_NVG_IMPORT_POLL_S", "SITAWARE_NVG_IMPORT_CA",
     "SITAWARE_HQ_NVG_ENABLE", "SITAWARE_HQ_NVG_BIND", "SITAWARE_HQ_NVG_PORT", "SITAWARE_HQ_NVG_PATH",
     "SITAWARE_HQ_NVG_USER", "SITAWARE_HQ_NVG_PASS", "SITAWARE_HQ_NVG_TLS_CERT", "SITAWARE_HQ_NVG_TLS_KEY",
-    "APRSIS_HOST", "APRSIS_PORT", "APRSIS_FILTER",
     "MQTT_HOST", "MQTT_PORT", "MQTT_TOPIC", "MQTT_USER", "MQTT_PASS", "MQTT_TLS",
     "MQTT_QOS", "MQTT_CLIENT_ID", "MQTT_INPUT_TOPIC",
     "SENSORTHINGS_URL", "SENSORTHINGS_POLL_S", "SENSORTHINGS_PAGE_LIMIT",
@@ -218,11 +212,10 @@ EDITABLE_EXACT = {
     "STANAG4609_SRT_URL", "STANAG4609_SOURCE",
     "CAP_INPUT_TOPIC", "CAP_ACTIVE_ONLY", "GEOJSON_INPUT_TOPIC",
     "SPECTRUM_INPUT_TOPIC", "SENSOR_HEALTH_INPUT_TOPIC", "MISSION_ROUTE_INPUT_TOPIC",
-    "VMF_PORT", "VMF_TCP", "VMF_ZENOH_RAW", "VMF_RAW_PORT", "VMF_RAW_TOPIC",
     "SAPIENT_HOST", "SAPIENT_PORT", "SAPIENT_LISTEN_PORT", "SAPIENT_BIND", "SAPIENT_ALLOW_PEER",
     "SAPIENT_ZENOH_RAW", "SAPIENT_RAW_PORT", "SAPIENT_RAW_TOPIC",
     "STANAG4586_HOST", "STANAG4586_PORT", "STANAG4586_PROFILE", "STANAG4586_ZENOH_RAW", "STANAG4586_RAW_PORT", "STANAG4586_RAW_TOPIC",
-    "VMF_RAW_PORT", "STANAG4586_RAW_PORT",
+    "STANAG4586_RAW_PORT",
 }
 EDITABLE_PREFIXES = ("CAT10_", "CAT20_", "CAT21_", "CAT34_", "CAT48_", "CAT62_", "NFFI_")
 SECRET_MARKERS = ("PASS", "PASSWORD", "TOKEN", "SECRET", "_KEY", "PRIVATE_KEY")
@@ -486,7 +479,44 @@ def _blocked_reason(name: str) -> str:
     return hint or "required configuration is missing"
 
 
+# The ASTERIX service is a BUNDLE: start.sh runs cat.py once per --category as
+# separate child processes (udp-ingress + asterix-cat<NN>[-raw]), each with its
+# own pidfile. There is no single 'asterix.pid', so status must aggregate the
+# children — otherwise the bundle always reads 'stopped' in the WebUI even while
+# every category is live.
+_BUNDLE_CHILD_PIDFILES = {
+    "asterix": lambda: sorted(PID_DIR.glob("asterix-cat*.pid")) + [PID_DIR / "udp-ingress.pid"],
+}
+
+
+def _bundle_status(name: str) -> dict:
+    present = [pf for pf in _BUNDLE_CHILD_PIDFILES[name]() if pf.exists()]
+    if not present:
+        return {"name": name, "running": False, "status": "stopped", "pid": None}
+    up = down = 0
+    for pf in present:
+        try:
+            pid = int(pf.read_text().strip())
+        except (OSError, ValueError):
+            down += 1
+            continue
+        if pid > 0 and Path(f"/proc/{pid}").exists():
+            up += 1
+        else:
+            down += 1
+    if up and not down:
+        return {"name": name, "running": True, "status": "running", "pid": None,
+                "details": {"children_up": up}}
+    if up and down:
+        return {"name": name, "running": True, "status": "degraded", "pid": None,
+                "details": {"children_up": up, "children_down": down}}
+    return {"name": name, "running": False, "status": "crashed", "pid": None,
+            "details": {"children_down": down}}
+
+
 def _service_status(name: str) -> dict:
+    if name in _BUNDLE_CHILD_PIDFILES:
+        return _bundle_status(name)
     pid, pid_file_present = _pid_record(name)
     values = _read_env()
     required = _SERVICE_REQUIRED_KEYS.get(name, ())

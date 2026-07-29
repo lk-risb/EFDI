@@ -1,0 +1,22 @@
+title = "EFDI gitleaks config"
+
+# Use gitleaks' maintained default ruleset as the base — no reason to
+# hand-roll secret patterns when a well-tested set already exists.
+[extend]
+useDefault = true
+
+# Every real credential in this repo already lives under paths .gitignore
+# excludes entirely (compose/.env, compose/certs/**, compose/state/**) — see
+# CONTRIBUTING.md's "no secrets or internal infra details" rule. These
+# allowlist entries exist only to quiet documentation that legitimately
+# *names* a credential file or env var without containing its value.
+[allowlist]
+paths = [
+  '''docs/superpowers/.*''',   # gitignored local planning docs
+  '''compose/certs/.*README\.md''',
+  # Settings-UI schema: a static list of env VAR NAMES for form fields
+  # (e.g. 'STANAG4609_SRT_URL'), never a value — the all-caps-with-underscores
+  # shape is what a secret-name heuristic keys on, giving 30+ false positives
+  # in this one file.
+  '''compose/zenoh-admin/ui/src/components/IntegrationSettings\.tsx''',
+]

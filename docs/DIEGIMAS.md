@@ -7,13 +7,18 @@
 Šis vadovas aprašo sensorių bridge'ų steko diegimą Linux serveryje. Stekas gali
 priimti mišrias ASTERIX kategorijas (dabartiniai normalizuojantys vertėjai yra
 CAT-010, CAT-020, CAT-021, CAT-034, CAT-048 ir CAT-062), dronuradaras.lt
-aptikimus, Link-16, MAVLink ir SitaWare duomenis, tada per vietinę Zenoh
+aptikimus, SAPIENT, STANAG 4586/4609 ir SitaWare duomenis, tada per vietinę Zenoh
 magistralę pateikia juos TAK ir SitaWare klientams.
 Pasirinktinai jis gali priimti deklaruotus Lietuvos UTM skrydžius, jei Oro
 navigacija suteikia autorizuotą JSON/GeoJSON eksportą. Tai nėra nacionalinis
 gyvas civilinis UTM srautas.
 
 ---
+
+> **Pradedate nuo tuščio serverio, kuriame dar nieko neįdiegta?** Pirmiausia
+> perskaitykite [`PARUOSIMAS.md`](PARUOSIMAS.md) — jame žingsnis po žingsnio
+> aprašomas Docker, Python, git ir NetBird diegimas nuo nulies Ubuntu arba
+> RHEL šeimos Linux sistemoje. Praleiskite, jei tai jau įdiegta ir veikia.
 
 ## 1. Reikalavimai
 
@@ -42,7 +47,6 @@ gyvas civilinis UTM srautas.
 | TCP 7447 TLS | iš serverio | Nuotolinis Zenoh router (reikia NetBird) |
 | HTTPS 8890 | į serverį | Zenoh administravimo GUI (Caddy TLS, vidinis CA — žr. §10) |
 | HTTPS | iš serverio | dronuradaras.lt API |
-| HTTPS | iš serverio | Autorizuotas `utm.ans.lt` JSON/GeoJSON eksportas (pasirinktinai) |
 
 ATAK įrenginiai turi būti tame pačiame L2 tinklo segmente kaip serveris (multicast neperžengia VLAN ribų be maršrutizatoriaus konfigūracijos). Tarpvietiniam diegimui naudokite TAK serverį ir `cot-bridge` paslaugą.
 
@@ -179,11 +183,10 @@ CAT48_RADAR_NAME=Giraffe AMB   # Vardas, rodomas ATAK žemėlapyje
 > Transportą, leidimą, bendrą ar atskirus srautus ir vendor kadravimą
 > patvirtinkite pagal ICD.
 
-Bendram srautui `ASTERIX_PORT` nustatykite tikrą paskirties prievadą.
-`asterix-udp` vienas priima UDP srautą ir nepakeistus kadrus publikuoja į
-`…/raw/asterix/cat34` bei `…/raw/asterix/cat48`; atskiri vertėjai dekoduoja tik
-savo kategoriją. `ASTERIX_PORT` turi pirmenybę tik `ASTERIX_CATEGORIES`
-išvardytoms kategorijoms. Nežinomą srautą pirmiausia patikrinkite:
+UDP 50000 yra bendras neapdorotų UDP duomenų įėjimas. Jis išsaugo kiekvieną
+datagramą `…/raw/udp/ingress` temoje ir papildomai nukreipia vienareikšmiškai
+atpažintus ASTERIX kadrus į `…/raw/asterix/catNN`. UDP 50034 ir 50048 lieka
+atskiri CAT-034 ir CAT-048 prievadai. Nežinomą srautą pirmiausia patikrinkite:
 
 ```bash
 python3 tools/asterix_probe.py --port 30001
@@ -220,13 +223,6 @@ SITAWARE_HQ_NVG_PASS=
 SITAWARE_HQ_NVG_TLS_CERT=
 SITAWARE_HQ_NVG_TLS_KEY=
 
-# ── Link-16 JREAP-C ─────────────────────────────────────────────────────────
-STANAG5516_PORT=                   # Palikite tuščią, jei Link-16 šaltinio nėra
-# Link-16 šiuo metu priima tik JREAP-C UDP; TCP reikia šliuzo kadravimo ICD.
-
-# ── MAVLink ─────────────────────────────────────────────────────────────────
-MAVLINK_PORT=
-MAVLINK_TCP=
 ```
 
 ---
@@ -250,16 +246,14 @@ Interaktyvus paleidiklis rodo visas paslaugas su jų parengties būsena. Įjunki
 
   Open-data bridges
   ──────────────────────────────────────────────────────────
-  [ 2] [✓] aprs           APRS-IS stations, vehicles, vessels    ready
   [ 6] [✓] meteolt        meteo.lt weather stations              ready
 
   Sensor bridges
   ──────────────────────────────────────────────────────────
   [ 8] [ ] sitaware       SitaWare HQ dokumentuotas JSON resursas will prompt for address+login
   [ 9] [✓] dronuradaras   dronuradaras.lt drone detection        ready
-  [10] [ ] dji-cloud      DJI Cloud API aircraft                 DJI_MQTT_HOST not set
-  [11] [ ] asterix-udp    Mixed ASTERIX UDP → raw topics         ASTERIX_PORT not set
-  [12] [✓] track-fusion   Radar/ADS-B track correlation          ready
+  [10] [✓] udp-ingress    Generic UDP → raw topics               UDP 50000
+  [11] [✓] track-fusion   Radar/ADS-B track correlation          ready
 
   Protocols
   ──────────────────────────────────────────────────────────
@@ -269,22 +263,16 @@ Interaktyvus paleidiklis rodo visas paslaugas su jų parengties būsena. Įjunki
   [16] [✓] asterix-cat34  ASTERIX CAT-034 radar service          UDP 50034
   [17] [✓] asterix-cat48  ASTERIX CAT-048 radar targets          UDP 50048
   [18] [✓] asterix-cat62  ASTERIX CAT-062 system tracks          UDP 50062
-  [19] [ ] stanag5516     Link-16 JREAP-C datalink               STANAG5516_PORT not set
-  [20] [ ] mavlink        MAVLink UAV telemetry                  MAVLINK_PORT not set
-  [22] [ ] vmf            VMF MIL-STD-47001C messages            VMF_PORT not set
-  [23] [✓] nffi           NATO NFFI XML Zenoh translator         ready
-  [24] [ ] sapient        SAPIENT / BSI Flex 335                 will prompt for address
-  [25] [ ] stanag4586     STANAG 4586 UAV feed                   will prompt for address
-  [26] [ ] mavlink-raw    MAVLink socket → Zenoh raw             MAVLINK_RAW_PORT not set
-  [27] [ ] stanag5516-raw Link-16 socket → Zenoh raw             STANAG5516_RAW_PORT not set
-  [28] [ ] vmf-raw        VMF socket → Zenoh raw                 VMF_RAW_PORT not set
-  [29] [ ] sapient-raw    SAPIENT socket → Zenoh raw             SAPIENT_RAW_PORT not set
-  [30] [ ] stanag4586-raw STANAG 4586 socket → Zenoh raw         STANAG4586_RAW_PORT not set
+  [19] [✓] nffi           NATO NFFI XML Zenoh translator         ready
+  [20] [ ] sapient        SAPIENT / BSI Flex 335                 will prompt for address
+  [21] [ ] stanag4586     STANAG 4586 UAV feed                   will prompt for address
+  [22] [ ] sapient-raw    SAPIENT socket → Zenoh raw             SAPIENT_RAW_PORT not set
+  [23] [ ] stanag4586-raw STANAG 4586 socket → Zenoh raw         STANAG4586_RAW_PORT not set
 
   Zenoh-native translators
   ──────────────────────────────────────────────────────────
-  [31] [✓] cap            CAP 1.2 XML → alerts                   ready
-  [32] [✓] geojson        GeoJSON/OGC Features → areas           ready
+  [24] [✓] cap            CAP 1.2 XML → alerts                   ready
+  [25] [✓] geojson        GeoJSON/OGC Features → areas           ready
   [33] [✓] spectrum       RF spectrum observations               ready
   [34] [✓] sensor-health  Sensor health/heartbeat records         ready
   [35] [✓] mission-route  UAV routes and corridors                ready
@@ -452,7 +440,7 @@ Authentication:            įjungta, atskiri srauto prisijungimo duomenys
 Pause Subscription:        ne
 ```
 
-Adresas priima tik GET/HEAD, pagal nutylėjimą reikalauja Basic autentifikavimo, riboja talpyklos dydį, pašalina ilgiau nei `SITAWARE_HQ_NVG_STALE_S` neatnaujintus takelius ir kiekvienam NVG objektui prideda tokios pačios trukmės `TimeSpan`, kad HQ paslėptų pasenusius objektus net nutrūkus srautui. Kai šaltinyje yra duomenų, standartiniai NVG modifikatoriai ir ribotas `ExtendedData` taip pat perduoda šaukinį, registraciją/ICAO, orlaivio ar laivo tipą, squawk, maršrutą, šaltinį, APRS kelią/komentarą, laivo ID bei sensoriaus tapatybę. Attributes kortelė naudoja tą patį domeno formatavimą kaip CoT/TAK, todėl rodomi tvarkingi skyriai, o ne neapdoroti Python laukų pavadinimai. Orlaiviams atskirai pateikiamas barometrinis ir geometrinis aukštis, pagrindinis aukštis metrais/pėdomis/skrydžio lygiu, kilimo ar leidimosi greitis, pasirinktas/tikslinis aukštis, greitis, kryptis, avarinė/autopiloto būsena ir ADS-B kokybės laukai. Stacionarūs APRS taškai ir dronuradaras.lt aptikimai naudoja HQ palaikomą bendrą neutralaus įrangos sensoriaus simbolį, o orų stebėjimai — atskirą neutralaus stacionaraus sensoriaus simbolį, nes HQ 6.22 standartinius METOC simbolius rodo kaip nežinomus. Nei vienas jų neklasifikuojamas kaip karinės žvalgybos vienetas. Ne lokaliame adrese procesas atsisako startuoti per paprastą HTTP, nebent izoliuotai laboratorijai aiškiai nustatyta `SITAWARE_HQ_NVG_ALLOW_INSECURE_HTTP=1`. Nenaudokite Keycloak paskyros ar slaptažodžio šiam srautui.
+Adresas priima tik GET/HEAD, pagal nutylėjimą reikalauja Basic autentifikavimo, riboja talpyklos dydį, pašalina ilgiau nei `SITAWARE_HQ_NVG_STALE_S` neatnaujintus takelius ir kiekvienam NVG objektui prideda tokios pačios trukmės `TimeSpan`, kad HQ paslėptų pasenusius objektus net nutrūkus srautui. Kai šaltinyje yra duomenų, standartiniai NVG modifikatoriai ir ribotas `ExtendedData` taip pat perduoda šaukinį, registraciją/ICAO, orlaivio ar laivo tipą, squawk, maršrutą, šaltinį, laivo ID bei sensoriaus tapatybę. Attributes kortelė naudoja tą patį domeno formatavimą kaip CoT/TAK, todėl rodomi tvarkingi skyriai, o ne neapdoroti Python laukų pavadinimai. Orlaiviams atskirai pateikiamas barometrinis ir geometrinis aukštis, pagrindinis aukštis metrais/pėdomis/skrydžio lygiu, kilimo ar leidimosi greitis, pasirinktas/tikslinis aukštis, greitis, kryptis, avarinė/autopiloto būsena ir ADS-B kokybės laukai. dronuradaras.lt aptikimai naudoja HQ palaikomą bendrą neutralaus įrangos sensoriaus simbolį, o orų stebėjimai — atskirą neutralaus stacionaraus sensoriaus simbolį, nes HQ 6.22 standartinius METOC simbolius rodo kaip nežinomus. Nei vienas jų neklasifikuojamas kaip karinės žvalgybos vienetas. Ne lokaliame adrese procesas atsisako startuoti per paprastą HTTP, nebent izoliuotai laboratorijai aiškiai nustatyta `SITAWARE_HQ_NVG_ALLOW_INSECURE_HTTP=1`. Nenaudokite Keycloak paskyros ar slaptažodžio šiam srautui.
 
 ### Piktogramų žinynas
 
@@ -484,14 +472,11 @@ Adresas priima tik GET/HEAD, pagal nutylėjimą reikalauja Basic autentifikavimo
 
 | Paslauga | Scenarijus | Zenoh tema (sutrumpinta) | Suaktyvinimas |
 | --- | --- | --- | --- |
-| `asterix-udp` | `bridges/asterix_udp_bridge.py` | `…/raw/asterix/catNN` | Vienas bendras unicast/multicast UDP srautas |
+| `udp-ingress` | `bridges/udp_ingress_bridge.py` | `…/raw/udp/ingress` ir atpažintas `…/raw/asterix/catNN` | Bendras UDP 50000 srautas |
 | `asterix-cat10/20/21/34/48/62` | `protocols/vendors/asterix/cat.py --category NN` | ASTERIX kategorijai skirta normali tema | Tiesioginis UDP/TCP arba viena neapdorota Zenoh kategorijos tema procesui |
 | `dronuradaras` | `bridges/dronuradaras_bridge.py` | `…/land/dronuradaras/acoustic/neutral/sensor/{type}/{id}/sapient` | Tik prisijungusių įrenginių apklausa 60 s ir atsijungusių pašalinimas / aptikimų apklausa 10 s |
 | `sitaware` | `bridges/sitaware_bridge.py` | `…/land/sitaware/c2/friendly/unit/{type}/{id}/sapient` | Konfigūruojama REST apklausa |
 | `nffi` | `protocols/random/nffi.py` | `…/land/nato/c2/friendly/unit/{type}/{id}/sapient` | Pilni XML dokumentai Zenoh temoje `…/raw/nffi/*` |
-| `stanag5516` | `protocols/vendors/stanag/5516.py` | `…/air/stanag_5516/c2/*/aircraft/{type}/{id}/sapient` | Srautinis UDP |
-| `mavlink` | `protocols/random/mavlink.py` | `…/air/mavlink/telemetry/*/uav/{type}/{id}/sapient` | Srautinis UDP/TCP |
-| `dji-cloud` | `bridges/dji_cloud_api_bridge.py` | `…/air/dji/telemetry/friendly/uav/{type}/{id}/sapient` | DJI šaltiniui skirtas autentifikuotas MQTT 5 tiltas |
 | `cot-udp` | `layers/cot_layer.py` | Prenumeratorius — visos temos | Įvykio valdomas |
 | `cot-bridge` | `layers/cot_layer.py` | Prenumeratorius — visos temos | Įvykio valdomas |
 | `nvg_bridge` | `bridges/nvg_bridge.py` | SitaWare NVG eksportas → Zenoh | Periodinis |
@@ -514,146 +499,9 @@ Vien šalies pavadinimas nepakeičia trūkstamo arba negaliojančio atsakiklio I
 
 ## C2 ↔ Zenoh abikryptė prijungimo instrukcija
 
-Įvestis ir išvestis yra atskiros paslaugos. Įjungta TAK ar SitaWare išvestis
-automatiškai neįjungia atgalinės krypties.
-
-### 1. Bendra Zenoh pusė
-
-Visi Python adapteriai turi jungtis tik į vietinį maršrutizatorių:
-
-```dotenv
-ZENOH_LOCAL_ENDPOINT=tcp/127.0.0.1:7448
-```
-
-Kintantis tėvinio ar backbone maršrutizatoriaus adresas rašomas tik į
-`ZENOH_FABRIC_ENDPOINT` (arba kelių nuorodų `ZENOH_FABRIC_ENDPOINTS` JSON
-masyvą). C2 duomenys publikuojami po
-`{NAMESPACE_PREFIX}/{PARTNER_NAMESPACE}/...`; ACL ir federacijos politika
-nustato, kuriems partneriams ši vardų sritis perduodama.
-
-### 2. Zenoh → TAK Server
-
-TAK Server administravimo sąsajoje:
-
-1. Prisijunkite administratoriaus tapatybe ir atverkite **User Management**.
-2. Sukurkite atskirą EFDI paslaugos tapatybę, ne žmogaus paskyrą.
-3. Priskirkite tik leidžiamas misijos grupes ir reikalingą **IN** kryptį.
-4. Per konkretaus diegimo sertifikatų/enrollment funkciją išduokite TAK kliento
-   sertifikatą ir paimkite sertifikatą, privatų raktą bei TAK CA grandinę.
-5. Failus laikykite tik runtime kataloge ir `compose/.env` įrašykite:
-
-```dotenv
-TAK_HOST=<tak-serveris>
-TAK_PORT=8089
-TAK_TLS=1
-TAK_TLS_SERVER_NAME=<tak-serverio-sertifikato-dns-san>
-TAK_CERT=/runtime/kelias/tak-client.pem
-TAK_KEY=/runtime/kelias/tak-client-key.pem
-TAK_CA=/runtime/kelias/tak-ca.pem
-```
-
-`./start.sh` pasirinkite `cot-bridge`. Tai turi būti TAK, ne Zenoh, išduotas
-sertifikatas. `TAK_HOST` yra stabilus prisijungimo vardas; jei senesnio TAK
-serverio sertifikate įrašytas kitas DNS SAN, jį nurodykite
-`TAK_TLS_SERVER_NAME`, o ne išjunkite vardo tikrinimą.
-
-### 3. Zenoh → SitaWare HQ
-
-HQ administravime įjunkite licencijuotą NVG REST sąsają, sukurkite ne žmogaus
-integracijos paskyrą su tikslinio NVG šaltinio/sluosnio rašymo teise ir iš
-įdiegto produkto ICD nukopijuokite tikslų URL:
-
-```dotenv
-SITAWARE_HQ_NVG_URL=https://<hq-serveris>/<dokumentuotas-nvg-resursas>
-SITAWARE_HQ_NVG_USER=<runtime-vartotojas>
-SITAWARE_HQ_NVG_PASS=<runtime-slaptažodis>
-SITAWARE_HQ_NVG_SOURCE=efdi-live
-```
-
-Pasirinkite `sitaware-hq-nvg`; po pirmo sėkmingo siuntimo HQ žemėlapyje
-įjunkite/rodykite `efdi-live`, jei nauji šaltiniai pagal nutylėjimą paslėpti.
-
-HQ atveju pirmiausia paleiskite `sitaware-hq-nvg`, tada SitaWare HQ spauskite
-**SitaWare Communication → NVG → NVG Import Subscriptions**, sukurkite
-prenumeratą ir įveskite:
-
-```text
-Subscription Name:         EFDI Live Tracks
-Remote Endpoint:           https://<efdi-adresas>:8088/nvg
-Target Layer:              efdi-live / EFDI Live Tracks
-Request NVG periodically:  taip
-Polling Interval:          10 sekundžių
-Reconnect Delay:           90 sekundžių
-Authentication:            įjungta; atskira srauto paskyra
-Pause Subscription:        ne
-```
-
-Jei sluoksnio nėra, prieš tai sukurkite `EFDI Live Tracks` tipo NVG sluoksnį ir
-HQ Windows saugykloje patikėkite srauto sertifikato CA.
-
-### 5. SitaWare HQ → Zenoh
-
-HQ administratorius turi įjungti licencijuotą API, sukurti tik skaitymo
-integracijos paskyrą ir suteikti prieigą prie konkretaus vienetų/takelių
-resurso. Iš įdiegto produkto API/ICD būtina gauti keturis dalykus: bazinį URL,
-resurso kelią, autentifikavimo būdą ir atsakymo schemos versiją.
-
-```dotenv
-SITAWARE_URL=https://<hq-serveris>
-SITAWARE_USER=<runtime-vartotojas>
-SITAWARE_PASS=<runtime-slaptažodis>
-SITAWARE_API_PATH=/<dokumentuotas-resurso-kelias>
-SITAWARE_POLL_S=10
-SITAWARE_TLS_VERIFY=1
-```
-
-Pasirinkite `sitaware`. Universalaus `/rest/v2/units` resurso nėra; jei
-administratorius negali parodyti tikro API ekrano/resurso, jo neatspėkite —
-naudokite konkretaus diegimo NFFI arba CoT Gateway.
-
-### 6. C2 duomenų perdavimas partneriams
-
-Nerašykite į kito partnerio vardų sritį. Leiskite pradinę vardų sritį
-maršrutizatoriaus/federacijos politikoje, o gavėjo pusėje prenumeruokite ją.
-Gavėjo `cot-*` ar `sitaware-hq-nvg` sluoksniai leidžiamas
-normalizuotas temas išvers taip pat kaip vietinius sensorių duomenis.
-
-### 8. Operacinių naudotojų testas
-
-Bandymui naudokite keturias atskiras tapatybes ar klientus. Tai operacinės
-rolės, o ne Zenoh Admin panelės `superadmin`, `admin` ir `readonly` teisės.
-
-| Rolė | Testo klientas ir veiksmas | EFDI paslaugos | Laukiamas rezultatas |
-| --- | --- | --- | --- |
-| C2 operatorius | TAK/WinTAK/ATAK arba SitaWare naudotojas stebi sukonfigūruotą CoT išvestį. | `cot-bridge` ir/arba `sitaware-hq-nvg`. | Normalizuoti EFDI takeliai pasiekia autorizuotą C2 sistemą. |
-| Sensoriaus leidėjas | Prie vietinio Zenoh router prijungtas imtuvas/aptikimo sistema publikuoja pilnus kadrus ar dokumentus į atitinkamą `…/raw/<protokolas>/<source-id>` temą. Laboratoriniam leidėjui administratorius **Publish Script** lange įrašo tuo metu galiojantį šio leidėjo router adresą ir sugeneruoja skriptą. | Atitinkamas protokolo vertėjas ir C2 išvedimo sluoksniai. | Vertėjas sukuria normalizuotus EFDI takelius; C2 sistemos rodo išvestus žymeklius, ne neapdorotą kadrą. |
-| Fabric administratorius | Atskira Zenoh Admin panelės paskyra administruoja tik router/federacijos nustatymus. | Infrastruktūra/Admin UI; sensoriaus ar C2 srautas nereikalingas. | Gali atlikti tik jai priskirtus panelės veiksmus; tai nėra TAK/SitaWare operacinė tapatybė. |
-
-Pirmajam bandymui naudokite TAK išduotą tarnybinę tapatybę `cot-bridge` išvesčiai
-ir patikrinkite, kad autorizuota C2 sistema gauna normalizuotus EFDI takelius.
-
-Dabartinė router ACL politika riboja vardų sritį, bet dar nėra susieta su
-konkrečiomis asmens rolėmis ar sertifikatų subjektais. Šie keturi klientai
-patikrina duomenų srautą ir C2 elgseną, bet neįrodo mažiausių Zenoh teisių tarp
-rolių. Tam reikia atskiro vėlesnio sertifikatų subjektų ACL sprendimo.
-
-> **ASTERIX leidimai:** įgyvendinti standartiniai UAP yra CAT-010 1.1,
-> CAT-020 1.11, CAT-021 2.7, CAT-034 1.29, CAT-048 1.32 ir CAT-062 1.21.
-> Prieš jungdami šaltinį patvirtinkite jo leidimą; kitam ar gamintojo UAP
-> būtinas atskirai pasirenkamas dekoderio profilis. Link-16 priima tik UDP,
-> nes šliuzo TCP kadravimas dar neaprašytas.
-
-### Zenoh temų schema
-
-```text
-{VARDAS_ERDVĖ}/{DOMENAS}/{ŠALTINIS}/{MODALUMAS}/{PRIKLAUSOMYBĖ}/{OBJEKTAS}/{TIPAS}/{ID}/{VAIZDAS}
-```
-
-| Laukas | Galimos reikšmės |
-| --- | --- |
-| `DOMENAS` | `air`, `land`, `sea`, `space`, `env` |
-| `PRIKLAUSOMYBĖ` | `friendly`, `hostile`, `neutral`, `unknown`, `civ`, `mil` |
-| `TIPAS` | `aircraft`, `vessel`, `vehicle`, `unit`, `sensor`, `uav`, `radar` |
+Operatoriaus pusės sąranka abiem kryptims (TAK ir SitaWare). Perkelta į
+bendrą (anglų kalba, nes tai env kintamųjų ir komandų vadovas) dokumentą:
+**[C2_RUNBOOK.md](C2_RUNBOOK.md)**.
 
 ---
 
@@ -686,370 +534,22 @@ kill -0 $(cat $POD_STATE_DIR/.pids/asterix.pid) && echo ok        # Konkretaus p
 
 ## 8. Dažniausios problemos
 
-### Zenoh ryšio klaida
+Simptomais pagrįsti sprendimai. Perkelta į atskirą dokumentą:
+**[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** (anglų kalba — komandos ir log
+eilutės vis tiek būtų angliškos).
 
-**Simptomas:** `zenoh.ZError: Unable to connect to any of [tls/zenoh.efdi...]`
+## 9. Naujo jutiklio ar protokolo pridėjimas
 
-```bash
-# 1. Patikrinkite ar router konteineris sveikas
-docker compose -f compose/docker-compose.yml ps zenoh-router
-
-# 2. Patikrinkite ar endpoint kintamasis nustatytas
-echo $ZENOH_LOCAL_ENDPOINT   # turi būti: tcp/127.0.0.1:7448
-
-# 3. Patikrinkite ar sertifikatų failai egzistuoja
-ls $EFDI_CERT_DIR/*.pem
-```
-
-Jei `compose/.env` buvo įkeltas paprastu `source compose/.env`, kintamieji neeksportuojami į vaikininius procesus. Naudokite `./start.sh` (kuris tai tvarko automatiškai), arba:
-
-```bash
-set -a && source compose/.env && set +a
-```
-
-### ATAK nerodo jokių objektų
-
-```bash
-# 1. Patikrinkite ar cot-udp veikia
-kill -0 $(cat $POD_STATE_DIR/.pids/cot-udp.pid) && echo veikia
-
-# 2. Patikrinkite ar multicast srautas išeina iš serverio
-sudo tcpdump -i any udp and host 239.2.3.1 and port 6969 -c 5
-
-# 3. Patikrinkite ar ATAK ir serveris tame pačiame L2 segmente
-```
-
-### Giraffe radaras rodomas 0°Š 0°R koordinatėse
-
-`CAT48_RADAR_LAT` arba `CAT48_RADAR_LON` nenustatytas. Patikrinkite:
-
-```bash
-grep CAT48_RADAR compose/.env
-```
-
-### Drono aptikimai nepublikuojami
-
-Bridge'as atmeta aptikimus, senesnius nei 300 s. Patikrinkite API pasiekiamumą ir duomenų aktualumą:
-
-```bash
-curl -s -H "Origin: https://dronuradaras.lt" \
-  https://radar-api.mainline.inc/api/v1/public/detections \
-  | python3 -c "
-import sys, json, time
-d = json.load(sys.stdin).get('detections', [])
-now = time.time()
-fresh = [x for x in d if (now - x.get('detected_at', 0)/1000) < 300]
-print(f'{len(fresh)} nauji / {len(d)} iš viso aptikimų')
-"
-```
-
-### SitaWare vienetai nerodomi ATAK
-
-**1. Patikrinkite ar bridge'as veikia ir apklausinėja:**
-
-```bash
-tail -f $POD_STATE_DIR/logs/sitaware.log
-# Laukiamas: "SitaWare poll: N units published" kas SITAWARE_POLL_S sekundžių
-```
-
-**2. Patikrinkite kredencialus ir adresą:**
-
-```bash
-curl -s -u "$SITAWARE_USER:$SITAWARE_PASS" "$SITAWARE_URL/..." | python3 -m json.tool | head -20
-```
-
-**3. SIDC kodo problema — vienetas rodomas su neteisinga piktograma arba nerodomas:**
-
-SitaWare vienetai be galiojančio 15 simbolių SIDC kodo nukreipiami į `…/land/sitaware/c2/unknown/unit/…` ir rodomi kaip nežinomi žemės vienetai (`a-u-G-U-C`). Patikrinkite SIDC reikšmę žurnale:
-
-```bash
-grep "sidc=" $POD_STATE_DIR/logs/sitaware.log | head -10
-```
-
-### EFDI takeliai nerodomi SitaWare HQ
-
-```bash
-tail -f $POD_STATE_DIR/logs/sitaware-hq-nvg.log
-curl -u "$SITAWARE_HQ_NVG_USER:$SITAWARE_HQ_NVG_PASS" \
-  -o /dev/null -w '%{http_code} %{content_type}\n' \
-  "http://127.0.0.1:${SITAWARE_HQ_NVG_PORT:-8088}${SITAWARE_HQ_NVG_PATH:-/nvg}"
-```
-
-Laukiamas atsakymas — `200 application/xml`. HQ NVG valdyme patikrinkite, kad prenumerata nesustabdyta, prisijungusi, kreipiasi į EFDI hosto adresą (ne HQ adresą) ir naudoja `efdi-live / EFDI Live Tracks` sluoksnį. Jei vietinis testas grąžina `200`, o HQ neprisijungia, tikrinkite maršrutizavimą, Windows/Linux ugniasienes ir sertifikato patikimumą, o ne NVG konvertavimą.
-
-### Keli to paties proceso egzemplioriai
-
-Atsiranda paleidus `start.sh` du kartus be sustabdymo:
-
-```bash
-pkill -f "_bridge\.py\|cot_layer\|track_fusion"
-rm -f $POD_STATE_DIR/.pids/*.pid
-./start.sh
-```
-
-### Giraffe radaro piktograma dingsta iš ATAK
-
-`asterix` bridge'as kas 60 s publikuoja keepalive nepriklausomai nuo takelio aktyvumo. Jei piktograma dingsta — bridge'as sustojo:
-
-```bash
-tail -20 $POD_STATE_DIR/logs/asterix.log | grep -E "keepalive|startup|error"
-```
-
----
-
-## 9. Naujo bridge kūrimas
-
-### Failo struktūra
-
-```python
-# compose/bridges/<pavadinimas>_bridge.py
-
-import json, os, time
-import zenoh
-
-ORG       = "<YOUR_NAMESPACE>"
-_ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", "tcp/127.0.0.1:7448")
-_CERT_DIR = os.environ.get("EFDI_CERT_DIR", os.path.dirname(__file__))
-
-# make_config() nukopijuokite iš bet kurio esamo bridge — visiems ji identiška.
-
-def main():
-    session = zenoh.open(make_config())
-    topic = f"{ORG}/air/<šaltinis>/<modalumas>/unknown/aircraft/{tipas}/{id}/sapient"
-    pub = session.declare_publisher(topic)
-
-    while True:
-        for item in fetch_data():
-            payload = {
-                "_src": "<šaltinis>", "_ts": time.time(),
-                "lat_deg": item["lat"], "lon_deg": item["lon"],
-            }
-            pub.put(json.dumps(payload).encode(),
-                    encoding=zenoh.Encoding.APPLICATION_JSON)
-        time.sleep(POLL_INTERVAL)
-```
-
-### Minimalūs privalomi JSON payload laukai
-
-```json
-{
-  "_src":    "šaltinio_pavadinimas",
-  "_ts":     1234567890.123,
-  "lat_deg": 54.6712,
-  "lon_deg": 25.2791
-}
-```
-
-Pasirinktiniai laukai, atpažįstami išvesties sluoksnių:
-
-```json
-{
-  "sensor_id":   "unikalus_id",
-  "callsign":    "rodomas_vardas",
-  "speed_ms":    15.2,
-  "heading_deg": 270.0,
-  "baro_alt_m":  1500.0
-}
-```
-
-### Registravimas `start.sh`
-
-```bash
-# 1. Pridėkite į SERVICES masyvą
-SERVICES=(... <pavadinimas> ...)
-
-# 2. Pridėkite kategoriją
-[<pavadinimas>]="Sensor bridges"
-
-# 3. Pridėkite aprašymą
-[<pavadinimas>]="Trumpas aprašymas"
-
-# 4. Pridėkite parengties tikrinimą (arba return 0 jei visada paruošta)
-<pavadinimas>) [[ "${MANO_KINTAMASIS:-}" ]] ;;
-
-# 5. Pridėkite launch case
-<pavadinimas>)
-    _start <pavadinimas> bridges/<pavadinimas>_bridge.py ;;
-```
-
-### CoT tipo pridėjimas (jei reikia naujo)
-
-`layers/cot_layer.py` faile, `_TOPIC_COT` žodyne:
-
-```python
-"air/**/hostile/uav/**":      ("a-h-A-M-F-Q", AIR_STALE_S),
-"land/**/neutral/sensor/**":  ("a-n-G-E-S",   LAND_STALE_S * 2),
-```
+Žingsnis po žingsnio vadovas — dabar atskiras (anglų kalba, nes tai kodo ir
+komandų vadovas) dokumentas: **[ADDING_A_SENSOR.md](ADDING_A_SENSOR.md)**.
 
 ---
 
 ## 10. Zenoh administravimo GUI
 
-Web GUI podui valdyti be SSH: routerio ir sistemos būsena, bridge'ų ir sluoksnių paleidimas/stabdymas, konfigūracijos ir prisijungimo duomenų redagavimas, sertifikatų įstaiga (CA) ir prekės ženklas. Naudoja modernią minimalistinę tamsią temą (vientisos tamsios kortelės, savarankiškai talpinamas Inter šriftas, žalsvas akcentas), kurią superadmin gali perbrandinti per WebUI Settings.
-
-Skydelio "Connected routers" panelė rodo kiekvieną kitą zenoh egzempliorių (router ar peer), su kuriuo šis routeris turi gyvą ryšį — gaunama iš routerio pačio admin space, tas pats šaltinis kaip prenumeratorių/queryable temų sąrašai, tad papildomos konfigūracijos nereikia be jau esamos `pod-admin-introspect` ACL taisyklės.
-
-### Panelės apžvalga
-
-Panelė veikia adresu `http://127.0.0.1:8890` (arba pod'o adresu) ir valdo vieną
-EFDI podą. Jei tik pradedate, tai orientacinė apžvalga; išsamesni poskyriai
-(*Runtime Control skydelis*, *Rolės*, *Konfigūracijos skirtuko laukai*) pateikti
-žemiau.
-
-**Pirmojo karto eiga.** Prisijunkite administratoriaus paskyra, sukurta diegimo
-metu (pirmą kartą gali paprašyti pakeisti slaptažodį). Atsidaro Dashboard —
-patikrinkite, ar podas sveikas. Toliau kasdienė eiga paprasta: **Runtime Control**
-paslaugoms paleisti, **Config** joms sukonfigūruoti, **Dashboard** būsenai
-patikrinti.
-
-**Puslapiai** (šoninio meniu tvarka):
-
-- **Dashboard** — būsenos apžvalga: CPU/RAM/disko/veikimo laiko/apkrovos/tinklo
-  rodikliai, pagrindinių paslaugų būsena, federacijos peržiūra ir gyvi Zenoh
-  rodikliai (prenumeratoriai, queryable, saugyklos, prijungti routeriai).
-- **Network** — *Managed Router Network*. Aktualu tik kai šis podas yra HQ/šaknis,
-  valdanti filialų routerius: topologija, tiesioginiai vaikai, pasitikėjimo būsena
-  ir **Apply trust ACL**. Vienas savarankiškas podas rodys „0 direct children" ir
-  gali šį puslapį ignoruoti.
-- **Config** — du sluoksniai viename puslapyje. **Zenoh Config** redaguoja patį
-  routerį (vietiniai prievadai, fabric endpoint'ai ir sertifikato tapatybė, vardų
-  sritis, ryšio politika — žr. *Konfigūracijos skirtuko laukai* žemiau).
-  **Integration Settings** redaguoja paslaugų aplinką be SSH: TAK host/port,
-  SitaWare HQ NVG importas/tiekimas ir REST keliai, UTM, MQTT/SensorThings,
-  ASTERIX prievadai, DJI. Slaptažodžiai — tik įrašomi. Išsaugoję perkraukite
-  atitinkamą paslaugą per Runtime Control.
-- **Runtime Control** — paleisti / stabdyti / perkrauti kiekvieną bridge (jutiklio
-  įvestį), protokolą (vertėją) ir sluoksnį (C2 išvestį); filtruoti pagal kategoriją
-  ar rolę; pasirinkti paleidimo rinkinį (įsimenamas tarp perkrovimų); skaityti
-  žurnalus vietoje. Žr. *Runtime Control skydelis* žemiau.
-- **Changes** — Zenoh konfigūracijos revizijų istorija ir jų rezultatas
-  (applied / rejected / rolled-back) — įrašomas rezultatas ir maiša, ne pati
-  konfigūracija.
-- **Admin Users** — panelės paskyrų ir jų rolių valdymas (tik superadmin).
-- **Certificates** — *Certificate Authority*: kurti vienkartinius kvietimus
-  vaikams federacijai (vaikas pats susigeneruoja raktus ir pateikia tik CSR) ir
-  stebėti sertifikatų galiojimą. Savarankiškiems podams nereikia.
-- **Publish Script** — sudaryti Zenoh publish komandą testavimui ar duomenų
-  tiekimui, be rankinio raktų išraiškų rašymo.
-- **Shell** — apribotas, audituojamas shell'as į routerio konteinerį diagnostikai.
-- **Logs** — gyvas bet kurios paslaugos žurnalo srautas.
-- **Audit Logs** — privilegijuotų veiksmų įrašas (konfigūracija, prekės ženklas,
-  naudotojai, prisijungimai).
-- **WebUI Settings** (paskyros meniu viršuje dešinėje) — **Branding**
-  (organizacijos pavadinimas, akcento spalva ir logotipas — superadmin),
-  **Appearance** (eilučių animacijos, tankios eilutės), **Live behavior**
-  (atnaujinimo intervalas) ir šviesios/tamsios temos jungiklis.
-
-**Dvi apsaugos, kurias galite sutikti — abi tyčinės.** EFDI atsisako veiksmų,
-kurie galėtų tyliai sugriauti pasitikėjimo ribas:
-
-1. *„Apply trust ACL" užblokuota — nevaldomas fabric uplink.* Šaknis vis dar
-   jungiasi prie išorinio fabric peer, kuris nėra užregistruotas vaikas. Arba
-   užregistruokite tą peer, arba pašalinkite uplink per **Config → Fabric
-   endpoints → „Root / no upstream"**.
-2. *Valdomo routerio ištrynimas išjungtas.* Vietoje to jį decommission/quarantine,
-   kad pašalintas routeris negrįžtų kaip nepatikimas peer.
-
-### Nustatymas
-
-Pridėkite į `compose/.env` (pilną bloką žr. `compose/.env.example`):
-
-```bash
-ZENOH_ADMIN_DB_USER=zenoh_admin
-ZENOH_ADMIN_DB_PASSWORD=<atsitiktinis>
-ZENOH_ADMIN_DB_ROOT_PASSWORD=<kita-atsitiktine-reiksme>
-ZENOH_ADMIN_DB_PORT=3307                # ne numatytasis: nesikerta su MariaDB/MySQL 3306 prievadu
-ZENOH_ADMIN_SECRET_KEY=<openssl rand -hex 32>
-ZENOH_ADMIN_FIRST_USER=admin
-ZENOH_ADMIN_FIRST_PASS=<nustatykite vieną kartą, po pirmo prisijungimo galite ištrinti>
-```
-
-`ZENOH_ADMIN_FIRST_PASS` sukuria pirmą `superadmin` paskyrą tik jei ji dar neegzistuoja — po pirmo prisijungimo šį kintamąjį saugu vėl palikti tuščią (paskyra išlieka MariaDB duomenų bazėje).
-
-#### Vienkartinis perkėlimas iš PostgreSQL
-
-Atnaujinimas palieka seną `${POD_STATE_DIR}/zenoh-admin/pgdata` katalogą ir
-MariaDB duomenis kuria `${POD_STATE_DIR}/zenoh-admin/mariadb` kataloge. Sustabdyk
-`zenoh-admin` ir seną `zenoh-admin-db`, pasidaryk pod būsenos bei `compose/.env`
-atsarginę kopiją,
-įrašyk `ZENOH_ADMIN_DB_ROOT_PASSWORD`, o seną `ZENOH_ADMIN_DB_PORT=5433` pakeisk
-į `ZENOH_ADMIN_DB_PORT=3307`. Perkėlimo metu senoji PostgreSQL bazė laikinai
-naudoja 55433 prievadą. Tada paleisk `INSTALL.md` skyriuje „One-time PostgreSQL
-migration“ pateiktą importavimo komandą. Importuotojas atsisako dirbti
-su netuščia MariaDB, kopijuoja lenteles viena transakcija ir prieš patvirtindamas
-patikrina eilučių skaičius. `pgdata` netrink, kol nepatikrinai prisijungimo,
-pasitikėjimo, federacijos, išvaizdos ir audito istorijos. Tai vieno mazgo MariaDB
-perkėlimas; Galera klasteris diegiamas atskirai.
-
-### Paleidimas
-
-```bash
-cd compose
-docker compose up -d zenoh-admin-db zenoh-admin zenoh-admin-proxy
-```
-
-Tada atidarykite `https://<pod-host>:8890`.
-
-Pats skydelis (`zenoh-admin`) klausosi tik `127.0.0.1:8895` — tiesiogiai nepasiekiamas. Caddy reverse proxy (`zenoh-admin-proxy`) baigia tikrą TLS ant `:8890` naudodamas savo vidinį CA (`local_certs` + `tls internal`, be išorinio ACME/CA priklausomybės), išsaugotą `zenoh_admin_caddy_data` tome, kad CA išliktų po perkrovimų. Naršyklė pirmą kartą parodys savarankiškai pasirašyto sertifikato įspėjimą — pasitikėkite Caddy vidiniu CA (arba priimkite įspėjimą), kad tęstumėte; čia sąmoningai nėra viešo sertifikato, nes šis skydelis nėra skirtas interneto prieigai.
-
-### Runtime Control skydelis
-
-TAK stiliaus **Runtime Control** skydelyje `superadmin` gali vienoje vietoje:
-
-- paleisti, sustabdyti, perkrauti ir peržiūrėti visų registruotų bridge'ų, protokolų vertėjų, raw ingress bei TAK/SitaWare išvesties sluoksnių log'us;
-- keisti endpoint'us, portus, Zenoh temas, API URL ir protokolų nustatymus;
-- rodyti ir keisti papildomus konkretaus diegimo `.env` laukus, kurie jau yra pod'e;
-- įvesti naudotojų vardus, slaptažodžius, API raktus ir token'us, nerodant jau išsaugotų paslapčių.
-
-Native procesai lieka valdomi host PID failais. `start.sh` ir `run.sh all`
-palaiko `admin-control` procesą tik loopback sąsajoje, porte 18896. API kviečia
-tuos pačius launcher skriptus, todėl nekuriamas atskiras Docker konteineris
-kiekvienam integracijos tipui. Papildomam apsaugos sluoksniui `compose/.env`
-galima nustatyti `EFDI_CONTROL_TOKEN`. Po pakeitimo perkraukite paveiktą
-servisą, kad jis perskaitytų naują aplinką.
-
-Paleidus `./dev.sh up`, laikinas control agent automatiškai persikelia į 18896
-jei kūrimo/numatytasis 8896 jau užimtas, o dev API nukreipiamas į pasirinktą
-portą.
-
-### Rolės
-
-| Rolė | Skydelis | Konfigūracija (peržiūra) | Konfigūracija (redagavimas + routerio perkrovimas) | Admin vartotojai |
-| --- | --- | --- | --- | --- |
-| `readonly` | ✓ | | | |
-| `admin` | ✓ | ✓ | | |
-| `superadmin` | ✓ | ✓ | ✓ | ✓ |
-
-Išsaugant konfigūracijos pakeitimą, jis pirma patikrinamas kaip galiojantis JSON5, tada įrašomas į primontuotą `${POD_STATE_DIR}/zenoh/config.json5`, ir tik tada perkraunamas `zenoh-router` konteineris — sintaksės klaida atmetama dar prieš paliečiant diską.
-
-### Konfigūracijos skirtuko laukai
-
-Konfigūracijos skirtukas rodo struktūrizuotus laukus, ne žalią JSON5 — kiekvienas išsaugojimas iš naujo atvaizduoja `host/zenoh-router.json5.tmpl` (tą patį šabloną, kurį naudoja `first-boot.sh`) su žemiau esančiomis reikšmėmis, todėl išsaugota konfigūracija niekada negali nukrypti nuo šablono struktūros.
-
-| Laukas | Poveikis |
-| --- | --- |
-| Vietinis mTLS portas | Tinklui skirtas listen portas skirtas bridges, audit-sink (numatytasis 7447) |
-| Vietinis TCP portas | Plaintext, tik vietinis listen portas bridge'ams + šiam GUI (numatytasis 7448) |
-| Fabric endpoint | Partnerio / kolegos endpoint, į kurį šis pod'as skambina — įvedamas kaip atskiri Host + Port laukai (schema visada `tls`, niekada nerodoma); yra vieno paspaudimo šablonai anksčiau naudotiems endpoint'ams |
-| Partner namespace | Šio pod'o first-party publish/subscribe prefiksas (jo slotas) — **keičiant šią reikšmę, kita fabric pusė taip pat turi leisti naują reikšmę savo ACL, kitaip publikacijos tyliai nustoja pasiekti** |
-| Inbound namespace | Bilateral prefiksas, kurį fabric publikuoja Į šį pod'ą |
-| Verify name on connect | Pagal nutylėjimą išjungta — gateway sertifikato SAN susietas su tinklo IP, ne su skambinamu DNS vardu; įjungus gali sulūžti fabric ryšys |
-| Storage plugin loading | Išjungus, nauji subscriberiai per `get()` nebegauna paskutinės žinomos reikšmės — publish/subscribe vis tiek veikia |
-
-Trys sąmoningai **nerodomi** GUI (per lengva užrakinti visus klientus, įskaitant patį GUI, jei sukonfigūruota blogai): `access_control.enabled`, `default_permission`, `enable_mtls`. Jei reikia, redaguokite juos tiesiogiai `zenoh/config.json5` faile.
-
-### Izoliuotas testinis routeris
-
-Lokaliam pub/sub testavimui, neliečiant tikro pod'o ar jo fabric ryšio: `zenoh-router-test`, už `test` compose profilio (niekada nepasileidžia kartu su likusiu stack'u).
-
-```bash
-cd compose
-docker compose --profile test up -d zenoh-router-test
-```
-
-Konfigūracija yra `${POD_STATE_DIR}/zenoh-test/config.json5` — tie patys sertifikatai/namespace/ACL kaip tikro routerio, bet skirtingi portai (`7457` mTLS / `7458` TCP, vietoj `7447`/`7448`) ir **be `connect.endpoints`** (niekada neskambina fabric). Saugu palikti veikiantį kartu su tikru routeriu — niekas nesikerta.
-
----
+Žiniatinklio GUI podui valdyti be SSH. Techninis turinys perkeltas į bendrą
+(anglišką) dokumentą, nes komandos ir laukų pavadinimai vis tiek liktų
+angliški: **[ZENOH_ADMIN.md](ZENOH_ADMIN.md)**.
 
 ## 11. Tęstinė integracija (CI)
 
@@ -1073,7 +573,6 @@ Tai pagauna sintaksės klaidas, TypeScript klaidas ir Dockerfile lūžimus prie�
 | --- | --- |
 | 2026-06-14 | Pradinis commit — šakota iš oficialaus `efdi-moon-pod-main` saugyklos |
 | 2026-06-15 | Baziniai bridge adapteriai sujungti; saugyklos struktūra nustatyta; pridėtas README |
-| 2026-06-16 | `airplanes.live` bridge: regioniniai ADS-B ir pasauliniai kariniai orlaiviai |
 | 2026-06-16 | Protocol Buffer takelių aprašai; dabar sutartys laikomos šalia vertėjų `compose/protocols/` kataloge |
 | 2026-06-17/18 | Kokybės gerinimai: bridge'ų stabilumas, sluoksnių dublikatų filtravimas, takelio suliejimo derinimas |
 | 2026-06-18 | ASTERIX pilno dekodavimo projektavimo specifikacijos dokumentas |

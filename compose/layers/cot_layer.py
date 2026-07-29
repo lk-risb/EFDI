@@ -22,7 +22,6 @@ Zenoh topics consumed (5 main categories):
          <ORG>/air/radar/json/tracks  → CoT a-u-A     (radar return, unidentified)
          <ORG>/air/sapient/fused/json/tracks→ CoT a-u-A     (SAPIENT sensor track)
   LAND:  <ORG>/land/civ/json/tracks   → CoT a-f-G-E-V-C (friendly ground vehicle)
-         <ORG>/land/aprs/json/tracks  → CoT a-n-G-I   (APRS stations / digipeaters / wx)
          <ORG>/land/nffi/json/tracks  → CoT a-f-G-U-C (NATO NFFI friendly forces)
   SEA:   <ORG>/sea/civ/json/tracks    → CoT a-f-S-X-L / a-h-S-X-L (hostile if RU/BY MMSI)
   SPACE: <ORG>/space/json/tracks      → CoT a-f-P     (satellite)
@@ -73,7 +72,7 @@ _ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", "tcp/127.0.0.1:7448")
 # Base lifetime for high-rate sources.
 AIR_STALE_S    = 120
 SEA_STALE_S    = 300     # vessels: Class B sends every 30-180s; 5 min covers worst case
-LAND_STALE_S   = 120     # ground vehicles and APRS mobiles
+LAND_STALE_S   = 120     # ground vehicles
 COT_STALE_S    = AIR_STALE_S  # default (air)
 SAT_STALE_S    = 300     # satellites: polled every 60s, 5 min gives 5× margin
 ENV_STALE_S    = 3600    # weather stations: polled every 15–30 min, 1 h gives plenty of margin
@@ -187,7 +186,15 @@ def _sensor_alert_cot_type(track: dict) -> str:
 # EFDI-RAD-<sac/sic/num> raw but EFDI-ICAO-<hex> once identified, so letting
 # both through really would draw the same contact twice.
 #
-_RAW_SENSOR_SOURCES = frozenset({"ASTERIX CAT-48", "ASTERIX CAT-20"})
+_RAW_SENSOR_SOURCE_PREFIXES = ("ASTERIX CAT-48", "ASTERIX CAT-20")
+
+
+def _is_unfused_sensor_track(track: dict, key: str) -> bool:
+    """True for a raw radar/MLAT track that must first pass through fusion."""
+    if "/fused/" in key:
+        return False
+    source = str(track.get("_src", ""))
+    return any(source.startswith(prefix) for prefix in _RAW_SENSOR_SOURCE_PREFIXES)
 
 # Schema: {domain}/{source}/{modality}/{affiliation}/{entity}/{type}/{id}/{view}
 # Wildcards: ** matches zero-or-more segments, so air/**/civ/aircraft/** catches
@@ -203,7 +210,7 @@ _TOPIC_COT = {
     "air/**/civ/aircraft/**":    (_civ_air_type,  AIR_STALE_S),
     "air/**/mil/aircraft/**":    (_mil_air_type,  AIR_STALE_S),
     "air/**/unknown/**":         (_unknown_air_type, AIR_STALE_S),
-    # LAND — full affiliation matrix for SitaWare / NFFI / APRS
+    # LAND — full affiliation matrix for SitaWare / NFFI
     "land/**/civ/vehicle/**":    ("a-f-G-E-V-C", LAND_STALE_S),
     "land/**/neutral/station/**":("a-n-G-I-R",   LAND_STALE_S),
     "land/**/friendly/unit/**":  ("a-f-G-U-C",   LAND_STALE_S),
@@ -266,23 +273,6 @@ def _is_ground_station(track: dict) -> bool:
     if cs in _ATC_EXACT:
         return True
     return any(cs.endswith(s) for s in _ATC_SUFFIX) and len(cs) <= 8
-
-# APRS symbol table+code → CoT type.  Fixed infrastructure → neutral installation.
-# Aircraft/balloon symbols → unknown air.  Everything else → unknown ground.
-_APRS_SYM_COT = {
-    "/-":  "a-n-G-I",      # house / home installation
-    "/#":  "a-n-G-I",      # digipeater → neutral ground installation (tower)
-    "/&":  "a-n-G-I",      # iGate → neutral ground installation (tower)
-    "/_":  "a-n-G-I",      # weather station installation
-    "/r":  "a-n-G-I",      # antenna / tower installation
-    "/^":  "a-u-A-C-F",    # civil aircraft (unknown)
-    "/O":  "a-u-A",        # balloon / airship
-    "\\_": "a-n-G-I",      # alternate-table weather
-    "\\#": "a-n-G-I",      # alternate-table digipeater
-}
-
-def _aprs_cot_type(track: dict) -> str:
-    return _APRS_SYM_COT.get(track.get("symbol", ""), "a-u-G")
 
 # ---------------------------------------------------------------------------
 # Embedded icon generator — stdlib only, no Pillow needed.
@@ -854,6 +844,8 @@ def _build_remarks(track: dict, cot_type: str) -> str:
             radar_l.append("RNG (range): {} nm / {} km   AZM (azimuth): {}°".format(
                 round(rng, 1), round(rng * 1.852, 1), round(azm or 0, 1)))
         rssi = track.get("rssi_db")
+        if rssi is None:
+            rssi = track.get("rssi_dbfs")
         if rssi is not None: radar_l.append("RSSI (signal strength): {} dBFS".format(rssi))
         ssr_amp = track.get("ssr_amplitude_dbm"); psr_amp = track.get("psr_amplitude_dbm")
         sig_amp = track.get("signal_amplitude_dbm")
@@ -1102,7 +1094,7 @@ def _build_remarks(track: dict, cot_type: str) -> str:
         _sec("IDENTITY",   ident_l)
         _sec("KINEMATICS", kinem_l)
 
-    else:                # ---- GROUND / ENV / APRS ------------------------
+    else:                # ---- GROUND / ENV -------------------------------
         def _sec(title, buf):
             if buf:
                 lines.append("─── {} ───".format(title))
@@ -1157,6 +1149,22 @@ def _build_remarks(track: dict, cot_type: str) -> str:
             rot = track.get("rotation_s")
             if rot: sensor_l.append("ROTATION: {}s/rev  ({:.1f} RPM)".format(
                 round(rot, 1), 60.0 / rot))
+            # Coverage ring — label its provenance so a configured instrumented
+            # maximum is never mistaken for measured, terrain-limited coverage.
+            rng_m = track.get("radar_range_m")
+            try:
+                cov_km = float(rng_m) / 1000.0 if rng_m else 0.0
+            except (TypeError, ValueError):
+                cov_km = 0.0
+            if cov_km > 0:
+                rsrc = track.get("radar_range_source")
+                if rsrc == "configured":
+                    note = "  (configured instrumented max — not terrain/target coverage)"
+                elif rsrc == "advertised":
+                    note = "  (advertised by radar, I034/100)"
+                else:
+                    note = ""
+                sensor_l.append("COVERAGE: {:.0f} km{}".format(cov_km, note))
             # STATUS
             for k, lbl in (("psr_status","PSR"), ("ssr_status","SSR"), ("mds_status","MODE-S")):
                 v = track.get(k)
@@ -1240,7 +1248,7 @@ def _build_remarks(track: dict, cot_type: str) -> str:
             _sec("WEATHER",     ident_l)
             _sec("CONDITIONS",  env_l)
 
-        else:                      # APRS / vehicles
+        else:                      # vehicles and other ground entities
             ident_l = []; kinem_l = []
             if time_str: ident_l.append("TIME: {}".format(time_str))
             _r("CALL", (track.get("callsign") or "").strip().upper() or None, ident_l)
@@ -1437,8 +1445,13 @@ def track_to_cot(track: dict, cot_type: str, stale_s: float = COT_STALE_S) -> st
         "course": str(crs_cot),
     })
     sweep_az = track.get("sweep_azimuth_deg")
-    rng = int(track.get("radar_range_m", 200_000))
-    if sweep_az is not None:
+    try:
+        rng = int(float(track.get("radar_range_m") or 0))
+    except (TypeError, ValueError, OverflowError):
+        rng = 0
+    if not 0 < rng <= 1_000_000:
+        rng = 0
+    if sweep_az is not None and rng:
         # Radar dish sweep: narrow 5° beam rotating around the site
         ET.SubElement(detail, "sensor", {
             "vfov": "1", "hfov": "5",
@@ -1449,7 +1462,7 @@ def track_to_cot(track: dict, cot_type: str, stale_s: float = COT_STALE_S) -> st
             "displayMagneticReference": "0",
             "stockTool": "false",
         })
-    elif track.get("sensor_type") == "radar":
+    elif track.get("sensor_type") == "radar" and rng:
         # Static radar site: show full 360° coverage circle
         ET.SubElement(detail, "sensor", {
             "vfov": "90", "hfov": "360",
@@ -1473,7 +1486,7 @@ def track_to_cot(track: dict, cot_type: str, stale_s: float = COT_STALE_S) -> st
             "stockTool": "false",
         })
     # Anything that merely MOVES used to get a <sensor> too — an airliner, a
-    # car, an APRS station all claimed to be a 360° radar with range="0". That
+    # car or other moving contact claimed to be a 360° radar with range="0". That
     # is wrong on its face (a moving contact is not a sensor) and a zero-range
     # sensor cone is a degenerate shape for a client to draw. <sensor> is now
     # emitted only for things that actually sense.
@@ -1658,7 +1671,7 @@ def make_handler(cot_type_or_fn, sender, verbose: bool, stale_s: float = COT_STA
         # than left to fail json.loads.
         #
         # Skip by DENYING the redundant views, not by requiring "/json": several
-        # bridges (APRS, weather, ADS-B, dronuradaras) publish a single flat JSON
+        # bridges (weather, ADS-B, dronuradaras) publish a single flat JSON
         # sample on a bare topic with no view suffix at all. Requiring "/json"
         # silently discarded every one of them, so TAK stayed empty while the
         # SitaWare feed — which has no such filter — showed them all.
@@ -1692,7 +1705,7 @@ def make_handler(cot_type_or_fn, sender, verbose: bool, stale_s: float = COT_STA
             if verbose:
                 print("CoT expired offline sensor {}".format(uid), flush=True)
             return
-        if "/fused/" not in key and src in _RAW_SENSOR_SOURCES:
+        if _is_unfused_sensor_track(track, key):
             return
         # ATC towers / ground vehicles show up in ADS-B with "TWR", "GND" etc.
         # Reclassify as neutral ground radar/radio station instead of aircraft.
@@ -1792,6 +1805,8 @@ def make_radar_status_handler(sender, verbose: bool):
                 if "sweep_azimuth_deg" not in track:
                     _radar_status[key] = track
         if "sweep_azimuth_deg" in track:
+            if not track.get("radar_range_m"):
+                return
             # Sweep tick: send a SEPARATE beam entity (different UID) so the site
             # marker keeps its permanent 360° coverage ring at the same time.
             rot = float(track.get("rotation_s") or 4.0)

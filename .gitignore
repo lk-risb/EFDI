@@ -15,6 +15,10 @@ compose/certs/**
 compose/state/
 logs/
 .pids/
+# Throwaway AI-agent / developer verification scripts. Never part of the
+# product — see scratch/README.md.
+scratch/*
+!scratch/README.md
 *.cbor
 node_modules/
 __pycache__/

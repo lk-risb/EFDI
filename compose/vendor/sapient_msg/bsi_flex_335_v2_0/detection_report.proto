@@ -44,11 +44,11 @@ message DetectionReport {
     repeated AssociatedDetection associated_detection = 15; // Other SAPIENT detections associated with this detection
     repeated DerivedDetection derived_detection = 16; // Other SAPIENT detections dervied from this detection
     oneof velocity_oneof {
-//        RYPVelocity ryp_velocity = 17; // Velocity of object relative to sensor location and sensor pointing direction  
+//        RYPVelocity ryp_velocity = 17; // Velocity of object relative to sensor location and sensor pointing direction
 //        GHCVelocity ghc_velocity = 18; // Velocity of object in global coordinates in the style of Air Traffic Management
 		ENUVelocity enu_velocity = 19; // Velocity of object as a vector in global cartesian coordinates
-//		SHPVelocity shp_velocity = 20; // Velocity of object as a vector in global spherical coordinates 
-//		RAEVelocity rae_velocity = 21; // Velocity of object relative to sensor location and ground plane 
+//		SHPVelocity shp_velocity = 20; // Velocity of object as a vector in global spherical coordinates
+//		RAEVelocity rae_velocity = 21; // Velocity of object relative to sensor location and ground plane
     }
     optional string colour = 22; // Colour of the object being reported
     optional string id = 23; // ID of the object being reported (e.g. the tail number of aircraft)
@@ -60,7 +60,7 @@ message DetectionReport {
         }
         optional google.protobuf.Timestamp predicted_timestamp = 3; // The timestamp of when the detected object will be at the predicted location
     }
-    
+
     message TrackObjectInfo {
         optional string type = 1 [(field_options) = {is_mandatory: true}]; // The type of object_info being reported (e.g. colour)
         optional string value = 2 [(field_options) = {is_mandatory: true}]; // The value of the object_info being reported (e.g. red)

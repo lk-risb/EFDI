@@ -51,6 +51,7 @@ from layers.cot_layer import (
     _is_adsb_surface_vehicle,
     _is_hostile_icao24,
     _is_hostile_mmsi,
+    _is_unfused_sensor_track,
     _speed_ms,
     _uid as _cot_uid,
 )
@@ -514,8 +515,14 @@ def _nvg_extended_data(track: dict, uid: str, sidc: str) -> list[tuple[str, str]
             if track.get("message_age_s") is not None else None
         )),
         ("Signal strength", (
-            "{} dBFS".format(track["rssi_db"])
-            if track.get("rssi_db") is not None else None
+            "{} dBFS".format(
+                track["rssi_db"]
+                if track.get("rssi_db") is not None
+                else track["rssi_dbfs"]
+            )
+            if track.get("rssi_db") is not None
+            or track.get("rssi_dbfs") is not None
+            else None
         )),
     )
     if any(value is not None for _, value in quality_rows):
@@ -525,8 +532,6 @@ def _nvg_extended_data(track: dict, uid: str, sidc: str) -> list[tuple[str, str]
 
     detail_rows = (
         ("Aircraft description", track.get("aircraft_description")),
-        ("APRS symbol", track.get("symbol")),
-        ("APRS path", track.get("path")),
         ("Comment", track.get("comment")),
         ("Sensor ID", track.get("sensor_id")),
         ("Sensor type", track.get("sensor_type")),
@@ -1021,6 +1026,8 @@ def make_handler(
         # but must not be written straight back into the same SitaWare import
         # subscription. The matching ingress bridge preserves the raw export.
         if track.get("_ingress") == "sitaware_nvg":
+            return
+        if _is_unfused_sensor_track(track, str(sample.key_expr)):
             return
         if track.get("_delete"):
             uid = cache.remove(track)

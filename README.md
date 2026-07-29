@@ -46,10 +46,8 @@ This repository is the EFDI-partner collaboration surface. It carries **no partn
 ```
                   INGRESS (bridges/protocols)          FABRIC            EGRESS (layers)
 
-[Giraffe AMB]  ──mixed ASTERIX UDP──► asterix_udp_bridge ─┐
+[Giraffe AMB]  ──UDP────────────────► udp_ingress_bridge ──┐
 [dronuradaras] ──REST/HTTPS─────────► dronuradaras_bridge ─┤                    │
-[Link-16]      ──UDP────────────────► stanag5516          ─┼─► Zenoh router ────┤
-[MAVLink]      ──UDP/TCP────────────► mavlink             ─┤                    └─► nvg_layer ──► SitaWare HQ (HQ polls)
 [SitaWare HQ]  ──NVG 2.0.2 export───► nvg_bridge          ─┤
 [TAK Server]   ──CoT stream─────────► tak_bridge          ─┘
                                           └─► track_fusion_bridge (CAT-48 / CAT-21 correlation)
@@ -73,17 +71,17 @@ The live data-plane payload is JSON. The `.proto` files beside each translator u
 | `nvg_layer` | Zenoh → C2 | **NVG 2.0.2 feed served to SitaWare HQ** (HQ's Import Subscription polls it) |
 | `nvg_bridge` | C2 → Zenoh | SitaWare HQ NVG export → normalized EFDI tracks |
 | `sitaware_bridge` | C2 → Zenoh | SitaWare HQ friendly-force REST/JSON polling (deployment-documented resource) |
-| `asterix_udp_bridge` | → Zenoh | Optional mixed-category UDP ingress; validates and demultiplexes ASTERIX frames |
+| `udp_ingress_bridge` | → Zenoh | Generic UDP ingress; preserves every datagram and safely dispatches complete ASTERIX frames |
 | `asterix` | protocol | ASTERIX family: CAT-010/020/021/034/048/062 translators |
 | `stanag` | protocol | STANAG family: 4586 feed plus 4609 SRT transport and KLV decode |
 | `dronuradaras_bridge` | → Zenoh | REST polling of currently-online acoustic sensors + drone-detection events |
 | Partner ADS-B / CAT-21 | → Zenoh | Registered fabric topics or ASTERIX CAT-021 → normalized aircraft tracks |
 | `sapient_flex335_bridge` | → Zenoh | SAPIENT BSI Flex 335 v2 sensor/detection ingress |
-| `mavlink_raw_bridge` / `5516_bridge` / `vmf_bridge` / `4586_bridge` | → Zenoh | Optional socket ingress; publishes raw bytes only |
+| `4586_bridge` | → Zenoh | Optional STANAG 4586 socket ingress; publishes raw bytes only |
 | `nffi` | protocol | NATO NFFI / ADatP-36 (STANAG 5527) friendly-force XML translator |
 | `cap` / `geojson_features` / `mission_route` | protocol | Alerts/areas, zones/overlays, UAV routes and corridors |
 | `spectrum_observation` / `sensor_health` | protocol | Vendor-neutral RF and sensor-status translators |
-| `mqtt_bridge` / `sensorthings_bridge` / `dji_cloud_api_bridge` | → Zenoh | Generic MQTT, OGC SensorThings, and DJI Cloud API ingress |
+| `mqtt_bridge` / `sensorthings_bridge` | → Zenoh | Generic MQTT and OGC SensorThings ingress |
 | `sparkplug` | protocol | Eclipse Sparkplug B (MQTT protobuf); resolves BIRTH-declared metric aliases |
 | `track_fusion_bridge` | fabric | ASTERIX CAT-48 / CAT-21 correlation |
 | `zenoh-admin` | — | FastAPI + React panel — router status, config, lifecycle, endpoints, write-only credentials |
@@ -92,7 +90,7 @@ The live data-plane payload is JSON. The `.proto` files beside each translator u
 
 All bridges and protocols are lightweight Python processes with no shared state beyond the Zenoh session. Native processes connect to `ZENOH_LOCAL_ENDPOINT` (default `tcp/127.0.0.1:7448`) and never default to a remote router; only the local `zenoh-router` owns `ZENOH_FABRIC_ENDPOINTS`, so changing a parent or federation address does not require restarting every adapter. Services run as individual host processes managed by PID files in `compose/state/.pids/` and are kept alive by `supervisor.py`; the only containerised components are the Zenoh router and the zenoh-admin panel, keeping the data path inspectable and restartable in isolation.
 
-ASTERIX compatibility is edition-specific: CAT-010 Ed. 1.1, CAT-020 Ed. 1.11, CAT-021 Ed. 2.7, CAT-034 Ed. 1.29, CAT-048 Ed. 1.32, CAT-062 Ed. 1.21. A producer using another edition needs a separate, explicitly selected profile — do not feed it into one of these decoders by resemblance. Link-16/JREAP-C field layouts are gateway-profile dependent; UDP is available, TCP is intentionally disabled until its stream framing is documented.
+ASTERIX compatibility is edition-specific: CAT-010 Ed. 1.1, CAT-020 Ed. 1.11, CAT-021 Ed. 2.7, CAT-034 Ed. 1.29, CAT-048 Ed. 1.32, CAT-062 Ed. 1.21. A producer using another edition needs a separate, explicitly selected profile — do not feed it into one of these decoders by resemblance.
 
 ---
 
@@ -133,7 +131,7 @@ EFDI treats ATAK/TAK and SitaWare HQ as first-class, co-equal consumers. Each ha
 | SitaWare HQ → Zenoh | `nvg_bridge` | `SITAWARE_NVG_IMPORT_URL` (+ pinned CA); an HQ NVG Export Endpoint |
 | SitaWare HQ → Zenoh | `sitaware` | Deployment-documented REST resource, schema, URL and credentials |
 
-SitaWare's REST resource path is **not** assumed — there is no universal `/rest/v2/units`; confirm it against the deployment's ICD. Full commands and the operator-side HQ subscription fields are in [INSTALL.md](docs/INSTALL.md#c2--zenoh-bidirectional-runbook).
+SitaWare's REST resource path is **not** assumed — there is no universal `/rest/v2/units`; confirm it against the deployment's ICD. Full commands and the operator-side HQ subscription fields are in [C2_RUNBOOK.md](docs/C2_RUNBOOK.md).
 
 Inbound C2 records are written under this pod's normal `{NAMESPACE_PREFIX}/{PARTNER_NAMESPACE}/…` namespace, becoming ordinary Zenoh data for authorized subscribers and federated partner routers; the router ACL and federation policy — not the C2 adapter — decide which pods receive them.
 
@@ -152,12 +150,12 @@ Every pod dials a single fabric endpoint over mutual TLS — it writes only with
 | TCP 7448 | localhost | Local Zenoh router (plaintext, bridges + zenoh-admin only) |
 | TCP 7447 TLS | outbound | Remote/fabric Zenoh router (mTLS) |
 | UDP 50010 / 50020 / 50021 / 50034 / 50048 / 50062 | inbound | Category-specific ASTERIX listeners (`CATNN_PORT`) |
-| UDP 50000 | inbound | Optional EFDI mixed ASTERIX ingress |
+| UDP 50000 | inbound | Generic raw UDP ingress; unknown protocols are preserved without guessing |
 | UDP multicast `239.2.3.1:6969` | outbound | CoT delivery to LAN ATAK clients |
 | TCP `<TAK_PORT>` (mTLS, default 8089) | outbound | CoT to TAK Server streaming input |
 | HTTP 8890 | inbound | zenoh-admin panel (web UI) |
 | TCP `<SITAWARE_HQ_NVG_PORT>` (default 8088) | inbound | SitaWare HQ polls the EFDI NVG feed |
-| HTTPS | outbound | SitaWare HQ, dronuradaras.lt, and any explicitly authorized UTM export API |
+| HTTPS | outbound | SitaWare HQ and dronuradaras.lt |
 
 See [INSTALL.md](docs/INSTALL.md) for the full network prerequisites table.
 
@@ -170,7 +168,6 @@ See [INSTALL.md](docs/INSTALL.md) for the full network prerequisites table.
 | Zenoh router | ✅ | `eclipse/zenoh:1.9.0`, digest-pinned, mTLS, ACL-scoped |
 | ASTERIX bridge + translators | ✅ | Mixed UDP demux; CAT-010/020/021/034/048/062 |
 | dronuradaras bridge | ✅ | REST polling, acoustic sensors + drone detection |
-| Oro navigacija UTM bridge | ✅ (endpoint required) | Declared/planned UAV flights from an authorized export |
 | Partner ADS-B / CAT-21 input | ✅ | Registered Zenoh topics or ASTERIX CAT-021; no public scraping bridge |
 | SAPIENT BSI Flex 335 v2 bridge | ✅ | Sensor/detection ingress |
 | CoT output layer (`cot_layer`) | ✅ | ATAK UDP multicast + TAK Server TCP/mTLS |
@@ -178,7 +175,6 @@ See [INSTALL.md](docs/INSTALL.md) for the full network prerequisites table.
 | SitaWare HQ NVG feed (`nvg_layer`) | ✅ | EFDI tracks → HQ NVG Import Subscription |
 | SitaWare HQ NVG ingest (`nvg_bridge`) | ✅ | HQ NVG export → Zenoh |
 | NATO NFFI protocol | ✅ | ADatP-36 / STANAG 5527 XML through Zenoh |
-| Link-16 / MAVLink bridges | ✅ | JREAP-C UDP; MAVLink 2 UDP/TCP |
 | Track fusion layer | ✅ | ASTERIX CAT-48 / CAT-21 correlation |
 | zenoh-admin panel | ✅ | FastAPI + React — status, config editor, health dashboard |
 

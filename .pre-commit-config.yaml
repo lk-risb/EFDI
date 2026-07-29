@@ -1,0 +1,51 @@
+# Local, fast checks before a commit leaves this machine. CI (.github/workflows/)
+# remains the authoritative, full gate — this catches the same class of
+# problem sooner, on only the files actually being committed.
+#
+# Deliberately does NOT include a code formatter (ruff format, prettier, ...):
+# this repo has an established compact style (see CLAUDE.md "Surgical
+# Changes") and a formatter would rewrite thousands of pre-existing lines on
+# first run. Install: `pip install pre-commit && pre-commit install`.
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+        args: ["--markdown-linebreak-ext=md"]   # a trailing double-space is a real MD line break
+      - id: end-of-file-fixer
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ["--maxkb=1024"]
+      - id: check-case-conflict
+      - id: mixed-line-ending
+        args: ["--fix=lf"]
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.0
+    hooks:
+      - id: ruff-check
+        # Pyflakes-equivalent rules only (unused imports, undefined names,
+        # shadowed/redefined functions, syntax errors) — NOT the full default
+        # ruleset, which would flag this repo's intentional compact style
+        # (single-line if/for, E701/E702) that CLAUDE.md explicitly keeps.
+        args: ["--select=F,E9", "--no-fix"]
+
+  - repo: https://github.com/koalaman/shellcheck-precommit
+    rev: v0.11.0
+    hooks:
+      - id: shellcheck
+        args: ["-x", "-S", "warning"]   # matches .github/workflows/shellcheck.yml exactly
+
+  - repo: https://github.com/DavidAnson/markdownlint-cli2
+    rev: v0.23.2
+    hooks:
+      - id: markdownlint-cli2
+        # Reads .markdownlint.yml automatically — see that file for why
+        # several default rules are disabled (established doc conventions,
+        # not laziness).
+        exclude: ^docs/superpowers/   # gitignored local planning docs
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
