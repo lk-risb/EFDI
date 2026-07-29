@@ -30,6 +30,14 @@ category translator remains a separate process and subscribes only to its own
 topic. `ASTERIX_CATEGORIES` selects which categories are auto-dispatched.
 Dedicated UDP/TCP inputs remain active at the same time.
 
+When the radar-side laptop already publishes complete frames through another
+Zenoh router, set `ASTERIX_ZENOH_UPSTREAM_ENDPOINT` and optionally
+`ASTERIX_ZENOH_UPSTREAM_ROOT`. `asterix_bridge.py` subscribes to every
+`…/raw/asterix/catN` topic at that router, verifies that the topic category and
+ASTERIX header agree, and republishes the unchanged frame locally. The same
+category translators then decode it; the bridge itself does not interpret a
+UAP. Plaintext `tcp/...:7448` is for isolated testing only.
+
 The mixed bridge also supports `ASTERIX_BIND`, `ASTERIX_MULTICAST_GROUP`,
 `ASTERIX_MULTICAST_INTERFACE`, and an IPv4/CIDR `ASTERIX_ALLOW_SOURCE` filter.
 Before configuring a new feed, observe it without Zenoh publication:
@@ -58,7 +66,19 @@ and `--multicast-interface`.
 All six ASTERIX translators also accept `--zenoh-raw` (or their corresponding
 `CATNN_ZENOH_RAW=1`) for an exact complete frame on `…/raw/asterix/catNN`.
 Launchers select that mode automatically for categories listed in
-`ASTERIX_CATEGORIES` whenever `ASTERIX_PORT` is configured.
+`ASTERIX_CATEGORIES` whenever generic UDP ingress or the upstream Zenoh
+ASTERIX bridge is configured.
+
+VERA-NG passive sensors that provide CAT-34 and CAT-48 use this same raw
+ASTERIX path; they do not need a VERA-specific bridge. Give every reporting
+source a unique SAC/SIC pair and leave `CAT34_RADAR_NAME` blank when Giraffe
+and VERA sources share one feed, so their site, status, coverage, and target
+state remain independently identified as `RADAR SACx/SICy`. Prefer the live
+CAT-34 I034/120 site position and I034/100 coverage values. Before operational
+use, capture representative frames and confirm the producer's CAT-34/CAT-48
+editions and UAP against the configured Ed.1.29/Ed.1.32 decoders. A passive
+sensor must not be given a synthetic rotating sweep: EFDI only renders sweep
+motion when the source actually sends the applicable CAT-34 timing messages.
 
 ASTERIX is a bit-level surveillance exchange family; category and edition must
 match the producer. EUROCONTROL publishes CAT-010 for surface movement,

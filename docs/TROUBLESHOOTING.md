@@ -37,12 +37,15 @@ sudo tcpdump -i any udp and host 239.2.3.1 and port 6969 -c 5
 # 3. Confirm ATAK and server are on the same L2 segment
 ```
 
-## Giraffe radar icon at 0°N 0°E
+## CAT-34 radar marker is missing
 
-The radar has not yet transmitted a CAT-34 message with I034/120 (3D-Position). Wait for the first rotation (~4 s), or set fallback coordinates in `.env`:
+The radar has not transmitted CAT-34 I034/120 (3D-Position), so EFDI cannot
+place the site safely. Check the CAT-34 log for `has no site position`. Prefer
+enabling I034/120 on the radar/gateway; for a single radar only, set fallback
+coordinates in `.env`:
 
 ```bash
-grep CAT48_RADAR compose/.env
+grep CAT34_RADAR compose/.env
 ```
 
 ## Drone detections not publishing

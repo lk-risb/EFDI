@@ -2144,7 +2144,16 @@ def _cat34_decode_cat034(data: bytes) -> dict | None:
     return msg if msg else None
 
 def _cat34__make_cat034_handler(pub_sensor, site, radar_name, configured_range_m=0.0):
-    # site = [lat, lon] — mutable so CAT-34 I034/120 can self-configure the radar position
+    # A configured site is a fallback for feeds that omit I034/120. Live
+    # positions are stored per SAC/SIC: one process may receive several radar
+    # heads, and a single mutable site would make them overwrite each other.
+    default_site = (
+        (float(site[0]), float(site[1]))
+        if site[0] is not None and site[1] is not None
+        else None
+    )
+    sites:          dict[str, tuple[float, float]] = {}
+    missing_sites:  set[str] = set()
     _first_seen:   dict[str, float] = {}
     _sweep:        dict[str, dict]  = {}   # key → {north_ts, rotation_s, status}
     _sweep_lock    = threading.Lock()
@@ -2223,16 +2232,28 @@ def _cat34__make_cat034_handler(pub_sensor, site, radar_name, configured_range_m
                 msg.get("collimation_rng_nm", "-"),
             ), flush=True)
 
-        # Self-configure: update radar site position from I034/120 when the radar transmits it
-        if msg.get("site_lat") is not None:
-            site[0] = msg["site_lat"]
-            site[1] = msg["site_lon"]
-
-        if not (pub_sensor and site[0] is not None and site[1] is not None):
+        if not pub_sensor:
             return
 
         sac = msg.get("sac", 0); sic = msg.get("sic", 0)
         key = "{}-{}".format(sac, sic)
+        # Self-configure each radar independently from I034/120. VERA-NG and
+        # other multi-sensor feeds commonly multiplex several SAC/SIC sources.
+        if msg.get("site_lat") is not None and msg.get("site_lon") is not None:
+            sites[key] = (float(msg["site_lat"]), float(msg["site_lon"]))
+            missing_sites.discard(key)
+        active_site = sites.get(key, default_site)
+        if active_site is None:
+            if key not in missing_sites:
+                print(
+                    "CAT-034 SAC{}/SIC{} has no site position; "
+                    "send I034/120 or configure CAT34_RADAR_LAT/LON".format(sac, sic),
+                    flush=True,
+                )
+                missing_sites.add(key)
+            return
+        site_lat, site_lon = active_site
+
         now = time.time()
         range_m, range_source = _cat34__coverage_range_m(msg, configured_range_m)
         if range_m is not None:
@@ -2245,16 +2266,16 @@ def _cat34__make_cat034_handler(pub_sensor, site, radar_name, configured_range_m
             # Compute speed and course from successive position reports (mobile platform support)
             speed_ms = heading_deg = None
             prev = _pos_hist.get(key)
-            if prev and site[0] is not None and site[1] is not None:
+            if prev:
                 dt = now - prev[0]
                 if 0 < dt < 3600:
-                    dlat = (site[0] - prev[1]) * 111320.0
-                    dlon = (site[1] - prev[2]) * 111320.0 * math.cos(math.radians(site[0]))
+                    dlat = (site_lat - prev[1]) * 111320.0
+                    dlon = (site_lon - prev[2]) * 111320.0 * math.cos(math.radians(site_lat))
                     dist_m = math.hypot(dlat, dlon)
                     speed_ms = round(dist_m / dt, 2)
                     if dist_m > 1.0:
                         heading_deg = round((math.degrees(math.atan2(dlon, dlat)) + 360) % 360, 1)
-            _pos_hist[key] = (now, site[0], site[1])
+            _pos_hist[key] = (now, site_lat, site_lon)
 
             status = {
                 "_src":        "ASTERIX CAT-34 Ed.1.29",
@@ -2262,8 +2283,8 @@ def _cat34__make_cat034_handler(pub_sensor, site, radar_name, configured_range_m
                 "sensor_type": "radar",
                 "sensor_id":   "CAT34-{}-{}".format(sac, sic),
                 "sensor_name": radar_name or "RADAR SAC{}/SIC{}".format(sac, sic),
-                "lat_deg":     site[0],
-                "lon_deg":     site[1],
+                "lat_deg":     site_lat,
+                "lon_deg":     site_lon,
                 "online_since": _first_seen[key],
             }
             if key in _ranges:
@@ -4055,6 +4076,7 @@ def _category_uses_raw(wanted: int) -> bool:
     if not (
         os.environ.get("UDP_INGRESS_PORT", "").strip()
         or os.environ.get("ASTERIX_PORT", "").strip()
+        or os.environ.get("ASTERIX_ZENOH_UPSTREAM_ENDPOINT", "").strip()
     ):
         return False
     categories = [item.strip() for item in os.environ.get("ASTERIX_CATEGORIES", "34,48").split(",")]
@@ -4064,6 +4086,12 @@ def _category_uses_raw(wanted: int) -> bool:
 def _bundle_main() -> None:
     children: list[tuple[str, str, list[str]]] = []
     script = "protocols/vendors/asterix/cat.py"
+    if os.environ.get("ASTERIX_ZENOH_UPSTREAM_ENDPOINT", "").strip():
+        children.append((
+            "asterix-bridge",
+            "bridges/asterix_bridge.py",
+            [],
+        ))
     if (
         os.environ.get("UDP_INGRESS_PORT", "").strip()
         or os.environ.get("ASTERIX_PORT", "").strip()

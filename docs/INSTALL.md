@@ -163,19 +163,32 @@ ASTERIX_MULTICAST_GROUP=       # optional
 ASTERIX_MULTICAST_INTERFACE=0.0.0.0
 ASTERIX_ALLOW_SOURCE=          # optional sender IPv4 address or CIDR
 
+# Optional sensor-side Zenoh router carrying complete raw ASTERIX frames:
+ASTERIX_ZENOH_UPSTREAM_ENDPOINT=  # e.g. tcp/zenoh2.example:7448 for isolated testing
+ASTERIX_ZENOH_UPSTREAM_ROOT=      # defaults to this pod's complete topic root
+
 # Separate publisher streams can continue using these direct listeners.
 CAT10_PORT=50010               # EFDI private-range convention; configure producer output
 CAT20_PORT=50020               # EFDI private-range convention; configure producer output
 CAT21_PORT=50021               # EFDI private-range convention; configure producer output
 CAT34_PORT=50034               # EFDI private-range convention; configure radar output
 CAT48_PORT=50048               # EFDI private-range convention; configure radar output
+CAT34_RADAR_LAT=               # Single-radar fallback; live I034/120 is preferred
+CAT34_RADAR_LON=               # Single-radar fallback; live I034/120 is preferred
+CAT34_RADAR_NAME=              # Blank = distinct RADAR SACx/SICy labels; set for one radar
+CAT34_RADAR_RANGE_M=           # Operator-confirmed maximum; live I034/100 wins
 CAT62_PORT=50062               # EFDI private-range convention; configure producer output
 CAT48_RADAR_SAC=<SAC>          # ASTERIX Source Area Code
 CAT48_RADAR_SIC=<SIC>          # ASTERIX Source Identification Code
-CAT48_RADAR_NAME=Giraffe AMB   # Callsign displayed in ATAK
 ```
 
-> **Radar position (lat/lon):** The bridge reads radar position automatically from each CAT-34 north marker via ASTERIX field I034/120. You do **not** need to configure coordinates for a static or mobile radar — position, speed, and course update live. Set `CAT48_RADAR_LAT` / `CAT48_RADAR_LON` only as a fallback for radar systems that do not transmit I034/120, or to show an immediate ATAK marker before the first CAT-34 message arrives.
+> **Radar position (lat/lon):** The bridge reads each radar position from
+> CAT-34 I034/120 and keeps it separately by SAC/SIC, so multiplexed VERA-NG
+> or other multi-radar feeds do not overwrite one another. Set
+> `CAT34_RADAR_LAT` / `CAT34_RADAR_LON` only as a single-radar fallback when
+> the feed omits I034/120. Without either source, EFDI logs the missing
+> SAC/SIC position and deliberately withholds the site marker instead of
+> placing it at 0°N 0°E.
 
 > **ASTERIX ports:** ASTERIX specifies the message format, not a registered
 > network port. In the radar/gateway management interface, set the EFDI host as
@@ -446,7 +459,7 @@ Do not clear a shared operational layer to work around this limitation.
 
 | ATAK appearance | CoT type | Source |
 | --- | --- | --- |
-| Blue radar dish (with motion trail if mobile) | `a-f-G-E-S-R` | Giraffe AMB site marker |
+| Neutral radar sensor (client-native MIL symbol) | `a-n-G-E-S-R` | CAT-34 site marker, including VERA-NG |
 | Blue ground unit | `a-f-G-U-C` | SitaWare friendly ground unit |
 | Red ground unit | `a-h-G-U-C` | SitaWare hostile ground unit |
 | Yellow/green ground unit | `a-n-G-U-C` | SitaWare neutral ground unit |

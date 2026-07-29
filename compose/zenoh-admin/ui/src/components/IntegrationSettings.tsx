@@ -59,6 +59,8 @@ const FIELD_GROUPS: { title: string; description: string; fields: { key: string;
     { key: 'SENSORTHINGS_TOKEN', label: 'SensorThings bearer token', secret: true },
   ] },
   { title: 'Sensors and data sources', description: 'Common partner endpoints. Protocol-specific CAT and raw-port settings are available under Advanced.', fields: [
+    { key: 'ASTERIX_ZENOH_UPSTREAM_ENDPOINT', label: 'ASTERIX upstream Zenoh endpoint', placeholder: 'tcp/zenoh2.example:7448' },
+    { key: 'ASTERIX_ZENOH_UPSTREAM_ROOT', label: 'ASTERIX upstream topic root', placeholder: 'partner/org' },
     { key: 'UDP_INGRESS_PORT', label: 'Generic UDP ingress port', placeholder: '50000' }, { key: 'ASTERIX_CATEGORIES', label: 'ASTERIX auto-dispatch categories', placeholder: '34,48' },
     { key: 'CAT10_PORT', label: 'CAT-010 port', placeholder: '50010' }, { key: 'CAT21_PORT', label: 'CAT-021 port', placeholder: '50021' },
     { key: 'CAT34_PORT', label: 'CAT-034 port', placeholder: '50034' }, { key: 'CAT48_PORT', label: 'CAT-048 port', placeholder: '50048' },
