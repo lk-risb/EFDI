@@ -196,6 +196,7 @@ EDITABLE_EXACT = {
     "UDP_INGRESS_PORT", "UDP_INGRESS_BIND", "UDP_INGRESS_ALLOW_SOURCE",
     "ASTERIX_PORT", "ASTERIX_BIND", "ASTERIX_CATEGORIES", "ASTERIX_MULTICAST_GROUP",
     "ASTERIX_MULTICAST_INTERFACE", "ASTERIX_ALLOW_SOURCE",
+    "ASTERIX_ZENOH_UPSTREAM_ENDPOINT", "ASTERIX_ZENOH_UPSTREAM_ROOT",
     "TAK_HOST", "TAK_HOST_FALLBACK", "TAK_PORT", "TAK_TLS", "TAK_TLS_SERVER_NAME",
     "TAK_CERT", "TAK_KEY", "TAK_CA",
     "SITAWARE_URL", "SITAWARE_URL_FALLBACK", "SITAWARE_API_PATH", "SITAWARE_USER", "SITAWARE_PASS", "SITAWARE_POLL_S",
@@ -485,7 +486,10 @@ def _blocked_reason(name: str) -> str:
 # children — otherwise the bundle always reads 'stopped' in the WebUI even while
 # every category is live.
 _BUNDLE_CHILD_PIDFILES = {
-    "asterix": lambda: sorted(PID_DIR.glob("asterix-cat*.pid")) + [PID_DIR / "udp-ingress.pid"],
+    "asterix": lambda: sorted(PID_DIR.glob("asterix-cat*.pid")) + [
+        PID_DIR / "asterix-bridge.pid",
+        PID_DIR / "udp-ingress.pid",
+    ],
 }
 
 

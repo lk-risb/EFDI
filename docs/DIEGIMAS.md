@@ -150,7 +150,7 @@ Redaguokite `compose/.env`. Failą `start.sh` nuskaito eilutė po eilutės saugi
 # Jei nenustatyta, numatytasis kelias yra compose/state/ (repo viduje, gitignored).
 #POD_STATE_DIR=/var/lib/efdi-pod
 
-# ── Mišrus ASTERIX UDP įėjimas (Giraffe pavyzdys: CAT-34/48) ───────────────
+# ── Mišrus ASTERIX UDP įėjimas (radarai, pvz. VERA-NG: CAT-34/48) ──────────
 # Vienam bendram ASTERIX UDP srautui išvardykite visas jame esančias
 # kategorijas. CAT-010/020/021/062 galima pridėti, kai jos yra sraute.
 # Kategorijų vertėjai automatiškai skaitys atskiras neapdorotas Zenoh temas.
@@ -167,6 +167,10 @@ CAT20_PORT=50020               # EFDI privatus susitarimas; nustatykite gamintoj
 CAT21_PORT=50021               # EFDI privatus susitarimas; nustatykite gamintojo išvestį
 CAT34_PORT=50034               # EFDI privatus susitarimas; nustatykite radaro išvestį
 CAT48_PORT=50048               # EFDI privatus susitarimas; nustatykite radaro išvestį
+CAT34_RADAR_LAT=               # Vieno radaro atsarginė reikšmė; pirmenybė I034/120
+CAT34_RADAR_LON=               # Vieno radaro atsarginė reikšmė; pirmenybė I034/120
+CAT34_RADAR_NAME=              # Tuščia = atskiri RADAR SACx/SICy vardai; nustatykite vienam radarui
+CAT34_RADAR_RANGE_M=           # Operatoriaus patvirtintas maksimumas; pirmenybė I034/100
 CAT62_PORT=50062               # EFDI privatus susitarimas; nustatykite gamintojo išvestį
 CAT48_RADAR_LAT=<RADAR_LAT>        # Antenos platuma  (WGS-84 dešimtainiai laipsniai)
 CAT48_RADAR_LON=<RADAR_LON>        # Antenos ilguma   (WGS-84 dešimtainiai laipsniai)
@@ -446,7 +450,7 @@ Adresas priima tik GET/HEAD, pagal nutylėjimą reikalauja Basic autentifikavimo
 
 | ATAK piktograma | CoT tipas | Šaltinis |
 | --- | --- | --- |
-| Mėlynas radaro dubuo (su judėjimo pėdsaku jei mobilus) | `a-f-G-E-S-R` | Giraffe AMB radaro vieta |
+| Neutralus radaro sensorius (kliento standartinis MIL simbolis) | `a-n-G-E-S-R` | CAT-34 radaro vieta, įskaitant VERA-NG |
 | Mėlynas žemės vienetas | `a-f-G-U-C` | SitaWare draugiškas žemės vienetas |
 | Raudonas žemės vienetas | `a-h-G-U-C` | SitaWare priešiškas žemės vienetas |
 | Geltonas/žalias žemės vienetas | `a-n-G-U-C` | SitaWare neutralus žemės vienetas |

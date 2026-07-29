@@ -130,3 +130,89 @@ def test_cat34_advertised_coverage_precedes_operator_fallback():
     ) == (46_300, "advertised")
     assert module._cat34__coverage_range_m({}, 150_000) == (150_000, "configured")
     assert module._cat34__coverage_range_m({}, 0) == (None, None)
+
+
+def test_cat34_keeps_live_site_position_per_sac_sic(monkeypatch):
+    module = importlib.import_module("protocols.vendors.asterix.cat")
+    messages = iter([
+        {
+            "msg_type": "north_marker",
+            "sac": 112,
+            "sic": 64,
+            "site_lat": 54.9,
+            "site_lon": 24.1,
+        },
+        {
+            "msg_type": "north_marker",
+            "sac": 112,
+            "sic": 65,
+            "site_lat": 55.1,
+            "site_lon": 25.2,
+        },
+        {
+            "msg_type": "north_marker",
+            "sac": 112,
+            "sic": 64,
+        },
+    ])
+    published = []
+
+    class NoThread:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def start(self):
+            pass
+
+    monkeypatch.setattr(module, "_cat34_decode_cat034", lambda _data: next(messages))
+    monkeypatch.setattr(module.threading, "Thread", NoThread)
+    monkeypatch.setattr(
+        module,
+        "publish_dual",
+        lambda _session, _topic, payload, *_args, **_kwargs:
+            published.append(dict(payload)),
+    )
+
+    handler = module._cat34__make_cat034_handler(
+        pub_sensor=object(),
+        site=[None, None],
+        radar_name="",
+    )
+    handler(b"first", False)
+    handler(b"second", False)
+    handler(b"first-again", False)
+
+    assert [
+        (item["sic"], item["sensor_name"], item["lat_deg"], item["lon_deg"])
+        for item in published
+    ] == [
+        (64, "RADAR SAC112/SIC64", 54.9, 24.1),
+        (65, "RADAR SAC112/SIC65", 55.1, 25.2),
+        (64, "RADAR SAC112/SIC64", 54.9, 24.1),
+    ]
+
+
+def test_cat34_reports_missing_site_once(monkeypatch, capsys):
+    module = importlib.import_module("protocols.vendors.asterix.cat")
+    published = []
+    monkeypatch.setattr(
+        module,
+        "_cat34_decode_cat034",
+        lambda _data: {"msg_type": "north_marker", "sac": 112, "sic": 64},
+    )
+    monkeypatch.setattr(
+        module,
+        "publish_dual",
+        lambda *_args, **_kwargs: published.append(True),
+    )
+    handler = module._cat34__make_cat034_handler(
+        pub_sensor=object(),
+        site=[None, None],
+        radar_name="VERA-NG",
+    )
+
+    handler(b"first", False)
+    handler(b"second", False)
+
+    assert not published
+    assert capsys.readouterr().out.count("has no site position") == 1

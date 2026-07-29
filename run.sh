@@ -119,7 +119,8 @@ skip_if_no_key() {
 
 asterix_category_uses_raw() {
     local wanted="$1" item
-    [[ -n "${UDP_INGRESS_PORT:-${ASTERIX_PORT:-}}" ]] || return 1
+    [[ -n "${UDP_INGRESS_PORT:-${ASTERIX_PORT:-}}" ||
+       -n "${ASTERIX_ZENOH_UPSTREAM_ENDPOINT:-}" ]] || return 1
     IFS=',' read -r -a _asterix_categories <<< "${ASTERIX_CATEGORIES:-34,48}"
     for item in "${_asterix_categories[@]}"; do
         item="${item//[[:space:]]/}"
@@ -186,6 +187,9 @@ start_zenoh() {
 
 start_asterix_protocols() {
     local category port tcp_var tcp_args host
+    if [[ -n "${ASTERIX_ZENOH_UPSTREAM_ENDPOINT:-}" ]]; then
+        start asterix-bridge bridges/asterix_bridge.py
+    fi
     for category in 10 20 21 34 48; do
         case "$category" in
             10) port="${CAT10_PORT:-}"; tcp_var="${CAT10_TCP:-}" ;;
