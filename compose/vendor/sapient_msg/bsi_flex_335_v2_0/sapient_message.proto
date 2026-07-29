@@ -48,10 +48,10 @@ message SapientMessage {
         Alert alert = 10; // SAPIENT Alert message
         AlertAck alert_ack = 11; // SAPIENT Alert Acknowledgment message
         Error error = 12; // SAPIENT Error message
-		
+
 
 	}
 	optional string additional_information = 13; // space for additional information
-	
+
 }
 // [END messages]

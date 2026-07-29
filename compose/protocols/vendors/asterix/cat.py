@@ -219,9 +219,9 @@ def _cat10__decode_bds50(mb: bytes) -> dict:
     out = {}
     if _bit(1):  out["roll_deg"]         = round(_sgn(2, 11) * 45.0 / 256.0, 1)
     if _bit(12): out["true_track_deg"]   = round(_uns(13, 22) * 360.0 / 1024.0, 1)
-    if _bit(23): out["bds_gs_kt"]        = round(_uns(24, 33) * 2.0, 0)
-    if _bit(34): out["track_rate_degs"]  = round(_sgn(35, 44) * 8.0 / 256.0, 2)
-    if _bit(45): out["tas_kt"]           = round(_uns(46, 55) * 2.0, 0)
+    if _bit(24): out["bds_gs_kt"]        = round(_uns(25, 34) * 2.0, 0)
+    if _bit(35): out["track_rate_degs"]  = round(_sgn(36, 45) * 8.0 / 256.0, 2)
+    if _bit(46): out["tas_kt"]           = round(_uns(47, 56) * 2.0, 0)
     return out
 
 def _cat10__decode_bds60(mb: bytes) -> dict:
@@ -234,10 +234,10 @@ def _cat10__decode_bds60(mb: bytes) -> dict:
         return r - (1 << w) if r >= (1 << (w - 1)) else r
     out = {}
     if _bit(1):  out["mag_hdg_deg"]  = round(_uns(2, 11) * 360.0 / 1024.0, 1)
-    if _bit(12): out["ias_kt"]       = _uns(13, 22)
-    if _bit(23): out["mach"]         = round(_uns(24, 34) * 2.048 / 2048.0, 3)
-    if _bit(35): out["baro_vr_fpm"]  = _sgn(36, 46) * 32
-    if _bit(47): out["ivv_fpm"]      = _sgn(48, 56) * 32
+    if _bit(13): out["ias_kt"]       = _uns(14, 23)
+    if _bit(24): out["mach"]         = round(_uns(25, 34) * 2.048 / 512.0, 3)
+    if _bit(35): out["baro_vr_fpm"]  = _sgn(36, 45) * 32
+    if _bit(46): out["ivv_fpm"]      = _sgn(47, 56) * 32
     return out
 
 def _cat10__decode_bds40(mb: bytes) -> dict:
@@ -775,9 +775,9 @@ def _cat20__decode_bds50(mb: bytes) -> dict:
     out = {}
     if _bit(1):  out["roll_deg"]         = round(_sgn(2, 11) * 45.0 / 256.0, 1)
     if _bit(12): out["true_track_deg"]   = round(_uns(13, 22) * 360.0 / 1024.0, 1)
-    if _bit(23): out["bds_gs_kt"]        = round(_uns(24, 33) * 2.0, 0)
-    if _bit(34): out["track_rate_degs"]  = round(_sgn(35, 44) * 8.0 / 256.0, 2)
-    if _bit(45): out["tas_kt"]           = round(_uns(46, 55) * 2.0, 0)
+    if _bit(24): out["bds_gs_kt"]        = round(_uns(25, 34) * 2.0, 0)
+    if _bit(35): out["track_rate_degs"]  = round(_sgn(36, 45) * 8.0 / 256.0, 2)
+    if _bit(46): out["tas_kt"]           = round(_uns(47, 56) * 2.0, 0)
     return out
 
 def _cat20__decode_bds60(mb: bytes) -> dict:
@@ -790,10 +790,10 @@ def _cat20__decode_bds60(mb: bytes) -> dict:
         return r - (1 << w) if r >= (1 << (w - 1)) else r
     out = {}
     if _bit(1):  out["mag_hdg_deg"]  = round(_uns(2, 11) * 360.0 / 1024.0, 1)
-    if _bit(12): out["ias_kt"]       = _uns(13, 22)
-    if _bit(23): out["mach"]         = round(_uns(24, 34) * 2.048 / 2048.0, 3)
-    if _bit(35): out["baro_vr_fpm"]  = _sgn(36, 46) * 32
-    if _bit(47): out["ivv_fpm"]      = _sgn(48, 56) * 32
+    if _bit(13): out["ias_kt"]       = _uns(14, 23)
+    if _bit(24): out["mach"]         = round(_uns(25, 34) * 2.048 / 512.0, 3)
+    if _bit(35): out["baro_vr_fpm"]  = _sgn(36, 45) * 32
+    if _bit(46): out["ivv_fpm"]      = _sgn(47, 56) * 32
     return out
 
 def _cat20__gillham_to_ft(code: int) -> int | None:
@@ -1342,9 +1342,9 @@ def _cat21__decode_bds50(mb: bytes) -> dict:
     out = {}
     if _bit(1):  out["roll_deg"]         = round(_sgn(2, 11) * 45.0 / 256.0, 1)
     if _bit(12): out["true_track_deg"]   = round(_uns(13, 22) * 360.0 / 1024.0, 1)
-    if _bit(23): out["bds_gs_kt"]        = round(_uns(24, 33) * 2.0, 0)
-    if _bit(34): out["track_rate_degs"]  = round(_sgn(35, 44) * 8.0 / 256.0, 2)
-    if _bit(45): out["tas_kt"]           = round(_uns(46, 55) * 2.0, 0)
+    if _bit(24): out["bds_gs_kt"]        = round(_uns(25, 34) * 2.0, 0)
+    if _bit(35): out["track_rate_degs"]  = round(_sgn(36, 45) * 8.0 / 256.0, 2)
+    if _bit(46): out["tas_kt"]           = round(_uns(47, 56) * 2.0, 0)
     return out
 
 def _cat21__decode_bds60(mb: bytes) -> dict:
@@ -1357,10 +1357,10 @@ def _cat21__decode_bds60(mb: bytes) -> dict:
         return r - (1 << w) if r >= (1 << (w - 1)) else r
     out = {}
     if _bit(1):  out["mag_hdg_deg"]  = round(_uns(2, 11) * 360.0 / 1024.0, 1)
-    if _bit(12): out["ias_kt"]       = _uns(13, 22)
-    if _bit(23): out["mach"]         = round(_uns(24, 34) * 2.048 / 2048.0, 3)
-    if _bit(35): out["baro_vr_fpm"]  = _sgn(36, 46) * 32
-    if _bit(47): out["ivv_fpm"]      = _sgn(48, 56) * 32
+    if _bit(13): out["ias_kt"]       = _uns(14, 23)
+    if _bit(24): out["mach"]         = round(_uns(25, 34) * 2.048 / 512.0, 3)
+    if _bit(35): out["baro_vr_fpm"]  = _sgn(36, 45) * 32
+    if _bit(46): out["ivv_fpm"]      = _sgn(47, 56) * 32
     return out
 
 def _cat21__decode_bds40(mb: bytes) -> dict:
@@ -1396,242 +1396,6 @@ def _cat21__decode_bds30(mb: bytes) -> dict:
     out["acas_ra_terminated"]  = bool(_bit(15))
     out["acas_multi_threat"]   = bool(_bit(16))
     return out
-
-def _cat21_decode_cat021_record(data: bytes, pos: int):
-    """Decode one CAT-021 ADS-B record. Returns (track_dict, new_pos)."""
-    fspec, pos = _cat21_parse_fspec(data, pos)
-    track = {"_ts": time.time(), "_src": "ASTERIX CAT-21"}
-
-    for frn, present in enumerate(fspec):
-        if not present:
-            continue
-        if frn == 0:                    # I021/010  SAC/SIC
-            if pos + 2 > len(data): return track, len(data)
-            track["sac"] = data[pos]; track["sic"] = data[pos + 1]; pos += 2
-        elif frn == 1:                  # I021/040  Target Report Descriptor (FX)
-            if pos >= len(data): return track, len(data)
-            b = data[pos]; pos += 1
-            atp = (b >> 5) & 0x07
-            arc = (b >> 3) & 0x03
-            track["addr_type"] = ("icao24","icao24_dup","surface","anonymous","non_icao","","","")[atp]
-            track["alt_res"]   = ("unknown","25ft","100ft","n/a")[arc]
-            if not (b & 0x04): track["range_check_fail"] = True
-            if b & 0x02:       track["surface_vehicle"]  = True   # RAB
-            if b & 0x01:
-                if pos >= len(data): return track, len(data)
-                b = data[pos]; pos += 1
-                if b & 0x80: track["diff_correction"] = True
-                if b & 0x40: track["on_ground"]       = True
-                if b & 0x20: track["simulated"]       = True
-                if b & 0x10: track["test_target"]     = True
-                if b & 0x08: track["mil_emergency"]   = True
-                if b & 0x04: track["mil_ident"]       = True
-                foe = (b >> 1) & 0x03
-                if foe: track["iff"] = ("","friendly","unknown","no_reply")[foe]
-                while b & 0x01:
-                    if pos >= len(data): break
-                    b = data[pos]; pos += 1
-        elif frn == 2:                  # I021/030  Time of Day (1/128 s)
-            if pos + 3 > len(data): return track, len(data)
-            raw = (data[pos] << 16) | (data[pos + 1] << 8) | data[pos + 2]
-            track["tod_s"] = raw / 128.0; pos += 3
-        elif frn == 3:                  # I021/130  WGS-84 (3+3 bytes, 180/2^23)
-            if pos + 6 > len(data): return track, len(data)
-            scale = 180.0 / (2 ** 23)
-            track["lat_deg"] = round(_cat21__s24(data[pos:pos + 3]) * scale, 6)
-            track["lon_deg"] = round(_cat21__s24(data[pos + 3:pos + 6]) * scale, 6)
-            pos += 6
-        elif frn == 4:                  # I021/080  ICAO 24-bit
-            if pos + 3 > len(data): return track, len(data)
-            addr = (data[pos] << 16) | (data[pos + 1] << 8) | data[pos + 2]
-            track["icao24"] = "{:06x}".format(addr); pos += 3
-        elif frn == 5:                  # I021/140  Geometric Altitude (6.25 ft/LSB)
-            if pos + 2 > len(data): return track, len(data)
-            track["alt_geom_ft"] = round(_cat21__s16(data[pos:pos + 2]) * 6.25); pos += 2
-        elif frn == 6:                  # I021/090  Figure of Merit (2 bytes)
-            if pos + 2 > len(data): return track, len(data)
-            w = _cat21__u16(data[pos:pos + 2])
-            track["nac_p"] = (w >> 9) & 0x0F
-            track["nic"]   = (w >> 5) & 0x0F
-            track["nac_v"] = (w >> 1) & 0x0F
-            pos += 2
-        elif frn == 7:                  # I021/210  Link Technology (FX)
-            if pos >= len(data): return track, len(data)
-            b = data[pos]; pos += 1
-            lt = []
-            if b & 0x80: lt.append("VDL4")
-            if b & 0x40: lt.append("UAT")
-            if b & 0x20: lt.append("1090ES")
-            if lt: track["link_tech"] = lt
-            while b & 0x01:
-                if pos >= len(data): break
-                b = data[pos]; pos += 1
-        elif frn == 8:                  # I021/230  Roll Angle (2 bytes, s16, 45/512 deg)
-            if pos + 2 > len(data): return track, len(data)
-            track["roll_deg"] = round(_cat21__s16(data[pos:pos + 2]) * 45.0 / 512.0, 1)
-            pos += 2
-        elif frn == 9:                  # I021/145  Barometric FL (1/4 FL × 100 ft)
-            if pos + 2 > len(data): return track, len(data)
-            track["alt_baro_ft"] = _cat21__s16(data[pos:pos + 2]) * 25; pos += 2
-        elif frn == 10:                 # I021/150  Air Speed (2 bytes)
-            if pos + 2 > len(data): return track, len(data)
-            w = _cat21__u16(data[pos:pos + 2])
-            im  = (w >> 15) & 1
-            val = w & 0x7FFF
-            if im:
-                track["mach"] = round(val * 2.0 / (2 ** 14), 3)
-            else:
-                track["ias_kt"] = round(val * 3600.0 / 16384.0, 1)
-            pos += 2
-        elif frn == 11:                 # I021/151  True Airspeed (2 bytes, u15 kt)
-            if pos + 2 > len(data): return track, len(data)
-            w = _cat21__u16(data[pos:pos + 2]) & 0x7FFF
-            if w: track["tas_kt"] = w
-            pos += 2
-        elif frn == 12:                 # I021/152  Magnetic Heading (2 bytes, u16)
-            if pos + 2 > len(data): return track, len(data)
-            track["mag_hdg_deg"] = round(_cat21__u16(data[pos:pos + 2]) * 360.0 / 65536.0, 2)
-            pos += 2
-        elif frn == 13:                 # I021/155  Barometric Vertical Rate (2 bytes)
-            if pos + 2 > len(data): return track, len(data)
-            w = _cat21__u16(data[pos:pos + 2])
-            re  = (w >> 15) & 1
-            if not re:
-                val = w & 0x7FFF
-                if val >= 0x4000: val -= 0x8000
-                track["baro_vr_fpm"] = round(val * 6.25)
-            pos += 2
-        elif frn == 14:                 # I021/157  Geometric Vertical Rate (2 bytes)
-            if pos + 2 > len(data): return track, len(data)
-            w = _cat21__u16(data[pos:pos + 2])
-            re  = (w >> 15) & 1
-            if not re:
-                val = w & 0x7FFF
-                if val >= 0x4000: val -= 0x8000
-                track["geo_vr_fpm"] = round(val * 6.25)
-            pos += 2
-        elif frn == 15:                 # I021/160  Ground Vector (GS 2B + TA 2B)
-            if pos + 4 > len(data): return track, len(data)
-            gs_raw = _cat21__u16(data[pos:pos + 2]) & 0x7FFF
-            ta_raw = _cat21__u16(data[pos + 2:pos + 4])
-            track["speed_ms"]    = round(gs_raw * (3600.0 / 16384.0) * 0.514444, 2)
-            track["heading_deg"] = round(ta_raw * 360.0 / 65536.0, 2)
-            pos += 4
-        elif frn == 16:                 # I021/165  Track Angle Rate (2 bytes, s16)
-            if pos + 2 > len(data): return track, len(data)
-            track["track_angle_rate_degs"] = round(_cat21__s16(data[pos:pos + 2]) * 360.0 / 65536.0, 3)
-            pos += 2
-        elif frn == 17:                 # I021/170  Target Identification (callsign)
-            if pos + 6 > len(data): return track, len(data)
-            track["callsign"] = _cat21__decode_callsign(data[pos:pos + 6]); pos += 6
-        elif frn == 18:                 # I021/095  Velocity Accuracy (1 byte)
-            if pos + 1 > len(data): return track, len(data)
-            nac_v = (data[pos] >> 4) & 0x0F
-            if nac_v and "nac_v" not in track: track["nac_v"] = nac_v
-            pos += 1
-        elif frn == 19:                 # I021/032  Time of Day Accuracy (1 byte, 1/128 s)
-            if pos + 1 > len(data): return track, len(data)
-            track["tod_accuracy_s"] = round(data[pos] / 128.0, 4); pos += 1
-        elif frn == 20:                 # I021/200  Target Status (FX)
-            if pos >= len(data): return track, len(data)
-            b = data[pos]; pos += 1
-            ss = (b >> 6) & 0x03
-            if ss == 1: track["alert"] = "permanent"
-            elif ss == 2: track["alert"] = "temporary"
-            elif ss == 3: track["spi"]  = True
-            if b & 0x20: track["lnav_engaged"]     = True
-            if b & 0x10: track["mil_emergency"]    = True
-            if b & 0x08: track["tcas_operational"] = True
-            if b & 0x04: track["intent_change"]    = True
-            while b & 0x01:
-                if pos >= len(data): break
-                b = data[pos]; pos += 1
-                if b & 0x80: track["autopilot"]    = True
-                if b & 0x40: track["vnav_active"]  = True
-                if b & 0x20: track["alt_hold"]     = True
-                if b & 0x10: track["approach_mode"]= True
-                if b & 0x08: track["tcas_ra"]      = True
-                if b & 0x04: track["ident_switch"]  = True
-        elif frn == 21:                 # I021/020  Emitter Category (1 byte)
-            if pos + 1 > len(data): return track, len(data)
-            ec = data[pos]; pos += 1
-            track["emitter_category"]     = ec
-            track["emitter_category_str"] = _cat21__EMITTER_CATEGORY.get(ec, "cat{}".format(ec))
-        elif frn == 22:                 # I021/220  Met Information (compound)
-            if pos >= len(data): return track, len(data)
-            psf = data[pos]; pos += 1
-            if psf & 0x80:              # wind speed (2 bytes, 0.5 kt)
-                if pos + 2 > len(data): return track, len(data)
-                track["wind_speed_kt"] = round(_cat21__u16(data[pos:pos + 2]) * 0.5, 1); pos += 2
-            if psf & 0x40:              # wind direction (2 bytes, 360/65536)
-                if pos + 2 > len(data): return track, len(data)
-                track["wind_dir_deg"] = round(_cat21__u16(data[pos:pos + 2]) * 360.0 / 65536.0, 1); pos += 2
-            if psf & 0x20:              # temperature (2 bytes, s16, 0.25°C)
-                if pos + 2 > len(data): return track, len(data)
-                track["temp_c"] = round(_cat21__s16(data[pos:pos + 2]) * 0.25, 1); pos += 2
-            if psf & 0x10:              # turbulence (1 byte)
-                if pos + 1 > len(data): return track, len(data)
-                track["turbulence"] = data[pos]; pos += 1
-            while psf & 0x01:
-                if pos >= len(data): break
-                psf = data[pos]; pos += 1
-        elif frn == 23:                 # I021/146  Selected Altitude (2 bytes)
-            if pos + 2 > len(data): return track, len(data)
-            w   = _cat21__u16(data[pos:pos + 2])
-            src = (w >> 13) & 0x03
-            val = w & 0x1FFF
-            if val >= 0x1000: val -= 0x2000
-            track["selected_alt_ft"]     = val * 25
-            track["selected_alt_source"] = ("MCP/FCU", "FMS", "FMS2", "reserved")[src]
-            pos += 2
-        elif frn == 24:                 # I021/148  Final State Selected Altitude
-            if pos + 2 > len(data): return track, len(data)
-            w   = _cat21__u16(data[pos:pos + 2]) & 0x1FFF
-            if w >= 0x1000: w -= 0x2000
-            track["final_alt_ft"] = w * 25; pos += 2
-        elif frn == 25:                 # I021/110  Trajectory Intent (compound, skip)
-            if pos >= len(data): return track, len(data)
-            psf = data[pos]; pos += 1
-            if psf & 0x80: pos += 1     # TIS sub-field (1 byte)
-            if psf & 0x40:              # TID: REP × 15 bytes
-                if pos < len(data):
-                    rep = data[pos]; pos += 1 + rep * 15
-            while psf & 0x01:
-                if pos >= len(data): break
-                psf = data[pos]; pos += 1
-        elif frn == 26:                 # I021/070  Mode-3/A squawk
-            if pos + 2 > len(data): return track, len(data)
-            track["squawk"] = "{:04o}".format(_cat21__u16(data[pos:pos + 2]) & 0x0FFF); pos += 2
-        elif frn == 27:                 # I021/131  High-Res WGS-84 (4+4, 180/2^31)
-            if pos + 8 > len(data): return track, len(data)
-            scale = 180.0 / (2 ** 31)
-            track["lat_deg"] = round(_cat21__s32(data[pos:pos + 4]) * scale, 7)
-            track["lon_deg"] = round(_cat21__s32(data[pos + 4:pos + 8]) * scale, 7)
-            pos += 8
-        elif frn == 28:                 # I021/132  Message Amplitude (s8, 1 dBm/LSB)
-            if pos + 1 > len(data): return track, len(data)
-            track["signal_amplitude_dbm"] = struct.unpack_from("b", data, pos)[0]; pos += 1
-        elif frn == 29:                 # I021/250  Mode-S MB Data (REP × 8 bytes)
-            if pos >= len(data): return track, len(data)
-            rep = data[pos]; pos += 1
-            for _ in range(rep):
-                if pos + 8 > len(data): break
-                mb = bytes(data[pos:pos + 7]); bds = data[pos + 7]; pos += 8
-                bds1 = (bds >> 4) & 0x0F; bds2 = bds & 0x0F
-                if   bds1 == 3 and bds2 == 0: track.update(_cat21__decode_bds30(mb))
-                elif bds1 == 4 and bds2 == 0: track.update(_cat21__decode_bds40(mb))
-                elif bds1 == 5 and bds2 == 0: track.update(_cat21__decode_bds50(mb))
-                elif bds1 == 6 and bds2 == 0: track.update(_cat21__decode_bds60(mb))
-        elif frn == 30:                 # I021/260  ACAS Resolution Advisory (7 bytes, BDS 3,0)
-            if pos + 7 > len(data): return track, len(data)
-            track.update(_cat21__decode_bds30(data[pos:pos + 7])); pos += 7
-        elif frn == 31:                 # I021/400  Receiver ID (1 byte)
-            if pos + 1 > len(data): return track, len(data)
-            track["receiver_id"] = data[pos]; pos += 1
-        elif frn == 32: pos += 3        # I021/008  ACAS Capability/Operational Status (3 bytes)
-        elif frn == 33: pos += 2        # I021/271  Surface Capabilities and Status (2 bytes)
-        else: break
-    return track, pos
 
 def _cat21__pub(pub, track: dict, label: str, verbose: bool):
     if "lat_deg" not in track or "lon_deg" not in track:
@@ -2127,6 +1891,22 @@ def _cat34__env_float(key: str) -> float:
     v = os.environ.get(key, "").strip()
     return float(v) if v else 0.0
 
+def _cat34__coverage_range_m(msg: dict, configured_range_m: float = 0.0) -> tuple[int | None, str | None]:
+    """Return (range_m, source): an advertised CAT-034 range first, then an
+    explicit operator fallback. ``source`` is ``"advertised"`` (decoded from
+    I034/100), ``"configured"`` (operator instrumented maximum — NOT measured
+    coverage), or ``None`` when neither is available. Provenance travels with the
+    range so the C2 card can label a configured ring honestly."""
+    try:
+        advertised_nm = float(msg.get("coverage_rho_end_nm") or 0.0)
+    except (TypeError, ValueError):
+        advertised_nm = 0.0
+    if math.isfinite(advertised_nm) and advertised_nm > 0:
+        return round(advertised_nm * 1852.0), "advertised"
+    if math.isfinite(configured_range_m) and configured_range_m > 0:
+        return round(configured_range_m), "configured"
+    return None, None
+
 def _cat34__netbird_ip() -> str:
     for iface in ("wt0", "netbird0"):
         try:
@@ -2363,7 +2143,7 @@ def _cat34_decode_cat034(data: bytes) -> dict | None:
             break
     return msg if msg else None
 
-def _cat34__make_cat034_handler(pub_sensor, site, radar_name):
+def _cat34__make_cat034_handler(pub_sensor, site, radar_name, configured_range_m=0.0):
     # site = [lat, lon] — mutable so CAT-34 I034/120 can self-configure the radar position
     _first_seen:   dict[str, float] = {}
     _sweep:        dict[str, dict]  = {}   # key → {north_ts, rotation_s, status}
@@ -2373,6 +2153,8 @@ def _cat34__make_cat034_handler(pub_sensor, site, radar_name):
     _keepalive_active: set[str]     = set()
     _ka_lock       = threading.Lock()
     _pos_hist:     dict[str, tuple] = {}   # key → (ts, lat, lon) for speed/course
+    _ranges:       dict[str, int] = {}     # key → last advertised/configured range
+    _range_sources: dict[str, str] = {}    # key → "advertised" | "configured"
     KEEPALIVE_S    = 60   # republish site marker every 60 s so ATAK never loses it
 
     def _keepalive_thread(key: str):
@@ -2452,6 +2234,10 @@ def _cat34__make_cat034_handler(pub_sensor, site, radar_name):
         sac = msg.get("sac", 0); sic = msg.get("sic", 0)
         key = "{}-{}".format(sac, sic)
         now = time.time()
+        range_m, range_source = _cat34__coverage_range_m(msg, configured_range_m)
+        if range_m is not None:
+            _ranges[key] = range_m
+            _range_sources[key] = range_source
 
         if mtype == "north_marker":
             _first_seen.setdefault(key, now)
@@ -2480,6 +2266,10 @@ def _cat34__make_cat034_handler(pub_sensor, site, radar_name):
                 "lon_deg":     site[1],
                 "online_since": _first_seen[key],
             }
+            if key in _ranges:
+                status["radar_range_m"] = _ranges[key]
+                if _range_sources.get(key):
+                    status["radar_range_source"] = _range_sources[key]
             if speed_ms is not None:
                 status["speed_ms"]    = speed_ms
             if heading_deg is not None:
@@ -2618,12 +2408,20 @@ def _cat34_main():
     parser.add_argument("--site-lat", type=float, default=_cat34__env_float("CAT34_RADAR_LAT"))
     parser.add_argument("--site-lon", type=float, default=_cat34__env_float("CAT34_RADAR_LON"))
     parser.add_argument("--site-name", default=os.environ.get("CAT34_RADAR_NAME", ""))
+    parser.add_argument(
+        "--radar-range-m",
+        type=float,
+        default=_cat34__env_float("CAT34_RADAR_RANGE_M"),
+        help="operator-confirmed fallback range; CAT-034 I034/100 takes precedence",
+    )
     parser.add_argument("--verbose", "-v", action="store_true")
     args = parser.parse_args()
     if not args.zenoh_raw and not args.port: parser.error("--port or CAT34_PORT is required unless --zenoh-raw is selected")
     site = [args.site_lat or None, args.site_lon or None]
     session = zenoh.open(_cat34_make_config())
-    handler = _cat34__make_cat034_handler(session, site, args.site_name or None)
+    handler = _cat34__make_cat034_handler(
+        session, site, args.site_name or None, args.radar_range_m
+    )
     try:
         if args.zenoh_raw: _cat34__run_zenoh_raw(session, args.input_topic, _cat34_CAT_034, handler, args.verbose)
         else: _cat34__run_inbound(args.port, args.tcp, "CAT-34 Ed.1.29", {_cat34_CAT_034: handler}, args.verbose)
@@ -2673,6 +2471,9 @@ _cat48__ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", "tcp/127.0.0.1:7448")
 
 _cat48_TOPIC_048    = _cat48_TOPIC_ROOT + "/air/{source}/radar/unknown/aircraft"
 _cat48_RAW_INPUT_TOPIC = "{}/raw/asterix/cat48".format(_cat48_TOPIC_ROOT)
+_cat48_SITE_INPUT_TOPIC = (
+    _cat48_TOPIC_ROOT + "/land/*/radar/neutral/radar/*/*/tracks/v1"
+)
 
 _cat48_CAT_048 = 0x30
 
@@ -2787,9 +2588,9 @@ def _cat48__decode_bds50(mb: bytes) -> dict:
     out = {}
     if _bit(1):  out["roll_deg"]         = round(_sgn(2, 11) * 45.0 / 256.0, 1)
     if _bit(12): out["true_track_deg"]   = round(_uns(13, 22) * 360.0 / 1024.0, 1)
-    if _bit(23): out["bds_gs_kt"]        = round(_uns(24, 33) * 2.0, 0)
-    if _bit(34): out["track_rate_degs"]  = round(_sgn(35, 44) * 8.0 / 256.0, 2)
-    if _bit(45): out["tas_kt"]           = round(_uns(46, 55) * 2.0, 0)
+    if _bit(24): out["bds_gs_kt"]        = round(_uns(25, 34) * 2.0, 0)
+    if _bit(35): out["track_rate_degs"]  = round(_sgn(36, 45) * 8.0 / 256.0, 2)
+    if _bit(46): out["tas_kt"]           = round(_uns(47, 56) * 2.0, 0)
     return out
 
 def _cat48__decode_bds60(mb: bytes) -> dict:
@@ -2802,10 +2603,10 @@ def _cat48__decode_bds60(mb: bytes) -> dict:
         return r - (1 << w) if r >= (1 << (w - 1)) else r
     out = {}
     if _bit(1):  out["mag_hdg_deg"]  = round(_uns(2, 11) * 360.0 / 1024.0, 1)
-    if _bit(12): out["ias_kt"]       = _uns(13, 22)
-    if _bit(23): out["mach"]         = round(_uns(24, 34) * 2.048 / 2048.0, 3)
-    if _bit(35): out["baro_vr_fpm"]  = _sgn(36, 46) * 32
-    if _bit(47): out["ivv_fpm"]      = _sgn(48, 56) * 32
+    if _bit(13): out["ias_kt"]       = _uns(14, 23)
+    if _bit(24): out["mach"]         = round(_uns(25, 34) * 2.048 / 512.0, 3)
+    if _bit(35): out["baro_vr_fpm"]  = _sgn(36, 45) * 32
+    if _bit(46): out["ivv_fpm"]      = _sgn(47, 56) * 32
     return out
 
 def _cat48__gillham_to_ft(code: int) -> int | None:
@@ -2881,6 +2682,52 @@ def _cat48__polar_to_wgs84(radar_lat: float, radar_lon: float,
     lon2 = lon1 + math.atan2(math.sin(az) * math.sin(d / R) * math.cos(lat1),
                               math.cos(d / R) - math.sin(lat1) * math.sin(lat2))
     return math.degrees(lat2), math.degrees(lon2)
+
+
+def _cat48__cache_cat34_site(
+    track: dict,
+    sites: dict[tuple[int, int], tuple[float, float]],
+) -> bool:
+    """Cache a CAT-34 radar position for CAT-48 polar geolocation."""
+    if not str(track.get("_src", "")).startswith("ASTERIX CAT-34"):
+        return False
+    try:
+        sac = int(track["sac"])
+        sic = int(track["sic"])
+        lat = float(track["lat_deg"])
+        lon = float(track["lon_deg"])
+    except (KeyError, TypeError, ValueError):
+        return False
+    if not (-90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0):
+        return False
+    sites[(sac, sic)] = (lat, lon)
+    return True
+
+
+def _cat48__geolocate_from_site(
+    track: dict,
+    default_site: list[float | None],
+    sites: dict[tuple[int, int], tuple[float, float]],
+) -> bool:
+    """Add WGS-84 coordinates to a polar CAT-48 plot when a site is known."""
+    if "lat_deg" in track and "lon_deg" in track:
+        return True
+    try:
+        range_nm = float(track["range_nm"])
+        azimuth_deg = float(track["azimuth_deg"])
+    except (KeyError, TypeError, ValueError):
+        return False
+    if range_nm <= 0:
+        return False
+    site = sites.get((int(track.get("sac", 0)), int(track.get("sic", 0))))
+    if site is None and None not in default_site:
+        site = (float(default_site[0]), float(default_site[1]))
+    if site is None:
+        return False
+    lat, lon = _cat48__polar_to_wgs84(site[0], site[1], range_nm, azimuth_deg)
+    track["lat_deg"] = round(lat, 6)
+    track["lon_deg"] = round(lon, 6)
+    return True
 
 def _cat48__compound_presence(data: bytes, pos: int) -> tuple[list[bool], int]:
     """Read all primary-subfield octets before any compound payload."""
@@ -3205,8 +3052,13 @@ def _cat48__pub(pub, track: dict, label: str, verbose: bool):
             track.get("calc_alt_ft") or "---",
         ), flush=True)
 
-def _cat48__make_cat048_handler(pub, site):
-    # site = [lat, lon] — shared mutable reference; updated live from CAT-34 I034/120
+def _cat48__make_cat048_handler(pub, site, sites=None, site_lock=None):
+    # CAT-34 and CAT-48 translators are separate processes. CAT-34 site
+    # positions therefore arrive through the semantic JSON topic and are kept
+    # by SAC/SIC here rather than relying on process-local shared memory.
+    sites = sites if sites is not None else {}
+    site_lock = site_lock or threading.Lock()
+
     def _h(data: bytes, verbose: bool):
         pos = 0
         while pos < len(data):
@@ -3215,9 +3067,11 @@ def _cat48__make_cat048_handler(pub, site):
             if pos <= previous:
                 break
             if len(track) > 2:
+                with site_lock:
+                    _cat48__geolocate_from_site(track, site, sites)
                 if verbose and "lat_deg" not in track:
                     ident = track.get("icao24") or track.get("radar_id") or "PSR"
-                    print("cat48 {} no-position (awaiting I034/120 or set --radar-lat/--radar-lon)".format(
+                    print("cat48 {} no-position (awaiting CAT-34 site or set --radar-lat/--radar-lon)".format(
                         ident), flush=True)
                 _cat48__pub(pub, track, "cat48", verbose)
                 publish_native(pub, native_topic(semantic_topic(
@@ -3316,12 +3170,36 @@ def _cat48_main():
     site = [args.site_lat or None, args.site_lon or None]
     if None in site: print("INFO: set CAT48_RADAR_LAT/LON for local polar positions", flush=True)
     session = zenoh.open(_cat48_make_config())
-    handler = _cat48__make_cat048_handler(session, site)
+    sites: dict[tuple[int, int], tuple[float, float]] = {}
+    site_lock = threading.Lock()
+
+    def _on_cat34_site(sample):
+        try:
+            track = json.loads(bytes(sample.payload))
+        except (TypeError, ValueError, UnicodeDecodeError):
+            return
+        with site_lock:
+            learned = _cat48__cache_cat34_site(track, sites)
+        if learned and args.verbose:
+            print(
+                "CAT-48 learned site SAC{}/SIC{} at {},{}".format(
+                    track["sac"], track["sic"], track["lat_deg"], track["lon_deg"]
+                ),
+                flush=True,
+            )
+
+    site_subscriber = session.declare_subscriber(
+        os.environ.get("CAT48_SITE_INPUT_TOPIC", _cat48_SITE_INPUT_TOPIC),
+        _on_cat34_site,
+    )
+    handler = _cat48__make_cat048_handler(session, site, sites, site_lock)
     try:
         if args.zenoh_raw: _cat48__run_zenoh_raw(session, args.input_topic, _cat48_CAT_048, handler, args.verbose)
         else: _cat48__run_inbound(args.port, args.tcp, "CAT-48 Ed.1.32", {_cat48_CAT_048: handler}, args.verbose)
     except KeyboardInterrupt: pass
-    finally: session.close()
+    finally:
+        site_subscriber.undeclare()
+        session.close()
 
 decode_cat048_record = _cat48_decode_cat048_record
 
@@ -3476,9 +3354,9 @@ def _cat62__decode_bds50(mb: bytes) -> dict:
     out = {}
     if _bit(1):  out["roll_deg"]         = round(_sgn(2, 11) * 45.0 / 256.0, 1)
     if _bit(12): out["true_track_deg"]   = round(_uns(13, 22) * 360.0 / 1024.0, 1)
-    if _bit(23): out["bds_gs_kt"]        = round(_uns(24, 33) * 2.0, 0)
-    if _bit(34): out["track_rate_degs"]  = round(_sgn(35, 44) * 8.0 / 256.0, 2)
-    if _bit(45): out["tas_kt"]           = round(_uns(46, 55) * 2.0, 0)
+    if _bit(24): out["bds_gs_kt"]        = round(_uns(25, 34) * 2.0, 0)
+    if _bit(35): out["track_rate_degs"]  = round(_sgn(36, 45) * 8.0 / 256.0, 2)
+    if _bit(46): out["tas_kt"]           = round(_uns(47, 56) * 2.0, 0)
     return out
 
 def _cat62__decode_bds60(mb: bytes) -> dict:
@@ -3491,10 +3369,10 @@ def _cat62__decode_bds60(mb: bytes) -> dict:
         return r - (1 << w) if r >= (1 << (w - 1)) else r
     out = {}
     if _bit(1):  out["mag_hdg_deg"]  = round(_uns(2, 11) * 360.0 / 1024.0, 1)
-    if _bit(12): out["ias_kt"]       = _uns(13, 22)
-    if _bit(23): out["mach"]         = round(_uns(24, 34) * 2.048 / 2048.0, 3)
-    if _bit(35): out["baro_vr_fpm"]  = _sgn(36, 46) * 32
-    if _bit(47): out["ivv_fpm"]      = _sgn(48, 56) * 32
+    if _bit(13): out["ias_kt"]       = _uns(14, 23)
+    if _bit(24): out["mach"]         = round(_uns(25, 34) * 2.048 / 512.0, 3)
+    if _bit(35): out["baro_vr_fpm"]  = _sgn(36, 45) * 32
+    if _bit(46): out["ivv_fpm"]      = _sgn(47, 56) * 32
     return out
 
 def _cat62__gillham_to_ft(code: int) -> int | None:
@@ -3744,258 +3622,6 @@ def _cat62__decode_i062_390(data: bytes, pos: int) -> tuple[dict, int]:
         if pos >= len(data): break
         psf2 = data[pos]; pos += 1
     return out, pos
-
-def _cat62_decode_cat62_record(data: bytes, pos: int):
-    """Decode one CAT-062 system track record. Returns (track_dict, new_pos)."""
-    fspec, pos = _cat62_parse_fspec(data, pos)
-    track = {"_ts": time.time(), "_src": "ASTERIX CAT-62"}
-
-    for frn, present in enumerate(fspec):
-        if not present:
-            continue
-        if frn == 0:                    # I062/010  SAC/SIC
-            if pos + 2 > len(data): return track, len(data)
-            track["sac"] = data[pos]; track["sic"] = data[pos + 1]; pos += 2
-        elif frn == 1:                  # I062/015  Service Identification
-            if pos + 1 > len(data): return track, len(data)
-            track["service_id"] = data[pos]; pos += 1
-        elif frn == 2:                  # I062/070  Time Of Track (1/128 s)
-            if pos + 3 > len(data): return track, len(data)
-            raw = (data[pos] << 16) | (data[pos + 1] << 8) | data[pos + 2]
-            track["tod_s"] = raw / 128.0; pos += 3
-        elif frn == 3:                  # I062/105  WGS-84 (2 × s32, 180/2^25)
-            if pos + 8 > len(data): return track, len(data)
-            scale = 180.0 / (2 ** 25)
-            track["lat_deg"] = round(_cat62__s32(data[pos:pos + 4]) * scale, 6)
-            track["lon_deg"] = round(_cat62__s32(data[pos + 4:pos + 8]) * scale, 6)
-            pos += 8
-        elif frn == 4:                  # I062/100  Cartesian position (0.5 m/LSB)
-            if pos + 4 > len(data): return track, len(data)
-            track["x_m"] = _cat62__s16(data[pos:pos + 2]) * 0.5
-            track["y_m"] = _cat62__s16(data[pos + 2:pos + 4]) * 0.5
-            pos += 4
-        elif frn == 5:                  # I062/185  Cartesian velocity (0.25 m/s/LSB)
-            if pos + 4 > len(data): return track, len(data)
-            vx = _cat62__s16(data[pos:pos + 2]) * 0.25
-            vy = _cat62__s16(data[pos + 2:pos + 4]) * 0.25
-            track["vx_ms"] = vx; track["vy_ms"] = vy
-            track["speed_ms"]    = round(math.hypot(vx, vy), 2)
-            track["heading_deg"] = round(math.degrees(math.atan2(vx, vy)) % 360.0, 2)
-            pos += 4
-        elif frn == 6:                  # I062/210  Acceleration (0.25 m/s²/LSB)
-            if pos + 4 > len(data): return track, len(data)
-            track["ax_ms2"] = _cat62__s16(data[pos:pos + 2]) * 0.25
-            track["ay_ms2"] = _cat62__s16(data[pos + 2:pos + 4]) * 0.25
-            pos += 4
-        elif frn == 7:                  # I062/060  Mode-3/A
-            if pos + 2 > len(data): return track, len(data)
-            track["squawk"] = "{:04o}".format(_cat62__u16(data[pos:pos + 2]) & 0x0FFF); pos += 2
-        elif frn == 8:                  # I062/040  Track Number
-            if pos + 2 > len(data): return track, len(data)
-            track["track_num"] = _cat62__u16(data[pos:pos + 2]) & 0x0FFF; pos += 2
-        elif frn == 9:                  # I062/080  Track Status (FX)
-            if pos >= len(data): return track, len(data)
-            b = data[pos]; pos += 1
-            if b & 0x80: track["track_monosensor"] = True   # MON: 1=monosensor track
-            if b & 0x40: track["spi"]              = True
-            src = (b >> 3) & 0x07
-            _SRC = ("", "GPS", "3D_radar", "triangulation", "pressure_alt",
-                    "velocity_integration", "INS", "3D_radar_corrected")
-            if src: track["height_src"] = _SRC[src]
-            if b & 0x04: track["track_tentative"]  = True   # CNF: 1=tentative
-            if b & 0x01:
-                if pos >= len(data): return track, len(data)
-                b = data[pos]; pos += 1
-                if b & 0x80: track["simulated"]      = True   # SIM
-                if b & 0x40: track["track_end"]      = True   # TSE: last plot of track
-                if b & 0x20: track["track_begin"]    = True   # TSB: first detection
-                if b & 0x10: track["fp_correlated"]  = True   # FRIFPSI
-                if b & 0x08: track["mil_emergency"]  = True   # ME
-                if b & 0x04: track["mil_ident"]      = True   # MI
-                if b & 0x02: track["amalgamated"]    = True   # AMA
-                while b & 0x01:
-                    if pos >= len(data): break
-                    b = data[pos]; pos += 1
-                    if b & 0x80: track["track_coasting"] = True   # STP
-        elif frn == 10:                 # I062/290  System Track Update Ages (compound)
-            if pos >= len(data): return track, len(data)
-            psf = data[pos]; pos += 1
-            age_map = [(0x80,"psr"),(0x40,"ssr"),(0x20,"mds"),(0x10,"ads"),
-                       (0x08,"es"),(0x04,"vdl"),(0x02,"uat")]
-            for mask, label in age_map:
-                if psf & mask:
-                    if pos + 1 > len(data): return track, len(data)
-                    track["track_age_{}_s".format(label)] = round(data[pos] * 0.25, 2); pos += 1
-            if psf & 0x01:              # FX: LOP, MLT ages (1 byte each, 0.25s/LSB)
-                if pos >= len(data): return track, len(data)
-                psf2 = data[pos]; pos += 1
-                if psf2 & 0x80:
-                    if pos + 1 > len(data): return track, len(data)
-                    track["track_age_lop_s"] = round(data[pos] * 0.25, 2); pos += 1
-                if psf2 & 0x40:
-                    if pos + 1 > len(data): return track, len(data)
-                    track["track_age_mlt_s"] = round(data[pos] * 0.25, 2); pos += 1
-                while psf2 & 0x01:
-                    if pos >= len(data): break
-                    psf2 = data[pos]; pos += 1
-        elif frn == 11:                 # I062/200  Mode of Movement (2 bytes)
-            if pos + 2 > len(data): return track, len(data)
-            b1 = data[pos]; b2 = data[pos + 1]; pos += 2
-            _MOV = ("constant", "right", "left", "undetermined")
-            _LON = ("constant", "increasing", "decreasing", "undetermined")
-            _VRT = ("level", "climb", "descend", "undetermined")
-            trans = (b1 >> 6) & 0x03
-            long_ = (b1 >> 4) & 0x03
-            vert  = (b1 >> 2) & 0x03
-            if trans: track["lateral_trend"]  = _MOV[trans]
-            if long_: track["speed_trend"]    = _LON[long_]
-            if vert:  track["vertical_trend"] = _VRT[vert]
-            if b1 & 0x02: track["alt_discrepancy"] = True   # ADF
-        elif frn == 13:                 # I062/136  Measured Flight Level
-            if pos + 2 > len(data): return track, len(data)
-            track["measured_alt_ft"] = _cat62__s16(data[pos:pos + 2]) * 25; pos += 2
-        elif frn == 14:                 # I062/130  Calculated Altitude
-            if pos + 2 > len(data): return track, len(data)
-            track["calc_alt_ft"] = _cat62__s16(data[pos:pos + 2]) * 25; pos += 2
-        elif frn == 18:                 # I062/300  Vehicle Fleet ID
-            if pos >= len(data): return track, len(data)
-            track["fleet_id"] = data[pos]; pos += 1
-        elif frn == 12:                 # I062/295  Track Data Ages (compound, 0.25s/LSB each)
-            if pos >= len(data): return track, len(data)
-            psf = data[pos]; pos += 1
-            _AGE295 = ["psr", "ssr", "mds", "ads_b", "es", "vdl4", "uat"]
-            for label, mask in zip(_AGE295, (0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02)):
-                if psf & mask:
-                    if pos + 1 > len(data): return track, len(data)
-                    track["data_age_{}_s".format(label)] = round(data[pos] * 0.25, 2); pos += 1
-            while psf & 0x01:
-                if pos >= len(data): break
-                psf = data[pos]; pos += 1
-                for mask in (0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02):
-                    if psf & mask:
-                        if pos + 1 > len(data): return track, len(data)
-                        pos += 1
-        elif frn == 15:                 # I062/380  Aircraft Derived Data
-            extra, pos = _cat62__decode_i062_380(data, pos)
-            track.update(extra)
-        elif frn == 16:                 # I062/390  Flight Plan Data
-            extra, pos = _cat62__decode_i062_390(data, pos)
-            track.update(extra)
-        elif frn == 17:                 # I062/270  Target Size/Orientation (FX)
-            if pos >= len(data): return track, len(data)
-            b = data[pos]; pos += 1
-            track["target_length_m"] = (b >> 1) & 0x7F
-            if b & 0x01:
-                if pos < len(data):
-                    b2 = data[pos]; pos += 1
-                    track["target_orientation_deg"] = round((b2 >> 1) * 360.0 / 128.0, 1)
-                    if b2 & 0x01 and pos < len(data):
-                        b3 = data[pos]; pos += 1
-                        track["target_width_m"] = (b3 >> 1) & 0x7F
-        elif frn == 22:                 # I062/500  Estimated Accuracies (compound)
-            if pos >= len(data): return track, len(data)
-            psf = data[pos]; pos += 1
-            # Apc sub-field: 2 × u16 (lat/lon accuracy, 0.5m/LSB)
-            if psf & 0x80:
-                if pos + 4 <= len(data):
-                    track["pos_accuracy_lat_m"] = round(_cat62__u16(data[pos:pos+2]) * 0.5, 1)
-                    track["pos_accuracy_lon_m"] = round(_cat62__u16(data[pos+2:pos+4]) * 0.5, 1)
-                    pos += 4
-            for mask in (0x40, 0x20, 0x10, 0x08, 0x04, 0x02):
-                if psf & mask: pos += 2
-            while psf & 0x01:
-                if pos >= len(data): break
-                psf = data[pos]; pos += 1
-                for mask in (0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02):
-                    if psf & mask: pos += 2
-        elif frn == 23:                 # I062/340  Measured Information (compound)
-            if pos >= len(data): return track, len(data)
-            psf = data[pos]; pos += 1
-            measured_by = []
-            if psf & 0x80:              # SID: SAC/SIC (2 bytes)
-                if pos + 2 > len(data): return track, len(data)
-                measured_by.append("{}/{}".format(data[pos], data[pos+1])); pos += 2
-            if psf & 0x40:              # measured slant range (1/256 NM) + azimuth (360/65536°)
-                if pos + 4 > len(data): return track, len(data)
-                track["meas_range_nm"] = round(_cat62__u16(data[pos:pos+2]) / 256.0, 3)
-                track["meas_az_deg"]   = round(_cat62__u16(data[pos+2:pos+4]) * 360.0 / 65536.0, 3)
-                pos += 4
-            if psf & 0x20:              # measured Mode-C height (Gillham)
-                if pos + 2 > len(data): return track, len(data)
-                alt = _cat62__gillham_to_ft(_cat62__u16(data[pos:pos+2]))
-                if alt is not None: track["meas_alt_ft"] = alt
-                pos += 2
-            if psf & 0x10:              # MDC: Measured Mode C code + confidence (4 bytes)
-                if pos + 4 > len(data): return track, len(data)
-                alt = _cat62__gillham_to_ft(_cat62__u16(data[pos:pos+2]))
-                if alt is not None: track.setdefault("meas_mode_c_ft", alt)
-                pos += 4
-            if psf & 0x08:              # MDA: Measured Mode 3/A code (2 bytes)
-                if pos + 2 > len(data): return track, len(data)
-                track.setdefault("squawk", "{:04o}".format(_cat62__u16(data[pos:pos+2]) & 0x0FFF))
-                pos += 2
-            if psf & 0x04: pos += 4    # MD5: Mode 5 code + confidence (4 bytes, skip)
-            if psf & 0x02:              # MD1: Mode 1 code + quality (2 bytes)
-                if pos + 2 > len(data): return track, len(data)
-                track.setdefault("mode1", "{:02o}".format(_cat62__u16(data[pos:pos+2]) & 0x3F))
-                pos += 2
-            if measured_by: track["measured_by"] = measured_by
-            while psf & 0x01:
-                if pos >= len(data): break
-                psf = data[pos]; pos += 1
-        elif frn == 19:                 # I062/110  Mode 5 and Mode 1 Data (compound)
-            if pos >= len(data): return track, len(data)
-            psf = data[pos]; pos += 1
-            if psf & 0x80:              # Mode 5 Summary (3 bytes: flags + PIN hi + PIN lo)
-                if pos + 3 > len(data): return track, len(data)
-                b = data[pos]
-                if b & 0x80: track["mode5_active"] = True
-                if b & 0x40: track["mode5_iff"]    = True
-                if b & 0x20: track["mode5_data"]   = True
-                pos += 3
-            if psf & 0x40: pos += 2    # National origin (2 bytes)
-            if psf & 0x20: pos += 8    # Reported position (lat/lon s32 each)
-            if psf & 0x10:              # Mode 1 code (2 bytes)
-                if pos + 2 > len(data): return track, len(data)
-                track["mode1"] = "{:02o}".format(_cat62__u16(data[pos:pos+2]) & 0x3F); pos += 2
-            if psf & 0x08:              # Mode 2 code (2 bytes)
-                if pos + 2 > len(data): return track, len(data)
-                track["mode2"] = "{:04o}".format(_cat62__u16(data[pos:pos+2]) & 0x0FFF); pos += 2
-            if psf & 0x04:              # Mode 3/A (2 bytes)
-                if pos + 2 > len(data): return track, len(data)
-                track.setdefault("squawk", "{:04o}".format(_cat62__u16(data[pos:pos+2]) & 0x0FFF)); pos += 2
-            if psf & 0x02:              # Mode C height (2 bytes, Gillham)
-                if pos + 2 > len(data): return track, len(data)
-                alt = _cat62__gillham_to_ft(_cat62__u16(data[pos:pos+2]))
-                if alt is not None: track.setdefault("mode_c_alt_ft", alt)
-                pos += 2
-            while psf & 0x01:
-                if pos >= len(data): break
-                psf = data[pos]; pos += 1
-                for mask in (0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02):
-                    if psf & mask: pos += 2
-        elif frn == 20:                 # I062/120  Mode 5 Track Ages (compound, 1 byte each)
-            if pos >= len(data): return track, len(data)
-            psf = data[pos]; pos += 1
-            for mask in (0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02):
-                if psf & mask:
-                    if pos + 1 > len(data): return track, len(data)
-                    pos += 1
-            while psf & 0x01:
-                if pos >= len(data): break
-                psf = data[pos]; pos += 1
-                for mask in (0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02):
-                    if psf & mask:
-                        if pos + 1 > len(data): return track, len(data)
-                        pos += 1
-        elif frn == 21:                 # I062/510  Composed Track Number (REP + N×4)
-            if pos >= len(data): return track, len(data)
-            n = data[pos]; pos += 1 + n * 4
-        elif frn in (24, 25):
-            break                       # I062/SP / I062/RE — vendor-specific, unrecoverable
-        else:
-            break
-    return track, pos
 
 def _cat62__pub(pub, track: dict, label: str, verbose: bool, topic: str = _cat62_TOPIC_062):
     if "lat_deg" not in track or "lon_deg" not in track:
@@ -4426,7 +4052,10 @@ decode_cat62_record = _cat62_decode_cat62_record
 # ============================================================================
 
 def _category_uses_raw(wanted: int) -> bool:
-    if not os.environ.get("ASTERIX_PORT", "").strip():
+    if not (
+        os.environ.get("UDP_INGRESS_PORT", "").strip()
+        or os.environ.get("ASTERIX_PORT", "").strip()
+    ):
         return False
     categories = [item.strip() for item in os.environ.get("ASTERIX_CATEGORIES", "34,48").split(",")]
     return str(wanted) in categories
@@ -4435,26 +4064,32 @@ def _category_uses_raw(wanted: int) -> bool:
 def _bundle_main() -> None:
     children: list[tuple[str, str, list[str]]] = []
     script = "protocols/vendors/asterix/cat.py"
-    if os.environ.get("ASTERIX_PORT", "").strip():
-        children.append(("asterix-udp", "bridges/asterix_udp_bridge.py", []))
+    if (
+        os.environ.get("UDP_INGRESS_PORT", "").strip()
+        or os.environ.get("ASTERIX_PORT", "").strip()
+    ):
+        children.append(("udp-ingress", "bridges/udp_ingress_bridge.py", []))
 
     for category in (10, 20, 21, 34, 48):
         port = os.environ.get(f"CAT{category}_PORT", "").strip()
         tcp = os.environ.get(f"CAT{category}_TCP", "") == "1"
         args = ["--category", str(category)]
         if _category_uses_raw(category):
-            args.append("--zenoh-raw")
-            children.append((f"asterix-cat{category}", script, args))
-        elif port:
-            args.extend(["--port", port])
+            children.append((
+                f"asterix-cat{category}-raw",
+                script,
+                args + ["--zenoh-raw"],
+            ))
+        if port:
+            direct_args = args + ["--port", port]
             if tcp:
-                args.append("--tcp")
-            children.append((f"asterix-cat{category}", script, args))
+                direct_args.append("--tcp")
+            children.append((f"asterix-cat{category}", script, direct_args))
 
     args = ["--category", "62"]
     if _category_uses_raw(62):
-        children.append(("asterix-cat62", script, args + ["--zenoh-raw"]))
-    elif os.environ.get("CAT62_UDP", "") == "1":
+        children.append(("asterix-cat62-raw", script, args + ["--zenoh-raw"]))
+    if os.environ.get("CAT62_UDP", "") == "1":
         children.append(("asterix-cat62", script, args + ["--udp", "--port", os.environ.get("CAT62_PORT", "50062")]))
     elif os.environ.get("CAT62_HOST", "").strip() or os.environ.get("RADAR_HOST", "").strip():
         children.append((

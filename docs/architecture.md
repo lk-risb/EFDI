@@ -129,4 +129,3 @@ principles that keep it cleanly standalone:
   environment value — router endpoint, namespaces, ACL subject axis, CA roots, mesh enrollment —
   arrives at first-boot from the **signed join bundle** plus the active **profile**
   (`profiles/<env>/`). Switching stacks is a different bundle + profile, never a code change.
-

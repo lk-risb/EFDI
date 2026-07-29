@@ -79,10 +79,10 @@ SERVICES=(
     zenoh
     admin-control
     cert-renewer supervisor presence
-    aprs meteolt
+    meteolt
     sitaware dronuradaras asterix track-fusion
-    vmf nffi sapient stanag4586 stanag4609
-    vmf-raw sapient-raw stanag4586-raw stanag4609-raw
+    nffi sapient stanag4586 stanag4609
+    sapient-raw stanag4586-raw stanag4609-raw
     mqtt-raw sensorthings-raw
     cap geojson mqtt sensorthings sparkplug spectrum sensor-health mission-route
     cot_layer tak-bridge nvg_bridge nvg_layer
@@ -150,17 +150,15 @@ declare -A SVC_CAT=(
     [cert-renewer]="Infrastructure"
     [supervisor]="Infrastructure"
     [presence]="Infrastructure"
-    [aprs]="Open-data bridges"
     [meteolt]="Open-data bridges"
     [asterix]="Sensor bridges"
-    [vmf]="Protocols"
     [mqtt]="Protocols" [sensorthings]="Protocols" [sparkplug]="Protocols"
     [nffi]="Protocols"
     [sitaware]="Sensor bridges" [dronuradaras]="Sensor bridges"
     [sapient]="Protocols" [stanag4586]="Protocols" [stanag4609]="Protocols"
     [tak-bridge]="C2 inputs"
     [mqtt-raw]="Sensor bridges" [sensorthings-raw]="Sensor bridges"
-    [vmf-raw]="Sensor bridges" [sapient-raw]="Sensor bridges"
+    [sapient-raw]="Sensor bridges"
     [stanag4586-raw]="Sensor bridges" [stanag4609-raw]="Sensor bridges"
     [cap]="Protocols" [geojson]="Protocols"
     [spectrum]="Protocols" [sensor-health]="Protocols" [mission-route]="Protocols"
@@ -176,13 +174,11 @@ declare -A SVC_DESC=(
     [cert-renewer]="Automatic short-lived transport certificate renewal"
     [supervisor]="Auto-restarts crashed bridges, protocols, and layers"
     [presence]="Liveliness presence tokens (fabric node visibility in panoscope)"
-    [aprs]="APRS-IS stations, vehicles, and vessels"
     [meteolt]="meteo.lt weather stations"
     [asterix]="ASTERIX family bundle: UDP ingress + CAT-010/020/021/034/048/062 translators"
     [mqtt]="MQTT sensor JSON on Zenoh → sensor records"
     [sensorthings]="OGC SensorThings observations → sensor records"
     [sparkplug]="Eclipse Sparkplug B (MQTT protobuf) → sensor records"
-    [vmf]="VMF MIL-STD-47001C messages"
     [sitaware]="SitaWare HQ friendly force tracking (inbound REST)"
     [nffi]="Raw NFFI XML on Zenoh → normalized friendly-force tracks"
     [dronuradaras]="dronuradaras.lt drone detection network"
@@ -191,7 +187,6 @@ declare -A SVC_DESC=(
     [stanag4609]="STANAG 4609 KLV decoder (raw → tracks)"
     [mqtt-raw]="MQTT broker → Zenoh raw"
     [sensorthings-raw]="OGC SensorThings REST poll → Zenoh raw"
-    [vmf-raw]="VMF UDP/TCP → Zenoh raw"
     [sapient-raw]="SAPIENT/FLEX 335 TCP → Zenoh raw"
     [stanag4586-raw]="STANAG 4586 TCP → Zenoh raw"
     [stanag4609-raw]="STANAG 4609 SRT/KLV → Zenoh raw"
@@ -212,7 +207,7 @@ declare -A SVC_DESC=(
 # ── Ready check — 0=can start, 1=missing config ───────────────────────────
 svc_ready() {
     case "$1" in
-        zenoh|aprs|meteolt|\
+        zenoh|meteolt|\
         dronuradaras|nffi|cot_layer|track-fusion|\
         cap|geojson|spectrum|sensor-health|mission-route)
             return 0 ;;
@@ -228,10 +223,8 @@ svc_ready() {
         mqtt)         return 0 ;;
         sensorthings) return 0 ;;
         sparkplug)    return 0 ;;
-        vmf)          [[ "${VMF_ZENOH_RAW:-}" == "1" || "${VMF_PORT:-}" ]] ;;
         mqtt-raw)     [[ "${MQTT_HOST:-}" ]] ;;
         sensorthings-raw) [[ "${SENSORTHINGS_URL:-}" ]] ;;
-        vmf-raw)      [[ "${VMF_RAW_PORT:-}" ]] ;;
         sapient-raw)  [[ "${SAPIENT_RAW_PORT:-}" ]] ;;
         stanag4586-raw) [[ "${STANAG4586_RAW_PORT:-}" ]] ;;
         stanag4609-raw) [[ "${STANAG4609_SRT_URL:-}" ]] ;;
@@ -260,10 +253,8 @@ svc_ready() {
 svc_hint() {
     case "$1" in
         asterix) echo "ASTERIX family bundle" ;;
-        vmf)      echo "set VMF_PORT or VMF_ZENOH_RAW=1" ;;
         mqtt-raw) echo "MQTT_HOST not set" ;;
         sensorthings-raw) echo "SENSORTHINGS_URL not set" ;;
-        vmf-raw) echo "VMF_RAW_PORT not set" ;;
         sapient-raw)
             if [[ "${SAPIENT_RAW_PORT:-}" ]]; then
                 echo "TCP port ${SAPIENT_RAW_PORT}"
@@ -393,8 +384,10 @@ is_running() {
     local f="$PID_DIR/$1.pid" pid cmd live_pid
     if [[ "$1" == "asterix" && -z "${2:-}" ]]; then
         local child
-        for child in asterix-udp asterix-cat10 asterix-cat20 asterix-cat21 \
-                     asterix-cat34 asterix-cat48 asterix-cat62; do
+        for child in udp-ingress asterix-cat10 asterix-cat20 asterix-cat21 \
+                     asterix-cat34 asterix-cat48 asterix-cat62 \
+                     asterix-cat10-raw asterix-cat20-raw asterix-cat21-raw \
+                     asterix-cat34-raw asterix-cat48-raw asterix-cat62-raw; do
             is_running "$child" && return 0
         done
         return 1
@@ -486,7 +479,7 @@ _start() {   # _start <name> <rel-script-path> [args…]
 
 asterix_category_uses_raw() {
     local wanted="$1" item
-    [[ -n "${ASTERIX_PORT:-}" ]] || return 1
+    [[ -n "${UDP_INGRESS_PORT:-${ASTERIX_PORT:-}}" ]] || return 1
     IFS=',' read -r -a _asterix_categories <<< "${ASTERIX_CATEGORIES:-34,48}"
     for item in "${_asterix_categories[@]}"; do
         item="${item//[[:space:]]/}"
@@ -499,10 +492,10 @@ _start_asterix_bundle() {
     local category port tcp_var host
     local -a tcp_args
 
-    if [[ -n "${ASTERIX_PORT:-}" ]]; then
-        _start asterix-udp bridges/asterix_udp_bridge.py
+    if [[ -n "${UDP_INGRESS_PORT:-${ASTERIX_PORT:-}}" ]]; then
+        _start udp-ingress bridges/udp_ingress_bridge.py
     else
-        printf "  ${YELLOW}[skip]${R}  asterix-udp      set ASTERIX_PORT for a mixed UDP feed\n"
+        printf "  ${YELLOW}[skip]${R}  udp-ingress      set UDP_INGRESS_PORT for generic UDP capture\n"
     fi
 
     for category in 10 20 21 34 48; do
@@ -514,14 +507,15 @@ _start_asterix_bundle() {
             48) port="${CAT48_PORT:-}"; tcp_var="${CAT48_TCP:-}" ;;
         esac
         if asterix_category_uses_raw "$category"; then
-            _start "asterix-cat${category}" protocols/vendors/asterix/cat.py \
+            _start "asterix-cat${category}-raw" protocols/vendors/asterix/cat.py \
                 --category "$category" --zenoh-raw
-        elif [[ -n "$port" ]]; then
+        fi
+        if [[ -n "$port" ]]; then
             tcp_args=()
             [[ "$tcp_var" == "1" ]] && tcp_args=(--tcp)
             _start "asterix-cat${category}" protocols/vendors/asterix/cat.py \
                 --category "$category" --port "$port" "${tcp_args[@]}"
-        else
+        elif ! asterix_category_uses_raw "$category"; then
             printf "  ${YELLOW}[skip]${R}  asterix-cat%-2s    set CAT%s_PORT to enable\n" \
                 "$category" "$category"
         fi
@@ -529,14 +523,15 @@ _start_asterix_bundle() {
 
     host="${CAT62_HOST:-${RADAR_HOST:-}}"
     if asterix_category_uses_raw 62; then
-        _start asterix-cat62 protocols/vendors/asterix/cat.py --category 62 --zenoh-raw
-    elif [[ -n "$host" && "$host" != "127.0.0.1" ]]; then
+        _start asterix-cat62-raw protocols/vendors/asterix/cat.py --category 62 --zenoh-raw
+    fi
+    if [[ -n "$host" && "$host" != "127.0.0.1" ]]; then
         _start asterix-cat62 protocols/vendors/asterix/cat.py --category 62 \
             --host "$host" --port "${CAT62_PORT:-${RADAR_PORT:-50062}}"
     elif [[ "${CAT62_UDP:-}" == "1" ]]; then
         _start asterix-cat62 protocols/vendors/asterix/cat.py --category 62 \
             --udp --port "${CAT62_PORT:-50062}"
-    else
+    elif ! asterix_category_uses_raw 62; then
         printf "  ${YELLOW}[skip]${R}  asterix-cat62    set CAT62_HOST or CAT62_UDP=1 to enable\n"
     fi
 }
@@ -649,25 +644,12 @@ launch() {
             printf "  ${GREEN}[start]${R} %-16s pid %s\n" "cert-renewer" "$!"
             ;;
 
-        aprs)
-            _start aprs bridges/aprsis_bridge.py
-            ;;
-
         meteolt)
             _start meteolt bridges/meteolt_forecast_bridge.py
             ;;
 
         asterix)
             _start_asterix_bundle
-            ;;
-
-        vmf)
-            if [[ "${VMF_ZENOH_RAW:-}" == "1" ]]; then
-                _start vmf protocols/random/vmf.py --zenoh-raw --raw-topic "${VMF_RAW_TOPIC:-}"
-            else
-                local tvmf=(); [[ "${VMF_TCP:-}" == "1" ]] && tvmf=(--tcp)
-                _start vmf protocols/random/vmf.py --port "$VMF_PORT" "${tvmf[@]}"
-            fi
             ;;
 
         mqtt-raw)
@@ -692,10 +674,6 @@ launch() {
                 export SENSORTHINGS_URL
             fi
             _start sensorthings-raw bridges/sensorthings_bridge.py
-            ;;
-
-        vmf-raw)
-            _start vmf-raw bridges/vmf_bridge.py --port "$VMF_RAW_PORT"
             ;;
 
         sapient-raw)
@@ -979,10 +957,6 @@ restored=0
 if [[ -n "$REMEMBERED_SERVICES" ]]; then
     IFS=',' read -r -a remembered_services <<< "$REMEMBERED_SERVICES"
     for remembered in "${remembered_services[@]}"; do
-        [[ "$remembered" == "remote-id" || "$remembered" == "opendroneid" ||
-           "$remembered" == "utm-ans" || "$remembered" == "mavlink" ||
-           "$remembered" == "mavlink-raw" || "$remembered" == "dji-cloud" ||
-           "$remembered" == "stanag5516" || "$remembered" == "stanag5516-raw" ]] && continue
         for svc in "${SERVICES[@]}"; do
             if [[ "$remembered" == "$svc" ]]; then
                 sel[$svc]=1

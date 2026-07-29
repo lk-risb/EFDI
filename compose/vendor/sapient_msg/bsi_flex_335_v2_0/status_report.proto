@@ -43,7 +43,7 @@ message StatusReport {
     }
 
     message Power {
-        reserved 1, 2; // These string field have been replaced by enumerations 
+        reserved 1, 2; // These string field have been replaced by enumerations
 //        optional string source = 1; // Power source (e.g. battery/mains)
 //        optional string status = 2; // Power supply status
         optional int32 level = 3; // Battery level 0-100
@@ -87,7 +87,7 @@ message StatusReport {
         STATUS_TYPE_UNSPECIFIED = 0; // No status type has been set
         STATUS_TYPE_INTERNAL_FAULT = 1; // The node has an internal fault
         STATUS_TYPE_EXTERNAL_FAULT = 2; // External influences have caused a fault with the node
-        STATUS_TYPE_ILLUMINATION = 3; // 
+        STATUS_TYPE_ILLUMINATION = 3; //
         STATUS_TYPE_WEATHER = 4; //
         STATUS_TYPE_CLUTTER = 5; //
         STATUS_TYPE_EXPOSURE = 6; //

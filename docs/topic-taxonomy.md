@@ -88,7 +88,7 @@ because EFDI has to route on them:
 | `adsb` | Aircraft self-reporting, relayed by a ground station |
 | `mlat` | Position computed from time differences of arrival |
 | `c2` | Arrived via a command-and-control or battle-management system |
-| `telemetry` | The platform reporting its own state (own UAV, MAVLink, DJI) |
+| `telemetry` | A platform reporting its own state |
 | `fused` | Output of a tracker that already combined several sensors |
 | `unknown` | Not an observation at all (station health, overlays) |
 

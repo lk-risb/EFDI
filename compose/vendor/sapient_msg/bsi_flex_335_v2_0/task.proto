@@ -75,7 +75,7 @@ message Task {
     }
 //
 // Note: enum RegionType also features in registration.proto, if making changes to this enumeration, identical changes must be made
-// in the same enumeration in registration.proto. Users should be aware, future versions of the SAPIENT proto files may be 
+// in the same enumeration in registration.proto. Users should be aware, future versions of the SAPIENT proto files may be
 // restructured so that enum RegionType only appears once.
 //
     enum RegionType {

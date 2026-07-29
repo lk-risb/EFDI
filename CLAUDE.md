@@ -124,3 +124,5 @@ Never run `git commit` in this repo. Stage changes and describe them — the use
 3. **Compound sub-field size wrong**: pos advances by N but field is N+k bytes — silently corrupts every FRN after it. Example: I048/130 RPD and APD are s8 (1 byte each), not s16 (2 bytes). Check physical plausibility of value range to detect wrong size.
 4. **FX loop treated as flag bits**: I048/030 type codes are repeating `(code << 1) | FX` octets, not individual named flags
 5. **PSF2 extension bytes consumed as data**: after a compound field's PSF byte, if FX is set, read the NEXT PSF byte — don't treat PSF extension bytes as sub-field data
+
+For operational/infrastructure gotchas (not decode bugs) — DNS, TLS profiles, atomic writes, shadowed duplicate functions — see `docs/GOTCHAS.md`.

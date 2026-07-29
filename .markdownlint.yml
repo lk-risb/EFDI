@@ -1,0 +1,28 @@
+# markdownlint config — calibrated against this repo's actual docs, not
+# generic defaults. Rules disabled below were checked against every existing
+# doc first (see docs/superpowers/plans/2026-07-29-production-hardening-and-onboarding.md
+# workstream E) — each disable reflects hundreds of instances of this repo's
+# established writing style, not a shortcut. Retroactively reforming 3500+
+# lines of working docs to satisfy a linter is exactly the kind of busywork
+# CLAUDE.md's "don't reformat what isn't broken" rule exists to prevent.
+# New docs are free to follow any of the disabled conventions too — the goal
+# is catching real breakage (bad links, duplicate titles, structural errors),
+# not enforcing one blank-line style.
+default: true
+
+MD013: false   # line-length — prose and long command lines are both fine
+MD022: false   # blanks-around-headings — this repo doesn't always pad headings
+MD028: false   # blanks-around-blockquotes — used deliberately for two
+               # adjacent-but-separate notes (e.g. INSTALL.md's radar-position
+               # + ASTERIX-ports callouts)
+MD031: false   # blanks-around-fences — same, established convention
+MD032: false   # blanks-around-lists — same
+MD033: false   # inline HTML — the odd <br>/<sub> in a table cell is fine
+MD040: false   # fenced-code-language — many blocks are plain output/trees
+               # where no language applies
+MD041: false   # first-line-must-be-h1 — a few docs open with a blockquote note
+MD060: false   # table-column-style — this repo mixes compact/spaced pipes
+               # across hundreds of existing tables; not worth a mass reformat
+
+MD024:         # duplicate heading text — allowed for same-named subsections
+  siblings_only: true
