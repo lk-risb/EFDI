@@ -63,10 +63,12 @@ stop_zenoh() {
     docker compose -f "$SCRIPT_DIR/compose/docker-compose.yml" stop zenoh-router 2>/dev/null || true
 }
 
-_SOURCE_BRIDGES=(aprs meteolt
-                 dronuradaras sitaware asterix-udp track-fusion)
+_SOURCE_BRIDGES=(meteolt
+                 dronuradaras sitaware udp-ingress track-fusion)
 _PROTOCOLS=(asterix-cat10 asterix-cat20 asterix-cat21 asterix-cat34
-            asterix-cat48 asterix-cat62 vmf sapient
+            asterix-cat48 asterix-cat62 asterix-cat10-raw asterix-cat20-raw
+            asterix-cat21-raw asterix-cat34-raw asterix-cat48-raw
+            asterix-cat62-raw sapient
             nffi stanag4586 stanag4609)
 _LAYERS=(cot_layer nvg_bridge nvg_layer)
 
@@ -105,7 +107,7 @@ case "$MODE" in
         ;;
     *)
         case "$MODE" in
-            admin-control|cert-renewer|aprs|meteolt|dronuradaras|sitaware|tak-bridge|asterix|asterix-udp|track-fusion|asterix-cat10|asterix-cat20|asterix-cat21|asterix-cat34|asterix-cat48|asterix-cat62|vmf|sapient|nffi|stanag4586|stanag4609|vmf-raw|sapient-raw|stanag4586-raw|stanag4609-raw|cap|geojson|mqtt|mqtt-raw|sensorthings|sensorthings-raw|sparkplug|spectrum|sensor-health|mission-route|cot_layer|nvg_bridge|nvg_layer)
+            admin-control|cert-renewer|meteolt|dronuradaras|sitaware|tak-bridge|asterix|udp-ingress|track-fusion|asterix-cat10|asterix-cat20|asterix-cat21|asterix-cat34|asterix-cat48|asterix-cat62|asterix-cat10-raw|asterix-cat20-raw|asterix-cat21-raw|asterix-cat34-raw|asterix-cat48-raw|asterix-cat62-raw|sapient|nffi|stanag4586|stanag4609|sapient-raw|stanag4586-raw|stanag4609-raw|cap|geojson|mqtt|mqtt-raw|sensorthings|sensorthings-raw|sparkplug|spectrum|sensor-health|mission-route|cot_layer|nvg_bridge|nvg_layer)
                 echo "=== Stopping $MODE ==="
                 stop_scripts "$MODE"
                 echo "Done."

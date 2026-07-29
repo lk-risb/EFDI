@@ -28,6 +28,7 @@ from nvg_layer import NVG_NS  # noqa: E402
 from nvg_layer import _TOPIC_SIDC  # noqa: E402
 from nvg_layer import _resolve_sidc  # noqa: E402
 from nvg_layer import track_to_nvg_item  # noqa: E402
+from cot_layer import _is_unfused_sensor_track  # noqa: E402
 
 
 class FakeClock:

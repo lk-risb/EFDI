@@ -1,5 +1,9 @@
 # EFDI integration matrix
 
+> **Want to connect a new sensor?** This page is the reference for what's
+> already wired. For the step-by-step "how do I add one" walkthrough, see
+> [`ADDING_A_SENSOR.md`](ADDING_A_SENSOR.md).
+
 EFDI separates source-specific collectors, reusable protocol translators, and
 TAK/SitaWare output layers:
 
@@ -19,13 +23,12 @@ ASTERIX category numbers do not define TCP or UDP port numbers. The radar or
 surveillance gateway management interface must be configured with the EFDI
 host as its destination and with the same transport/port selected below. EFDI
 uses UDP 50034 for CAT-034 and UDP 50048 for CAT-048 as deterministic local
-conventions; these are not EUROCONTROL or Saab defaults. If a producer combines
-multiple categories on one stream, set `ASTERIX_PORT` (EFDI convention: UDP
-50000). `asterix_udp_bridge.py` validates each complete frame and publishes it
-unchanged to `…/raw/asterix/catNN`; every category translator remains a separate
-process and subscribes only to its own topic. `ASTERIX_CATEGORIES` selects which
-categories enter this path. Unlisted categories can still use independent
-UDP/TCP inputs.
+conventions; these are not EUROCONTROL or Saab defaults. UDP 50000 is the
+generic raw ingress. `udp_ingress_bridge.py` preserves every datagram and safely
+publishes complete ASTERIX frames unchanged to `…/raw/asterix/catNN`; every
+category translator remains a separate process and subscribes only to its own
+topic. `ASTERIX_CATEGORIES` selects which categories are auto-dispatched.
+Dedicated UDP/TCP inputs remain active at the same time.
 
 The mixed bridge also supports `ASTERIX_BIND`, `ASTERIX_MULTICAST_GROUP`,
 `ASTERIX_MULTICAST_INTERFACE`, and an IPv4/CIDR `ASTERIX_ALLOW_SOURCE` filter.
@@ -47,11 +50,7 @@ and `--multicast-interface`.
 | `vendors/asterix/cat.py --category 34` | UDP listener or TCP server | Radar sends CAT-034 alone to `CAT34_PORT` (EFDI convention: UDP 50034) | EUROCONTROL CAT-034 Ed.1.29 radar service messages |
 | `vendors/asterix/cat.py --category 48` | UDP listener or TCP server | Radar sends CAT-048 alone to `CAT48_PORT` (EFDI convention: UDP 50048); local polar positions require `CAT48_RADAR_LAT/LON` | EUROCONTROL CAT-048 Ed.1.32 targets |
 | `vendors/asterix/cat.py --category 62` | TCP client or UDP listener | Set `CAT62_HOST/PORT`, or `CAT62_UDP=1`; confirm Edition 1.21 | EUROCONTROL CAT-062 Ed.1.21 system tracks |
-| `mavlink.py` | UDP listener or TCP server | Autopilot, GCS, or receiver sends MAVLink to `MAVLINK_PORT` | MAVLink 1/2 position plus MAVLink `OPEN_DRONE_ID_*` aggregation |
-| `opendroneid.py` | Zenoh subscriber/translator | Receiver publishes an exact 25-byte message or bounded Message Pack under `…/raw/opendroneid/{receiver}/{transmitter}` | ASTM F3411 / ASD-STAN Basic ID, Location, Auth, Self ID, System, and Operator ID |
 | `vendors/sapient/flex335.py` | TCP listener or client | Edge node connects to `SAPIENT_LISTEN_PORT`, or set middleware `SAPIENT_HOST/PORT`; remote listeners require an allowed source CIDR | BSI FLEX 335 v2 framing and public SAPIENT protobuf subset |
-| `5516.py` | UDP listener | A Link 16/JREAP-C gateway sends its documented UDP profile to `STANAG5516_PORT` | Gateway data only; no direct radio interface and no guessed TCP framing |
-| `vmf.py` | UDP listener or TCP server | VMF gateway sends to `VMF_PORT` and confirms MIL-STD-47001C profile | Implemented message subset |
 | `nffi.py` | Zenoh subscriber/translator | Publisher writes one complete XML document under `…/raw/nffi/{source-id}` | NATO NFFI / ADatP-36 (STANAG 5527) XML subset |
 | `vendors/stanag/4586.py` | TCP client | Set CUCS/VSM `STANAG4586_HOST/PORT`; validate the VSM ICD before selecting `STANAG4586_PROFILE=legacy_ed3_approx` | Historical deployment layout, disabled by default; not claimed as a generic STANAG 4586 decoder |
 | `vendors/stanag/4609.py` | SRT/KLV input | Set `STANAG4609_SRT_URL` for the motion-imagery metadata stream | MISB ST 0601 KLV local-set subset over STANAG 4609 motion imagery; SRT is the configured transport, not part of the KLV schema |
@@ -143,11 +142,8 @@ catalog requires exact registration.
 
 | Bridge | Endpoint behavior | Configuration needed |
 |---|---|---|
-| Mixed ASTERIX UDP | Receives one unicast or multicast UDP stream and publishes exact frames by category | `ASTERIX_PORT`, categories, and optional bind/multicast/source filter |
-| APRS-IS | Connects to APRS-IS | Runtime area/range; upstream connection is built in |
+| Generic UDP | Preserves every datagram and safely auto-dispatches complete ASTERIX frames | `UDP_INGRESS_PORT`, optional bind/multicast/source filter, and ASTERIX dispatch categories |
 | dronuradaras.lt | Polls its fixed public HTTPS API | None |
-| Oro navigacija UTM (`utm.ans.lt`) | Polls an explicitly authorized JSON/GeoJSON export or API | `UTM_ANS_API_URL`; optional bearer `UTM_ANS_API_TOKEN` |
-| DJI Cloud API | Connects to a deployment's DJI MQTT 5 broker and selects aircraft OSD messages | `DJI_MQTT_HOST`, broker credentials/TLS, and DJI Pilot 2 or Dock enrollment |
 | meteo.lt | Polls the fixed public HTTPS API | Optional places/rate |
 | SitaWare HQ REST inbound | Polls deployment-specific resource | URL, credentials, and the real `SITAWARE_API_PATH`; there is no universal units URL |
 | Track fusion | Subscribes to local Zenoh topics | No external endpoint; starts working when normalized tracks arrive |
@@ -164,10 +160,10 @@ py .\radar_udp_relay.py --listen-port 50048
 
 The relay forwards every datagram unchanged to `asusrog.efdi.ltu:50000`.
 Override `--destination-host` when mesh DNS is unavailable. Configure this
-router with `ASTERIX_PORT=50000` when the forwarded stream contains mixed
-ASTERIX categories. Run one relay instance per input port when protocols arrive
-on separate local ports; combining unrelated wire formats on one destination
-port requires a receiver that can distinguish their framing.
+router with `UDP_INGRESS_PORT=50000`. The generic receiver preserves every
+datagram on its raw Zenoh topic and only auto-dispatches protocols whose framing
+is unambiguous. UDP 50034 and 50048 remain separate deterministic CAT-034 and
+CAT-048 listeners.
 
 On the EFDI laptop, inspect traffic without taking ownership of the UDP socket:
 
@@ -177,45 +173,8 @@ On the EFDI laptop, inspect traffic without taking ownership of the UDP socket:
 ```
 
 The first command displays packet bytes; the second saves a full packet capture
-for offline decoder work. Both use tcpdump and can run while the ASTERIX bridge
-is bound to UDP 50000.
-
-### Oro navigacija UTM and Lithuanian civilian UAV data
-
-The public [`utm.ans.lt` map](https://utm.ans.lt/) is a U-space/UTM user
-interface for declared flight planning and coordination. Oro navigacija's
-[UAV/UTM information](https://www.ans.lt/en/services/unmanned-aerial-vehicles-drones)
-and [UTM user rules](https://www.ans.lt/en/services/unmanned-aerial-vehicles-drones/utm-system-user-rules)
-do not
-advertise an anonymous JSON endpoint or a national live ASTM F3411/OpenDroneID
-feed. The bridge therefore refuses to guess private web endpoints or scrape map
-HTML. It starts only when `UTM_ANS_API_URL` points to a JSON/GeoJSON export/API
-provided by Oro navigacija or an authorized institutional integration:
-
-```dotenv
-UTM_ANS_API_URL=https://approved.example/utm/export
-UTM_ANS_API_TOKEN=<runtime-only-token>
-UTM_ANS_POLL_S=15
-UTM_ANS_TLS_VERIFY=1
-```
-
-These records are marked `source_kind=declared_utm_flight` and
-`utm_remote_id_observed=false`. For actual broadcast Remote ID, attach a
-receiver/detection node and publish ASTM F3411/OpenDroneID messages to Zenoh;
-the `protocols/random/opendroneid.py` translator handles that path. Other lawful
-options are an institutional U-space/CIS or network-identification service
-agreement with Oro navigacija, an approved DroneAware API account, or a
-contracted airport detection system. None is a guaranteed free public feed.
-
-There is no documented self-service API-token screen. Request integration
-access from Oro navigacija at [bepilociai@ans.lt](mailto:bepilociai@ans.lt) or
-[info@ans.lt](mailto:info@ans.lt), explaining that you need an authorized
-machine-to-machine JSON/GeoJSON feed for a Zenoh-to-TAK/SitaWare integration.
-Ask them to confirm the endpoint, authentication/token procedure, TLS trust
-chain, schema, permitted fields, polling/rate limits, and redistribution terms.
-The published Common Information Service is a regulated service with a 2026
-listed fee, so commercial/institutional access may require an agreement rather
-than a free token.
+for offline decoder work. Both use tcpdump and can run while the generic UDP
+ingress is bound to port 50000.
 
 ## Output layers
 
@@ -271,7 +230,7 @@ and SitaWare output layers consume the normalized topics automatically. An
 adapter must never write directly into another partner's namespace.
 
 Operator-side configuration is documented step-by-step in the
-[bidirectional runbook](INSTALL.md#c2--zenoh-bidirectional-runbook). In brief,
+[bidirectional runbook](C2_RUNBOOK.md). In brief,
 TAK Server requires a dedicated client identity, the correct IN/OUT groups and
 a TAK-issued certificate; SitaWare HQ NVG input is created under **SitaWare
 Communication → NVG → NVG Import Subscriptions**; and a licensed SitaWare CoT
@@ -279,64 +238,6 @@ Gateway must be given one TCP role, the EFDI endpoint, an approved export-layer
 set, and an explicit exclusion for `EFDI Live Tracks`. Product screens not
 present in the installed license/release cannot be substituted with a guessed
 REST path.
-
-## DJI and Mavic reality
-
-DJI aircraft are not generic MAVLink publishers. DJI's Cloud API uses HTTPS,
-WebSocket, and MQTT, with Pilot 2 or a Dock acting as the gateway. DJI currently
-lists Mavic 3 Enterprise models among supported Cloud API products and explicitly
-excludes several older enterprise models. See DJI's [Cloud API architecture](https://developer.dji.com/doc/cloud-api-tutorial/en/overview/product-architecture.html),
-[MQTT model](https://developer.dji.com/doc/cloud-api-tutorial/en/overview/basic-concept/mqtt.html),
-[supported products](https://developer.dji.com/doc/cloud-api-tutorial/en/overview/product-support.html),
-and [aircraft OSD fields](https://developer.dji.com/doc/cloud-api-tutorial/en/api-reference/pilot-to-cloud/mqtt/aircraft/properties.html).
-
-The Cloud API bridge remains available for a deployment that already operates
-its own Pilot 2/Dock broker. It is independent of the OpenDroneID feed below.
-MSDK is intentionally not an EFDI runtime path: DJI defines it as a library in a
-mobile application connected through the controller, not a headless network
-protocol. See DJI's [Mobile SDK architecture](https://developer.dji.com/doc/mobile-sdk-tutorial/en/basic-introduction/msdk-introduction.html).
-
-### Receiver → Zenoh → Open Drone ID translation
-
-The standard path is:
-
-`receiver/detection system → local Zenoh router → federated Zenoh routers → opendroneid.py → normalized Zenoh track → TAK/SitaWare layers`
-
-The receiver publishes to:
-
-`{NAMESPACE_PREFIX}/{PARTNER_NAMESPACE}/raw/opendroneid/{receiver_id}/{transmitter_id}`
-
-The payload can be the exact binary 25-byte ASTM/ASD-STAN message or an exact
-Message Pack of at most nine messages. When receiver metadata is available, it
-can instead publish this bounded JSON envelope:
-
-```json
-{
-  "payload_b64": "base64-encoded ASTM/ASD-STAN bytes",
-  "source_id": "optional transmitter identifier",
-  "transport": "ble-or-vendor-transport",
-  "rssi_dbm": -52
-}
-```
-
-`payload_hex` may replace `payload_b64`, but both must not be present. Receiver
-and transmitter topic segments are limited to deployment-safe identifiers; the
-envelope is limited to 4096 bytes and the decoded protocol payload to 228 bytes.
-The translator then publishes only to:
-
-`{NAMESPACE_PREFIX}/{PARTNER_NAMESPACE}/air/opendroneid/passive_rf/{affiliation}/uav/{type}/{id}/sapient`
-
-Configure runtime-only `OPENDRONEID_FRIENDLY_IDS` to classify own UAS IDs as
-friendly; all others remain unknown. The ordinary router launcher starts the
-idle-safe translator, not a radio receiver. OpenDroneID carries public identity,
-position, altitude, movement, status, and optional operator/takeoff information.
-It does not carry DJI's proprietary battery, camera/video, payload, or detailed
-health telemetry.
-
-EFDI intentionally contains no BLE/Wi-Fi receiver implementation. A partner's
-receiver or detection system is responsible for publishing the raw contract to
-its attached Zenoh router; `opendroneid.py` only translates traffic already in
-Zenoh.
 
 ## Next protocol candidates
 

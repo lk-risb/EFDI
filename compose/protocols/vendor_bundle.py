@@ -67,4 +67,3 @@ def run_bundle(bundle_name: str, child_specs: list[tuple[str, str, list[str]]]) 
             time.sleep(1)
     except KeyboardInterrupt:
         stop()
-

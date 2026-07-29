@@ -223,4 +223,3 @@ def test_sitaware_output_does_not_echo_sitaware_ingress():
     )(sample)
 
     cache.upsert.assert_not_called()
-

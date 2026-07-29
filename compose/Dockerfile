@@ -28,4 +28,4 @@ ENV PYTHONPATH=/app:/app/generated
 # key to GID 10001 so this user can read it despite the /certs mount being :ro.
 RUN groupadd -g 10001 bridge && useradd -u 10001 -g 10001 -M -s /usr/sbin/nologin bridge
 USER bridge
-CMD ["python3", "/app/aprsis_bridge.py"]
+CMD ["python3", "--version"]

@@ -50,6 +50,7 @@ _device_names:     dict[str, str]   = {}   # device_id → display_name
 _device_positions: dict[str, tuple] = {}   # device_id → (lat, lon)
 _last_detection:   dict[str, float] = {}   # device_id → epoch of most recent detection
 _online_devices:   set[str]         = set()
+_offline_announced: set[str]        = set()
 _device_lock  = threading.Lock()
 
 DEVICE_POLL_S     = 60    # radar nodes move rarely
@@ -125,14 +126,32 @@ def run_devices(pub: "zenoh.Publisher", verbose: bool):
                 dev["id"] for dev in with_position
                 if dev.get("is_online") is True
             }
+            positioned_ids = {dev["id"] for dev in with_position}
 
             # Keep positions and detection state only for devices confirmed
             # online by the latest successful device poll. Offline payloads are
-            # emitted as tombstones so downstream caches delete old markers.
+            # emitted as one-shot tombstones so downstream caches delete old
+            # markers without briefly reviving them on every poll.
             with _device_lock:
+                previous_positions = dict(_device_positions)
                 for dev in devices:
                     if dev.get("id") and dev.get("display_name"):
                         _device_names[dev["id"]] = dev["display_name"]
+                for dev_id in online_ids:
+                    _offline_announced.discard(dev_id)
+                offline_candidates = {
+                    dev["id"] for dev in with_position
+                    if dev["id"] not in online_ids
+                }
+                # A device can disappear from the API response or temporarily
+                # lose its coordinates. Use its last online position for the
+                # deletion event in either case.
+                offline_candidates.update(
+                    dev_id for dev_id in previous_positions
+                    if dev_id not in online_ids and dev_id not in positioned_ids
+                )
+                tombstone_ids = offline_candidates - _offline_announced
+                _offline_announced.update(tombstone_ids)
                 _online_devices.clear()
                 _online_devices.update(online_ids)
                 for dev_id in list(_device_positions):
@@ -140,12 +159,16 @@ def run_devices(pub: "zenoh.Publisher", verbose: bool):
                         _device_positions.pop(dev_id, None)
                         _last_detection.pop(dev_id, None)
 
+            published_online = 0
+            removed_offline = 0
             for dev in with_position:
                 lat = dev["latitude"]
                 lon = dev["longitude"]
 
                 dev_id = dev["id"]
                 is_online = dev_id in online_ids
+                if not is_online and dev_id not in tombstone_ids:
+                    continue
                 with _device_lock:
                     if is_online:
                         _device_positions[dev_id] = (lat, lon)
@@ -166,8 +189,12 @@ def run_devices(pub: "zenoh.Publisher", verbose: bool):
                 }
                 if not is_online:
                     payload["_delete"] = True
+                    removed_offline += 1
                 elif last_det is not None:
                     payload["last_detection_ts"] = last_det
+                    published_online += 1
+                else:
+                    published_online += 1
 
                 pub.put(json.dumps(payload).encode(),
                         encoding=zenoh.Encoding.APPLICATION_JSON)
@@ -176,8 +203,26 @@ def run_devices(pub: "zenoh.Publisher", verbose: bool):
                           "online={}".format(payload["is_online"]),
                           "{:.4f},{:.4f}".format(lat, lon), flush=True)
 
-            print("Devices: {} online published, {} offline removed ({} total registered)".format(
-                len(online_ids), len(with_position) - len(online_ids), len(devices)), flush=True)
+            missing_tombstones = tombstone_ids - positioned_ids
+            for dev_id in missing_tombstones:
+                lat, lon = previous_positions[dev_id]
+                payload = {
+                    "_src":        "dronuradaras.lt",
+                    "_ts":         time.time(),
+                    "sensor_type": "acoustic",
+                    "sensor_id":   "DRONU-{}".format(dev_id[:8]),
+                    "sensor_name": _device_names.get(dev_id, "dronu-sensor"),
+                    "lat_deg":     round(lat, 6),
+                    "lon_deg":     round(lon, 6),
+                    "is_online":   False,
+                    "_delete":     True,
+                }
+                pub.put(json.dumps(payload).encode(),
+                        encoding=zenoh.Encoding.APPLICATION_JSON)
+                removed_offline += 1
+
+            print("Devices: {} online published, {} newly offline removed ({} total registered)".format(
+                published_online, removed_offline, len(devices)), flush=True)
 
         time.sleep(DEVICE_POLL_S)
 

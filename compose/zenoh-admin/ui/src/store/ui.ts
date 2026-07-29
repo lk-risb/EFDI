@@ -27,4 +27,3 @@ export const useUiSettings = create<UiState>()(
     { name: 'zenoh-admin-ui' }
   )
 )
-

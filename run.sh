@@ -119,7 +119,7 @@ skip_if_no_key() {
 
 asterix_category_uses_raw() {
     local wanted="$1" item
-    [[ -n "${ASTERIX_PORT:-}" ]] || return 1
+    [[ -n "${UDP_INGRESS_PORT:-${ASTERIX_PORT:-}}" ]] || return 1
     IFS=',' read -r -a _asterix_categories <<< "${ASTERIX_CATEGORIES:-34,48}"
     for item in "${_asterix_categories[@]}"; do
         item="${item//[[:space:]]/}"
@@ -128,11 +128,11 @@ asterix_category_uses_raw() {
     return 1
 }
 
-start_asterix_udp_bridge() {
-    if [[ "${ASTERIX_PORT:-}" ]]; then
-        start asterix-udp bridges/asterix_udp_bridge.py
+start_udp_ingress_bridge() {
+    if [[ "${UDP_INGRESS_PORT:-${ASTERIX_PORT:-}}" ]]; then
+        start udp-ingress bridges/udp_ingress_bridge.py
     else
-        echo "  [skip] asterix-udp — set ASTERIX_PORT for a mixed UDP feed"
+        echo "  [skip] udp-ingress — set UDP_INGRESS_PORT for generic UDP capture"
     fi
 }
 
@@ -195,25 +195,31 @@ start_asterix_protocols() {
             48) port="${CAT48_PORT:-}"; tcp_var="${CAT48_TCP:-}" ;;
         esac
         if asterix_category_uses_raw "$category"; then
-            start "asterix-cat${category}" protocols/vendors/asterix/cat.py --category "$category" --zenoh-raw
-        elif [[ "$port" ]]; then
+            start "asterix-cat${category}-raw" protocols/vendors/asterix/cat.py \
+                --category "$category" --zenoh-raw
+        fi
+        if [[ "$port" ]]; then
             tcp_args=(); [[ "$tcp_var" == "1" ]] && tcp_args=(--tcp)
             start "asterix-cat${category}" protocols/vendors/asterix/cat.py \
                 --category "$category" --port "$port" "${tcp_args[@]}"
-        else
+        elif ! asterix_category_uses_raw "$category"; then
             echo "  [skip] asterix-cat${category} — set CAT${category}_PORT in .env to enable"
+        fi
+        if [[ ! "$port" ]] && asterix_category_uses_raw "$category"; then
+            echo "  [skip] asterix-cat${category} direct listener — set CAT${category}_PORT to enable"
         fi
     done
 
     host="${CAT62_HOST:-${RADAR_HOST:-}}"
     if asterix_category_uses_raw 62; then
-        start asterix-cat62 protocols/vendors/asterix/cat.py --category 62 --zenoh-raw
-    elif [[ "$host" && "$host" != "127.0.0.1" ]]; then
+        start asterix-cat62-raw protocols/vendors/asterix/cat.py --category 62 --zenoh-raw
+    fi
+    if [[ "$host" && "$host" != "127.0.0.1" ]]; then
         start asterix-cat62 protocols/vendors/asterix/cat.py --category 62 --host "$host" \
             --port "${CAT62_PORT:-${RADAR_PORT:-50062}}"
     elif [[ "${CAT62_UDP:-}" == "1" ]]; then
         start asterix-cat62 protocols/vendors/asterix/cat.py --category 62 --udp --port "${CAT62_PORT:-50062}"
-    else
+    elif ! asterix_category_uses_raw 62; then
         echo "  [skip] asterix-cat62 — set CAT62_HOST or CAT62_UDP=1 in .env to enable"
     fi
 }
@@ -225,11 +231,9 @@ start_bridges() {
     echo ""
     echo "=== Source bridges ==="
 
-    start_asterix_udp_bridge
+    start_udp_ingress_bridge
 
     start dronuradaras bridges/dronuradaras_bridge.py
-
-    start aprs bridges/aprsis_bridge.py
 
     start meteolt bridges/meteolt_forecast_bridge.py
 
@@ -249,9 +253,6 @@ start_bridges() {
 
     # Optional transport-only ingress.  These processes publish bytes; the
     # matching protocol translators below perform all decoding.
-    if [[ "${VMF_RAW_PORT:-}" ]]; then
-        start vmf-raw bridges/vmf_bridge.py --port "$VMF_RAW_PORT"
-    fi
     if [[ "${SAPIENT_RAW_PORT:-}" ]]; then
         start sapient-raw bridges/sapient_flex335_bridge.py --tcp --port "$SAPIENT_RAW_PORT"
     fi
@@ -291,15 +292,6 @@ start_protocols() {
     fi
 
     start nffi protocols/random/nffi.py
-
-    if [[ "${VMF_ZENOH_RAW:-}" == "1" ]]; then
-        start vmf protocols/random/vmf.py --zenoh-raw --raw-topic "${VMF_RAW_TOPIC:-}"
-    elif [[ "${VMF_PORT:-}" ]]; then
-        vmf_args=(); [[ "${VMF_TCP:-}" == "1" ]] && vmf_args=(--tcp)
-        start vmf protocols/random/vmf.py --port "$VMF_PORT" "${vmf_args[@]}"
-    else
-        echo "  [skip] vmf — set VMF_PORT in .env to enable"
-    fi
 
     if [[ "${STANAG4586_PROFILE:-}" == "legacy_ed3_approx" && "${STANAG4586_ZENOH_RAW:-}" == "1" ]]; then
         start stanag4586 protocols/vendors/stanag/4586.py --zenoh-raw --raw-topic "${STANAG4586_RAW_TOPIC:-}"
@@ -370,16 +362,8 @@ start_giraffe_bridges() {
     echo ""
     echo "=== Giraffe sensor bridges ==="
 
-    start_asterix_udp_bridge
+    start_udp_ingress_bridge
     start_asterix_protocols
-
-    if [[ "${VMF_PORT:-}" ]]; then
-        tcp_vmf=""
-        [[ "${VMF_TCP:-}" == "1" ]] && tcp_vmf="--tcp"
-        start vmf protocols/random/vmf.py --port "$VMF_PORT" ${tcp_vmf:+"$tcp_vmf"}
-    else
-        echo "  [skip] vmf — set VMF_PORT in .env to enable"
-    fi
 
 }
 

@@ -22,7 +22,7 @@ message AlertAck {
 //    optional string reason = 3; // Reason why alert was not accepted
     repeated string reason = 4; // Reason(s) why alert was not accepted
 	optional AlertAckStatus alert_ack_status = 5 [(field_options) = {is_mandatory: true}]; // State of the information in this message
-  
+
     enum AlertAckStatus {
         ALERT_ACK_STATUS_UNSPECIFIED = 0; // Reason not set
         ALERT_ACK_STATUS_ACCEPTED = 1; // Alert accepted

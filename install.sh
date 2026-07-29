@@ -51,7 +51,7 @@ gen_uuid() { python3 -c 'import uuid; print(uuid.uuid4().hex)'; }
 # ── Banner ────────────────────────────────────────────────────────────────────
 echo ""
 echo -e "${BOLD}  EFDI — Bridge Stack Installer${NC}"
-echo "  Sensor bridges: ASTERIX · Link-16 · MAVLink · VMF · SitaWare · dronuradaras"
+echo "  Sensor bridges: ASTERIX · SitaWare · dronuradaras"
 echo ""
 
 # ── Install mode ──────────────────────────────────────────────────────────────
@@ -190,21 +190,6 @@ if [ -n "${CAT48_PORT:-}" ]; then
     ask_opt CAT20_PORT       "MLAT  CAT-20 UDP port (optional)" ""
 fi
 
-section "Link-16 / JREAP-C"
-ask_opt LINK16_PORT "Link-16 JREAP-C UDP port (leave blank to skip)" ""
-
-section "MAVLink"
-ask_opt MAVLINK_PORT "MAVLink UDP/TCP port (leave blank to skip)" ""
-if [ -n "${MAVLINK_PORT:-}" ]; then
-    ask_opt MAVLINK_TCP "TCP mode? (1=TCP, leave blank=UDP)" ""
-fi
-
-section "VMF (MIL-STD-47001C)"
-ask_opt VMF_PORT "VMF UDP/TCP port (leave blank to skip)" ""
-if [ -n "${VMF_PORT:-}" ]; then
-    ask_opt VMF_TCP "TCP mode? (1=TCP, leave blank=UDP)" ""
-fi
-
 section "SitaWare friendly-force tracking"
 ask_opt SITAWARE_URL  "SitaWare URL (e.g. https://sitaware.example.com)" ""
 if [ -n "${SITAWARE_URL:-}" ]; then
@@ -229,9 +214,6 @@ echo "  BUNDLE_DIR        : $BUNDLE_DIR"
 echo "  POD_STATE_DIR     : $POD_STATE_DIR"
 echo "  ZENOH_ENDPOINT    : $ZENOH_LOCAL_ENDPOINT"
 [ -n "${CAT48_PORT:-}"    ] && echo "  CAT48_PORT        : $CAT48_PORT"
-[ -n "${LINK16_PORT:-}"   ] && echo "  LINK16_PORT       : $LINK16_PORT"
-[ -n "${MAVLINK_PORT:-}"  ] && echo "  MAVLINK_PORT      : $MAVLINK_PORT"
-[ -n "${VMF_PORT:-}"      ] && echo "  VMF_PORT          : $VMF_PORT"
 [ -n "${SITAWARE_URL:-}"  ] && echo "  SITAWARE_URL      : $SITAWARE_URL"
 [ -n "${TAK_HOST:-}"      ] && echo "  TAK_HOST:PORT     : $TAK_HOST:$TAK_PORT"
 echo ""
@@ -311,7 +293,6 @@ if [ -f "$ENV_FILE" ]; then
     MANAGED_KEYS+="|BUNDLE_DIR|EFDI_CERT_DIR"
     MANAGED_KEYS+="|CAT48_PORT|CAT48_TCP|CAT48_RADAR_SAC|CAT48_RADAR_SIC|CAT48_RADAR_NAME|CAT48_RADAR_LAT|CAT48_RADAR_LON"
     MANAGED_KEYS+="|CAT21_PORT|CAT21_TCP|CAT20_PORT|CAT20_TCP"
-    MANAGED_KEYS+="|LINK16_PORT|LINK16_TCP|MAVLINK_PORT|MAVLINK_TCP|VMF_PORT|VMF_TCP"
     MANAGED_KEYS+="|SITAWARE_URL|SITAWARE_API_PATH|SITAWARE_USER|SITAWARE_PASS|SITAWARE_POLL_S|SITAWARE_DISCOVER"
     MANAGED_KEYS+="|TAK_HOST|TAK_PORT"
     EXTRA_LINES=$(grep -Ev "^(#|[[:space:]]*$)" "$ENV_FILE" 2>/dev/null \
@@ -348,11 +329,6 @@ fi
     [ -n "${CAT20_PORT:-}"       ] && echo "CAT20_PORT=${CAT20_PORT}"
     echo ""
     echo "# ── Sensor ports ──────────────────────────────────────────────────────"
-    [ -n "${LINK16_PORT:-}"  ] && echo "LINK16_PORT=${LINK16_PORT}"
-    [ -n "${MAVLINK_PORT:-}" ] && echo "MAVLINK_PORT=${MAVLINK_PORT}"
-    [ -n "${MAVLINK_TCP:-}"  ] && echo "MAVLINK_TCP=${MAVLINK_TCP}"
-    [ -n "${VMF_PORT:-}"     ] && echo "VMF_PORT=${VMF_PORT}"
-    [ -n "${VMF_TCP:-}"      ] && echo "VMF_TCP=${VMF_TCP}"
     echo ""
     echo "# ── Integrations ──────────────────────────────────────────────────────"
     [ -n "${SITAWARE_URL:-}"    ] && echo "SITAWARE_URL=${SITAWARE_URL}"

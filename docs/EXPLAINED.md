@@ -14,8 +14,8 @@ and **[6. How data actually flows](#6-how-data-actually-flows)**.
 EFDI is a **sensor-to-C2 translator with a shared message fabric in the middle.**
 
 On one side are *sensors and data sources* that each speak their own dialect —
-radars speaking ASTERIX, aircraft transponders speaking ADS-B, drones speaking
-Open Drone ID, weather stations, partner feeds, and so on. On the other side are
+radars speaking ASTERIX, aircraft transponders speaking ADS-B, acoustic
+drone-detection sensors, weather stations, partner feeds, and so on. On the other side are
 *command-and-control (C2) systems* that operators actually look at — **TAK**
 (ATAK/WinTAK) which speaks Cursor-on-Target (CoT), and **SitaWare HQ** which
 speaks NVG.
@@ -57,8 +57,8 @@ flowchart LR
   subgraph Sources["Sensors & data sources"]
     R[Radars / ASTERIX]
     A[Partner ADS-B / CAT-21]
-    D[Drones / Open Drone ID / dronuradaras]
-    W[Weather / APRS / …]
+    D[Drone detections / dronuradaras]
+    W[Weather / partner feeds]
   end
 
   subgraph Pod["EFDI moon-pod (native Python + Docker infra)"]
@@ -131,7 +131,7 @@ about the backbone — it publishes locally and the router carries it.
 Take a radar as the worked example:
 
 1. A radar emits **ASTERIX CAT-048** bytes over UDP.
-2. `asterix_udp_bridge.py` receives the raw datagram and publishes it verbatim on
+2. `udp_ingress_bridge.py` receives the raw datagram and publishes it verbatim on
    a **raw** key (`{root}/raw/asterix/cat048`) — no decoding, just transport.
 3. The ASTERIX decoder process (`protocols/vendors/asterix/cat.py`, selected with
    `--category`) subscribes to that raw key, decodes the binary record into a
@@ -141,9 +141,8 @@ Take a radar as the worked example:
    `protocols/protobuf_codec.py`, which assemble the taxonomy key and publish
    **several views of the same track** (§6.4).
 
-Other sources are simpler — `aprsis_bridge.py` reads the APRS-IS stream and
-`put`s JSON, while partner ADS-B arrives through registered fabric topics or
-ASTERIX CAT-021. The pattern is always
+Other sources are simpler — partner ADS-B arrives through registered fabric
+topics or ASTERIX CAT-021. The pattern is always
 **decode → track dict → publish helper.**
 
 ### 6.2 The normalized track
@@ -299,9 +298,9 @@ supervisor is always running; a crashed feed comes back on its own.
 
 | Category | Examples | Role |
 |---|---|---|
-| **Open-data bridges** | `aprs`, `meteolt` | Poll explicitly retained feeds → tracks |
-| **Sensor bridges** | `asterix`, `sitaware`, `dronuradaras`, `dji-cloud`, `track-fusion`, `*-raw` | Ingest sensors / raw sockets |
-| **Protocols** | `sapient`, `stanag4586/4609/5516`, `mavlink`, `vmf`, `cap`, `geojson`, `mqtt`, `sensorthings`, `sparkplug`, `nffi` | Decode a wire protocol on a raw Zenoh topic → tracks |
+| **Open-data bridges** | `meteolt` | Poll explicitly retained feeds → tracks |
+| **Sensor bridges** | `asterix`, `sitaware`, `dronuradaras`, `track-fusion`, `*-raw` | Ingest sensors / raw sockets |
+| **Protocols** | `sapient`, `stanag4586/4609`, `cap`, `geojson`, `mqtt`, `sensorthings`, `sparkplug`, `nffi` | Decode a wire protocol on a raw Zenoh topic → tracks |
 | **Output layers** | `cot_layer`, `nvg_layer` | Egress tracks → TAK / SitaWare |
 | **C2 inputs** | `tak-bridge`, `nvg_bridge` | Ingress from TAK / SitaWare |
 | **Infrastructure** | `zenoh`, `admin-control`, `supervisor`, `presence`, `cert-renewer` | Router, web UI, keep-alive, presence, cert rotation |
@@ -321,21 +320,21 @@ supervisor is always running; a crashed feed comes back on its own.
 
 ## 12. Operating it — golden paths
 
-**Start everything and keep it running**
+### Start everything and keep it running
 ```bash
 ./start.sh                 # interactive menu, or:
 ./start.sh --service presence   # start one service non-interactively
 ```
 The supervisor keeps configured services alive; `presence` announces them.
 
-**Check health / what's live**
+### Check health / what's live
 ```bash
 ls compose/state/.pids/                 # one pidfile per running service
 docker ps                               # infra containers healthy?
 tail -f compose/state/logs/<svc>.log    # a service's output
 ```
 
-**Confirm you're publishing to the backbone**
+### Confirm you're publishing to the backbone
 ```bash
 # a scouting-disabled client connecting only to the backbone should see
 # your 1851281…/…/tracks/v1 keys alongside other vendors' prefixes

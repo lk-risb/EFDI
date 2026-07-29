@@ -44,7 +44,7 @@ message Alert {
         ALERT_TYPE_CRITICAL = 3;
         ALERT_TYPE_ERROR = 4;
         ALERT_TYPE_FATAL = 5;
-        ALERT_TYPE_MODE_CHANGE = 6; 
+        ALERT_TYPE_MODE_CHANGE = 6;
     }
 
     enum AlertStatus {

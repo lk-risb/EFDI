@@ -6,7 +6,7 @@ from the standard it claims to speak. Re-vendor from upstream instead.
 
 ## `sapient_msg/` — BSI Flex 335 v2.0 (SAPIENT)
 
-- **Upstream:** https://github.com/dstl/SAPIENT-Proto-Files (`bsi_flex_335_v2_0/`)
+- **Upstream:** [github.com/dstl/SAPIENT-Proto-Files](https://github.com/dstl/SAPIENT-Proto-Files) (`bsi_flex_335_v2_0/`)
 - **Licence:** Apache License 2.0 — see `sapient_msg/LICENCE.txt`. Permits use,
   modification and redistribution, including commercial and defence use, as
   long as the licence and copyright notices are retained (which is why
