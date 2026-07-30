@@ -109,7 +109,7 @@ _MAX_FABRIC_ENDPOINTS = 16
 # restarting the data plane is how a WebUI prefix change goes live without
 # recreating containers (their env is baked at create time).
 _PREFIX_FILE = os.environ.get("NAMESPACE_PREFIX_FILE", "/namespace-prefix")
-_DEFAULT_PREFIX = "LTU/CISB"
+_DEFAULT_PREFIX = "EFDI"
 _DATA_PREFIX_FILE = os.environ.get("DATA_NAMESPACE_PREFIX_FILE", "/data-topic-prefix")
 _CONFIG_APPLY_LOCK = threading.RLock()
 _LAST_KNOWN_GOOD_PATH = CONFIG_PATH + ".last-known-good"
@@ -224,6 +224,41 @@ class ConfigFields(BaseModel):
 
 class RenderedConfigRequest(BaseModel):
     rendered: str = Field(min_length=1, max_length=512_000)
+
+
+def _fabric_presets() -> list[dict[str, object]]:
+    presets: list[dict[str, object]] = []
+    for env_prefix in ("EFDI_LOCAL_FABRIC", "EFDI_BACKBONE_FABRIC"):
+        raw = os.environ.get(f"{env_prefix}_ENDPOINTS", "[]")
+        try:
+            endpoints = json5.loads(raw)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=500,
+                detail=f"{env_prefix}_ENDPOINTS is not a JSON array: {exc}",
+            ) from exc
+        if not isinstance(endpoints, list) or any(not isinstance(item, str) for item in endpoints):
+            raise HTTPException(
+                status_code=500,
+                detail=f"{env_prefix}_ENDPOINTS must be a JSON array of endpoint strings",
+            )
+        if not endpoints:
+            continue
+        profile = os.environ.get(f"{env_prefix}_PROFILE", "efdi")
+        if profile not in _TLS_PROFILES:
+            raise HTTPException(
+                status_code=500,
+                detail=f"{env_prefix}_PROFILE names an unknown TLS profile",
+            )
+        ConfigFields._check_safe_endpoints(endpoints)
+        presets.append(
+            {
+                "label": os.environ.get(f"{env_prefix}_LABEL", env_prefix),
+                "endpoints": endpoints,
+                "profile": profile,
+            }
+        )
+    return presets
 
 
 def _extract_fields(raw: str) -> ConfigFields:
@@ -641,7 +676,14 @@ async def get_config(_=Depends(require_role("admin", "superadmin"))):
         fields = _extract_fields(raw)
     except (ValueError, KeyError, TypeError) as exc:
         raise HTTPException(status_code=500, detail=f"Could not parse current config: {exc}")
-    return {"fields": fields, "path": CONFIG_PATH}
+    return {
+        "fields": fields,
+        "path": CONFIG_PATH,
+        "fabric_presets": _fabric_presets(),
+        "tls_profiles": {
+            name: profile["label"] for name, profile in _TLS_PROFILES.items()
+        },
+    }
 
 
 @router.get("/rendered")

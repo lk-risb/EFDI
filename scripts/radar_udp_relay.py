@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import socket
 
 
@@ -24,8 +25,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--destination-host",
-        default="asusrog.efdi.ltu",
-        help="EFDI laptop hostname or IP (default: asusrog.efdi.ltu)",
+        default=os.environ.get("EFDI_DESTINATION_HOST"),
+        help="EFDI router hostname or IP (or set EFDI_DESTINATION_HOST)",
     )
     parser.add_argument(
         "--destination-port",
@@ -34,6 +35,8 @@ def parse_args() -> argparse.Namespace:
         help="EFDI laptop UDP port (default: 50000)",
     )
     args = parser.parse_args()
+    if not args.destination_host:
+        parser.error("--destination-host or EFDI_DESTINATION_HOST is required")
     for name in ("listen_port", "destination_port"):
         port = getattr(args, name)
         if not 1 <= port <= 65535:

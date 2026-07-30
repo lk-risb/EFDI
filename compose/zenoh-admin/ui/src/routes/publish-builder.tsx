@@ -35,11 +35,13 @@ interface PublishProfile {
   router_connect_certificate: string
   router_connect_private_key: string
   router_root_ca: string
+  requires_client_cn: boolean
 }
 
 interface PublishDefaults {
   current_endpoint: string
   endpoints: string[]
+  publish_root: string
   tls_profile: string
   verify_name_on_connect: boolean
   client_cn: string
@@ -135,6 +137,13 @@ function PublishBuilderPage() {
       setCertDir(data.cert_dir)
       setTlsProfile(data.tls_profile)
       setVerifyNameOnConnect(data.verify_name_on_connect)
+      setRows(current => {
+        if (current.length !== 1 || current[0].topic.trim()) return current
+        const topic = data.publish_root
+          ? `${data.publish_root}/health/publish-test/v1`
+          : 'health/publish-test/v1'
+        return [{...current[0], topic}]
+      })
     } catch (e) {
       notify.error(errorMessage(e))
     } finally {
@@ -226,11 +235,14 @@ function PublishBuilderPage() {
 
   function validateRows(): string | null {
     if (!routerEndpoint.trim()) return 'Router endpoint is required'
-    if (!clientCn.trim()) return 'Client name (cert CN) is required'
+    if (selectedProfile?.requires_client_cn && !clientCn.trim()) {
+      return 'Client name (cert CN) is required by the selected TLS profile'
+    }
     if (!certDir.trim()) return 'Cert directory is required'
     if (rows.length === 0) return 'At least one row is required'
     for (const row of rows) {
       if (!row.topic.trim()) return 'Every row needs a topic'
+      if (row.topic.includes('*')) return 'Publish topics must be concrete and cannot contain wildcards'
       if (row.count < 1) return 'Count must be at least 1'
       if (row.interval_s < 0) return 'Interval must be 0 or more'
     }
@@ -373,15 +385,24 @@ function PublishBuilderPage() {
                   placeholder="tls/zenohpeer.nb.efdi:7447"
                 />
               </label>
-              <label className="space-y-1">
-                <span className="text-sm text-zinc-700 dark:text-zinc-300">Client name (cert CN)</span>
-                <input
-                  className={inputClass}
-                  value={clientCn}
-                  onChange={e => setClientCn(e.target.value)}
-                  placeholder="acme"
-                />
-              </label>
+              {selectedProfile?.requires_client_cn ? (
+                <label className="space-y-1">
+                  <span className="text-sm text-zinc-700 dark:text-zinc-300">Client name (cert CN)</span>
+                  <input
+                    className={inputClass}
+                    value={clientCn}
+                    onChange={e => setClientCn(e.target.value)}
+                    placeholder="router-slot"
+                  />
+                </label>
+              ) : (
+                <div className="space-y-1">
+                  <span className="text-sm text-zinc-700 dark:text-zinc-300">Client certificate</span>
+                  <div className={`${inputClass} text-zinc-500`}>
+                    {selectedProfile?.client_cert_filename ?? 'Fixed by TLS profile'}
+                  </div>
+                </div>
+              )}
               <label className="space-y-1">
                 <span className="text-sm text-zinc-700 dark:text-zinc-300">Certificate directory</span>
                 <input
@@ -462,8 +483,13 @@ function PublishBuilderPage() {
                         className={inputClass}
                         value={row.topic}
                         onChange={e => updateRow(index, { topic: e.target.value })}
-                        placeholder="LTU/CISB/acme/status"
+                        placeholder={defaults?.publish_root
+                          ? `${defaults.publish_root}/health/status/v1`
+                          : 'router-slot/health/status/v1'}
                       />
+                      <span className="block text-[11px] text-zinc-500">
+                        Use a concrete key. `/**` is an ACL/subscription pattern and cannot be published.
+                      </span>
                     </label>
                     <label className="space-y-1">
                       <span className="text-xs uppercase tracking-wide text-zinc-500">Message</span>

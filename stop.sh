@@ -3,6 +3,7 @@
 #
 # Usage:
 #   ./stop.sh           # stop everything (bridges + protocols + layers + zenoh)
+#   ./stop.sh native    # stop every PID-managed process; leave Docker infrastructure
 #   ./stop.sh giraffe   # stop source/API bridges; leave sensor protocols + output running
 #   ./stop.sh bridges   # stop source-specific bridges only
 #   ./stop.sh protocols # stop reusable input protocols only
@@ -78,6 +79,10 @@ case "$MODE" in
         stop_scripts "*"
         stop_zenoh
         ;;
+    native)
+        echo "=== Stopping native bridges and layers ==="
+        stop_scripts "*"
+        ;;
     giraffe)
         echo "=== Stopping open-API bridges (leaving giraffe sensors + layers) ==="
         for name in "${_SOURCE_BRIDGES[@]}"; do
@@ -114,7 +119,7 @@ case "$MODE" in
                 exit 0
                 ;;
         esac
-        echo "Usage: $0 [all|giraffe|bridges|protocols|layers|zenoh]"
+        echo "Usage: $0 [all|native|giraffe|bridges|protocols|layers|zenoh]"
         exit 1
         ;;
 esac

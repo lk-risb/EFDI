@@ -5,11 +5,36 @@
 
 set -euo pipefail
 
+REPO_URL="https://github.com/risblicencijos/EFDI.git"
+INSTALL_DIR="${INSTALL_DIR:-$HOME/efdi-router}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || echo "$PWD")"
 ENV_FILE="$SCRIPT_DIR/compose/.env"
+COMPOSE_FILE="$SCRIPT_DIR/compose/docker-compose.yml"
 VENV="$SCRIPT_DIR/compose/venv"
 
 [ -t 0 ] || exec < /dev/tty 2>/dev/null || true
+
+# Match TAK's curl-pipe bootstrap behavior: install into a normal git checkout,
+# then re-exec the checked-in installer.
+if [ ! -f "$COMPOSE_FILE" ]; then
+    echo "Bootstrapping — cloning repo to $INSTALL_DIR ..."
+    if ! command -v git >/dev/null 2>&1; then
+        command -v sudo >/dev/null 2>&1 \
+            && sudo apt-get update -qq \
+            && sudo apt-get install -y -qq git
+    fi
+    command -v git >/dev/null 2>&1 || {
+        echo "git is required to install EFDI." >&2
+        exit 1
+    }
+    if [ -d "$INSTALL_DIR/.git" ]; then
+        git -C "$INSTALL_DIR" pull --ff-only
+    else
+        git clone "$REPO_URL" "$INSTALL_DIR"
+    fi
+    git -C "$INSTALL_DIR" submodule update --init --recursive
+    exec bash "$INSTALL_DIR/install.sh" </dev/tty
+fi
 
 # ── Colours ───────────────────────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
@@ -46,6 +71,19 @@ ask_opt() {  # ask_opt <var> <question> [default]  — empty answer allowed
     fi
 }
 
+ask_secret() {
+    local _var="$1" _q="$2" _ans
+    read -rsp "$(echo -e "  ${BOLD}${_q}${NC}: ")" _ans
+    echo
+    printf -v "$_var" '%s' "$_ans"
+}
+
+env_value() {
+    local key="$1"
+    [ -f "$ENV_FILE" ] || return 0
+    sed -n "s/^${key}=//p" "$ENV_FILE" | head -1
+}
+
 gen_uuid() { python3 -c 'import uuid; print(uuid.uuid4().hex)'; }
 
 # ── Banner ────────────────────────────────────────────────────────────────────
@@ -53,6 +91,20 @@ echo ""
 echo -e "${BOLD}  EFDI — Bridge Stack Installer${NC}"
 echo "  Sensor bridges: ASTERIX · SitaWare · dronuradaras"
 echo ""
+
+# ── Existing installation ────────────────────────────────────────────────────
+if [ -f "$ENV_FILE" ]; then
+    section "Existing installation"
+    echo "  [R] Reinstall (remove local images/containers, keep certs and data)"
+    echo "  [C] Full reconfigure"
+    echo "  [Q] Cancel"
+    read -rp "  Action [R/c/q]: " _EXISTING_ACTION
+    case "${_EXISTING_ACTION:-R}" in
+        [Rr]*) exec bash "$SCRIPT_DIR/reinstall.sh" ;;
+        [Cc]*) ;;
+        *) echo "Aborted."; exit 0 ;;
+    esac
+fi
 
 # ── Install mode ──────────────────────────────────────────────────────────────
 section "Install mode"
@@ -79,7 +131,7 @@ fi
 section "Prerequisites"
 
 PY_OK=0
-for py in python3.12 python3.11 python3.10 python3; do
+for py in python3.14 python3.13 python3.12 python3.11 python3.10 python3; do
     if command -v "$py" &>/dev/null; then
         PY_VER=$("$py" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
         PY_MAJ=${PY_VER%%.*}; PY_MIN=${PY_VER#*.}
@@ -142,9 +194,9 @@ if [ "$INSTALL_MODE" = "production" ]; then
         EXISTING_PREFIX=$(grep '^NAMESPACE_PREFIX=' "$ENV_FILE" | head -1 | cut -d= -f2- | tr -d '[:space:]')
     fi
     echo ""
-    echo "  NAMESPACE_PREFIX is your org's topic prefix. Only the first segment is fixed"
-    echo "  by convention; the rest is yours and may be any depth (e.g. LTU/CISB, LTU/CISB/LTK)."
-    ask NAMESPACE_PREFIX "NAMESPACE_PREFIX" "${EXISTING_PREFIX:-LTU/CISB}"
+    echo "  NAMESPACE_PREFIX is your deployment's topic prefix and may have any depth."
+    echo "  Use a stable organization name; do not put an IP address or secret in it."
+    ask NAMESPACE_PREFIX "NAMESPACE_PREFIX" "${EXISTING_PREFIX:-EFDI}"
 
     section "Pod state directory"
     echo "  Zenoh router config and TLS material live here (created by first-boot.sh)."
@@ -166,7 +218,7 @@ else
     # Testing mode — generate everything automatically
     section "Test namespace and directories"
     PARTNER_NAMESPACE=$(gen_uuid)
-    NAMESPACE_PREFIX="LTU/CISB"
+    NAMESPACE_PREFIX="EFDI"
     BUNDLE_DIR="$SCRIPT_DIR/compose/test-certs"
     POD_STATE_DIR="$SCRIPT_DIR/.test-pod-state"
     ZENOH_LOCAL_ENDPOINT="tcp/127.0.0.1:7448"
@@ -176,14 +228,14 @@ else
 fi
 
 # ── Sensor bridges ─────────────────────────────────────────────────────────────
-section "ASTERIX radar (CAT-48/34 — Giraffe AMB)"
+section "ASTERIX radar (CAT-48/34)"
 echo "  Leave blank if no radar is connected."
 echo ""
-ask_opt CAT48_PORT      "Radar UDP port (CAT48_PORT)"     "30048"
+ask_opt CAT48_PORT      "Radar UDP port (CAT48_PORT)"     "50048"
 if [ -n "${CAT48_PORT:-}" ]; then
     ask_opt CAT48_RADAR_SAC  "Radar SAC (Source Area Code)"    ""
     ask_opt CAT48_RADAR_SIC  "Radar SIC (Source Identification Code)" ""
-    ask_opt CAT48_RADAR_NAME "Radar display name in ATAK"      "Giraffe AMB"
+    ask_opt CAT48_RADAR_NAME "Radar display name in C2 clients" "ASTERIX Radar"
     ask_opt CAT48_RADAR_LAT  "Radar fallback latitude  (or blank for auto from CAT-34)" ""
     ask_opt CAT48_RADAR_LON  "Radar fallback longitude (or blank for auto from CAT-34)" ""
     ask_opt CAT21_PORT       "ADS-B CAT-21 UDP port (optional)" ""
@@ -204,6 +256,31 @@ ask_opt TAK_HOST "TAK Server hostname/IP" ""
 ask_opt TAK_PORT "TAK Server port"        "8087"
 
 section "API keys (optional)"
+
+# ── Admin credentials and generated secrets ──────────────────────────────────
+section "Zenoh WebUI administrator"
+ZENOH_ADMIN_FIRST_USER="$(env_value ZENOH_ADMIN_FIRST_USER)"
+ZENOH_ADMIN_FIRST_USER="${ZENOH_ADMIN_FIRST_USER:-admin}"
+if [ "$INSTALL_MODE" = "production" ]; then
+    ask ZENOH_ADMIN_FIRST_USER "Admin username" "$ZENOH_ADMIN_FIRST_USER"
+    while true; do
+        ask_secret ZENOH_ADMIN_FIRST_PASS "Admin password (minimum 12 characters)"
+        [ "${#ZENOH_ADMIN_FIRST_PASS}" -ge 12 ] && break
+        warn "Minimum 12 characters required."
+    done
+else
+    ZENOH_ADMIN_FIRST_PASS="$(openssl rand -base64 18 | tr -d '/+=' | head -c 20)"
+fi
+ZENOH_ADMIN_DB_USER="$(env_value ZENOH_ADMIN_DB_USER)"
+ZENOH_ADMIN_DB_USER="${ZENOH_ADMIN_DB_USER:-zenoh_admin}"
+ZENOH_ADMIN_DB_PASSWORD="$(env_value ZENOH_ADMIN_DB_PASSWORD)"
+ZENOH_ADMIN_DB_PASSWORD="${ZENOH_ADMIN_DB_PASSWORD:-$(openssl rand -hex 24)}"
+ZENOH_ADMIN_DB_ROOT_PASSWORD="$(env_value ZENOH_ADMIN_DB_ROOT_PASSWORD)"
+ZENOH_ADMIN_DB_ROOT_PASSWORD="${ZENOH_ADMIN_DB_ROOT_PASSWORD:-$(openssl rand -hex 24)}"
+ZENOH_ADMIN_SECRET_KEY="$(env_value ZENOH_ADMIN_SECRET_KEY)"
+ZENOH_ADMIN_SECRET_KEY="${ZENOH_ADMIN_SECRET_KEY:-$(openssl rand -hex 32)}"
+EFDI_CONTROL_TOKEN="$(env_value EFDI_CONTROL_TOKEN)"
+EFDI_CONTROL_TOKEN="${EFDI_CONTROL_TOKEN:-$(openssl rand -hex 32)}"
 
 # ── Summary ────────────────────────────────────────────────────────────────────
 echo ""
@@ -295,6 +372,8 @@ if [ -f "$ENV_FILE" ]; then
     MANAGED_KEYS+="|CAT21_PORT|CAT21_TCP|CAT20_PORT|CAT20_TCP"
     MANAGED_KEYS+="|SITAWARE_URL|SITAWARE_API_PATH|SITAWARE_USER|SITAWARE_PASS|SITAWARE_POLL_S|SITAWARE_DISCOVER"
     MANAGED_KEYS+="|TAK_HOST|TAK_PORT"
+    MANAGED_KEYS+="|ZENOH_ADMIN_DB_USER|ZENOH_ADMIN_DB_PASSWORD|ZENOH_ADMIN_DB_ROOT_PASSWORD"
+    MANAGED_KEYS+="|ZENOH_ADMIN_SECRET_KEY|ZENOH_ADMIN_FIRST_USER|ZENOH_ADMIN_FIRST_PASS|EFDI_CONTROL_TOKEN"
     EXTRA_LINES=$(grep -Ev "^(#|[[:space:]]*$)" "$ENV_FILE" 2>/dev/null \
                   | grep -Ev "^(${MANAGED_KEYS})=" || true)
 fi
@@ -340,6 +419,15 @@ fi
     [ -n "${TAK_PORT:-}"        ] && echo "TAK_PORT=${TAK_PORT}"
     echo ""
     echo "# ── API keys ──────────────────────────────────────────────────────────"
+    echo ""
+    echo "# ── Zenoh WebUI and MariaDB ───────────────────────────────────────────"
+    echo "ZENOH_ADMIN_DB_USER=${ZENOH_ADMIN_DB_USER}"
+    echo "ZENOH_ADMIN_DB_PASSWORD=${ZENOH_ADMIN_DB_PASSWORD}"
+    echo "ZENOH_ADMIN_DB_ROOT_PASSWORD=${ZENOH_ADMIN_DB_ROOT_PASSWORD}"
+    echo "ZENOH_ADMIN_SECRET_KEY=${ZENOH_ADMIN_SECRET_KEY}"
+    echo "ZENOH_ADMIN_FIRST_USER=${ZENOH_ADMIN_FIRST_USER}"
+    echo "ZENOH_ADMIN_FIRST_PASS=${ZENOH_ADMIN_FIRST_PASS}"
+    echo "EFDI_CONTROL_TOKEN=${EFDI_CONTROL_TOKEN}"
     if [ -n "$EXTRA_LINES" ]; then
         echo ""
         echo "# ── Preserved from prior .env ────────────────────────────────────────"
@@ -351,48 +439,52 @@ ok "compose/.env written (mode 600)"
 
 # ── Python venv ────────────────────────────────────────────────────────────────
 section "Python virtual environment"
-if [ -x "$VENV/bin/python3" ]; then
-    INSTALLED_ZEN=$("$VENV/bin/pip" show eclipse-zenoh 2>/dev/null | grep '^Version:' | awk '{print $2}' || echo "")
-    if [ "$INSTALLED_ZEN" = "1.9.0" ]; then
-        ok "Venv exists with eclipse-zenoh 1.9.0"
-    else
-        info "Reinstalling eclipse-zenoh==1.9.0 (found: ${INSTALLED_ZEN:-none})"
-        "$VENV/bin/pip" install --quiet eclipse-zenoh==1.9.0
-        ok "eclipse-zenoh 1.9.0 installed"
-    fi
-else
+if [ ! -x "$VENV/bin/python3" ]; then
     info "Creating venv at $VENV…"
     "$PYTHON" -m venv "$VENV"
-    info "Installing eclipse-zenoh==1.9.0…"
-    "$VENV/bin/pip" install --quiet eclipse-zenoh==1.9.0
-    ok "Venv ready"
 fi
+info "Synchronizing Python runtime dependencies…"
+"$VENV/bin/pip" install --quiet --disable-pip-version-check \
+    -r "$SCRIPT_DIR/compose/requirements.txt" \
+    -r "$SCRIPT_DIR/compose/zenoh-admin/requirements.txt"
+ok "Venv ready from compose/requirements.txt"
 
-# ── Zenoh router ──────────────────────────────────────────────────────────────
-section "Zenoh router"
+# ── Infrastructure ────────────────────────────────────────────────────────────
+section "EFDI infrastructure"
 ZENOH_CONFIG="${POD_STATE_DIR}/zenoh/config.json5"
 if [ ! -f "$ZENOH_CONFIG" ]; then
     warn "Zenoh config not found at $ZENOH_CONFIG"
     warn "Run host/first-boot.sh with certs from scripts/gen-certs.sh to generate it, then:"
     warn "  docker compose -f compose/docker-compose.yml up -d zenoh-router"
 else
-    info "Starting zenoh-router…"
-    docker compose -f "$SCRIPT_DIR/compose/docker-compose.yml" up -d zenoh-router
-    printf "  Waiting for zenoh-router to be healthy"
-    for _ in $(seq 1 20); do
-        sleep 1
-        if docker compose -f "$SCRIPT_DIR/compose/docker-compose.yml" ps zenoh-router \
-                --format "{{.Status}}" 2>/dev/null | grep -q "healthy"; then
-            printf " OK\n"; break
+    GIT_COMMIT="$(git -C "$SCRIPT_DIR" rev-parse HEAD 2>/dev/null || printf unknown)"
+    export GIT_COMMIT
+    info "Building locally maintained infrastructure…"
+    docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" build
+    info "Starting router, MariaDB, WebUI, and proxy…"
+    docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d
+
+    db_container="$(docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" ps -q zenoh-admin-db)"
+    for _ in $(seq 1 60); do
+        if [ -n "$db_container" ] && docker exec "$db_container" \
+            healthcheck.sh --connect --innodb_initialized >/dev/null 2>&1; then
+            break
         fi
-        printf "."
+        sleep 2
     done
-    if docker compose -f "$SCRIPT_DIR/compose/docker-compose.yml" ps zenoh-router \
-            --format "{{.Status}}" 2>/dev/null | grep -q "healthy"; then
-        ok "zenoh-router healthy"
-    else
-        warn "zenoh-router not healthy — check: docker compose -f compose/docker-compose.yml logs zenoh-router"
+    if [ -z "$db_container" ] || ! docker exec "$db_container" \
+        healthcheck.sh --connect --innodb_initialized >/dev/null 2>&1; then
+        err "MariaDB did not become ready."
     fi
+    ok "MariaDB ready"
+
+    # shellcheck source=scripts/scrub_admin_secret.sh
+    . "$SCRIPT_DIR/scripts/scrub_admin_secret.sh"
+    scrub_admin_bootstrap_secret "$ENV_FILE" \
+        || err "Admin bootstrap credential could not be removed safely."
+
+    EFDI_NONINTERACTIVE=1 "$SCRIPT_DIR/start.sh" --restore
+    ok "Infrastructure and saved native services started"
 fi
 
 # ── Done ──────────────────────────────────────────────────────────────────────

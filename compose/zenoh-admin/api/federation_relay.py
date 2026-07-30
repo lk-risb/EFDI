@@ -32,7 +32,7 @@ def _prefix() -> str:
             return value
     except OSError:
         pass
-    return os.environ.get("NAMESPACE_PREFIX", "LTU/CISB")
+    return os.environ.get("NAMESPACE_PREFIX", "EFDI")
 
 
 def relay_topic(namespace: str) -> str:

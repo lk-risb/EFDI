@@ -1,6 +1,6 @@
 """Single source of truth for this pod's runtime data namespace prefix.
 
-The prefix (e.g. "LTU/CISB", "LTU/CISB/LTK", or empty for a slot-root
+The prefix (e.g. "EFDI", "ORG/UNIT", or empty for a slot-root
 sandbox namespace) is deployment-chosen and variable depth. It is written to a
 dedicated state file the admin can update live; bridges read it here at startup.
 The legacy namespace-prefix state file remains the fallback for older installs.
@@ -15,7 +15,7 @@ published into a namespace nobody was subscribed to.
 import os
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
-_DEFAULT = "LTU/CISB"
+_DEFAULT = "EFDI"
 
 
 def _state_candidates(basename: str) -> list[str]:
@@ -76,7 +76,7 @@ if __name__ == "__main__":
     os.environ.pop("NAMESPACE_PREFIX", None)
     os.environ["NAMESPACE_PREFIX_FILE"] = "/nonexistent-namespace-prefix"
     importlib.reload(np)
-    assert np.prefix() == "LTU/CISB", np.prefix()
+    assert np.prefix() == "EFDI", np.prefix()
     # env override
     os.environ["NAMESPACE_PREFIX"] = "LTU/GVB"
     importlib.reload(np)

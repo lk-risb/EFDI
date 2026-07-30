@@ -14,6 +14,7 @@ import {
     GitPullRequestDraft,
     History,
     LayoutDashboard,
+    ListTree,
     LogOut,
     Moon,
     Network,
@@ -52,6 +53,7 @@ function HamburgerIcon({ open }: { open: boolean }) {
 const navItems = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/network', label: 'Network', icon: Network },
+  { to: '/topics', label: 'Topics', icon: ListTree },
 ]
 
 const adminItems = [

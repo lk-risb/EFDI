@@ -33,6 +33,12 @@ interface ConfigFields {
   fabric_tls_profile: string
 }
 
+interface FabricPreset {
+  label: string
+  endpoints: string[]
+  profile: string
+}
+
 const EMPTY_FIELDS: ConfigFields = {
   mtls_port: 7447,
   local_tcp_port: 7448,
@@ -106,28 +112,6 @@ function ConfigSection({
   )
 }
 
-// One-click fabric targets: each bundles the endpoint AND the mTLS identity
-// profile that endpoint expects, so switching networks is a single pill + Save.
-// Still just host/port under the hood (scheme is always tls, never exposed).
-// The CA profile MUST match the endpoint — an efdi cert to the backbone (or a
-// Desert Bread cert to the sandbox) fails the mTLS handshake.
-const FABRIC_PRESETS = [
-  {
-    label: 'LTU sandbox',
-    endpoints: [
-      'tls/zenoh1.efdi.ltu:7447',
-      'tls/zenoh2.efdi.ltu:7447',
-      'tls/zenoh3.efdi.ltu:7447',
-    ],
-    profile: 'ltu-local',
-  },
-  {
-    label: 'Backbone',
-    endpoints: ['tls/zenoh.efdi.netbird.efdi-backbone.net:7447'],
-    profile: 'backbone',
-  },
-]
-
 function parseFabricEndpoint(v: string): { host: string; port: number } {
   const m = v.match(/^tls\/(.+):(\d+)$/)
   return m ? { host: m[1], port: Number(m[2]) } : { host: v, port: 7447 }
@@ -168,11 +152,18 @@ function ConfigPage() {
   const [target, setTarget] = useState<string>('local')
   const [localFields, setLocalFields] = useState<ConfigFields>(EMPTY_FIELDS)
   const [endpointStatuses, setEndpointStatuses] = useState<Record<string, EndpointStatus>>({})
+  const [fabricPresets, setFabricPresets] = useState<FabricPreset[]>([])
+  const [tlsProfiles, setTlsProfiles] = useState<Record<string, string>>({})
 
   async function load() {
     setLoading(true)
     try {
-      const data = await apiJson<{ fields: ConfigFields; path: string }>('/api/config')
+      const data = await apiJson<{
+        fields: ConfigFields
+        path: string
+        fabric_presets?: FabricPreset[]
+        tls_profiles?: Record<string, string>
+      }>('/api/config')
       const normalized = {
         ...data.fields,
         // Keep the new UI compatible with an older admin API during a rolling
@@ -184,6 +175,8 @@ function ConfigPage() {
       setLocalFields(normalized)
       if (target === 'local') setFields(normalized)
       setPath(data.path)
+      setFabricPresets(data.fabric_presets ?? [])
+      setTlsProfiles(data.tls_profiles ?? {})
     } catch (e) {
       notify.error(errorMessage(e))
     } finally {
@@ -494,7 +487,7 @@ function ConfigPage() {
                     className={pillCls(isRootTarget)}>
                     Root / no upstream
                   </button>
-                  {FABRIC_PRESETS.map(p => (
+                  {fabricPresets.map(p => (
                     <button key={p.label} type="button" disabled={!canWrite}
                       onClick={() => setFields(f => ({
                         ...f,
@@ -511,9 +504,9 @@ function ConfigPage() {
                 <Field label="Fabric mTLS identity" help="The selected certificate, private key, and trust roots are used for every TLS link in this router. Choose the profile that belongs to the selected federation endpoint.">
                   <select disabled={!canWrite} className={inputClass} value={fields.fabric_tls_profile}
                     onChange={e => set('fabric_tls_profile', e.target.value)}>
-                    <option value="efdi">Local mesh (EFDI CA)</option>
-                    <option value="ltu-local">LTU sandbox (EFDI LTU CA)</option>
-                    <option value="backbone">Backbone (Desert Bread CA)</option>
+                    {Object.entries(tlsProfiles).map(([name, label]) => (
+                      <option key={name} value={name}>{label}</option>
+                    ))}
                   </select>
                 </Field>
                 <div className="space-y-2">
