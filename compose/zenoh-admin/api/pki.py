@@ -67,7 +67,7 @@ def _prefix() -> str:
             return value
     except OSError:
         pass
-    return os.environ.get("NAMESPACE_PREFIX", "LTU/CISB").strip("/")
+    return os.environ.get("NAMESPACE_PREFIX", "EFDI").strip("/")
 
 
 def _full_namespace(partner_namespace: str | None = None) -> str:
@@ -153,6 +153,31 @@ async def ensure_local_authority(db: AsyncSession) -> TrustAuthority:
         raise HTTPException(status_code=503, detail="local router CA has no basic constraints") from exc
     if not constraints.ca or constraints.path_length is None:
         raise HTTPException(status_code=503, detail="local router CA cannot delegate managed children")
+    ca_fingerprint = certificate_sha256(ca)
+    if not _TRUST_BOOTSTRAP.is_file():
+        previous_local = (
+            await db.execute(
+                select(TrustAuthority).where(
+                    TrustAuthority.ca_fingerprint == ca_fingerprint,
+                    TrustAuthority.parent_id.is_(None),
+                )
+            )
+        ).scalar_one_or_none()
+        if previous_local is not None:
+            previous_local.identity_uri = identity
+            previous_local.namespace_scope = _full_namespace() + "/**"
+            previous_local.ca_cert_pem = _ROUTER_CA_CERT.read_text(encoding="utf-8")
+            previous_local.policy_signer_fingerprint = certificate_sha256(policy)
+            previous_local.policy_signer_cert_pem = _POLICY_CERT.read_text(encoding="utf-8")
+            previous_local.max_delegation_depth = constraints.path_length
+            previous_local.state = "active"
+            previous_local.not_after = min(
+                ca.not_valid_after_utc,
+                policy.not_valid_after_utc,
+            )
+            await db.commit()
+            await db.refresh(previous_local)
+            return previous_local
     if _TRUST_BOOTSTRAP.is_file():
         try:
             bootstrap = json.loads(_TRUST_BOOTSTRAP.read_text(encoding="utf-8"))
@@ -232,7 +257,7 @@ async def ensure_local_authority(db: AsyncSession) -> TrustAuthority:
     authority = TrustAuthority(
         identity_uri=identity,
         namespace_scope=_full_namespace() + "/**",
-        ca_fingerprint=certificate_sha256(ca),
+        ca_fingerprint=ca_fingerprint,
         ca_cert_pem=_ROUTER_CA_CERT.read_text(encoding="utf-8"),
         policy_signer_fingerprint=certificate_sha256(policy),
         policy_signer_cert_pem=_POLICY_CERT.read_text(encoding="utf-8"),

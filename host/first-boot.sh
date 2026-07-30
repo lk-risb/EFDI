@@ -31,7 +31,7 @@ set +a
 # INBOUND_NAMESPACE: bilateral prefix the fabric publishes TO the pod. Default to the pod's own
 # namespace so the rendered ACL is always valid even when no bilateral inbound is granted yet.
 : "${INBOUND_NAMESPACE:=${PARTNER_NAMESPACE}}"
-: "${NAMESPACE_PREFIX:=LTU/CISB}"
+: "${NAMESPACE_PREFIX:=EFDI}"
 NAMESPACE_ROOT="${NAMESPACE_PREFIX%%/*}"
 # Runtime data root is independently configurable. An explicitly empty value means that
 # publishers use the slot itself (the live EFDI sandbox contract: <slot_id>/**).

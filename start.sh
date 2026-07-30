@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # start.sh — interactive EFDI service launcher
-# Usage: ./start.sh
+# Usage: ./start.sh [--restore]
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COMPOSE_DIR="$SCRIPT_DIR/compose"
@@ -143,6 +143,11 @@ save_launcher_state() {
 }
 
 load_launcher_state
+RESTORE_ONLY=0
+if [[ "${1:-}" == "--restore" ]]; then
+    RESTORE_ONLY=1
+    export EFDI_NONINTERACTIVE=1
+fi
 
 declare -A SVC_CAT=(
     [zenoh]="Infrastructure"
@@ -1035,6 +1040,9 @@ draw_menu() {
 }
 
 change_selection=1
+if (( RESTORE_ONLY == 1 )); then
+    change_selection=0
+fi
 if (( restored == 1 )) && [[ -t 0 ]]; then
     draw_menu
     printf "  ${GREEN}Saved selection restored.${R} Auto-starting in 5 seconds.\n"

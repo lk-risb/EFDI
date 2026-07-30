@@ -77,15 +77,16 @@ Tai sukuria:
 
 ```text
 compose/certs/
-├── efdi/                     # šio podo nuosavas EFDI CA + identitetas (neperv.)
-├── efdi-ltu/                 # LTU sandbox: asusrog klientinis cert + EFDI LTU Root CA
-├── efdi-backbone/                 # goat backbone identitetas (Desert Bread CA)
+├── efdi/                     # vidinis maršrutizatoriaus identitetas + EFDI CA
+├── efdi-backbone/            # Backbone: cert.pem, key.pem, ca-roots.pem
+├── efdi-ltu/                 # LTU sandbox: client.pem, client.key, ca.crt
 ├── sitaware/                 # SitaWare tiekimo CA ir serverio identitetas
 └── tak/                      # TAK Serverio identitetas
 ```
 
 Pilnas paaiškinimas (kuris cert kuriam fabric) — `compose/certs/README.md`. Visas
-katalogas yra `.gitignore`.
+katalogų išdėstymas ir README failai yra sekami, tačiau visi sertifikatai,
+privatūs raktai, grandinės ir sugeneruoti kredencialai yra `.gitignore`.
 
 LTU dalyvio raktas yra užšifruotas, o jo lapo sertifikato faile nėra tarpinio CA.
 Pereinant į šį fabric terminale paleiskite `scripts/connect-ltu.sh`: slaptažodis

@@ -18,9 +18,9 @@ jobs:
           - name: zenoh-admin
             context: compose/zenoh-admin
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Build ${{ matrix.name }} image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ${{ matrix.context }}
           push: false

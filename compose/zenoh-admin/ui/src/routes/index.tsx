@@ -133,14 +133,17 @@ function PeerList({ peers }: { peers: PeerInfo[] }) {
   )
 }
 
-// Groups a raw key_expr like "LTU/CISB/<namespace>/air/**/civ/aircraft/**" into
-// a domain bucket ("AIR") + the remainder path, so the long, repetitive
-// namespace prefix doesn't have to be read over and over to see what's what.
+// Group a key expression at the first normalized domain segment. This works
+// with any deployment prefix and partner-namespace depth.
 function groupTopic(keyExpr: string): { group: string; rest: string } {
   if (keyExpr.startsWith('@/')) return { group: 'ADMIN', rest: keyExpr }
   const parts = keyExpr.split('/')
-  if (parts[0] === 'LTU' && parts[1] === 'CISB' && parts.length > 3) {
-    return { group: (parts[3] || 'other').toUpperCase(), rest: parts.slice(3).join('/') }
+  const domainIndex = parts.findIndex(part => ['air', 'land', 'sea', 'space', 'env'].includes(part))
+  if (domainIndex >= 0) {
+    return {
+      group: parts[domainIndex].toUpperCase(),
+      rest: parts.slice(domainIndex).join('/'),
+    }
   }
   return { group: 'OTHER', rest: keyExpr }
 }

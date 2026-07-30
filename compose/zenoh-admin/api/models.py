@@ -126,6 +126,30 @@ class ConfigRevision(Base):
     completed_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
 
 
+class TopicRegistration(Base):
+    __tablename__ = "topic_registrations"
+
+    id: Mapped[str] = mapped_column(UUID_STRING, primary_key=True, default=_uuid)
+    key_expr: Mapped[str] = mapped_column(
+        String(512, collation="ascii_bin"),
+        unique=True,
+        nullable=False,
+        index=True,
+    )
+    encoding: Mapped[str] = mapped_column(String(128), nullable=False)
+    direction: Mapped[str] = mapped_column(String(16), nullable=False)
+    description: Mapped[str] = mapped_column(String(512), nullable=False, default="")
+    registered_by: Mapped[str] = mapped_column(
+        ForeignKey("admin_users.id"),
+        nullable=False,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime(),
+        default=lambda: datetime.now(timezone.utc),
+    )
+
+
 class PkiInvitation(Base):
     __tablename__ = "pki_invitations"
 

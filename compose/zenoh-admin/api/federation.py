@@ -36,7 +36,7 @@ def _prefix() -> str:
             return v
     except OSError:
         pass
-    return os.environ.get("NAMESPACE_PREFIX", "LTU/CISB")
+    return os.environ.get("NAMESPACE_PREFIX", "EFDI")
 
 
 class FederatedChildIn(BaseModel):

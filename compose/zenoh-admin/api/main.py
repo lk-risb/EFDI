@@ -29,6 +29,7 @@ from .config_revisions import router as config_revisions_router
 from .pki import router as pki_router
 from .managed_acl import router as managed_acl_router
 from .trust_api import router as trust_router
+from .topics import router as topics_router, start_topic_observer
 from .deps import SECRET_KEY
 
 
@@ -43,6 +44,7 @@ async def lifespan(app: FastAPI):
     _, federation_status_task = start_federation_status_subscriber(loop)
     _, federation_relay_task = start_relay_subscriber(loop)
     topology_session, topology_task = start_topology(loop)
+    topic_session = start_topic_observer()
 
     yield
 
@@ -63,6 +65,8 @@ async def lifespan(app: FastAPI):
                 pass
     if topology_session is not None:
         topology_session.close()
+    if topic_session is not None:
+        topic_session.close()
 
 
 app = FastAPI(title="Zenoh Admin API", version="1.0.0", lifespan=lifespan)
@@ -107,6 +111,7 @@ app.include_router(config_revisions_router)
 app.include_router(pki_router)
 app.include_router(managed_acl_router)
 app.include_router(trust_router)
+app.include_router(topics_router)
 
 
 class SPAStaticFiles(StaticFiles):

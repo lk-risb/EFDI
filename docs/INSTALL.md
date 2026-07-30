@@ -77,15 +77,16 @@ This produces:
 
 ```text
 compose/certs/
-├── efdi/                     # this pod's own EFDI CA + identity (do not rename)
-├── efdi-ltu/                 # LTU sandbox: asusrog client cert + EFDI LTU Root CA
-├── efdi-backbone/                 # goat backbone identity (Desert Bread CA)
+├── efdi/                     # internal router identity: namespace leaf + EFDI CA
+├── efdi-backbone/            # Backbone identity: cert.pem, key.pem, ca-roots.pem
+├── efdi-ltu/                 # LTU sandbox: client.pem, client.key, ca.crt
 ├── sitaware/                 # SitaWare feed CA and server identity
 └── tak/                      # TAK Server identity
 ```
 
 See `compose/certs/README.md` for the full legend (which cert authenticates to
-which fabric). The whole directory is gitignored.
+which fabric). The empty profile layout and README files are tracked; every
+certificate, private key, chain, and generated credential is gitignored.
 
 The LTU participant key is encrypted and its leaf file does not contain the
 intermediate CA. Run `scripts/connect-ltu.sh` from a terminal when switching to
