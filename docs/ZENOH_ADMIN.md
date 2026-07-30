@@ -77,37 +77,9 @@ ZENOH_ADMIN_FIRST_PASS=<set once, then blank it out after first login>
 
 `ZENOH_ADMIN_FIRST_PASS` only creates the first `superadmin` account if it doesn't already exist — it is safe to blank it out again after the first login (the account persists in MariaDB).
 
-### One-time PostgreSQL migration
-
-Upgrades preserve the old `${POD_STATE_DIR}/zenoh-admin/pgdata` directory and
-create MariaDB in `${POD_STATE_DIR}/zenoh-admin/mariadb`. Stop the admin service,
-back up both the pod state and `compose/.env`, add
-`ZENOH_ADMIN_DB_ROOT_PASSWORD`, and change an existing
-`ZENOH_ADMIN_DB_PORT=5433` to `ZENOH_ADMIN_DB_PORT=3307`. The legacy PostgreSQL
-container uses temporary port 55433 during this procedure. Then run the
-fail-closed importer:
-
-```bash
-cd compose
-docker compose stop zenoh-admin zenoh-admin-db
-docker compose \
-  -f docker-compose.yml \
-  -f docker-compose.postgres-migration.yml \
-  --profile postgres-migration \
-  up --build --abort-on-container-exit --exit-code-from zenoh-admin-db-import \
-  zenoh-admin-db zenoh-admin-db-postgres-migration zenoh-admin-db-import
-docker compose \
-  -f docker-compose.yml \
-  -f docker-compose.postgres-migration.yml \
-  --profile postgres-migration down
-docker compose up -d zenoh-admin-db zenoh-admin zenoh-admin-proxy
-```
-
-The importer refuses a non-empty MariaDB target, copies every table in one
-transaction, preserves self-references, and verifies row counts before commit.
-Do not delete `pgdata` until login, trust inventory, federation, branding, and
-audit history have been checked in the rebuilt admin UI. This is a single-node
-MariaDB migration; Galera clustering is a separate deployment step.
+The admin service is MariaDB-only. Historical PostgreSQL migration tooling was
+removed after the deployment cutover; upgrades must back up
+`${POD_STATE_DIR}/zenoh-admin/mariadb` and `compose/.env` before rebuilding.
 
 ## Launching
 
