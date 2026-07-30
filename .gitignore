@@ -1,4 +1,17 @@
-.compound-engineering/*.local.yaml
+# Local agent/editor state. Dot-prefixed names are not ignored by Git unless
+# they are listed explicitly.
+.claude/
+.compound-engineering/
+.codex/
+.agents/
+.cursor/
+.gemini/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
+
 register_topics.sh
 compose/.env
 # Keep the certificate layout and instructions reproducible while excluding
