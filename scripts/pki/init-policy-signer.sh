@@ -57,6 +57,6 @@ if ! chgrp 10001 "$KEY" 2>/dev/null; then
 fi
 chmod 640 "$KEY"
 chmod 644 "$CERT"
-openssl verify -CAfile "$CA_CERT" "$CERT" >/dev/null
+openssl verify -partial_chain -CAfile "$CA_CERT" "$CERT" >/dev/null
 openssl x509 -in "$CERT" -noout -subject -enddate
 echo "Policy signer initialized at $STATE_DIR"

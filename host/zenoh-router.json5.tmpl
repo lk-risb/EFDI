@@ -10,7 +10,7 @@
 //                              this pod dials OUT, or [] when this pod is the fabric root
 //   ${PARTNER_NAMESPACE}      the pod's first-party write/read prefix (its slot, or release/<partner>)
 //   ${INBOUND_NAMESPACE}      the bilateral prefix the fabric publishes TO the pod (compose/.env-driven)
-//   ${NAMESPACE_PREFIX}       the org prefix (variable depth, e.g. LTU/CISB); pod writes under ${NAMESPACE_PREFIX}/${PARTNER_NAMESPACE}
+//   ${NAMESPACE_PREFIX}       deployment prefix (variable depth); pod writes under ${NAMESPACE_PREFIX}/${PARTNER_NAMESPACE}
 //   ${NAMESPACE_ROOT}         first segment of the prefix; scopes mesh-wide federation/topology wildcards
 //   ${DATA_TOPIC_ROOT}        runtime data publish root; may be the slot itself on the EFDI sandbox
 //   ${LISTEN_CERT_PEM}        selected local listener certificate

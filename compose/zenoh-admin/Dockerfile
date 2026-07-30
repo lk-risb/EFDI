@@ -3,13 +3,15 @@ WORKDIR /ui
 RUN apt-get update \
     && apt-get upgrade -y \
     && rm -rf /var/lib/apt/lists/*
-RUN npm install -g pnpm
-COPY ui/package.json ./
-RUN pnpm install
+RUN npm install -g pnpm@11.9.0
+COPY ui/package.json ui/pnpm-lock.yaml ui/pnpm-workspace.yaml ./
+RUN pnpm install --frozen-lockfile
 COPY ui/ .
 RUN pnpm build
 
 FROM python:3.13.14-slim@sha256:afe189875f1d2f9b45e287834fb9f2c273a5d59d354ae4050ab9affbf0a6ba06 AS runtime
+ARG GIT_COMMIT=unknown
+LABEL org.opencontainers.image.revision="${GIT_COMMIT}"
 WORKDIR /app
 RUN apt-get update \
     && apt-get upgrade -y \

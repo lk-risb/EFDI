@@ -143,6 +143,8 @@ services:
     build:
       context: ./zenoh-admin
       target: runtime
+      args:
+        GIT_COMMIT: ${GIT_COMMIT:-unknown}
     container_name: efdi-pod-zenoh-admin
     network_mode: host
     restart: unless-stopped
@@ -197,6 +199,12 @@ services:
       - EFDI_SHELL_CONTROL_PORT=${EFDI_SHELL_CONTROL_PORT:-18897}
       - EFDI_SHELL_ENABLED=${EFDI_SHELL_ENABLED:-true}
       - EFDI_RUNTIME_LOG_DIR=/runtime-logs
+      - EFDI_LOCAL_FABRIC_LABEL=${EFDI_LOCAL_FABRIC_LABEL:-Local fabric}
+      - EFDI_LOCAL_FABRIC_ENDPOINTS=${EFDI_LOCAL_FABRIC_ENDPOINTS:-[]}
+      - EFDI_LOCAL_FABRIC_PROFILE=${EFDI_LOCAL_FABRIC_PROFILE:-ltu-local}
+      - EFDI_BACKBONE_FABRIC_LABEL=${EFDI_BACKBONE_FABRIC_LABEL:-Backbone}
+      - EFDI_BACKBONE_FABRIC_ENDPOINTS=${EFDI_BACKBONE_FABRIC_ENDPOINTS:-[]}
+      - EFDI_BACKBONE_FABRIC_PROFILE=${EFDI_BACKBONE_FABRIC_PROFILE:-backbone}
     volumes:
       # Least-privilege identity mount: never expose efdi-ca-root-key.pem (or a
       # router-CA key) to the WebUI container. It needs only its own transport

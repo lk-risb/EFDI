@@ -33,7 +33,7 @@ def test_every_admin_table_compiles_for_mariadb_without_postgres_types():
         for table in Base.metadata.sorted_tables
     ]
 
-    assert len(statements) == 13
+    assert len(statements) == 14
     assert all(" UUID" not in statement for statement in statements)
     assert "LONGTEXT" in "\n".join(statements)
     assert "COLLATE ascii_bin" in "\n".join(statements)

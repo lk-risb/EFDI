@@ -1,0 +1,128 @@
+#!/usr/bin/env bash
+# Self-heal the deployment, then run every repository test and static check.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ENV_FILE="$ROOT/compose/.env"
+COMPOSE_FILE="$ROOT/compose/docker-compose.yml"
+UI="$ROOT/compose/zenoh-admin/ui"
+PYTHON="$ROOT/compose/venv/bin/python3"
+
+# shellcheck source=scripts/_spinner.sh
+. "$ROOT/scripts/_spinner.sh"
+# shellcheck source=scripts/_selftest.sh
+. "$ROOT/scripts/_selftest.sh"
+
+[ -f "$ENV_FILE" ] || fail "compose/.env not found — run ./install.sh first"
+[ -d "$ROOT/.git" ] || fail "Not a git repo — clone via git, not a manual download"
+[ -x "$PYTHON" ] || PYTHON="$(command -v python3)"
+cd "$ROOT"
+
+banner "Health Check"
+
+if command -v pnpm >/dev/null 2>&1; then
+    PNPM=(pnpm)
+elif command -v npx >/dev/null 2>&1; then
+    PNPM=(npx --yes pnpm@11.9.0)
+else
+    fail "pnpm or npx is required to validate the WebUI"
+fi
+
+git_commit="$(git rev-parse HEAD)"
+admin_image="$(docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" images -q zenoh-admin 2>/dev/null)"
+deployed_commit=""
+if [ -n "$admin_image" ]; then
+    deployed_commit="$(docker inspect --format \
+        '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$admin_image" 2>/dev/null || true)"
+fi
+if [ "$deployed_commit" != "$git_commit" ]; then
+    warn "Stale zenoh-admin image detected — rebuilding without cache"
+    export GIT_COMMIT="$git_commit"
+    docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" build --no-cache zenoh-admin \
+        || fail "Clean zenoh-admin rebuild failed"
+    admin_image="$(docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" images -q zenoh-admin)"
+    deployed_commit="$(docker inspect --format \
+        '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$admin_image" 2>/dev/null || true)"
+    [ "$deployed_commit" = "$git_commit" ] \
+        || fail "Clean rebuild still does not carry revision ${git_commit:0:7}"
+    docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d --remove-orphans \
+        || fail "Infrastructure restart failed"
+    docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" restart zenoh-admin-proxy \
+        || fail "zenoh-admin-proxy restart failed"
+    ok "Clean build now matches ${git_commit:0:7}"
+else
+    ok "Deployed zenoh-admin image matches ${git_commit:0:7}"
+fi
+
+info "Host discovery"
+"$PYTHON" "$ROOT/scripts/detect-host.py"
+
+info "Python compile checks"
+mapfile -t python_files < <(
+    find "$ROOT/compose/bridges" "$ROOT/compose/layers" "$ROOT/compose/protocols" \
+         "$ROOT/compose/zenoh-admin/api" -type f -name '*.py' -print | sort
+)
+"$PYTHON" -m py_compile "${python_files[@]}"
+ok "Python modules compile"
+
+info "Python tests"
+PYTHONPATH="$ROOT/compose/generated:$ROOT/compose/generated/protocols:$ROOT/compose" \
+    "$PYTHON" -m pytest -q "$ROOT/tests"
+ok "Python tests passed"
+
+info "Shell syntax and ShellCheck"
+mapfile -d '' -t shell_files < <(
+    git ls-files -co --exclude-standard -z -- '*.sh'
+)
+for index in "${!shell_files[@]}"; do
+    shell_files[index]="$ROOT/${shell_files[index]}"
+    bash -n "${shell_files[index]}"
+done
+if command -v shellcheck >/dev/null 2>&1; then
+    shellcheck "${shell_files[@]}"
+else
+    warn "shellcheck is not installed; shell syntax passed but linting was skipped"
+fi
+ok "Shell checks passed"
+
+info "Compose rendering"
+docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" config -q
+for overlay in docker-compose.child.yml docker-compose.grandchild.yml; do
+    if [ -f "$ROOT/compose/$overlay" ]; then
+        docker compose -f "$ROOT/compose/$overlay" --env-file "$ENV_FILE" config -q
+    fi
+done
+ok "Compose files render"
+
+info "Frontend type-check and build"
+if [ ! -d "$UI/node_modules" ]; then
+    (cd "$UI" && "${PNPM[@]}" install --frozen-lockfile)
+fi
+(cd "$UI" && "${PNPM[@]}" type-check && "${PNPM[@]}" build)
+ok "Frontend checks passed"
+
+info "Executable tests"
+while IFS= read -r test_script; do
+    "$test_script"
+done < <(find "$ROOT/tests" -type f -name '*.sh' -perm -u+x -print | sort)
+ok "Executable tests passed"
+
+efdi_selftest || fail "Live EFDI self-test failed after self-heal"
+
+info "Whitespace and optional secret scan"
+git diff --check
+if command -v gitleaks >/dev/null 2>&1; then
+    gitleaks detect --source "$ROOT" --no-banner --redact
+else
+    warn "gitleaks is not installed; tracked-file secret scan was skipped"
+fi
+
+info "Container status"
+docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" ps \
+    --format 'table {{.Name}}\t{{.Status}}'
+
+printf '\n'
+printf '  %b┌────────────────────────────────────────────────┐%b\n' "$G" "$NC"
+printf '  %b│%b  %bHealth check passed%b                          %b│%b\n' \
+    "$G" "$NC" "$W" "$NC" "$G" "$NC"
+printf '  %b└────────────────────────────────────────────────┘%b\n\n' "$G" "$NC"
