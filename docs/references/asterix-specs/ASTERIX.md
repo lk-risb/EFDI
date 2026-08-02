@@ -1,10 +1,9 @@
 # ASTERIX category sources
 
 Every row below is decoded in `../../../compose/protocols/vendors/asterix/cat.py`.
-"Local copy" is the actual `.ast` DSL file pulled into this repo under
-[``](asterix-specs/) — open it directly to check any field
-against the primary source rather than trusting this table or the code
-comments.
+"Local copy" is the actual `.ast` DSL file pulled into this repo alongside
+this file — open it directly to check any field against the primary
+source rather than trusting this table or the code comments.
 
 | CAT | Edition | Source URL | Local copy | Trust |
 | --- | --- | --- | --- | --- |

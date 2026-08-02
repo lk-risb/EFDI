@@ -21,11 +21,17 @@ text used, so a reviewer can check our work without re-deriving it.
   paraphrased), one per implemented category, plus that repository's
   `LICENSE`.
 - [`sapient/SAPIENT.md`](sapient/SAPIENT.md) — source and trust assessment for
-  `vendors/sapient/flex335.py` and the vendored `compose/vendor/sapient_msg`
+  `vendors/sapient/flex335.py` and the vendored `compose/protocols/vendors/sapient/sapient_msg`
   protobuf schema.
 - [`stanag/STANAG.md`](stanag/STANAG.md) — source and trust assessment for
   `vendors/stanag/stanag.py` (4586/4609/5516), including where confidence is
   lower and why.
+- [`tak/TAK.md`](tak/TAK.md) — source and trust assessment for
+  `layers/tak_layer.py` (CoT, MIL-STD-2525C/APP-6), including what has and
+  hasn't been checked against a real TAK client.
+- [`sitaware/SITAWARE.md`](sitaware/SITAWARE.md) — source and trust
+  assessment for `layers/sitaware_layer.py` (NVG 2.0.2), including what has
+  and hasn't been checked against a real SitaWare instance.
 
 ## How to read the trust levels
 
@@ -152,7 +158,7 @@ code actually rests on.
 
 - [`dstl/SAPIENT-Proto-Files`](https://github.com/dstl/SAPIENT-Proto-Files)
   (GitHub repo, UK Dstl's own official protobuf schema) — the wire format
-  itself, vendored into `compose/vendor/sapient_msg/bsi_flex_335_v2_0/`.
+  itself, vendored into `compose/protocols/vendors/sapient/sapient_msg/bsi_flex_335_v2_0/`.
   Fetched directly:
   [`bsi_flex_335_v2_0/sapient_message.proto`](https://raw.githubusercontent.com/dstl/SAPIENT-Proto-Files/main/bsi_flex_335_v2_0/sapient_message.proto)
   and the repo's
@@ -192,6 +198,33 @@ the 4586/5516 paths as explicitly lower-confidence per `stanag/STANAG.md`.
   caught a real transcription bug (four Dwell-segment optional-field bit
   positions off by one, discovered because the decode consumed the wrong
   number of bytes) before it shipped — see `stanag/STANAG.md` for detail.
+
+### TAK / CoT / MIL-STD-2525C / APP-6 (`layers/tak_layer.py`)
+
+- [MITRE — "Cursor on Target: The Face of Every Combat ID Program You've
+  Ever Seen..."](https://www.mitre.org/sites/default/files/pdf/09_4937.pdf)
+  — the originating description of the CoT `<event>` schema.
+- [DoD ATAK-CIV](https://github.com/deptofdefense/AndroidTacticalAssaultKit-CIV)
+  and [WinTAK-CIV](https://github.com/deptofdefense/WinTAK-CIV) (public
+  releases at [tak.gov](https://tak.gov/)) — the reference clients this CoT
+  schema and MIL-STD-2525C symbology target. Named as the authoritative
+  target, not fetched/diffed against during this project — see
+  `tak/TAK.md` for what was actually implemented from established
+  knowledge versus verified live against a real iTAK client.
+- MIL-STD-2525C (US DoD Common Warfighting Symbology) and NATO APP-6
+  (STANAG 2019) — public military standards, implemented from established
+  symbol-code conventions, not a fresh fetch this session.
+
+### SitaWare / NVG 2.0.2 (`layers/sitaware_layer.py`)
+
+- NATO Allied Command Transformation TIDE (The Interoperability Data
+  Environment) NVG schema namespace, `https://tide.act.nato.int/schemas/2012/10/nvg`
+  — the real namespace URI `sitaware_layer.py` emits; the full XSD behind it
+  requires NATO-affiliated registry access and was not fetched this project.
+  See `sitaware/SITAWARE.md` for the real operational verification
+  that was performed against a live SitaWare HQ 6.22 Import Subscription
+  (transport/auth/polling contract), distinct from the schema-fetch
+  verification tier used for ASTERIX/SAPIENT.
 
 ## Why `asterix-specs` is trustworthy as a source
 
