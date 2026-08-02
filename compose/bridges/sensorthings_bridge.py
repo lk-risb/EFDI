@@ -28,36 +28,15 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
+from namespace_prefix import topic_root
 
 import zenoh
+from protocols.gateway import open_session
 
-from namespace_prefix import topic_root
-from zenoh_auth import apply_zenoh_auth
-
-ORG = os.environ.get("PARTNER_NAMESPACE", "")
 TOPIC_ROOT = topic_root()
-HERE = os.path.dirname(os.path.abspath(__file__))
-_CERT_DIR = os.environ.get("EFDI_CERT_DIR", HERE)
-_ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", "tcp/127.0.0.1:7448")
 _RECONNECT_S = float(os.environ.get("SENSORTHINGS_RECONNECT_S", "10"))
 RAW_TOPIC = "{}/raw/sensorthings/observations".format(TOPIC_ROOT)
 MAX_BYTES = int(os.environ.get("SENSORTHINGS_MAX_BYTES", "8388608"))
-
-
-def make_config() -> "zenoh.Config":
-    conf = zenoh.Config()
-    conf.insert_json5("mode", '"client"')
-    conf.insert_json5("connect/endpoints", json.dumps([_ENDPOINT]))
-    apply_zenoh_auth(conf)
-    if _ENDPOINT.startswith("tls"):
-        conf.insert_json5("transport/link/tls", json.dumps({
-            "root_ca_certificate": os.path.join(_CERT_DIR, "efdi-ca-root.pem"),
-            "connect_certificate": os.path.join(_CERT_DIR, ORG + "-cert.pem"),
-            "connect_private_key": os.path.join(_CERT_DIR, ORG + "-key.pem"),
-            "enable_mtls": True,
-            "verify_name_on_connect": True,
-        }))
-    return conf
 
 
 def observations_url(base: str, since: datetime, limit: int) -> str:
@@ -89,7 +68,7 @@ def run(args) -> None:
 
     while True:
         try:
-            session = zenoh.open(make_config())
+            session = open_session()
             break
         except Exception as exc:
             print("SensorThings Zenoh connect failed: {} — retry in {}s".format(exc, _RECONNECT_S), flush=True)

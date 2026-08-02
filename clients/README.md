@@ -1,83 +1,16 @@
 # clients — send & receive data with an EFDI pod
 
-This tree is for **the people consuming the pod**: how to publish data to the EFDI fabric and
-receive data from it, in your language and with your tooling. Pick the path that fits you:
+See `docs/INSTALL.md` §7 "Integrations → Client SDKs — connecting to the pod" for the
+full guide: the connection model, required env vars, the mTLS one-block
+gotcha, and per-language/per-stack build and run instructions for everything
+under `connect/` and `examples/` below.
 
-| You are… | Start here |
-|---|---|
-| A modern dev (Python/TS/Go/Rust/Java/C++) | [`examples/modern/<lang>/`](examples/modern/) |
-| Working in an older / less-common stack (C, Java 8, .NET Framework, MATLAB) | [`examples/military-legacy/`](examples/military-legacy/) |
-| Want to use a protocol you already speak (HTTP, MQTT, Kafka, files) — no Zenoh code | [`examples/bridges/`](examples/bridges/) |
-| Just want the minimal connect snippet | [`connect/<lang>/`](connect/) |
-
-## The whole model in 30 seconds
-
-The pod runs a **Zenoh router** on your machine. You talk to it as a **Zenoh client over mTLS**.
-Three operations, that's the whole API:
-
-1. **Publish** (`put`) to keys under **your namespace** — e.g. `release/<you>/sensors/temp`.
-2. **Subscribe** (`sub`) to keys you're allowed to read — your own, plus `release/<partner>/**`
-   for data a partner sends you (when the relationship is bilateral).
-3. **Query** (`get`) for the latest/historical value of a key (optional).
-
-Keys are slash-paths (`a/b/c`); subscriptions can use `*` (one segment) and `**` (any depth).
-
-## What you need (from your pod operator / OOB bundle)
-
-Every example reads the same five things — **from environment variables**, so you never hardcode
-secrets:
-
-| Env var | What it is | Example |
-|---|---|---|
-| `EFDI_ROUTER` | the pod's Zenoh endpoint | `tls/127.0.0.1:7447` (the pod is on your box) |
-| `EFDI_CERT` | your mTLS client certificate (PEM) | `/etc/efdi/mycert.pem` |
-| `EFDI_KEY` | your mTLS private key (PEM) | `/etc/efdi/mykey.pem` |
-| `EFDI_CA` | the CA root that signs the router (PEM) | `/etc/efdi/ca-root.pem` |
-| `PARTNER_NAMESPACE` | the prefix you own (publish under this) | `release/acme` |
-
-> The pod's own `scripts/gen-certs.sh <namespace>` writes these to `compose/certs/`
-> (`<namespace>-cert.pem`, `<namespace>-key.pem`, `efdi-ca-root.pem`). For a downstream consumer
-> your EFDI administrator hands you a copy of the same three files out-of-band. **If the pod is
-> on your machine, `EFDI_ROUTER` is `tls/127.0.0.1:7447`.** If you connect to a remote pod/router
-> over the mesh, it's that host's mesh IP.
-
-A copy-paste setup:
-
-```sh
-export EFDI_ROUTER="tls/127.0.0.1:7447"
-export EFDI_CERT="$HOME/efdi-certs/mtls-cert.pem"
-export EFDI_KEY="$HOME/efdi-certs/mtls-key.pem"
-export EFDI_CA="$HOME/efdi-certs/ca-root.pem"
-export PARTNER_NAMESPACE="release/acme"
-```
-
-## The one connection gotcha (read this — it bites everyone)
-
-Zenoh's TLS config must be inserted as **one whole block**, with **`enable_mtls: true`**. Setting
-the sub-keys one at a time (`transport/link/tls/connect_certificate`, etc.) silently does **not**
-turn on the client-cert send path on Zenoh 1.x — your session opens but the router rejects you, or
-you connect read-only. Every `connect/` helper here does it the working way. Also: when the
-router cert's SAN binds an **IP/mesh address** rather than the DNS name you dial, set
-`verify_name_on_connect: false` (the pod's local router is reached at `127.0.0.1`, so its examples
-use `false`; a DNS-named remote router keeps it `true`).
-
-## Versions
-
-Examples target **Zenoh 1.9.0** (the fleet-pinned version — see the pod's
-`compose/docker-compose.yml`). Use the matching-major client library for your language
-(`eclipse-zenoh` 1.x). The bridges pin their own images by digest.
-
-## Layout
-
-```
+```text
 clients/
-├── connect/            minimal "cert bundle → Zenoh session" helper per language (the only per-language wiring you need)
+├── connect/             minimal "cert bundle -> Zenoh session" helper per language
 ├── examples/
-│   ├── modern/         idiomatic pub / sub / request-reply per language
+│   ├── modern/          idiomatic pub/sub/request-reply per language
 │   ├── military-legacy/ older toolchains, offline/air-gapped, file/HTTP fallbacks
-│   └── bridges/        use a protocol you already speak — no Zenoh code in your app
-└── README.md           this file
+│   └── bridges/         use a protocol you already speak — no Zenoh code in your app
+└── README.md            this file
 ```
-
-Each subdirectory has its own README with exact build/run commands, including **offline / no-
-internet** dependency instructions where relevant.

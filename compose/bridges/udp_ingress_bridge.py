@@ -24,35 +24,15 @@ import socket
 import struct
 import time
 
-import zenoh
-from protocols.random.raw_envelope_pb2 import RawEnvelope
-from zenoh_auth import apply_zenoh_auth
+from protocols.proto.raw_envelope_pb2 import RawEnvelope
 from namespace_prefix import topic_root
+import zenoh
+from protocols.gateway import open_session
 
 
-ORG = os.environ.get("PARTNER_NAMESPACE", "")
 TOPIC_ROOT = topic_root()
-HERE = os.path.dirname(os.path.abspath(__file__))
-_CERT_DIR = os.environ.get("EFDI_CERT_DIR", HERE)
-_ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", "tcp/127.0.0.1:7448")
 
 MAX_DATAGRAM = 65_535
-
-
-def make_config() -> "zenoh.Config":
-    conf = zenoh.Config()
-    conf.insert_json5("mode", '"client"')
-    conf.insert_json5("connect/endpoints", json.dumps([_ENDPOINT]))
-    apply_zenoh_auth(conf)
-    if _ENDPOINT.startswith("tls"):
-        conf.insert_json5("transport/link/tls", json.dumps({
-            "root_ca_certificate": os.path.join(_CERT_DIR, "efdi-ca-root.pem"),
-            "connect_certificate": os.path.join(_CERT_DIR, ORG + "-cert.pem"),
-            "connect_private_key": os.path.join(_CERT_DIR, ORG + "-key.pem"),
-            "enable_mtls": True,
-            "verify_name_on_connect": True,
-        }))
-    return conf
 
 
 def split_asterix_datagram(datagram: bytes) -> list[tuple[int, bytes]]:
@@ -145,7 +125,7 @@ def run(args) -> None:
         args.multicast_group,
         args.multicast_interface,
     )
-    session = zenoh.open(make_config())
+    session = open_session()
     raw_publisher = session.declare_publisher("{}/raw/udp/ingress".format(TOPIC_ROOT))
     publishers = {
         category: session.declare_publisher(

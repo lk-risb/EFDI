@@ -1,11 +1,5 @@
 # Backbone fabric identity
 
-Required fixed filenames:
-
-- `cert.pem` — Backbone-issued client certificate
-- `key.pem` — matching private key
-- `ca-roots.pem` — Backbone trust chain
-
-`host/first-boot.sh` validates that the bundle is complete and stages protected
-runtime copies. The Zenoh WebUI `Backbone` preset then selects those copies and
-the matching Backbone endpoint atomically.
+See `docs/INSTALL.md` §2.2 "Generate certificates" for required filenames and
+staging behavior. This placeholder exists only to keep this gitignored
+directory present after `git clone`.

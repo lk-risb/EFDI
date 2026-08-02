@@ -14,6 +14,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, os.fspath(ROOT / "compose"))
+sys.path.insert(0, os.fspath(ROOT / "compose" / "control"))
 
 from protocols.vendors.asterix.cat import (  # noqa: E402
     decode_cat020_record,
@@ -265,7 +266,7 @@ def test_sapient_additional_information_is_not_a_content_message():
 
 
 def test_misb_st0601_ber_oid_and_exact_packet_round_trip():
-    module = import_module("protocols.vendors.stanag.4609")
+    module = import_module("protocols.vendors.stanag.stanag")
     value = b"\x81\x02\x01\xaa"      # BER-OID tag 130, length 1, value aa
     assert module.parse_local_set(value) == {130: b"\xaa"}
 
@@ -275,7 +276,7 @@ def test_misb_st0601_ber_oid_and_exact_packet_round_trip():
 
 
 def test_misb_st0601_current_field_widths_and_reserved_signed_value():
-    module = import_module("protocols.vendors.stanag.4609")
+    module = import_module("protocols.vendors.stanag.stanag")
     tags = {
         15: b"\x00\x00",
         18: b"\x80\x00\x00\x00",
@@ -293,7 +294,7 @@ def test_misb_st0601_current_field_widths_and_reserved_signed_value():
 
 
 def test_misb_klv_stream_parser_handles_split_prefix_and_ber_length():
-    module = import_module("protocols.vendors.stanag.4609")
+    module = import_module("protocols.vendors.stanag.stanag")
 
     class ChunkedStream(BytesIO):
         def read(self, _size=-1):

@@ -2,11 +2,11 @@
 """sitaware_bridge.py — SitaWare REST API → Zenoh bridge.
 
 Polls a SitaWare Headquarters server for unit positions and publishes each unit
-as a JSON track to the EFDI Zenoh fabric so cot_layer.py can forward it to ATAK.
+as a JSON track to the EFDI Zenoh fabric so tak_layer.py can forward it to ATAK.
 
 SitaWare uses MIL-STD-2525C / NATO APP-6 SIDC codes (15-char symbol ID) to
 describe each unit's affiliation, battle dimension, and type.  This bridge maps
-SIDCs to the correct Zenoh topic path so cot_layer.py assigns the right CoT type.
+SIDCs to the correct Zenoh topic path so tak_layer.py assigns the right CoT type.
 
 SIDC affiliation (char 2):
     F / A → friendly   → a-f-
@@ -63,16 +63,12 @@ import time
 import urllib.error
 import urllib.request
 
-import zenoh
 from namespace_prefix import topic_root
-from protocols.protobuf_codec import semantic_topic, add_version
-from zenoh_auth import apply_zenoh_auth
+import zenoh
+from protocols.gateway import open_session
+from protocols.track_views import semantic_topic, add_version
 
-ORG       = os.environ.get("PARTNER_NAMESPACE", "")
 TOPIC_ROOT = topic_root()
-HERE      = os.path.dirname(os.path.abspath(__file__))
-_CERT_DIR = os.environ.get("EFDI_CERT_DIR", HERE)
-_ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", "tcp/127.0.0.1:7448")
 
 _BASE_URL_PRIMARY  = os.environ.get("SITAWARE_URL",          "").rstrip("/")
 _BASE_URL_FALLBACK = os.environ.get("SITAWARE_URL_FALLBACK", "").rstrip("/")
@@ -101,45 +97,6 @@ _API_FALLBACKS = [
 # ---------------------------------------------------------------------------
 # Zenoh
 # ---------------------------------------------------------------------------
-
-def make_config() -> "zenoh.Config":
-    conf = zenoh.Config()
-    conf.insert_json5("mode", '"client"')
-    conf.insert_json5("connect/endpoints", json.dumps([_ENDPOINT]))
-    apply_zenoh_auth(conf)
-    if _ENDPOINT.startswith("tls"):
-        conf.insert_json5("transport/link/tls", json.dumps({
-            "root_ca_certificate": os.path.join(_CERT_DIR, "efdi-ca-root.pem"),
-            "connect_certificate": os.path.join(_CERT_DIR, ORG + "-cert.pem"),
-            "connect_private_key": os.path.join(_CERT_DIR, ORG + "-key.pem"),
-            "enable_mtls": True,
-            "verify_name_on_connect": True,
-        }))
-    return conf
-
-
-# ---------------------------------------------------------------------------
-# SIDC → Zenoh topic
-# ---------------------------------------------------------------------------
-
-_AFF_SLUG = {
-    "F": "friendly", "A": "friendly",   # Assumed Friendly
-    "H": "hostile",
-    "N": "neutral",  "L": "neutral",    # Exercise Neutral
-    "U": "unknown",  "P": "unknown",    # Pending
-    "J": "unknown",  "K": "unknown",    # Exercise / Faker
-}
-
-_DIM_CONFIG = {
-    # sidc_char: (domain, entity, fallback_cot_dim)
-    "A": ("air",   "aircraft", "A"),
-    "G": ("land",  "unit",     "G"),
-    "S": ("sea",   "vessel",   "S"),
-    "U": ("sea",   "vessel",   "U"),   # subsurface → sea topic
-    "P": ("space", "satellite", "P"),
-    "F": ("land",  "unit",      "G"),   # special operations forces
-}
-
 
 def sidc_to_topic(sidc: str) -> str:
     """Map a 15-char SIDC to the appropriate Zenoh topic."""
@@ -340,7 +297,7 @@ def normalise_unit(raw: dict) -> dict | None:
 def publish_unit(session: "zenoh.Session", track: dict, verbose: bool):
     # Publish on the object key's /json view — the form both output layers
     # consume. A bare put on the semantic prefix (no {type}/{id}, no /json view)
-    # is silently dropped by cot_layer and nvg_layer, which only forward samples
+    # is silently dropped by tak_layer and sitaware_layer, which only forward samples
     # whose key ends in /json.
     topic = add_version(semantic_topic(sidc_to_topic(track.get("sidc", "")), track))
     session.put(topic, json.dumps(track).encode(),
@@ -390,7 +347,7 @@ def run(args):
 
     while True:
         try:
-            session = zenoh.open(make_config())
+            session = open_session()
             break
         except Exception as exc:
             print("SitaWare Zenoh connect failed: {} — retry in {}s".format(exc, ZENOH_RETRY_S), flush=True)

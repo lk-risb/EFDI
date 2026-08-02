@@ -8,6 +8,7 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "compose"))
+sys.path.insert(0, str(ROOT / "compose" / "control"))
 sys.path.insert(0, str(ROOT / "compose" / "protocols"))
 
 from protocols.random.cap import parse_cap  # noqa: E402

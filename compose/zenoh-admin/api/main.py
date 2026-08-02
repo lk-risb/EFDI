@@ -11,6 +11,7 @@ from . import models  # noqa: F401 — ensures models register with Base
 from .auth import router as auth_router, _ensure_first_user
 from .admin_users import router as admin_users_router
 from .status import router as status_router
+from .data_stats import router as data_stats_router
 from .config import router as config_router
 from .health import router as health_router
 from .branding import router as branding_router
@@ -96,6 +97,7 @@ if OIDC_ENABLED:
 app.include_router(auth_router)
 app.include_router(admin_users_router)
 app.include_router(status_router)
+app.include_router(data_stats_router)
 app.include_router(config_router)
 app.include_router(health_router)
 app.include_router(branding_router)

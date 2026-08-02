@@ -18,12 +18,10 @@ import argparse
 import os
 import time
 from datetime import datetime, timezone
+from gateway import TOPIC_ROOT, open_session, subscribe, payload_json
+from protocols.proto.sensorthings_pb2 import SensorThingsObservation
 
-import zenoh
-
-from protocols.protobuf_codec import publish_dual
-from protocols.random.sensorthings_pb2 import SensorThingsObservation
-from translation_common import TOPIC_ROOT, make_config, payload_json
+from protocols.track_views import publish_dual
 
 INPUT_TOPIC = os.environ.get("SENSORTHINGS_INPUT_TOPIC") or TOPIC_ROOT + "/raw/sensorthings/**"
 OUTPUT_TOPIC = TOPIC_ROOT + "/land/sensorthings/iot/neutral/sensor"
@@ -138,17 +136,17 @@ def normalize(observation: dict, now: float | None = None) -> dict | None:
 
 
 def run() -> None:
-    session = zenoh.open(make_config())
+    session = open_session()
 
     def on_sample(sample) -> None:
         try:
             record = normalize(payload_json(sample))
             if record:
-                publish_dual(session, OUTPUT_TOPIC, record, SensorThingsObservation, zenoh)
+                publish_dual(session, OUTPUT_TOPIC, record, SensorThingsObservation)
         except Exception as exc:
             print("SensorThings decode error:", exc, flush=True)
 
-    subscriber = session.declare_subscriber(INPUT_TOPIC, on_sample)
+    subscriber = subscribe(session, INPUT_TOPIC, on_sample)
     print("SensorThings translator: {} -> {}".format(INPUT_TOPIC, OUTPUT_TOPIC), flush=True)
     try:
         while True:

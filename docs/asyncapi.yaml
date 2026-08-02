@@ -1,0 +1,325 @@
+asyncapi: 2.6.0
+info:
+  title: EFDI Data Backbone Interface
+  version: "1.0.0"
+  description: >
+    EFDI publishes normalized track and status data over Zenoh pub/sub. This
+    document maps the channels (Zenoh key expressions) and message schemas
+    that an authorized backbone participant can subscribe to. It is generated
+    from the implemented contract in docs/topic-taxonomy.md and
+    docs/INSTALL.md §7 Integrations — every channel and schema below is live code, not
+    aspirational.
+
+    Transport is Zenoh (github.com/eclipse-zenoh/zenoh), a pub/sub and
+    query protocol addressed by hierarchical key expressions, over TCP with
+    optional TLS/mTLS. It is not one of AsyncAPI's built-in protocol bindings,
+    so the `zenoh` protocol value below is a custom identifier; behavior is
+    described in the server/channel descriptions instead of a formal binding.
+
+servers:
+  backbone:
+    url: "tls://{router-host}:7447"
+    protocol: zenoh
+    description: >
+      The EFDI Data Backbone router. Participants connect as a Zenoh client
+      or peer/router and federate; once linked, publisher/subscriber
+      declarations propagate automatically — there is no separate
+      "register a topic" step at the protocol level. mTLS required in
+      production; a plaintext local sandbox may be offered for integration
+      testing only.
+    variables:
+      router-host:
+        description: Backbone router hostname, provided during onboarding.
+        default: zenoh.example.backbone.net
+
+defaultContentType: application/octet-stream
+
+channels:
+  "{prefix}/{pod}/{domain}/{source}/{modality}/{affiliation}/{entity}/{type}/{id}/tracks/v1":
+    description: >
+      Canonical JSON view of one tracked object. No `{view}` segment — this
+      is the default, human-readable representation. Published on every
+      track update; the same object always re-publishes to the same key for
+      its lifetime (see "id priority" in topic-taxonomy.md), so a subscriber
+      sees update-in-place, not a new topic per report.
+    parameters:
+      prefix:
+        $ref: "#/components/parameters/prefix"
+      pod:
+        $ref: "#/components/parameters/pod"
+      domain:
+        $ref: "#/components/parameters/domain"
+      source:
+        $ref: "#/components/parameters/source"
+      modality:
+        $ref: "#/components/parameters/modality"
+      affiliation:
+        $ref: "#/components/parameters/affiliation"
+      entity:
+        $ref: "#/components/parameters/entity"
+      type:
+        $ref: "#/components/parameters/type"
+      id:
+        $ref: "#/components/parameters/id"
+    subscribe:
+      summary: Receive one object's canonical JSON track.
+      message:
+        $ref: "#/components/messages/JsonTrack"
+
+  "{prefix}/{pod}/{domain}/{source}/{modality}/{affiliation}/{entity}/{type}/{id}/sapient/tracks/v1":
+    description: >
+      BSI Flex 335 v2 SAPIENT view — **the fabric contract**. This is the
+      view an external consumer should default to: vendor-neutral, published
+      first (before JSON/proto), and best-effort-independent of the other
+      views (a failure encoding JSON or proto never blocks this one).
+    parameters:
+      prefix:
+        $ref: "#/components/parameters/prefix"
+      pod:
+        $ref: "#/components/parameters/pod"
+      domain:
+        $ref: "#/components/parameters/domain"
+      source:
+        $ref: "#/components/parameters/source"
+      modality:
+        $ref: "#/components/parameters/modality"
+      affiliation:
+        $ref: "#/components/parameters/affiliation"
+      entity:
+        $ref: "#/components/parameters/entity"
+      type:
+        $ref: "#/components/parameters/type"
+      id:
+        $ref: "#/components/parameters/id"
+    subscribe:
+      summary: Receive one object's SAPIENT-encoded track.
+      message:
+        $ref: "#/components/messages/SapientTrack"
+
+  "{prefix}/{pod}/{domain}/{source}/{modality}/{affiliation}/{entity}/{type}/{id}/proto/tracks/v1":
+    description: >
+      EFDI per-protocol protobuf view — full sensor detail SAPIENT does not
+      model. The message type varies by producing protocol (ASTERIX, SAPIENT,
+      STANAG 4609, etc. — see compose/protocols/ for the full set); the
+      example schema referenced here is the ASTERIX track message, the
+      primary radar path.
+    parameters:
+      prefix:
+        $ref: "#/components/parameters/prefix"
+      pod:
+        $ref: "#/components/parameters/pod"
+      domain:
+        $ref: "#/components/parameters/domain"
+      source:
+        $ref: "#/components/parameters/source"
+      modality:
+        $ref: "#/components/parameters/modality"
+      affiliation:
+        $ref: "#/components/parameters/affiliation"
+      entity:
+        $ref: "#/components/parameters/entity"
+      type:
+        $ref: "#/components/parameters/type"
+      id:
+        $ref: "#/components/parameters/id"
+    subscribe:
+      summary: Receive one object's native per-protocol protobuf track.
+      message:
+        $ref: "#/components/messages/ProtoTrack"
+
+  "{prefix}/{pod}/{domain}/{source}/{modality}/{affiliation}/{entity}/{type}/{id}/raw/tracks/v1":
+    description: >
+      Original wire bytes, byte-exact and unmodified, wrapped in a
+      RawEnvelope. The only view that can never lose a field — use this to
+      run a vendor's own decoder over the exact bytes EFDI received.
+    parameters:
+      prefix:
+        $ref: "#/components/parameters/prefix"
+      pod:
+        $ref: "#/components/parameters/pod"
+      domain:
+        $ref: "#/components/parameters/domain"
+      source:
+        $ref: "#/components/parameters/source"
+      modality:
+        $ref: "#/components/parameters/modality"
+      affiliation:
+        $ref: "#/components/parameters/affiliation"
+      entity:
+        $ref: "#/components/parameters/entity"
+      type:
+        $ref: "#/components/parameters/type"
+      id:
+        $ref: "#/components/parameters/id"
+    subscribe:
+      summary: Receive one object's raw wire-format envelope.
+      message:
+        $ref: "#/components/messages/RawTrack"
+
+  "{prefix}/_meta/alive/{service}":
+    description: >
+      Zenoh liveliness token per running feed (not a data message — presence
+      only). Declared by compose/control/presence.py. Used to draw the publishing
+      pod as a node in a fabric inspector; track PUTs alone only draw edges.
+    parameters:
+      prefix:
+        description: Deployment-configured org/pod namespace prefix.
+        schema:
+          type: string
+      service:
+        description: Name of the live feed/service declaring presence.
+        schema:
+          type: string
+    subscribe:
+      summary: Observe which EFDI services are currently alive.
+      message:
+        name: LivelinessToken
+        summary: Zenoh liveliness declaration — no payload, presence only.
+        payload: {}
+
+components:
+  parameters:
+    prefix:
+      description: >
+        Org/deployment prefix. On the backbone this is the bare
+        participant org UUID; a local sandbox may use a different
+        human-readable prefix.
+      schema:
+        type: string
+    pod:
+      description: Which pod/deployment instance published this.
+      schema:
+        type: string
+    domain:
+      description: Physical domain.
+      schema:
+        type: string
+        enum: [air, land, sea, space]
+    source:
+      description: >
+        WHO observed it — sensor/feed identity (e.g. ASTERIX SAC/SIC pair,
+        a named partner feed). Not knowable at subscribe time for
+        dynamically-named sensors; subscribe with `*` in this segment.
+      schema:
+        type: string
+    modality:
+      description: HOW it was observed.
+      schema:
+        type: string
+        enum:
+          - radar
+          - lidar
+          - camera
+          - seismic
+          - acoustic
+          - proximity_sensor
+          - passive_rf
+          - human
+          - chemical
+          - biological
+          - radiation
+          - kinetic
+          - jammer
+          - cyber
+          - ldew
+          - rfdew
+          - mobile_node
+          - pointable_node
+          - fusion_node
+          - adsb
+          - mlat
+          - c2
+          - telemetry
+          - fused
+          - unknown
+    affiliation:
+      description: Friend/foe posture.
+      schema:
+        type: string
+        enum: [civ, mil, friendly, hostile, neutral, unknown]
+    entity:
+      description: What kind of thing.
+      schema:
+        type: string
+    type:
+      description: >
+        Specific type; `unknown` when the sensor cannot resolve it. Mutable
+        — when a track's type resolves later, the topic key changes and the
+        old key goes quiet.
+      schema:
+        type: string
+    id:
+      description: >
+        Stable identity for this object's lifetime. Priority order:
+        registration id > ICAO24 > MMSI > UID > callsign > track number >
+        radar id > generated object id.
+      schema:
+        type: string
+
+  messages:
+    JsonTrack:
+      name: JsonTrack
+      title: Canonical JSON track
+      contentType: application/json
+      summary: >
+        Flat JSON object. Publisher-defined field set — only the fields the
+        source decoder actually models are present; this is not a fixed
+        schema, so schema below documents known common fields with
+        additionalProperties allowed.
+      payload:
+        type: object
+        additionalProperties: true
+        properties:
+          affiliation:
+            type: string
+            description: Friend/foe posture, mirrors the topic segment.
+          icao24:
+            type: string
+          mmsi:
+            type: string
+          callsign:
+            type: string
+          track_num:
+            type: string
+          registration:
+            type: string
+          uid:
+            type: string
+
+    SapientTrack:
+      name: SapientTrack
+      title: BSI Flex 335 v2 SapientMessage
+      contentType: "application/protobuf;SapientMessage"
+      summary: >
+        The fabric contract. See BSI FLEX 335 v2 / Dstl SAPIENT-Proto-Files.
+        Schema: `compose/vendor/sapient_msg/bsi_flex_335_v2_0/sapient_message.proto`
+        in this repo — not linked here as a machine `$ref` because that file
+        `import`s sibling `.proto` files (alert.proto, detection_report.proto,
+        etc.) and the AsyncAPI protobuf schema tooling (both the official
+        `@asyncapi/cli` parser and IDE plugins) cannot follow cross-file
+        protobuf imports; a `$ref` here reliably reports as invalid even
+        though the schema itself is fine. Read the file directly instead of
+        relying on a tool to resolve it through this document.
+
+    ProtoTrack:
+      name: ProtoTrack
+      title: "EFDI native per-protocol track (example: ASTERIX)"
+      contentType: "application/protobuf"
+      summary: >
+        Message type varies by producing protocol — the Zenoh Encoding is
+        self-describing (application/protobuf;<Message.full_name>), so a
+        subscriber resolves the exact schema from the encoding without an
+        out-of-band lookup. Example below is the ASTERIX track message.
+        Schema: `compose/protocols/proto/cat.proto` in this repo —
+        not a machine `$ref` for the same cross-file-import reason as
+        SapientTrack above.
+
+    RawTrack:
+      name: RawTrack
+      title: RawEnvelope
+      contentType: "application/protobuf;RawEnvelope"
+      summary: >
+        Original wire bytes, unmodified, with provenance metadata. Schema:
+        `compose/protocols/proto/raw_envelope.proto` in this repo — not a
+        machine `$ref` for the same cross-file-import reason as
+        SapientTrack above.

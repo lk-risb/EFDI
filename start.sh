@@ -47,7 +47,7 @@ export POD_STATE_DIR="${POD_STATE_DIR:-$SCRIPT_DIR/compose/state}"
 # Host-launched bridges read the same prefix state file the admin writes.
 export NAMESPACE_PREFIX_FILE="${POD_STATE_DIR}/namespace-prefix"
 export DATA_NAMESPACE_PREFIX_FILE="${POD_STATE_DIR}/data-topic-prefix"
-export PYTHONPATH="$COMPOSE_DIR/generated:$COMPOSE_DIR/generated/protocols:$COMPOSE_DIR${PYTHONPATH:+:$PYTHONPATH}"
+export PYTHONPATH="$COMPOSE_DIR/generated:$COMPOSE_DIR/generated/protocols:$COMPOSE_DIR:$COMPOSE_DIR/control${PYTHONPATH:+:$PYTHONPATH}"
 LOG_DIR="$POD_STATE_DIR/logs"
 PID_DIR="$POD_STATE_DIR/.pids"
 LAUNCHER_STATE_FILE="$POD_STATE_DIR/launcher-state.env"
@@ -81,12 +81,11 @@ SERVICES=(
     cert-renewer supervisor presence
     meteolt
     sitaware dronuradaras asterix track-fusion
-    nffi sapient stanag4586 stanag4609
-    sapient-raw stanag4586-raw stanag4609-raw
+    nffi sapient stanag4586 stanag4609 stanag5516
+    sapient-raw stanag4586-raw stanag4609-raw stanag5516-raw
     mqtt-raw sensorthings-raw
     cap geojson mqtt sensorthings sparkplug spectrum sensor-health mission-route
-    cot_layer tak-bridge nvg_bridge nvg_layer
-    tak-gateway sitaware-gateway
+    tak_layer tak-bridge sitaware_layer
 )
 
 # Restore only non-secret launcher choices. Explicit compose/.env values win;
@@ -160,16 +159,14 @@ declare -A SVC_CAT=(
     [mqtt]="Protocols" [sensorthings]="Protocols" [sparkplug]="Protocols"
     [nffi]="Protocols"
     [sitaware]="Sensor bridges" [dronuradaras]="Sensor bridges"
-    [sapient]="Protocols" [stanag4586]="Protocols" [stanag4609]="Protocols"
+    [sapient]="Protocols" [stanag4586]="Protocols" [stanag4609]="Protocols" [stanag5516]="Protocols"
     [tak-bridge]="C2 inputs"
     [mqtt-raw]="Sensor bridges" [sensorthings-raw]="Sensor bridges"
     [sapient-raw]="Sensor bridges"
-    [stanag4586-raw]="Sensor bridges" [stanag4609-raw]="Sensor bridges"
+    [stanag4586-raw]="Sensor bridges" [stanag4609-raw]="Sensor bridges" [stanag5516-raw]="Sensor bridges"
     [cap]="Protocols" [geojson]="Protocols"
     [spectrum]="Protocols" [sensor-health]="Protocols" [mission-route]="Protocols"
-    [cot_layer]="Output layers"   [nvg_layer]="Output layers"
-    [nvg_bridge]="C2 inputs"
-    [tak-gateway]="C2 gateways"   [sitaware-gateway]="C2 gateways"
+    [tak_layer]="Output layers"   [sitaware_layer]="Output layers"
     [track-fusion]="Sensor bridges"
 )
 
@@ -190,22 +187,21 @@ declare -A SVC_DESC=(
     [sapient]="SAPIENT / BSI Flex 335 sensor feed"
     [stanag4586]="STANAG 4586 UAV control (VSM)"
     [stanag4609]="STANAG 4609 KLV decoder (raw → tracks)"
+    [stanag5516]="STANAG 5516 / Link 16 JREAP-C decoder (raw → tracks)"
     [mqtt-raw]="MQTT broker → Zenoh raw"
     [sensorthings-raw]="OGC SensorThings REST poll → Zenoh raw"
     [sapient-raw]="SAPIENT/FLEX 335 TCP → Zenoh raw"
     [stanag4586-raw]="STANAG 4586 TCP → Zenoh raw"
     [stanag4609-raw]="STANAG 4609 SRT/KLV → Zenoh raw"
+    [stanag5516-raw]="STANAG 5516 JREAP-C UDP → Zenoh raw"
     [cap]="CAP 1.2 XML on Zenoh → alerts"
     [geojson]="GeoJSON/OGC Features on Zenoh → areas"
     [spectrum]="RF spectrum observations on Zenoh"
     [sensor-health]="Sensor health on Zenoh"
     [mission-route]="UAV routes and corridors on Zenoh"
-    [cot_layer]="CoT → TAK Server (mTLS)"
+    [tak_layer]="CoT → TAK Server (mTLS)"
     [tak-bridge]="TAK Server CoT ingress"
-    [nvg_bridge]="SitaWare NVG export → Zenoh"
-    [nvg_layer]="EFDI tracks → SitaWare (NVG feed, SitaWare polls)"
-    [tak-gateway]="TAK: CoT ingress + egress in one process (replaces cot_layer + tak-bridge)"
-    [sitaware-gateway]="SitaWare: NVG feed + NVG/REST ingress in one process (replaces nvg_layer + nvg_bridge + sitaware)"
+    [sitaware_layer]="EFDI tracks → SitaWare (NVG feed, SitaWare polls)"
     [track-fusion]="Radar/ADS-B track correlation"
 )
 
@@ -213,7 +209,7 @@ declare -A SVC_DESC=(
 svc_ready() {
     case "$1" in
         zenoh|meteolt|\
-        dronuradaras|nffi|cot_layer|track-fusion|\
+        dronuradaras|nffi|tak_layer|track-fusion|\
         cap|geojson|spectrum|sensor-health|mission-route)
             return 0 ;;
         admin-control) [[ -n "${ZENOH_ADMIN_SECRET_KEY:-}" || -n "${EFDI_CONTROL_TOKEN:-}" ]] ;;
@@ -233,23 +229,16 @@ svc_ready() {
         sapient-raw)  [[ "${SAPIENT_RAW_PORT:-}" ]] ;;
         stanag4586-raw) [[ "${STANAG4586_RAW_PORT:-}" ]] ;;
         stanag4609-raw) [[ "${STANAG4609_SRT_URL:-}" ]] ;;
+        stanag5516-raw) return 0 ;;  # UDP listener, default port 3010
         sitaware)     return 0 ;;  # always ready; prompts for server IP at launch if unset
         tak-bridge)   [[ "${TAK_HOST:-}" || "${TAK_HOST_FALLBACK:-}" ]] ;;
         sapient) return 0 ;;
         stanag4586) [[ "${STANAG4586_PROFILE:-}" == "legacy_ed3_approx" &&
                        ( -n "${STANAG4586_ZENOH_RAW:-}" || -n "${STANAG4586_HOST:-}" ) ]] ;;
         stanag4609) [[ "${STANAG4609_SRT_URL:-}" ]] ;;
-        # nvg_layer serves a feed, so it needs a port to listen on;
-        # nvg_bridge reads SitaWare's export, so it needs a URL.
-        nvg_layer) [[ -n "${SITAWARE_HQ_NVG_PORT:-}" ]] ;;
-        nvg_bridge) [[ -n "${SITAWARE_NVG_IMPORT_URL:-}" || ( -n "${SITAWARE_URL:-}" && -n "${SITAWARE_API_PATH:-}" ) ]] ;;
-        tak-gateway) [[ "${TAK_HOST:-}" || "${TAK_HOST_FALLBACK:-}" ]] ;;
-        sitaware-gateway)
-            [[ "${SITAWARE_HQ_NVG_ENABLE:-0}" == "1" ||
-               -n "${SITAWARE_NVG_IMPORT_URL:-}" ||
-               ( ( -n "${SITAWARE_URL:-}" || -n "${SITAWARE_URL_FALLBACK:-}" ) &&
-                 ( -n "${SITAWARE_API_PATH:-}" || "${SITAWARE_DISCOVER:-0}" == "1" ) ) ]]
-            ;;
+        stanag5516) return 0 ;;  # UDP listener, default port 3010
+        # sitaware_layer serves a feed, so it needs a port to listen on.
+        sitaware_layer) [[ -n "${SITAWARE_HQ_NVG_PORT:-}" ]] ;;
         *)        return 0 ;;
     esac
 }
@@ -275,6 +264,7 @@ svc_hint() {
             fi
             ;;
         stanag4609-raw) echo "STANAG4609_SRT_URL not set" ;;
+        stanag5516-raw) echo "UDP port ${STANAG5516_PORT:-3010}" ;;
         sapient)
             # This function only DESCRIBES a service — it must never launch one.
             # A stray _start here (copy-pasted from launch()) meant that merely
@@ -290,19 +280,12 @@ svc_hint() {
             fi ;;
         stanag4586) echo "set STANAG4586_PROFILE=legacy_ed3_approx plus a 4586 source" ;;
         stanag4609) echo "STANAG4609_SRT_URL not set (ingest via stanag4609-raw)" ;;
-        nvg_layer)
+        stanag5516) echo "UDP port ${STANAG5516_PORT:-3010}" ;;
+        sitaware_layer)
             if [[ -n "${SITAWARE_HQ_NVG_PORT:-}" ]]; then
                 echo "serving ${SITAWARE_HQ_NVG_BIND:-127.0.0.1}:${SITAWARE_HQ_NVG_PORT}${SITAWARE_HQ_NVG_PATH:-/nvg}"
             else
                 echo "SITAWARE_HQ_NVG_PORT not set"
-            fi ;;
-        nvg_bridge)
-            if [[ -n "${SITAWARE_NVG_IMPORT_URL:-}" ]]; then
-                echo "${SITAWARE_NVG_IMPORT_URL}"
-            elif [[ -n "${SITAWARE_URL:-}" && -n "${SITAWARE_API_PATH:-}" ]]; then
-                echo "${SITAWARE_URL}${SITAWARE_API_PATH}"
-            else
-                echo "SITAWARE_NVG_IMPORT_URL not set"
             fi ;;
         sitaware)
             if [[ "${SITAWARE_URL:-}" ]]; then
@@ -316,16 +299,12 @@ svc_hint() {
             else
                 echo "will prompt for address"
             fi ;;
-        cot_layer)
+        tak_layer)
             if [[ "${TAK_HOST:-}" ]]; then
                 [[ "${TAK_HOST_FALLBACK:-}" ]] && echo "${TAK_HOST}:${TAK_PORT:-8087} (+fallback)" || echo "${TAK_HOST}:${TAK_PORT:-8087}"
             else
                 echo "will prompt for address"
             fi ;;
-        tak-gateway) echo "set TAK_HOST (runs ingress + egress)" ;;
-        sitaware-gateway)
-            echo "enable SITAWARE_HQ_NVG_ENABLE or configure NVG/REST ingress"
-            ;;
         *)        echo "" ;;
     esac
 }
@@ -508,13 +487,34 @@ _start_asterix_bundle() {
         printf "  ${YELLOW}[skip]${R}  udp-ingress      set UDP_INGRESS_PORT for generic UDP capture\n"
     fi
 
-    for category in 10 20 21 34 48; do
+    for category in 1 2 4 7 8 9 10 11 15 16 17 18 19 20 21 23 25 32 34 48 63 65 150 205 240 247; do
         case "$category" in
+            1)  port="${CAT1_PORT:-}"; tcp_var="${CAT1_TCP:-}" ;;
+            2)  port="${CAT2_PORT:-}"; tcp_var="${CAT2_TCP:-}" ;;
+            4)  port="${CAT4_PORT:-}"; tcp_var="${CAT4_TCP:-}" ;;
+            7)  port="${CAT7_PORT:-}"; tcp_var="${CAT7_TCP:-}" ;;
+            8)  port="${CAT8_PORT:-}"; tcp_var="${CAT8_TCP:-}" ;;
+            9)  port="${CAT9_PORT:-}"; tcp_var="${CAT9_TCP:-}" ;;
             10) port="${CAT10_PORT:-}"; tcp_var="${CAT10_TCP:-}" ;;
+            11) port="${CAT11_PORT:-}"; tcp_var="${CAT11_TCP:-}" ;;
+            15) port="${CAT15_PORT:-}"; tcp_var="${CAT15_TCP:-}" ;;
+            16) port="${CAT16_PORT:-}"; tcp_var="${CAT16_TCP:-}" ;;
+            17) port="${CAT17_PORT:-}"; tcp_var="${CAT17_TCP:-}" ;;
+            18) port="${CAT18_PORT:-}"; tcp_var="${CAT18_TCP:-}" ;;
+            19) port="${CAT19_PORT:-}"; tcp_var="${CAT19_TCP:-}" ;;
             20) port="${CAT20_PORT:-}"; tcp_var="${CAT20_TCP:-}" ;;
             21) port="${CAT21_PORT:-}"; tcp_var="${CAT21_TCP:-}" ;;
+            23) port="${CAT23_PORT:-}"; tcp_var="${CAT23_TCP:-}" ;;
+            25) port="${CAT25_PORT:-}"; tcp_var="${CAT25_TCP:-}" ;;
+            32) port="${CAT32_PORT:-}"; tcp_var="${CAT32_TCP:-}" ;;
             34) port="${CAT34_PORT:-}"; tcp_var="${CAT34_TCP:-}" ;;
             48) port="${CAT48_PORT:-}"; tcp_var="${CAT48_TCP:-}" ;;
+            63) port="${CAT63_PORT:-}"; tcp_var="${CAT63_TCP:-}" ;;
+            65) port="${CAT65_PORT:-}"; tcp_var="${CAT65_TCP:-}" ;;
+            150) port="${CAT150_PORT:-}"; tcp_var="${CAT150_TCP:-}" ;;
+            205) port="${CAT205_PORT:-}"; tcp_var="${CAT205_TCP:-}" ;;
+            240) port="${CAT240_PORT:-}"; tcp_var="${CAT240_TCP:-}" ;;
+            247) port="${CAT247_PORT:-}"; tcp_var="${CAT247_TCP:-}" ;;
         esac
         if asterix_category_uses_raw "$category"; then
             _start "asterix-cat${category}-raw" protocols/vendors/asterix/cat.py \
@@ -546,30 +546,8 @@ _start_asterix_bundle() {
     fi
 }
 
-_reject_c2_conflict() {
-    local requested="$1" conflict
-    shift
-    for conflict in "$@"; do
-        if is_running "$conflict"; then
-            printf "  ${YELLOW}[skip]${R}  %-16s conflicts with running %s; stop it first\n" \
-                "$requested" "$conflict"
-            return 1
-        fi
-    done
-}
-
 launch() {
     local name="$1"
-    case "$name" in
-        tak-gateway)
-            _reject_c2_conflict "$name" cot_layer tak-bridge || return 1 ;;
-        cot_layer|tak-bridge)
-            _reject_c2_conflict "$name" tak-gateway || return 1 ;;
-        sitaware-gateway)
-            _reject_c2_conflict "$name" nvg_layer nvg_bridge sitaware || return 1 ;;
-        nvg_layer|nvg_bridge|sitaware)
-            _reject_c2_conflict "$name" sitaware-gateway || return 1 ;;
-    esac
     case "$name" in
 
         zenoh)
@@ -605,31 +583,31 @@ launch() {
                 printf "  ${YELLOW}[skip]${R}  admin-control requires ZENOH_ADMIN_SECRET_KEY or EFDI_CONTROL_TOKEN\n"
                 return 1
             fi
-            if is_running "admin-control" "admin_control.py"; then
+            if is_running "admin-control" "control/admin_control.py"; then
                 printf "  ${DIM}[skip]${R}  %-16s already running (pid %s)\n" "admin-control" "$(cat "$PID_DIR/admin-control.pid")"
                 return
             fi
             rm -f "$PID_DIR/admin-control.pid"
-            ( exec setsid "$PYTHON" "$COMPOSE_DIR/admin_control.py" \
+            ( exec setsid "$PYTHON" "$COMPOSE_DIR/control/admin_control.py" \
                 >> "$LOG_DIR/admin-control.log" 2>&1 ) &
             echo $! > "$PID_DIR/admin-control.pid"
             printf "  ${GREEN}[start]${R} %-16s pid %s\n" "admin-control" "$!"
             ;;
 
         supervisor)
-            if is_running "supervisor" "supervisor.py"; then
+            if is_running "supervisor" "control/supervisor.py"; then
                 printf "  ${DIM}[skip]${R}  %-16s already running (pid %s)\n" "supervisor" "$(cat "$PID_DIR/supervisor.pid")"
                 return
             fi
             rm -f "$PID_DIR/supervisor.pid"
-            ( exec setsid "$PYTHON" "$COMPOSE_DIR/supervisor.py" \
+            ( exec setsid "$PYTHON" "$COMPOSE_DIR/control/supervisor.py" \
                 >> "$LOG_DIR/supervisor.log" 2>&1 ) &
             echo $! > "$PID_DIR/supervisor.pid"
             printf "  ${GREEN}[start]${R} %-16s pid %s\n" "supervisor" "$!"
             ;;
 
         presence)
-            _start presence presence.py
+            _start presence control/presence.py
             ;;
 
         cert-renewer)
@@ -687,7 +665,7 @@ launch() {
             ;;
 
         sapient-raw)
-            _start sapient-raw bridges/sapient_flex335_bridge.py --tcp --port "${SAPIENT_RAW_PORT:-7001}"
+            _start sapient-raw bridges/flex335_bridge.py --tcp --port "${SAPIENT_RAW_PORT:-7001}"
             ;;
 
         stanag4586-raw)
@@ -700,6 +678,10 @@ launch() {
                 return
             fi
             _start stanag4609-raw bridges/4609_bridge.py
+            ;;
+
+        stanag5516-raw)
+            _start stanag5516-raw bridges/5516_bridge.py --port "${STANAG5516_PORT:-3010}"
             ;;
 
         cap)
@@ -791,11 +773,11 @@ launch() {
                 return
             fi
             if [[ "${STANAG4586_ZENOH_RAW:-}" == "1" ]]; then
-                stanag_args=(--zenoh-raw)
+                stanag_args=(--proto 4586 --zenoh-raw)
                 [[ "${STANAG4586_RAW_TOPIC:-}" ]] && stanag_args+=(--raw-topic "$STANAG4586_RAW_TOPIC")
-                _start stanag4586 protocols/vendors/stanag/4586.py "${stanag_args[@]}"
+                _start stanag4586 protocols/vendors/stanag/stanag.py "${stanag_args[@]}"
             elif [[ -n "${STANAG4586_HOST:-}" ]]; then
-                _start stanag4586 protocols/vendors/stanag/4586.py \
+                _start stanag4586 protocols/vendors/stanag/stanag.py --proto 4586 \
                     --host "$STANAG4586_HOST" --port "${STANAG4586_PORT:-4586}"
             else
                 printf "  ${YELLOW}[skip]${R}  stanag4586       set STANAG4586_HOST or STANAG4586_ZENOH_RAW=1\n"
@@ -807,7 +789,18 @@ launch() {
                 printf "  ${YELLOW}[skip]${R}  stanag4609       set STANAG4609_SRT_URL (ingest runs as stanag4609-raw)\n"
                 return
             fi
-            _start stanag4609 protocols/vendors/stanag/4609.py --zenoh-raw
+            _start stanag4609 protocols/vendors/stanag/stanag.py --proto 4609 --zenoh-raw
+            ;;
+
+        stanag5516)
+            if [[ "${STANAG5516_ZENOH_RAW:-}" == "1" ]]; then
+                stanag_args=(--proto 5516 --zenoh-raw)
+                [[ "${STANAG5516_RAW_TOPIC:-}" ]] && stanag_args+=(--raw-topic "$STANAG5516_RAW_TOPIC")
+                _start stanag5516 protocols/vendors/stanag/stanag.py "${stanag_args[@]}"
+            else
+                _start stanag5516 protocols/vendors/stanag/stanag.py --proto 5516 \
+                    --port "${STANAG5516_PORT:-3010}"
+            fi
             ;;
 
         dronuradaras)
@@ -815,13 +808,13 @@ launch() {
             ;;
 
 
-        cot_layer)
+        tak_layer)
             local tak_host="${TAK_HOST:-}"
             local tak_host2="${TAK_HOST_FALLBACK:-}"
             if [[ -z "$tak_host" && -z "$tak_host2" ]]; then
                 _prompt_address "TAK Server" tak_host
                 if [[ -z "$tak_host" ]]; then
-                    printf "  ${YELLOW}[skip]${R}  cot_layer          no address entered\n"
+                    printf "  ${YELLOW}[skip]${R}  tak_layer          no address entered\n"
                     return
                 fi
                 export TAK_HOST="$tak_host"
@@ -832,7 +825,7 @@ launch() {
             if [[ "${TAK_TLS:-}" == "1" ]]; then
                 tcp_args+=(--tls --cert "${TAK_CERT:-}" --key "${TAK_KEY:-}" --ca "${TAK_CA:-}")
             fi
-            _start cot_layer layers/cot_layer.py "${tcp_args[@]}"
+            _start tak_layer layers/tak_layer.py "${tcp_args[@]}"
             ;;
 
         tak-bridge)
@@ -855,41 +848,18 @@ launch() {
             _start tak-bridge bridges/tak_bridge.py "${tak_ingest_args[@]}"
             ;;
 
-        nvg_bridge)
-            # Reads SitaWare's NVG Export Endpoint into the fabric. Falls back
-            # to the same URL the sitaware bridge uses, since both point at the
-            # same server — one speaks NVG XML, the other the JSON track API.
-            if [[ -z "${SITAWARE_NVG_IMPORT_URL:-}" && ( -z "${SITAWARE_URL:-}" || -z "${SITAWARE_API_PATH:-}" ) ]]; then
-                printf "  ${YELLOW}[skip]${R}  nvg_bridge         set SITAWARE_NVG_IMPORT_URL (or SITAWARE_URL + SITAWARE_API_PATH)\n"
-                return
-            fi
-            _start nvg_bridge bridges/nvg_bridge.py
-            ;;
-
-        nvg_layer)
+        sitaware_layer)
             # Serves the NVG feed SitaWare's Import Subscription polls, so it
             # takes a listen address and has nothing to prompt for.
             if [[ -z "${SITAWARE_HQ_NVG_PORT:-}" ]]; then
-                printf "  ${YELLOW}[skip]${R}  nvg_layer          set SITAWARE_HQ_NVG_PORT\n"
+                printf "  ${YELLOW}[skip]${R}  sitaware_layer          set SITAWARE_HQ_NVG_PORT\n"
                 return
             fi
-            _start nvg_layer layers/nvg_layer.py
-            ;;
-
-        tak-gateway)
-            # One process = TAK CoT egress + ingress (env-driven, no prompt).
-            # Run this INSTEAD of cot_layer + tak-bridge, not alongside them.
-            _start tak-gateway c2/tak_gateway.py
-            ;;
-
-        sitaware-gateway)
-            # One process = SitaWare NVG feed + NVG/REST ingress (env-driven).
-            # Run this INSTEAD of nvg_layer + nvg_bridge + sitaware.
-            _start sitaware-gateway c2/sitaware_gateway.py
+            _start sitaware_layer layers/sitaware_layer.py
             ;;
 
         track-fusion)
-            _start track-fusion bridges/track_fusion_bridge.py
+            _start track-fusion protocols/fusion.py
             ;;
 
     esac
@@ -933,31 +903,9 @@ fi
 # ── Interactive menu ───────────────────────────────────────────────────────
 declare -A sel
 
-normalize_c2_selection() {
-    if [[ "${sel[tak-gateway]:-0}" == "1" ]]; then
-        sel[cot_layer]=0
-        sel[tak-bridge]=0
-    fi
-    if [[ "${sel[sitaware-gateway]:-0}" == "1" ]]; then
-        sel[nvg_layer]=0
-        sel[nvg_bridge]=0
-        sel[sitaware]=0
-    fi
-}
-
 select_service() {
     local service="$1"
     sel[$service]=1
-    case "$service" in
-        tak-gateway)
-            sel[cot_layer]=0; sel[tak-bridge]=0 ;;
-        cot_layer|tak-bridge)
-            sel[tak-gateway]=0 ;;
-        sitaware-gateway)
-            sel[nvg_layer]=0; sel[nvg_bridge]=0; sel[sitaware]=0 ;;
-        nvg_layer|nvg_bridge|sitaware)
-            sel[sitaware-gateway]=0 ;;
-    esac
 }
 
 # Restore the last valid selection. On first use, default to zenoh + the main
@@ -988,7 +936,7 @@ for svc in "${SERVICES[@]}"; do
     fi
 done
 if (( restored == 0 )); then
-    for svc in zenoh admin-control cot_layer track-fusion asterix stanag; do
+    for svc in zenoh admin-control tak_layer track-fusion asterix stanag; do
         sel[$svc]=1
     done
 fi
@@ -1103,7 +1051,6 @@ done
 # ── Start ──────────────────────────────────────────────────────────────────
 printf "\n${BOLD}Starting selected services…${R}\n\n"
 
-normalize_c2_selection
 for svc in "${SERVICES[@]}"; do
     [[ "${sel[$svc]}" == "1" ]] || continue
     launch "$svc"

@@ -9,12 +9,10 @@ import json
 import os
 import time
 
-import zenoh
-
 from namespace_prefix import prefix
-from protocols.random.geojson_features_pb2 import GeoFeature
-from protocols.protobuf_codec import publish_dual
-from translation_common import TOPIC_ROOT, make_config, payload_json
+from protocols.proto.geojson_features_pb2 import GeoFeature
+from protocols.track_views import publish_dual
+from gateway import TOPIC_ROOT, open_session, subscribe, payload_json
 
 
 INPUT_TOPIC = os.environ.get("GEOJSON_INPUT_TOPIC") or TOPIC_ROOT + "/raw/geojson/**"
@@ -98,7 +96,7 @@ def normalize(feature: dict, now: float | None = None) -> dict | None:
 
 
 def run() -> None:
-    session = zenoh.open(make_config())
+    session = open_session()
 
     def on_sample(sample) -> None:
         try:
@@ -106,11 +104,11 @@ def run() -> None:
             for feature in _features(payload):
                 record = normalize(feature)
                 if record:
-                    publish_dual(session, OUTPUT_TOPIC, record, GeoFeature, zenoh)
+                    publish_dual(session, OUTPUT_TOPIC, record, GeoFeature)
         except Exception as exc:
             print("GeoJSON decode error:", exc, flush=True)
 
-    subscriber = session.declare_subscriber(INPUT_TOPIC, on_sample)
+    subscriber = subscribe(session, INPUT_TOPIC, on_sample)
     print("GeoJSON translator: {} -> {}".format(INPUT_TOPIC, OUTPUT_TOPIC), flush=True)
     try:
         while True:
