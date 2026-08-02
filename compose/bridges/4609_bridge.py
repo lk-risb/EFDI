@@ -27,23 +27,19 @@ import threading
 import time
 from urllib.parse import urlsplit
 
-import zenoh
 
 from namespace_prefix import topic_root
-from zenoh_auth import apply_zenoh_auth
+import zenoh
+from protocols.gateway import open_session
 
 # The KLV wire format lives in the protocol module (single, test-covered source
 # of truth). The bridge reuses only the streaming framer and the BER encoder to
 # reassemble each packet's exact bytes; it does no ST 0601 decoding.
-_codec = import_module("protocols.vendors.stanag.4609")
-_parse_klv_packets = _codec._parse_klv_packets
-_encode_ber = _codec._encode_ber
+_codec = import_module("protocols.vendors.stanag.stanag")
+_parse_klv_packets = _codec._4609_parse_klv_packets
+_encode_ber = _codec._4609_encode_ber
 
-ORG = os.environ.get("PARTNER_NAMESPACE", "")
 TOPIC_ROOT = topic_root()
-HERE = os.path.dirname(os.path.abspath(__file__))
-_CERT_DIR = os.environ.get("EFDI_CERT_DIR", HERE)
-_ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", "tcp/127.0.0.1:7448")
 _SRT_URL = os.environ.get("STANAG4609_SRT_URL", "").strip()
 SOURCE = os.environ.get("STANAG4609_SOURCE", "klv").strip() or "klv"
 _FFMPEG_BIN = os.environ.get("STANAG4609_FFMPEG_BIN", "ffmpeg")
@@ -60,22 +56,6 @@ def _safe_stream_label(url: str) -> str:
         return "{}://{}{}".format(parsed.scheme or "srt", host, port)
     except ValueError:
         return "srt://configured-host"
-
-
-def make_config() -> "zenoh.Config":
-    conf = zenoh.Config()
-    conf.insert_json5("mode", '"client"')
-    conf.insert_json5("connect/endpoints", json.dumps([_ENDPOINT]))
-    apply_zenoh_auth(conf)
-    if _ENDPOINT.startswith("tls"):
-        conf.insert_json5("transport/link/tls", json.dumps({
-            "root_ca_certificate": os.path.join(_CERT_DIR, "efdi-ca-root.pem"),
-            "connect_certificate": os.path.join(_CERT_DIR, ORG + "-cert.pem"),
-            "connect_private_key": os.path.join(_CERT_DIR, ORG + "-key.pem"),
-            "enable_mtls": True,
-            "verify_name_on_connect": True,
-        }))
-    return conf
 
 
 def _ffmpeg_proc() -> "subprocess.Popen[bytes]":
@@ -107,7 +87,7 @@ def _stderr_pump(proc: "subprocess.Popen[bytes]") -> None:
 def run(args):
     while True:
         try:
-            session = zenoh.open(make_config())
+            session = open_session()
             break
         except Exception as exc:
             print("STANAG4609 Zenoh connect failed: {} — retry in {}s".format(exc, _RECONNECT_S), flush=True)

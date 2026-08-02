@@ -133,7 +133,7 @@ EOF
             EFDI_CONTROL_PORT="$DEV_CONTROL_PORT" \
             EFDI_ENV_FILE="$CONTROL_ENV_FILE" \
             POD_STATE_DIR="$CONTROL_STATE_DIR" \
-            exec setsid python3 "$SCRIPT_DIR/compose/admin_control.py"
+            exec setsid python3 "$SCRIPT_DIR/compose/control/admin_control.py"
         ) > "$CONTROL_LOGFILE" 2>&1 < /dev/null &
         echo "$!" > "$CONTROL_PIDFILE"
         info "Waiting for the dev control agent..."

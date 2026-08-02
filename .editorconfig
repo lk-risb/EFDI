@@ -1,5 +1,5 @@
-# Describes this repo's actual formatting conventions — see docs/GOTCHAS.md
-# for why nothing here should trigger an auto-reformat of existing files.
+# Describes this repo's actual formatting conventions — see docs/INSTALL.md
+# §11.2 Gotchas for why nothing here should trigger an auto-reformat of existing files.
 root = true
 
 [*]

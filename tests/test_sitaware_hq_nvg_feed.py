@@ -13,22 +13,24 @@ import xml.etree.ElementTree as ET
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "compose"))
+sys.path.insert(0, str(ROOT / "compose" / "control"))
 sys.path.insert(0, str(ROOT / "compose" / "bridges"))
 sys.path.insert(0, str(ROOT / "compose" / "layers"))
 
-# The feed server moved to nvg_layer: it writes the fabric OUT to SitaWare, so
-# it is the C2 egress. SitaWare polling it is a transport detail. nvg_bridge is
-# now the ingress that reads SitaWare's NVG export back into Zenoh.
-from nvg_layer import (  # noqa: E402
+# sitaware_layer writes the fabric OUT to SitaWare, so it is the C2 egress.
+# SitaWare polling it is a transport detail, not a direction change. SitaWare
+# ingress (sitaware_bridge.py) is the only ingest path — there is no separate
+# NVG-XML ingest bridge.
+from sitaware_layer import (  # noqa: E402
     NVGFeedCache,
     NVGFeedServer,
     basic_authorized,
 )
-from nvg_layer import NVG_NS  # noqa: E402
-from nvg_layer import _TOPIC_SIDC  # noqa: E402
-from nvg_layer import _resolve_sidc  # noqa: E402
-from nvg_layer import track_to_nvg_item  # noqa: E402
-from cot_layer import _is_unfused_sensor_track  # noqa: E402
+from sitaware_layer import NVG_NS  # noqa: E402
+from sitaware_layer import _TOPIC_SIDC  # noqa: E402
+from sitaware_layer import _resolve_sidc  # noqa: E402
+from sitaware_layer import track_to_nvg_item  # noqa: E402
+from tak_layer import _is_unfused_sensor_track  # noqa: E402
 
 
 class FakeClock:
@@ -164,16 +166,22 @@ class NVGFeedCacheTests(unittest.TestCase):
             _TOPIC_SIDC["land/**/neutral/sensor/**"],
         )
 
-    def test_air_and_sea_affiliation_matches_cot_hostile_classification(self):
+    def test_civ_mil_affiliation_is_nationality_independent(self):
+        # `civ`/`mil` affiliation means "civilian traffic"/"military traffic"
+        # with no posture judgment implied — nationality is never a hostility
+        # signal on its own. Real hostile/friendly/neutral classification
+        # comes from the actual data via the dedicated topic entries, not
+        # from an ICAO24/MMSI nationality lookup. Every registration below
+        # must resolve to the same neutral SIDC regardless of country.
         civil_air = _TOPIC_SIDC["air/**/civ/aircraft/**"]
         military_air = _TOPIC_SIDC["air/**/mil/aircraft/**"]
         civil_sea = _TOPIC_SIDC["sea/**/civ/vessel/**"]
 
         self.assertEqual(
-            _resolve_sidc(civil_air, {"icao24": "151d4f"}), "SHAPCF----*****"
+            _resolve_sidc(civil_air, {"icao24": "151d4f"}), "SNAPCF----*****"
         )
         self.assertEqual(
-            _resolve_sidc(military_air, {"icao24": "140001"}), "SHAPMF----*****"
+            _resolve_sidc(military_air, {"icao24": "140001"}), "SNAPMF----*****"
         )
         self.assertEqual(
             _resolve_sidc(civil_air, {"icao24": "4ca123"}), "SNAPCF----*****"
@@ -183,7 +191,7 @@ class NVGFeedCacheTests(unittest.TestCase):
             "SNGPEV----*****",
         )
         self.assertEqual(
-            _resolve_sidc(civil_sea, {"mmsi": "273123456"}), "SHSPXF----*****"
+            _resolve_sidc(civil_sea, {"mmsi": "273123456"}), "SNSPXF----*****"
         )
         self.assertEqual(
             _resolve_sidc(civil_sea, {"mmsi": "257123456"}), "SNSPXF----*****"

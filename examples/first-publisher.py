@@ -30,7 +30,7 @@ import time
 
 import zenoh
 
-ROUTER = "tls/zenoh.efdi.netbird.efdi-backbone.net:7447"       # mesh-internal endpoint; from the OOB bundle
+ROUTER = os.environ.get("EFDI_ROUTER", "tls/zenoh.efdi.netbird.efdi-backbone.net:7447")  # mesh-internal endpoint; from the OOB bundle
 ORG = os.environ.get("PARTNER_NAMESPACE", "")       # your org prefix
 HERE = os.path.dirname(os.path.abspath(__file__))
 

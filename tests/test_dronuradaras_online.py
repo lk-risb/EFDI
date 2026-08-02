@@ -6,9 +6,9 @@ import sys
 
 import pytest
 
-
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "compose"))
+sys.path.insert(0, str(ROOT / "compose" / "control"))
 sys.path.insert(0, str(ROOT / "compose" / "bridges"))
 
 import dronuradaras_bridge as bridge  # noqa: E402

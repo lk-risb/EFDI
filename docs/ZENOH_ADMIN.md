@@ -237,7 +237,7 @@ failure restores the last-known-good config and restarts the previous state.
 
 ## Config tab fields
 
-The Config tab exposes structured fields, not raw JSON5 — each save re-renders `host/zenoh-router.json5.tmpl` (the same template `first-boot.sh` uses) with the values below, so a saved config can never drift from the template's structure.
+The Config tab exposes structured fields, not raw JSON5 — each save re-renders `../examples/zenoh-router.json5.tmpl` (the same template `first-boot.sh` uses) with the values below, so a saved config can never drift from the template's structure.
 
 | Field | Effect |
 | --- | --- |

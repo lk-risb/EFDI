@@ -1,7 +1,7 @@
 # Local agent/editor state. Dot-prefixed names are not ignored by Git unless
 # they are listed explicitly.
-.claude/
-.compound-engineering/
+.ai/.claude/
+.ai/.claude/.compound-engineering/
 .codex/
 .agents/
 .cursor/
@@ -12,7 +12,7 @@
 .mypy_cache/
 .venv/
 venv/
-
+.ai/
 register_topics.sh
 compose/.env
 # Keep the certificate layout and instructions reproducible while excluding
@@ -56,6 +56,10 @@ compose/zenoh-admin/.venv/
 
 # JetBrains IDE settings — per-developer, not project state
 .idea/
+*.iml
+
+# Stray backup files
+*.bak
 
 # Scratch commit-message drafts — working state, not project content
 commit_msg.txt

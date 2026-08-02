@@ -3,8 +3,8 @@
 # The Zenoh router is still started via Docker (single container, compiled binary).
 #
 # Usage:
-#   ./run.sh            # giraffe mode (default) — radar sensors + CoT-UDP only
-#   ./run.sh giraffe    # same as above — ASTERIX CAT categories + cot-udp
+#   ./run.sh            # giraffe mode (default) — radar sensors + TAK output only
+#   ./run.sh giraffe    # same as above — ASTERIX CAT categories + TAK output
 #   ./run.sh all        # everything — bridges, input protocols, and output layers
 #   ./run.sh bridges    # source-specific bridges only (skip zenoh + layers)
 #   ./run.sh protocols  # reusable input protocols only
@@ -47,7 +47,7 @@ export EFDI_CERT_DIR="${EFDI_CERT_DIR:-$BUNDLE_DIR/efdi}"
 export POD_STATE_DIR="${POD_STATE_DIR:-$SCRIPT_DIR/compose/state}"
 export NAMESPACE_PREFIX_FILE="${POD_STATE_DIR}/namespace-prefix"
 export DATA_NAMESPACE_PREFIX_FILE="${POD_STATE_DIR}/data-topic-prefix"
-export PYTHONPATH="$COMPOSE_DIR/generated:$COMPOSE_DIR/generated/protocols:$COMPOSE_DIR${PYTHONPATH:+:$PYTHONPATH}"
+export PYTHONPATH="$COMPOSE_DIR/generated:$COMPOSE_DIR/generated/protocols:$COMPOSE_DIR:$COMPOSE_DIR/control${PYTHONPATH:+:$PYTHONPATH}"
 LOG_DIR="$POD_STATE_DIR/logs"
 PID_DIR="$POD_STATE_DIR/.pids"
 mkdir -p "$LOG_DIR" "$PID_DIR"
@@ -167,7 +167,7 @@ start_zenoh() {
         done
         echo " timeout — continuing anyway"
     fi
-    start admin-control admin_control.py
+    start admin-control control/admin_control.py
     if [[ -n "${EFDI_STEP_CA_URL:-}" ]]; then
         renew_cert="${EFDI_STEP_RENEW_CERT_PATH:-${EFDI_CERT_DIR}/${PARTNER_NAMESPACE}-cert.pem}"
         renew_key="${EFDI_STEP_RENEW_KEY_PATH:-${EFDI_CERT_DIR}/${PARTNER_NAMESPACE}-key.pem}"
@@ -190,13 +190,34 @@ start_asterix_protocols() {
     if [[ -n "${ASTERIX_ZENOH_UPSTREAM_ENDPOINT:-}" ]]; then
         start asterix-bridge bridges/asterix_bridge.py
     fi
-    for category in 10 20 21 34 48; do
+    for category in 1 2 4 7 8 9 10 11 15 16 17 18 19 20 21 23 25 32 34 48 63 65 150 205 240 247; do
         case "$category" in
+            1)  port="${CAT1_PORT:-}"; tcp_var="${CAT1_TCP:-}" ;;
+            2)  port="${CAT2_PORT:-}"; tcp_var="${CAT2_TCP:-}" ;;
+            4)  port="${CAT4_PORT:-}"; tcp_var="${CAT4_TCP:-}" ;;
+            7)  port="${CAT7_PORT:-}"; tcp_var="${CAT7_TCP:-}" ;;
+            8)  port="${CAT8_PORT:-}"; tcp_var="${CAT8_TCP:-}" ;;
+            9)  port="${CAT9_PORT:-}"; tcp_var="${CAT9_TCP:-}" ;;
             10) port="${CAT10_PORT:-}"; tcp_var="${CAT10_TCP:-}" ;;
+            11) port="${CAT11_PORT:-}"; tcp_var="${CAT11_TCP:-}" ;;
+            15) port="${CAT15_PORT:-}"; tcp_var="${CAT15_TCP:-}" ;;
+            16) port="${CAT16_PORT:-}"; tcp_var="${CAT16_TCP:-}" ;;
+            17) port="${CAT17_PORT:-}"; tcp_var="${CAT17_TCP:-}" ;;
+            18) port="${CAT18_PORT:-}"; tcp_var="${CAT18_TCP:-}" ;;
+            19) port="${CAT19_PORT:-}"; tcp_var="${CAT19_TCP:-}" ;;
             20) port="${CAT20_PORT:-}"; tcp_var="${CAT20_TCP:-}" ;;
             21) port="${CAT21_PORT:-}"; tcp_var="${CAT21_TCP:-}" ;;
+            23) port="${CAT23_PORT:-}"; tcp_var="${CAT23_TCP:-}" ;;
+            25) port="${CAT25_PORT:-}"; tcp_var="${CAT25_TCP:-}" ;;
+            32) port="${CAT32_PORT:-}"; tcp_var="${CAT32_TCP:-}" ;;
             34) port="${CAT34_PORT:-}"; tcp_var="${CAT34_TCP:-}" ;;
             48) port="${CAT48_PORT:-}"; tcp_var="${CAT48_TCP:-}" ;;
+            63) port="${CAT63_PORT:-}"; tcp_var="${CAT63_TCP:-}" ;;
+            65) port="${CAT65_PORT:-}"; tcp_var="${CAT65_TCP:-}" ;;
+            150) port="${CAT150_PORT:-}"; tcp_var="${CAT150_TCP:-}" ;;
+            205) port="${CAT205_PORT:-}"; tcp_var="${CAT205_TCP:-}" ;;
+            240) port="${CAT240_PORT:-}"; tcp_var="${CAT240_TCP:-}" ;;
+            247) port="${CAT247_PORT:-}"; tcp_var="${CAT247_TCP:-}" ;;
         esac
         if asterix_category_uses_raw "$category"; then
             start "asterix-cat${category}-raw" protocols/vendors/asterix/cat.py \
@@ -253,12 +274,12 @@ start_bridges() {
         echo "  [skip] sitaware — set SITAWARE_URL in .env to enable"
     fi
 
-    start track-fusion bridges/track_fusion_bridge.py
+    start track-fusion protocols/fusion.py
 
     # Optional transport-only ingress.  These processes publish bytes; the
     # matching protocol translators below perform all decoding.
     if [[ "${SAPIENT_RAW_PORT:-}" ]]; then
-        start sapient-raw bridges/sapient_flex335_bridge.py --tcp --port "$SAPIENT_RAW_PORT"
+        start sapient-raw bridges/flex335_bridge.py --tcp --port "$SAPIENT_RAW_PORT"
     fi
     if [[ "${STANAG4586_RAW_PORT:-}" ]]; then
         start stanag4586-raw bridges/4586_bridge.py --tcp --port "$STANAG4586_RAW_PORT"
@@ -298,18 +319,24 @@ start_protocols() {
     start nffi protocols/random/nffi.py
 
     if [[ "${STANAG4586_PROFILE:-}" == "legacy_ed3_approx" && "${STANAG4586_ZENOH_RAW:-}" == "1" ]]; then
-        start stanag4586 protocols/vendors/stanag/4586.py --zenoh-raw --raw-topic "${STANAG4586_RAW_TOPIC:-}"
+        start stanag4586 protocols/vendors/stanag/stanag.py --proto 4586 --zenoh-raw --raw-topic "${STANAG4586_RAW_TOPIC:-}"
     elif [[ "${STANAG4586_PROFILE:-}" == "legacy_ed3_approx" && "${STANAG4586_HOST:-}" ]]; then
-        start stanag4586 protocols/vendors/stanag/4586.py \
+        start stanag4586 protocols/vendors/stanag/stanag.py --proto 4586 \
             --host "$STANAG4586_HOST" --port "${STANAG4586_PORT:-4586}"
     else
         echo "  [skip] stanag4586 — validate the VSM ICD, then set STANAG4586_PROFILE=legacy_ed3_approx and a source"
     fi
 
     if [[ "${STANAG4609_SRT_URL:-}" ]]; then
-        start stanag4609 protocols/vendors/stanag/4609.py --zenoh-raw
+        start stanag4609 protocols/vendors/stanag/stanag.py --proto 4609 --zenoh-raw
     else
         echo "  [skip] stanag4609 — set STANAG4609_SRT_URL in .env to enable"
+    fi
+
+    if [[ "${STANAG5516_ZENOH_RAW:-}" == "1" ]]; then
+        start stanag5516 protocols/vendors/stanag/stanag.py --proto 5516 --zenoh-raw --raw-topic "${STANAG5516_RAW_TOPIC:-}"
+    else
+        start stanag5516 protocols/vendors/stanag/stanag.py --proto 5516 --port "${STANAG5516_PORT:-3010}"
     fi
 }
 
@@ -320,23 +347,6 @@ start_layers() {
     echo ""
     echo "=== TAK and SitaWare layers ==="
 
-    # CoT → ATAK UDP multicast (no TAK Server needed)
-    start cot-udp layers/cot_layer.py --udp --host 239.2.3.1 --port 6969
-
-    # Optional direct UDP-unicast CoT output for a WinTAK/ATAK client whose
-    # matching UDP input is reachable on the LAN/VPN. Keep this separate from
-    # TAK_HOST/TAK_PORT, which describe a TAK Server TCP stream.
-    if [[ "${TAK_UDP_HOST:-}" || "${TAK_UDP_HOST_FALLBACK:-}" ]]; then
-        _tak_udp_hosts=()
-        [[ "${TAK_UDP_HOST:-}" ]] && _tak_udp_hosts+=(--host "$TAK_UDP_HOST")
-        [[ "${TAK_UDP_HOST_FALLBACK:-}" ]] && \
-            _tak_udp_hosts+=(--host "$TAK_UDP_HOST_FALLBACK")
-        start cot-udp-tak layers/cot_layer.py --udp "${_tak_udp_hosts[@]}" \
-            --port "${TAK_UDP_PORT:-8087}"
-    else
-        echo "  [skip] cot-udp-tak — set TAK_UDP_HOST to enable direct client output"
-    fi
-
     # CoT → TAK Server TCP (Option A: plaintext :8087, Option B: mTLS :8089)
     if [[ "${TAK_HOST:-127.0.0.1}" != "127.0.0.1" ]] || \
        nc -z "${TAK_HOST:-127.0.0.1}" "${TAK_PORT:-8087}" 2>/dev/null; then
@@ -344,17 +354,17 @@ start_layers() {
         if [[ "${TAK_TLS:-}" == "1" ]]; then
             _cot_args+=(--tls --cert "${TAK_CERT}" --key "${TAK_KEY}" --ca "${TAK_CA}")
         fi
-        start cot-bridge layers/cot_layer.py "${_cot_args[@]}"
+        start tak-layer layers/tak_layer.py "${_cot_args[@]}"
     else
-        echo "  [skip] cot-bridge — TAK Server not reachable at ${TAK_HOST:-127.0.0.1}:${TAK_PORT:-8087}"
+        echo "  [skip] tak-layer — TAK Server not reachable at ${TAK_HOST:-127.0.0.1}:${TAK_PORT:-8087}"
     fi
 
-    # SitaWare HQ NVG Import Subscription pulls a complete NVG snapshot from
-    # this native HTTP(S) feed. This is separate from the Edge REST adapter.
-    if [[ "${SITAWARE_HQ_NVG_ENABLE:-}" == "1" ]]; then
-        start sitaware-hq-nvg bridges/nvg_bridge.py
+    # SitaWare HQ NVG Import Subscription polls this native HTTP(S) feed.
+    # This is separate from the Edge REST adapter.
+    if [[ "${SITAWARE_HQ_NVG_PORT:-}" ]]; then
+        start sitaware-hq-nvg layers/sitaware_layer.py
     else
-        echo "  [skip] sitaware-hq-nvg — set SITAWARE_HQ_NVG_ENABLE=1 to enable"
+        echo "  [skip] sitaware-hq-nvg — set SITAWARE_HQ_NVG_PORT to enable"
     fi
 
 }
@@ -375,9 +385,6 @@ start_giraffe_layers() {
     echo ""
     echo "=== Protocol layers (radar → CoT) ==="
 
-    # CoT → ATAK UDP multicast
-    start cot-udp layers/cot_layer.py --udp --host 239.2.3.1 --port 6969
-
     # CoT → TAK Server TCP (Option A: plaintext :8087, Option B: mTLS :8089)
     if [[ "${TAK_HOST:-127.0.0.1}" != "127.0.0.1" ]] || \
        nc -z "${TAK_HOST:-127.0.0.1}" "${TAK_PORT:-8087}" 2>/dev/null; then
@@ -385,19 +392,19 @@ start_giraffe_layers() {
         if [[ "${TAK_TLS:-}" == "1" ]]; then
             _cot_args+=(--tls --cert "${TAK_CERT}" --key "${TAK_KEY}" --ca "${TAK_CA}")
         fi
-        start cot-bridge layers/cot_layer.py "${_cot_args[@]}"
+        start tak-layer layers/tak_layer.py "${_cot_args[@]}"
     else
-        echo "  [skip] cot-bridge — TAK Server not reachable at ${TAK_HOST:-127.0.0.1}:${TAK_PORT:-8087}"
+        echo "  [skip] tak-layer — TAK Server not reachable at ${TAK_HOST:-127.0.0.1}:${TAK_PORT:-8087}"
     fi
 
     # Track fusion — always start in giraffe mode (correlates radar + any ADS-B)
-    start track-fusion bridges/track_fusion_bridge.py
+    start track-fusion protocols/fusion.py
 
     # STANAG 4586 UAS interface — only if VSM host is configured
     if [[ "${STANAG4586_PROFILE:-}" == "legacy_ed3_approx" && "${STANAG4586_HOST:-}" ]]; then
-        start stanag4586 protocols/vendors/stanag/4586.py --host "$STANAG4586_HOST" --port "${STANAG4586_PORT:-4586}"
+        start stanag4586 protocols/vendors/stanag/stanag.py --proto 4586 --host "$STANAG4586_HOST" --port "${STANAG4586_PORT:-4586}"
     else
-        start stanag4586 protocols/vendors/stanag/4586.py --zenoh-raw
+        start stanag4586 protocols/vendors/stanag/stanag.py --proto 4586 --zenoh-raw
     fi
 }
 

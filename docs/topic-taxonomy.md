@@ -19,14 +19,14 @@ example below:
 Two non-track key families live beside the tracks:
 
 - **Presence:** `{prefix}/_meta/alive/<service>` — a Zenoh liveliness token per
-  running feed, declared by `compose/presence.py`. This is what draws the pod as
+  running feed, declared by `compose/control/presence.py`. This is what draws the pod as
   a **node** in the fabric inspector (panoscope); track PUTs alone only draw
   edges. See `EXPLAINED.md`.
 - **Control plane:** `{root}/**/@config/v1` etc. (below), which keep versions.
 
 Protobuf views are published **self-describing**: the Zenoh `Encoding` is
 `application/protobuf;<Message.full_name>` (via
-`protobuf_codec.proto_encoding`), so the inspector's schema-viewer can pick the
+`track_views.proto_encoding`), so the inspector's schema-viewer can pick the
 `.proto` descriptor without an out-of-band lookup.
 
 ## The key
@@ -59,7 +59,7 @@ LTU/CISB/hq/land/dronuradaras/acoustic/unknown/drone/unknown/1/sapient
 They answer different questions, and one segment cannot serve both.
 
 `source` is provenance: *who said this*. Two ADS-B feeds must stay distinct,
-because `track_fusion_bridge` exists to de-duplicate them against each other.
+because `fusion` (compose/protocols/fusion.py) exists to de-duplicate them against each other.
 Two radars feeding one router must stay distinct, or their tracks collide.
 
 `modality` is method: *how was it sensed*. This is what a C2 consumer filters
@@ -174,7 +174,7 @@ its topic is not knowable at startup. Subscribers use `*` in the source slot
 
 ## How it is built
 
-`semantic_topic()` in `compose/protocols/protobuf_codec.py` is the single place
+`semantic_topic()` in `compose/protocols/track_views.py` is the single place
 that assembles a key. Publishers pass only the semantic prefix
 (`…/{domain}/{source}/{modality}/{affiliation}/{entity}`); the builder appends
 `{type}/{id}` from the track itself, and each publish leg appends its own view.
@@ -196,7 +196,7 @@ Collisions worth knowing about, all handled:
 - **Source and modality must not be the same word.** `fused/fused` is
   meaningless; the source is named for the node and the modality stays the
   method.
-- **Subscribing by modality can match your own output.** `track_fusion_bridge`
+- **Subscribing by modality can match your own output.** `fusion`
   subscribes to `…/air/*/fused/**` to ingest ASTERIX CAT-062 — which also
   matches its own published tracks. It rejects its own prefix explicitly;
   without that, a fused track is re-ingested and fused with itself.
@@ -208,6 +208,6 @@ Router ACL is unchanged: data keys stay under `${DATA_TOPIC_ROOT}/**`.
 Any existing subscriber. Nothing consumes these in production yet, so the cost
 is lowest now and rises with every consumer added.
 
-Subscribers inside the repo are already migrated: `cot_layer` and `nvg_layer`
-match with `**`, which absorbs the added segment; `track_fusion_bridge` and
-`cot_layer`'s radar-status subscription were rewritten to key on modality.
+Subscribers inside the repo are already migrated: `tak_layer` and `sitaware_layer`
+match with `**`, which absorbs the added segment; `fusion` and
+`tak_layer`'s radar-status subscription were rewritten to key on modality.

@@ -23,12 +23,10 @@ import json
 import os
 import time
 from datetime import datetime, timezone
+from gateway import TOPIC_ROOT, open_session, subscribe, payload_bytes
+from protocols.proto.mqtt_json_pb2 import MqttSensorRecord
 
-import zenoh
-
-from protocols.protobuf_codec import publish_dual
-from protocols.random.mqtt_json_pb2 import MqttSensorRecord
-from translation_common import TOPIC_ROOT, make_config, payload_bytes
+from protocols.track_views import publish_dual
 
 INPUT_TOPIC = os.environ.get("MQTT_INPUT_TOPIC") or TOPIC_ROOT + "/raw/mqtt/**"
 OUTPUT_TOPIC = TOPIC_ROOT + "/land/mqtt/iot/unknown/sensor"
@@ -121,7 +119,7 @@ def normalize(payload: dict, mqtt_topic: str = "", now: float | None = None) -> 
 
 
 def run() -> None:
-    session = zenoh.open(make_config())
+    session = open_session()
     prefix = TOPIC_ROOT + "/raw/mqtt/"
 
     def on_sample(sample) -> None:
@@ -138,11 +136,11 @@ def run() -> None:
             mqtt_topic = key[len(prefix):] if key.startswith(prefix) else ""
             record = normalize(payload, mqtt_topic)
             if record:
-                publish_dual(session, OUTPUT_TOPIC, record, MqttSensorRecord, zenoh)
+                publish_dual(session, OUTPUT_TOPIC, record, MqttSensorRecord)
         except Exception as exc:
             print("MQTT decode error:", exc, flush=True)
 
-    subscriber = session.declare_subscriber(INPUT_TOPIC, on_sample)
+    subscriber = subscribe(session, INPUT_TOPIC, on_sample)
     print("MQTT translator: {} -> {}".format(INPUT_TOPIC, OUTPUT_TOPIC), flush=True)
     try:
         while True:

@@ -18,18 +18,19 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, os.fspath(ROOT / "compose" / "protocols"))
 sys.path.insert(0, os.fspath(ROOT / "compose"))
+sys.path.insert(0, os.fspath(ROOT / "compose" / "control"))
 
 import zenoh  # noqa: E402
 
-from protocols.random.normalized_track_pb2 import NormalizedTrack  # noqa: E402
-from protocols.random.nffi_pb2 import NffiTrack  # noqa: E402
-from protocols.random.raw_envelope_pb2 import RawEnvelope  # noqa: E402
-from protocols.sapient_encode import (  # noqa: E402
+from protocols.proto.normalized_track_pb2 import NormalizedTrack  # noqa: E402
+from protocols.proto.nffi_pb2 import NffiTrack  # noqa: E402
+from protocols.proto.raw_envelope_pb2 import RawEnvelope  # noqa: E402
+from protocols.vendors.sapient.flex335 import (  # noqa: E402
     publish_sapient,
     track_to_sapient,
 )
 from sapient_msg.bsi_flex_335_v2_0.sapient_message_pb2 import SapientMessage  # noqa: E402
-from protocols.protobuf_codec import (  # noqa: E402
+from protocols.track_views import (  # noqa: E402
     asterix_data_block,
     dual_topic,
     native_topic,
@@ -88,7 +89,7 @@ class WrappedTrackMessageTests(unittest.TestCase):
         raised out of the builder, and publish_dual's guard then dropped the
         ENTIRE protobuf sample — one list field silently cost the whole /v2
         message, not just that field."""
-        from protocols.vendors.sapient.flex335_pb2 import SapientFlex335Track
+        from protocols.proto.flex335_pb2 import SapientFlex335Track
 
         track = dict(TRACK, sapient_node_types=["acoustic", "radar"], sensor_id="S1")
         message = wrapped_track_message(SapientFlex335Track, track)
@@ -101,7 +102,7 @@ class WrappedTrackMessageTests(unittest.TestCase):
     def test_scalar_string_is_not_treated_as_a_repeated_sequence(self):
         """A str is iterable — extending a repeated field with one would splay
         it into characters, so scalars must never take the repeated path."""
-        from protocols.vendors.sapient.flex335_pb2 import SapientFlex335Track
+        from protocols.proto.flex335_pb2 import SapientFlex335Track
 
         message = wrapped_track_message(
             SapientFlex335Track, dict(TRACK, sapient_node_types="acoustic")

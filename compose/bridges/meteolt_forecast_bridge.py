@@ -21,37 +21,17 @@ import time
 import urllib.error
 import urllib.request
 
-import zenoh
-from zenoh_auth import apply_zenoh_auth
 from http_json import read_json_response
 from namespace_prefix import topic_root
+import zenoh
+from protocols.gateway import open_session
 
-ORG    = os.environ.get("PARTNER_NAMESPACE", "")
 TOPIC_ROOT = topic_root()
-HERE   = os.path.dirname(os.path.abspath(__file__))
-_CERT_DIR = os.environ.get("EFDI_CERT_DIR", HERE)
-_ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", "tcp/127.0.0.1:7448")
 
 METEO_LT_BASE = "https://api.meteo.lt/v1/places"
 POLL_INTERVAL  = 3600  # 1 h — forecasts update every ~6 h, polling hourly is plenty
 
 DEFAULT_PLACES = ["vilnius", "kaunas", "klaipeda", "siauliai", "panevezys"]
-
-
-def make_config() -> "zenoh.Config":
-    conf = zenoh.Config()
-    conf.insert_json5("mode", '"client"')
-    conf.insert_json5("connect/endpoints", json.dumps([_ENDPOINT]))
-    apply_zenoh_auth(conf)
-    if _ENDPOINT.startswith("tls"):
-        conf.insert_json5("transport/link/tls", json.dumps({
-        "root_ca_certificate": os.path.join(_CERT_DIR, "efdi-ca-root.pem"),
-        "connect_certificate": os.path.join(_CERT_DIR, ORG + "-cert.pem"),
-        "connect_private_key": os.path.join(_CERT_DIR, ORG + "-key.pem"),
-        "enable_mtls": True,
-        "verify_name_on_connect": True,
-    }))
-    return conf
 
 
 def fetch_forecast(place: str) -> dict | None:
@@ -106,7 +86,7 @@ def normalize(place_meta: dict, ts: dict) -> dict:
 
 
 def run(args):
-    session = zenoh.open(make_config())
+    session = open_session()
     publishers = {
         place: session.declare_publisher(
             "{}/env/weather/station/meteolt/forecast/{}/tracks/v1".format(TOPIC_ROOT, place)
