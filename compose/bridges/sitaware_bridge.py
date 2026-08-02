@@ -9,10 +9,10 @@ describe each unit's affiliation, battle dimension, and type.  This bridge maps
 SIDCs to the correct Zenoh topic path so tak_layer.py assigns the right CoT type.
 
 SIDC affiliation (char 2):
-    F / A → friendly   → a-f-
-    H     → hostile    → a-h-
-    N / L → neutral    → a-n-
-    U / P → unknown    → a-u-
+    F / A         → friendly   → a-f-
+    H / S / J / K → hostile    → a-h-  (Suspect/Joker/Faker render hostile-side in 2525C)
+    N / L         → neutral    → a-n-
+    U / P / O     → unknown    → a-u-  (Pending/None-specified have no confirmed side yet)
 
 SIDC battle dimension (char 3):
     A → air    → air/**/friendly|hostile|.../aircraft/json/tracks
@@ -97,6 +97,24 @@ _API_FALLBACKS = [
 # ---------------------------------------------------------------------------
 # Zenoh
 # ---------------------------------------------------------------------------
+
+# SIDC affiliation (char 2) and battle dimension (char 3), per the module
+# docstring above.
+_AFF_SLUG = {
+    "F": "friendly", "A": "friendly",
+    "H": "hostile", "S": "hostile", "J": "hostile", "K": "hostile",
+    "N": "neutral", "L": "neutral",
+    "U": "unknown", "P": "unknown", "O": "unknown",
+}
+_DIM_CONFIG = {
+    "A": ("air", "aircraft", "A"),
+    "G": ("land", "unit", "G"),
+    "S": ("sea", "vessel", "S"),
+    "U": ("sea", "vessel", "U"),
+    "P": ("space", "satellite", "P"),
+    "F": ("land", "unit", "F"),
+}
+
 
 def sidc_to_topic(sidc: str) -> str:
     """Map a 15-char SIDC to the appropriate Zenoh topic."""
