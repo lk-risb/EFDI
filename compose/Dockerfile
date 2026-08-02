@@ -19,9 +19,18 @@ COPY protocols ./protocols
 # the host: -I . so `import "protocols/..."` resolves, output into generated/,
 # which PYTHONPATH points at. Without this every `protocols.*_pb2` import — and
 # therefore every publish_dual call — fails at runtime.
+#
+# The vendored BSI Flex 335 schema (protocols/vendors/sapient/sapient_msg) is
+# its own include root: its files import each other as
+# "sapient_msg/bsi_flex_335_v2_0/<f>", which only resolves relative to that
+# directory, not to /app. Compiled in a separate invocation — combining both
+# roots in one protoc call resolves the same physical file under two logical
+# import paths at once and fails with "already defined".
 RUN mkdir -p generated \
     && python3 -m grpc_tools.protoc -I . --python_out=generated \
-       $(find protocols -type f -name '*.proto' | sort)
+       $(find protocols -type f -name '*.proto' -not -path 'protocols/vendors/sapient/sapient_msg/*' | sort) \
+    && python3 -m grpc_tools.protoc -I protocols/vendors/sapient --python_out=generated \
+       $(cd protocols/vendors/sapient && find sapient_msg -type f -name '*.proto' | sort)
 ENV PYTHONPATH=/app:/app/generated
 # No writable mounts (certs come in read-only) — drop root, nothing needs it.
 # Fixed UID:GID 10001:10001 — scripts/gen-certs.sh chgrp's each leaf private
