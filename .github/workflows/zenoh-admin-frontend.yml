@@ -15,12 +15,14 @@ jobs:
         working-directory: compose/zenoh-admin/ui
     steps:
       - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
       - uses: actions/setup-node@v6
         with:
           node-version: "24"
           cache: pnpm
           cache-dependency-path: compose/zenoh-admin/ui/pnpm-lock.yaml
-      - run: npm install -g pnpm@11.9.0
       - run: pnpm install --frozen-lockfile
       - run: pnpm type-check
       - run: pnpm build
