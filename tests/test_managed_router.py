@@ -79,7 +79,7 @@ def test_ltu_profile_uses_canonical_runtime_paths(monkeypatch):
     monkeypatch.setattr(
         config,
         "TEMPLATE_PATH",
-        str(ROOT / "host" / "zenoh-router.json5.tmpl"),
+        str(ROOT / "examples" / "zenoh-router.json5.tmpl"),
     )
     ltu = fields()
     ltu.fabric_tls_profile = "ltu-local"

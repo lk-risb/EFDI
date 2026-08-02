@@ -25,8 +25,9 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq protobuf-compiler
+          VENDOR_ROOT="compose/protocols/vendors/sapient"
           while IFS= read -r protocol; do
-            schema="${protocol%.py}.proto"
+            schema="compose/protocols/proto/$(basename "${protocol%.py}").proto"
             test -f "$schema" || { echo "Missing matching schema: $schema"; exit 1; }
           done < <(
             find compose/protocols/random compose/protocols/vendors \
@@ -34,10 +35,25 @@ jobs:
               sort
           )
           mapfile -t schemas < <(
-            find compose/protocols -type f -name '*.proto' -print | sort
+            find compose/protocols -type f -name '*.proto' \
+              -not -path "$VENDOR_ROOT/sapient_msg/*" -print | sort
           )
           test "${#schemas[@]}" -gt 0
           protoc -I compose \
             --descriptor_set_out=/tmp/efdi-protocols.pb \
             --include_imports \
             "${schemas[@]}"
+          # The vendored BSI Flex 335 schema is its own include root (its files
+          # import each other as "sapient_msg/bsi_flex_335_v2_0/<f>", which only
+          # resolves relative to VENDOR_ROOT) — compiled in a separate
+          # invocation, same as scripts/generate-protobuf.sh, to avoid the same
+          # physical file resolving under two different logical import paths at
+          # once (a real "already defined" failure mode, not hypothetical).
+          mapfile -t vendor_schemas < <(
+            find "$VENDOR_ROOT/sapient_msg" -type f -name '*.proto' -print | sort |
+              sed "s|^$VENDOR_ROOT/||"
+          )
+          protoc -I "$VENDOR_ROOT" \
+            --descriptor_set_out=/tmp/efdi-vendor-protocols.pb \
+            --include_imports \
+            "${vendor_schemas[@]}"
