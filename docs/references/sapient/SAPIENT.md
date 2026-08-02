@@ -4,7 +4,7 @@
 encode for all 9 SAPIENT message types (registration, status report,
 detection report, task, task ack, alert, alert ack, error, associated
 file), against the wire schema vendored at
-`compose/vendor/sapient_msg/bsi_flex_335_v2_0/*.proto`.
+`compose/protocols/vendors/sapient/sapient_msg/bsi_flex_335_v2_0/*.proto`.
 
 ## Source
 
@@ -14,7 +14,7 @@ UK Ministry of Defence's Defence Science and Technology Laboratory (Dstl)
 official protobuf schema for BSI Flex 335 (the SAPIENT interface standard).
 This is the authoritative machine-readable schema — not a third-party
 transcription — vendored directly into this repository at
-`../../../compose/vendor/sapient_msg`.
+`../../../compose/protocols/vendors/sapient/sapient_msg`.
 
 ## Trust: high
 
