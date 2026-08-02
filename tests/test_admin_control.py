@@ -8,6 +8,7 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "compose"))
+sys.path.insert(0, str(ROOT / "compose" / "control"))
 
 from admin_control import (  # noqa: E402
     CONFIG_VALIDATE_MAX_BYTES,

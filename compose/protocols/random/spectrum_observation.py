@@ -9,12 +9,10 @@ import math
 import os
 import time
 
-import zenoh
-
 from namespace_prefix import prefix
-from protocols.protobuf_codec import publish_dual
-from protocols.random.spectrum_observation_pb2 import SpectrumObservation
-from translation_common import TOPIC_ROOT, make_config, payload_json
+from protocols.track_views import publish_dual
+from protocols.proto.spectrum_observation_pb2 import SpectrumObservation
+from gateway import TOPIC_ROOT, open_session, subscribe, payload_json
 
 
 INPUT_TOPIC = os.environ.get("SPECTRUM_INPUT_TOPIC") or TOPIC_ROOT + "/raw/spectrum/**"
@@ -72,7 +70,7 @@ def normalize(payload: dict, now: float | None = None) -> dict | None:
 
 
 def run() -> None:
-    session = zenoh.open(make_config())
+    session = open_session()
 
     def on_sample(sample) -> None:
         try:
@@ -81,11 +79,11 @@ def run() -> None:
             for item in values:
                 record = normalize(item)
                 if record:
-                    publish_dual(session, OUTPUT_TOPIC, record, SpectrumObservation, zenoh)
+                    publish_dual(session, OUTPUT_TOPIC, record, SpectrumObservation)
         except Exception as exc:
             print("spectrum decode error:", exc, flush=True)
 
-    subscriber = session.declare_subscriber(INPUT_TOPIC, on_sample)
+    subscriber = subscribe(session, INPUT_TOPIC, on_sample)
     print("Spectrum translator: {} -> {}".format(INPUT_TOPIC, OUTPUT_TOPIC), flush=True)
     try:
         while True:

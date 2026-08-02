@@ -30,14 +30,14 @@ import ssl
 import time
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
-from protocols.random.normalized_track_pb2 import NormalizedTrack
+from namespace_prefix import topic_root
+from protocols.proto.normalized_track_pb2 import NormalizedTrack
 
 import zenoh
 from defusedxml import ElementTree as SafeET
 from defusedxml.common import DefusedXmlException
-from namespace_prefix import topic_root
-from protocols.protobuf_codec import publish_dual
-from protocols.translation_common import base_record, make_config
+from protocols.gateway import base_record, open_session
+from protocols.track_views import publish_dual
 
 ORG = os.environ.get("PARTNER_NAMESPACE", "")
 TOPIC_ROOT = topic_root()
@@ -205,7 +205,7 @@ def _normalize_event(event: ET.Element) -> tuple[str, dict[str, object]] | None:
     cot_stale = _text(event.get("stale"))
 
     # TAK Server broadcasts a client's own CoT back over that client's receive
-    # stream. cot_layer marks those frames explicitly. Keep the exact frame on
+    # stream. tak_layer marks those frames explicitly. Keep the exact frame on
     # the raw audit topic, but do not turn that reflected copy into a second
     # normalized object. Unmarked TAK objects remain valid regardless of UID.
     if _is_fabric_reflection(event):
@@ -358,7 +358,7 @@ def run(args) -> None:
     if args.tls and not args.ca:
         raise SystemExit("--ca / TAK_CA is required when --tls is specified")
 
-    session = zenoh.open(make_config())
+    session = open_session()
     raw_pub = session.declare_publisher(_RAW_TOPIC)
 
     print("TAK CoT ingress bridge started", flush=True)
@@ -399,7 +399,7 @@ def run(args) -> None:
                     normalized = _normalize_event(elem)
                     if normalized is not None:
                         topic, record = normalized
-                        publish_dual(session, topic, record, NormalizedTrack, zenoh)
+                        publish_dual(session, topic, record, NormalizedTrack)
                         if args.verbose:
                             print("TAK PUB {} uid={} type={}".format(
                                 topic, record.get("uid"), record.get("cot_type", "")), flush=True)

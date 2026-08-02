@@ -1,13 +1,13 @@
 import importlib.util
-from pathlib import Path
 import sys
+from pathlib import Path
 
 import pytest
-
 
 ROOT = Path(__file__).resolve().parents[1]
 COMPOSE = ROOT / "compose"
 sys.path.insert(0, str(COMPOSE))
+sys.path.insert(0, str(COMPOSE / "control"))
 
 spec = importlib.util.spec_from_file_location(
     "asterix_bridge",

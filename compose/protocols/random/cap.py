@@ -17,12 +17,10 @@ import re
 import time
 
 from defusedxml import ElementTree as ET
-import zenoh
-
 from namespace_prefix import prefix
-from protocols.random.cap_pb2 import CapAlert
-from protocols.protobuf_codec import publish_dual
-from translation_common import TOPIC_ROOT, make_config, payload_bytes
+from protocols.proto.cap_pb2 import CapAlert
+from protocols.track_views import publish_dual
+from gateway import TOPIC_ROOT, open_session, subscribe, payload_bytes
 
 
 INPUT_TOPIC = os.environ.get("CAP_INPUT_TOPIC") or TOPIC_ROOT + "/raw/cap/**"
@@ -175,18 +173,18 @@ def parse_cap(xml: bytes, now: float | None = None) -> list[dict]:
 
 
 def run(args) -> None:
-    session = zenoh.open(make_config())
+    session = open_session()
 
     def on_sample(sample) -> None:
         try:
             for record in parse_cap(payload_bytes(sample)):
                 if args.active_only and not record.get("cap_active"):
                     continue
-                publish_dual(session, OUTPUT_TOPIC, record, CapAlert, zenoh)
+                publish_dual(session, OUTPUT_TOPIC, record, CapAlert)
         except Exception as exc:  # malformed partner data must not kill the translator
             print("CAP decode error:", exc, flush=True)
 
-    subscriber = session.declare_subscriber(INPUT_TOPIC, on_sample)
+    subscriber = subscribe(session, INPUT_TOPIC, on_sample)
     print("CAP translator: {} -> {}".format(INPUT_TOPIC, OUTPUT_TOPIC), flush=True)
     try:
         while True:

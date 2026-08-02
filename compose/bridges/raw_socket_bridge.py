@@ -9,40 +9,20 @@ does validation and translation.
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import socket
 import time
 
 import zenoh
-from zenoh_auth import apply_zenoh_auth
 
 from namespace_prefix import topic_root
-
-
-def make_config() -> "zenoh.Config":
-    org = os.environ.get("PARTNER_NAMESPACE", "")
-    endpoint = os.environ.get("ZENOH_LOCAL_ENDPOINT", "tcp/127.0.0.1:7448")
-    cert_dir = os.environ.get("EFDI_CERT_DIR", os.path.dirname(__file__))
-    config = zenoh.Config()
-    config.insert_json5("mode", '"client"')
-    config.insert_json5("connect/endpoints", json.dumps([endpoint]))
-    apply_zenoh_auth(config)
-    if endpoint.startswith("tls"):
-        config.insert_json5("transport/link/tls", json.dumps({
-            "root_ca_certificate": os.path.join(cert_dir, "efdi-ca-root.pem"),
-            "connect_certificate": os.path.join(cert_dir, org + "-cert.pem"),
-            "connect_private_key": os.path.join(cert_dir, org + "-key.pem"),
-            "enable_mtls": True,
-            "verify_name_on_connect": True,
-        }))
-    return config
+from protocols.gateway import open_session
 
 
 def run_raw(protocol: str, default_port: int, args, frame_mode: str = "chunk") -> None:
     root = topic_root()
     topic = args.topic or "{}/raw/{}/{}".format(root, protocol, args.source)
-    session = zenoh.open(make_config())
+    session = open_session()
     publisher = session.declare_publisher(topic)
     sock = socket.socket(socket.AF_INET6 if ":" in args.bind else socket.AF_INET,
                          socket.SOCK_STREAM if args.tcp else socket.SOCK_DGRAM)

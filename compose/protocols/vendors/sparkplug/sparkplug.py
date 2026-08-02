@@ -25,14 +25,11 @@ import os
 import time
 from importlib import import_module
 
-import zenoh
-
-from protocols.protobuf_codec import publish_dual
-from translation_common import TOPIC_ROOT, make_config, payload_bytes
+from gateway import TOPIC_ROOT, open_session, payload_bytes, publish_dual, subscribe
 
 Payload = import_module("protocols.vendors.sparkplug.sparkplug_b_pb2").Payload
 SparkplugRecord = import_module(
-    "protocols.vendors.sparkplug.sparkplug_pb2").SparkplugRecord
+    "protocols.proto.sparkplug_pb2").SparkplugRecord
 
 INPUT_TOPIC = os.environ.get("SPARKPLUG_INPUT_TOPIC") or TOPIC_ROOT + "/raw/mqtt/spBv1.0/**"
 OUTPUT_TOPIC = TOPIC_ROOT + "/land/sparkplug/iot/unknown/sensor"
@@ -192,7 +189,7 @@ def normalize(payload, topic: dict, aliases: AliasTable, now: float | None = Non
 
 
 def run() -> None:
-    session = zenoh.open(make_config())
+    session = open_session()
     aliases = AliasTable()
 
     def on_sample(sample) -> None:
@@ -214,11 +211,11 @@ def run() -> None:
                 return
             record = normalize(payload, topic, aliases)
             if record:
-                publish_dual(session, OUTPUT_TOPIC, record, SparkplugRecord, zenoh)
+                publish_dual(session, OUTPUT_TOPIC, record, SparkplugRecord)
         except Exception as exc:
             print("Sparkplug decode error:", exc, flush=True)
 
-    subscriber = session.declare_subscriber(INPUT_TOPIC, on_sample)
+    subscriber = subscribe(session, INPUT_TOPIC, on_sample)
     print("Sparkplug B translator: {} -> {}".format(INPUT_TOPIC, OUTPUT_TOPIC), flush=True)
     try:
         while True:

@@ -70,8 +70,8 @@ _PROTOCOLS=(asterix-cat10 asterix-cat20 asterix-cat21 asterix-cat34
             asterix-cat48 asterix-cat62 asterix-cat10-raw asterix-cat20-raw
             asterix-cat21-raw asterix-cat34-raw asterix-cat48-raw
             asterix-cat62-raw sapient
-            nffi stanag4586 stanag4609)
-_LAYERS=(cot_layer nvg_bridge nvg_layer)
+            nffi stanag4586 stanag4609 stanag5516)
+_LAYERS=(tak_layer sitaware_layer)
 
 case "$MODE" in
     all)
@@ -112,7 +112,7 @@ case "$MODE" in
         ;;
     *)
         case "$MODE" in
-            admin-control|cert-renewer|meteolt|dronuradaras|sitaware|tak-bridge|asterix|asterix-bridge|udp-ingress|track-fusion|asterix-cat10|asterix-cat20|asterix-cat21|asterix-cat34|asterix-cat48|asterix-cat62|asterix-cat10-raw|asterix-cat20-raw|asterix-cat21-raw|asterix-cat34-raw|asterix-cat48-raw|asterix-cat62-raw|sapient|nffi|stanag4586|stanag4609|sapient-raw|stanag4586-raw|stanag4609-raw|cap|geojson|mqtt|mqtt-raw|sensorthings|sensorthings-raw|sparkplug|spectrum|sensor-health|mission-route|cot_layer|nvg_bridge|nvg_layer)
+            admin-control|cert-renewer|meteolt|dronuradaras|sitaware|tak-bridge|asterix|asterix-bridge|udp-ingress|track-fusion|asterix-cat10|asterix-cat20|asterix-cat21|asterix-cat34|asterix-cat48|asterix-cat62|asterix-cat10-raw|asterix-cat20-raw|asterix-cat21-raw|asterix-cat34-raw|asterix-cat48-raw|asterix-cat62-raw|sapient|nffi|stanag4586|stanag4609|stanag5516|sapient-raw|stanag4586-raw|stanag4609-raw|stanag5516-raw|cap|geojson|mqtt|mqtt-raw|sensorthings|sensorthings-raw|sparkplug|spectrum|sensor-health|mission-route|tak_layer|sitaware_layer)
                 echo "=== Stopping $MODE ==="
                 stop_scripts "$MODE"
                 echo "Done."

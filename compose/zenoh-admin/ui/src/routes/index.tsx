@@ -63,6 +63,23 @@ interface CertInfo {
   days_remaining: number
 }
 
+interface DataStatsSnapshot {
+  bytes_in: number
+  bytes_out: number
+  frames_in: number
+  frames_out: number
+  since: number
+}
+
+interface DataStatsResponse {
+  ingress: Record<string, DataStatsSnapshot>
+  egress: Record<string, DataStatsSnapshot>
+  ingress_bytes_total: number
+  ingress_frames_total: number
+  egress_bytes_total: number
+  egress_frames_total: number
+}
+
 interface SystemStats {
   cpu_percent: number | null
   mem_used_mb: number
@@ -90,6 +107,13 @@ function formatBytesPerSec(bytes: number | null): string {
   if (bytes < 1024) return `${bytes.toFixed(0)} B/s`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB/s`
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB/s`
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KB`
+  if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} MB`
+  return `${(bytes / 1024 ** 3).toFixed(2)} GB`
 }
 
 function StatCard({ label, value }: { label: string; value: string }) {
@@ -231,6 +255,32 @@ function SystemStatCard({ icon: Icon, label, value, state = 'ok' }: { icon: Luci
   )
 }
 
+function DataVolumeTable({ label, snapshots }: { label: string; snapshots: Record<string, DataStatsSnapshot> }) {
+  const rows = Object.entries(snapshots).sort((a, b) => a[0].localeCompare(b[0]))
+  return (
+    <div className="hud-frame rounded-md border border-zinc-200 dark:border-white/10 hud-glass p-5 hud-card">
+      <HudCorners />
+      <span className="text-[10px] font-semibold tracking-wider text-zinc-500 uppercase">{label}</span>
+      {rows.length === 0 ? (
+        <p className="text-xs text-zinc-400 dark:text-zinc-600 mt-3">no data recorded yet</p>
+      ) : (
+        <div className="mt-3 space-y-1.5 max-h-64 overflow-auto">
+          {rows.map(([key, snap]) => {
+            const bytes = snap.bytes_in || snap.bytes_out
+            const frames = snap.frames_in || snap.frames_out
+            return (
+              <div key={key} className="flex items-center justify-between text-sm">
+                <span className="font-mono text-xs text-zinc-700 dark:text-zinc-300">{key}</span>
+                <span className="text-xs text-zinc-500">{frames.toLocaleString()} msgs · {formatBytes(bytes)}</span>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function ServiceCard({ service }: { service: ServiceState }) {
   const running = service.status === 'running'
   return (
@@ -264,6 +314,7 @@ function DashboardPage() {
   const [services, setServices] = useState<ServiceState[]>([])
   const [system, setSystem] = useState<SystemStats | null>(null)
   const [topology, setTopology] = useState<TopologyResponse | null>(null)
+  const [dataStats, setDataStats] = useState<DataStatsResponse | null>(null)
 
   async function load() {
     try {
@@ -278,6 +329,10 @@ function DashboardPage() {
     try {
       const data = await fetchTopology()
       setTopology(data)
+    } catch {}
+    try {
+      const data = await apiJson<DataStatsResponse>('/api/data-stats')
+      setDataStats(data)
     } catch {}
   }
 
@@ -382,6 +437,22 @@ function DashboardPage() {
             </div>
             <div className="grid grid-cols-1 gap-4">
               <PeerList peers={status.peers} />
+            </div>
+          </>
+        )}
+
+        {dataStats && (Object.keys(dataStats.ingress).length > 0 || Object.keys(dataStats.egress).length > 0) && (
+          <>
+            <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-3 mt-6">Data volume</h2>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+              <StatCard label="Ingress (ASTERIX etc.)" value={formatBytes(dataStats.ingress_bytes_total)} />
+              <StatCard label="Ingress frames" value={dataStats.ingress_frames_total.toLocaleString()} />
+              <StatCard label="Egress (translated)" value={formatBytes(dataStats.egress_bytes_total)} />
+              <StatCard label="Egress messages" value={dataStats.egress_frames_total.toLocaleString()} />
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+              <DataVolumeTable label="By protocol (received)" snapshots={dataStats.ingress} />
+              <DataVolumeTable label="By view (translated + published)" snapshots={dataStats.egress} />
             </div>
           </>
         )}

@@ -11,7 +11,7 @@ instead of placing a second icon near the sensor, the sensor's own marker
 changes color while an alert is active — same icon (a-?-G-E-S), only the
 MIL-STD-2525C affiliation letter changes: neutral (green, no alert) → unknown
 (yellow, cooling down) → hostile (red, active detection in the last 60 s).
-See cot_layer.py's _sensor_alert_cot_type().
+See tak_layer.py's _sensor_alert_cot_type().
 
 Zenoh topic:
   <ORG>/land/dronuradaras/acoustic/neutral/sensor/json/status   — sensor nodes
@@ -28,17 +28,13 @@ import threading
 import urllib.error
 import urllib.request
 
-import zenoh
-from zenoh_auth import apply_zenoh_auth
 from http_json import read_json_response
 from namespace_prefix import topic_root
+import zenoh
+from protocols.gateway import open_session
 
-ORG    = os.environ.get("PARTNER_NAMESPACE", "")
 TOPIC_ROOT = topic_root()
-HERE   = os.path.dirname(os.path.abspath(__file__))
 
-_CERT_DIR = os.environ.get("EFDI_CERT_DIR", HERE)
-_ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", "tcp/127.0.0.1:7448")
 
 API_BASE          = "https://radar-api.mainline.inc/api/v1/public"
 AUDIO_URL         = API_BASE + "/detections/{}/audio"
@@ -63,34 +59,6 @@ ALERT_WARM_S      = DETECT_WINDOW_S  # marker shows unknown (yellow) until this 
 # ---------------------------------------------------------------------------
 # Zenoh
 # ---------------------------------------------------------------------------
-
-def make_config() -> "zenoh.Config":
-    conf = zenoh.Config()
-    conf.insert_json5("mode", '"client"')
-    conf.insert_json5("connect/endpoints", json.dumps([_ENDPOINT]))
-    apply_zenoh_auth(conf)
-    if _ENDPOINT.startswith("tls"):
-        conf.insert_json5("transport/link/tls", json.dumps({
-            "root_ca_certificate": os.path.join(_CERT_DIR, "efdi-ca-root.pem"),
-            "connect_certificate": os.path.join(_CERT_DIR, ORG + "-cert.pem"),
-            "connect_private_key": os.path.join(_CERT_DIR, ORG + "-key.pem"),
-            "enable_mtls": True,
-            "verify_name_on_connect": True,
-        }))
-    return conf
-
-
-# ---------------------------------------------------------------------------
-# HTTP helpers
-# ---------------------------------------------------------------------------
-
-_HEADERS = {
-    "Origin":  ORIGIN_HEADER,
-    "Referer": REFERER_HEADER,
-    "User-Agent": "EFDI-Bridge/1.0",
-    "Accept": "application/json",
-}
-
 
 def _get(path: str) -> dict | None:
     """GET {API_BASE}/{path}, return parsed JSON or None on error."""
@@ -234,7 +202,7 @@ def run_devices(pub: "zenoh.Publisher", verbose: bool):
 def _publish_sensor_alert(pub_dev: "zenoh.Publisher", dev_id: str, last_detection_ts: float,
                            audio_url: str | None = None):
     """Republish the reporting sensor's OWN status marker with a fresh
-    last_detection_ts — this is what recolors it in cot_layer.py, instead of
+    last_detection_ts — this is what recolors it in tak_layer.py, instead of
     spawning a separate nearby drone icon."""
     with _device_lock:
         pos  = _device_positions.get(dev_id)
@@ -338,7 +306,7 @@ def main():
     ap.add_argument("--verbose", "-v", action="store_true")
     args = ap.parse_args()
 
-    session = zenoh.open(make_config())
+    session = open_session()
 
     topic_dev = "{}/land/dronuradaras/acoustic/neutral/sensor/tracks/v1".format(TOPIC_ROOT)
     pub_dev = session.declare_publisher(topic_dev)

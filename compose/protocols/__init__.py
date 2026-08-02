@@ -2,8 +2,9 @@
 
 Generated bindings live under compose/generated/protocols while source
 contracts and translators live under compose/protocols. Extend the package
-path so `protocols.random.*_pb2` and `protocols.vendors.*_pb2` resolve beside
-their source modules regardless of whether the caller sets PYTHONPATH manually.
+path so `protocols.proto.*_pb2` (every EFDI-authored schema, in one place)
+resolves beside the source modules regardless of whether the caller sets
+PYTHONPATH manually.
 """
 
 from __future__ import annotations

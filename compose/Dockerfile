@@ -10,7 +10,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # protocols/ = one reusable protocol translator per wire/API contract
 # layers/    = TAK and SitaWare connection/output layers
 # Shared helpers every bridge/layer imports by bare name.
-COPY namespace_prefix.py http_json.py zenoh_auth.py translation_common.py ./
+COPY control/namespace_prefix.py control/http_json.py control/zenoh_auth.py control/gateway.py ./
 # bridges/ and layers/ are flattened onto /app so CMD can name a script directly.
 COPY bridges/*.py layers/*.py ./
 # protocols/ keeps its package layout — modules import protocols.<group>.<name>.

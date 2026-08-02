@@ -1,0 +1,1650 @@
+syntax = "proto3";
+
+package efdi.protocols.v2;
+
+import "protocols/proto/normalized_track.proto";
+
+// Matches EUROCONTROL CAT-001 Ed.1.4 monoradar plot/track reports. One
+// physical wire record can be a plot OR a track (see is_track) — the two
+// share FRN1/FRN2 but diverge from FRN3 onward; this message is the flat
+// union of both variants' fields.
+message AsterixCat1Track {
+  efdi.data.v2.NormalizedTrack track = 1;
+  optional uint32 sac = 2;
+  optional uint32 sic = 3;
+  optional bool is_track = 4;
+  optional bool simulated = 5;
+  optional string ssr_psr = 6;
+  optional uint32 antenna = 7;
+  optional bool spi = 8;
+  optional bool fixed_transponder = 9;
+  optional bool test_target = 10;
+  optional string emergency = 11;
+  optional bool military_emergency = 12;
+  optional bool military_id = 13;
+  optional uint32 track_num = 14;
+  optional double rho_nm = 15;
+  optional double theta_deg = 16;
+  optional double x_nm = 17;
+  optional double y_nm = 18;
+  optional double speed_ms = 19;
+  optional double heading_deg = 20;
+  optional string mode3a_squawk = 21;
+  optional bool mode3a_validated = 22;
+  optional bool mode3a_garbled = 23;
+  optional bool mode3a_smoothed = 24;
+  optional string mode2_squawk = 25;
+  optional bool mode2_validated = 26;
+  optional bool mode2_garbled = 27;
+  optional bool mode2_smoothed = 28;
+  optional double alt_baro_ft = 29;
+  optional bool altitude_validated = 30;
+  optional bool altitude_garbled = 31;
+  optional double tod_trunc_s = 32;
+  optional double doppler_speed_ms = 33;
+  optional int32 received_power_dbm = 34;
+  optional uint32 mode_c_gray_code = 35;
+  optional bool mode_c_validated = 36;
+  optional bool mode_c_garbled = 37;
+  optional bool confirmed = 38;
+  optional string radar_type = 39;
+  optional bool maneuvering = 40;
+  optional bool doubtful_association = 41;
+  optional uint32 rdp_chain = 42;
+  optional bool ghost_track = 43;
+  optional bool x_pulse_mode3a = 44;
+  optional bool x_pulse_modec = 45;
+  optional bool x_pulse_mode2 = 46;
+  // mode3a_confidence / mode2_confidence / mode_c_confidence (12-bit pulse
+  // quality dicts) and warnings / plot_characteristics_raw / track_quality_raw
+  // (repetitive lists) are nested — JSON-only, see AsterixCat19Status's
+  // comment above for why.
+}
+
+// Matches EUROCONTROL CAT-002 Ed.1.2 monoradar service messages (the
+// status/marker companion to CAT-001, same relationship CAT-034 has to
+// CAT-048).
+message AsterixCat2Status {
+  efdi.data.v2.NormalizedTrack sensor = 1;
+  optional uint32 sac = 2;
+  optional uint32 sic = 3;
+  optional string msg_type = 4;
+  optional double sector_deg = 5;
+  optional double tod_s = 6;
+  optional double antenna_rotation_s = 7;
+  optional double window_rho_start_nm = 8;
+  optional double window_rho_end_nm = 9;
+  optional double window_theta_start_deg = 10;
+  optional double window_theta_end_deg = 11;
+  optional double range_error_nm = 12;
+  optional double azimuth_error_deg = 13;
+  // station_configuration_raw / station_processing_mode_raw / warnings_raw
+  // (application-defined raw byte lists) and plot_counts (repeated group)
+  // are nested — JSON-only, see AsterixCat19Status's comment above for why.
+}
+
+// Matches EUROCONTROL CAT-004 Ed.1.13 safety net (STCA/MSAW/APW/RIMCA/...)
+// alert messages. sdps_ids, safety_net_status, aircraft{1,2}_characteristics,
+// conflict_nature_ext_raw, conflict_timing, area, and fdps_sectors are
+// nested dicts/lists — JSON-only, see AsterixCat19Status's comment above
+// for why.
+message AsterixCat4Alert {
+  efdi.data.v2.NormalizedTrack alert = 1;
+  optional uint32 sac = 2;
+  optional uint32 sic = 3;
+  optional string msg_type = 4;
+  optional double tod_s = 5;
+  optional uint32 alert_id = 6;
+  optional bool area_status_populated = 7;
+  optional string area_status = 8;
+  optional uint32 alert_status_raw = 9;
+  optional uint32 track_num_1 = 10;
+  optional uint32 track_num_2 = 11;
+  optional string aircraft1_callsign = 12;
+  optional string aircraft1_mode3a_squawk = 13;
+  optional double aircraft1_wgs84_lat_deg = 14;
+  optional double aircraft1_wgs84_lon_deg = 15;
+  optional double aircraft1_wgs84_alt_ft = 16;
+  optional double aircraft1_cart_x_m = 17;
+  optional double aircraft1_cart_y_m = 18;
+  optional double aircraft1_cart_z_ft = 19;
+  optional double aircraft1_time_to_threshold_s = 20;
+  optional double aircraft1_distance_to_threshold_m = 21;
+  optional string aircraft1_mode_s_id = 22;
+  optional uint32 aircraft1_flight_plan_number = 23;
+  optional double aircraft1_cleared_fl = 24;
+  optional string aircraft2_callsign = 25;
+  optional string aircraft2_mode3a_squawk = 26;
+  optional double aircraft2_wgs84_lat_deg = 27;
+  optional double aircraft2_wgs84_lon_deg = 28;
+  optional double aircraft2_wgs84_alt_ft = 29;
+  optional double aircraft2_cart_x_m = 30;
+  optional double aircraft2_cart_y_m = 31;
+  optional double aircraft2_cart_z_ft = 32;
+  optional double aircraft2_time_to_threshold_s = 33;
+  optional double aircraft2_distance_to_threshold_m = 34;
+  optional string aircraft2_mode_s_id = 35;
+  optional uint32 aircraft2_flight_plan_number = 36;
+  optional double aircraft2_cleared_fl = 37;
+  optional bool conflict_military_airspace = 38;
+  optional bool conflict_civil_airspace = 39;
+  optional bool conflict_fast_lateral_divergence = 40;
+  optional bool conflict_fast_vertical_divergence = 41;
+  optional bool conflict_major_separation = 42;
+  optional bool conflict_crossed = 43;
+  optional bool conflict_diverging = 44;
+  optional uint32 conflict_table_id = 45;
+  optional uint32 conflict_properties_raw = 46;
+  optional bool conflict_severity_high = 47;
+  optional double conflict_probability_pct = 48;
+  optional double conflict_duration_s = 49;
+  optional double vertical_deviation_ft = 50;
+  optional double longitudinal_deviation_m = 51;
+  optional double transversal_deviation_m = 52;
+}
+
+// Matches EUROCONTROL CAT-007 Ed.1.12 directed interrogation messages
+// (military Mode 4/5/S interrogation control). Two UAPs (downlink/uplink)
+// share one flat message here; plot_characteristics, mode_s_mb_data,
+// mode3a_confidence, mode2_confidence, mode_c_confidence, mode1_confidence,
+// radial_doppler, interrogation_result, mode5, required_interrogation_modes,
+// warnings, and bds_register_requests are nested — JSON-only, see
+// AsterixCat19Status's comment above for why.
+message AsterixCat7Track {
+  efdi.data.v2.NormalizedTrack track = 1;
+  optional uint32 sac = 2;
+  optional uint32 sic = 3;
+  optional uint32 dest_sac = 4;
+  optional uint32 dest_sic = 5;
+  optional string msg_type = 6;
+  optional bool is_uplink = 7;
+  optional double tod_s = 8;
+  optional bool request_high_priority = 9;
+  optional uint32 request_number = 10;
+  optional string report_type = 11;
+  optional bool simulated = 12;
+  optional uint32 rdp_chain = 13;
+  optional bool spi = 14;
+  optional bool field_monitor = 15;
+  optional bool test_target = 16;
+  optional bool extended_range = 17;
+  optional bool x_pulse_present = 18;
+  optional bool military_emergency = 19;
+  optional bool military_id = 20;
+  optional string mode4 = 21;
+  optional bool adsb_populated = 22;
+  optional bool adsb_available = 23;
+  optional bool scn_populated = 24;
+  optional bool scn_available = 25;
+  optional bool pai_populated = 26;
+  optional bool pai_available = 27;
+  optional bool acasvx_populated = 28;
+  optional uint32 acasvx_version = 29;
+  optional bool poxpr_populated = 30;
+  optional bool poxpr_available = 31;
+  optional bool poact_populated = 32;
+  optional bool poact_active = 33;
+  optional bool dtfxpr_populated = 34;
+  optional bool dtfxpr_supported = 35;
+  optional bool dtfact_populated = 36;
+  optional bool dtfact_active = 37;
+  optional bool irmxpr_populated = 38;
+  optional bool irmxpr_capable = 39;
+  optional bool irmact_populated = 40;
+  optional bool irmact_active = 41;
+  optional double rho_nm = 42;
+  optional double theta_deg = 43;
+  optional double x_nm = 44;
+  optional double y_nm = 45;
+  optional string mode3a_squawk = 46;
+  optional bool mode3a_validated = 47;
+  optional bool mode3a_garbled = 48;
+  optional double flight_level = 49;
+  optional bool fl_validated = 50;
+  optional bool fl_garbled = 51;
+  optional string icao24 = 52;
+  optional string callsign = 53;
+  optional uint32 track_num = 54;
+  optional double speed_ms = 55;
+  optional double heading_deg = 56;
+  optional bool confirmed = 57;
+  optional string radar_type = 58;
+  optional bool low_confidence = 59;
+  optional bool horizontal_maneuver = 60;
+  optional string climb_descend = 61;
+  optional bool end_of_track = 62;
+  optional bool ghost_track = 63;
+  optional bool neighboring_node = 64;
+  optional bool slant_range_corrected = 65;
+  optional double sigma_x_nm = 66;
+  optional double sigma_y_nm = 67;
+  optional double sigma_speed_ms = 68;
+  optional double sigma_heading_deg = 69;
+  optional uint32 mode_c_gray_code = 70;
+  optional bool mode_c_validated = 71;
+  optional bool mode_c_garbled = 72;
+  optional double height_3d_ft = 73;
+  optional string comm_capability = 74;
+  optional string flight_status = 75;
+  optional bool si_capable = 76;
+  optional bool mode_s_service_capable = 77;
+  optional bool altitude_resolution_25ft = 78;
+  optional bool aircraft_id_capable = 79;
+  optional uint32 bds10_raw = 80;
+  optional string acas_ra_raw = 81;
+  optional bool mode1_validated = 82;
+  optional bool mode1_garbled = 83;
+  optional bool mode1_smoothed = 84;
+  optional string mode1_code = 85;
+  optional string mode2_squawk = 86;
+  optional bool mode2_validated = 87;
+  optional bool mode2_garbled = 88;
+  optional double window_rho_start_nm = 89;
+  optional double window_rho_end_nm = 90;
+  optional double window_theta_start_deg = 91;
+  optional double window_theta_end_deg = 92;
+}
+
+// Matches EUROCONTROL CAT-008 Ed.1.3 monoradar derived weather information
+// (weather-image vectors/contours, not target tracks). cartesian_vectors,
+// polar_vectors, contour_points, weather_vectors, processing_params_raw,
+// and station_configuration_raw are nested — JSON-only, see
+// AsterixCat19Status's comment above for why.
+message AsterixCat8Weather {
+  efdi.data.v2.NormalizedTrack sensor = 1;
+  optional uint32 sac = 2;
+  optional uint32 sic = 3;
+  optional string msg_type = 4;
+  optional string coord_system = 5;
+  optional uint32 intensity = 6;
+  optional double shading_deg = 7;
+  optional bool test_vector = 8;
+  optional bool error_condition = 9;
+  optional string contour_coord_system = 10;
+  optional uint32 contour_intensity = 11;
+  optional string contour_position = 12;
+  optional uint32 contour_serial_number = 13;
+  optional double tod_s = 14;
+  optional int32 scaling_factor = 15;
+  optional uint32 reduction_stage = 16;
+  optional uint32 total_items = 17;
+}
+
+// Matches EUROCONTROL CAT-009 Ed.2.1 composite weather reports (merged
+// multi-radar weather picture). cartesian_vectors, processing_params_raw,
+// and radar_status are nested — JSON-only, see AsterixCat19Status's
+// comment above for why.
+message AsterixCat9Weather {
+  efdi.data.v2.NormalizedTrack sensor = 1;
+  optional uint32 sac = 2;
+  optional uint32 sic = 3;
+  optional string msg_type = 4;
+  optional string coord_system = 5;
+  optional uint32 intensity = 6;
+  optional double shading_deg = 7;
+  optional uint32 step_number = 8;
+  optional double tod_s = 9;
+  optional int32 scaling_factor = 10;
+  optional uint32 reduction_stage = 11;
+  optional uint32 vector_count = 12;
+}
+
+// Matches EUROCONTROL CAT-011 Ed.1.3 A-SMGCS system tracks (fused
+// airport-surface picture: aircraft + vehicles, with flight-plan
+// correlation). times_of_day, holdbar_status, and tracks_in_alert are
+// nested — JSON-only, see AsterixCat19Status's comment above for why.
+message AsterixCat11Track {
+  efdi.data.v2.NormalizedTrack track = 1;
+  optional uint32 sac = 2;
+  optional uint32 sic = 3;
+  optional string msg_type = 4;
+  optional uint32 service_id = 5;
+  optional double tod_s = 6;
+  optional double cart_x_m = 7;
+  optional double cart_y_m = 8;
+  optional double velocity_east_ms = 9;
+  optional double velocity_north_ms = 10;
+  optional double speed_ms = 11;
+  optional double heading_deg = 12;
+  optional double accel_east_ms2 = 13;
+  optional double accel_north_ms2 = 14;
+  optional string squawk = 15;
+  optional string sti = 16;
+  optional string callsign = 17;
+  optional string icao24 = 18;
+  optional string com = 19;
+  optional string flight_status = 20;
+  optional bool ssc = 21;
+  optional bool altitude_reporting = 22;
+  optional bool aircraft_id_capability = 23;
+  optional bool bds10_bit_array_available = 24;
+  optional uint32 bds10_bit_array_raw = 25;
+  optional bool altitude_capability = 26;
+  optional bool mode_s_specific_service = 27;
+  optional bool dte_sub_addressing = 28;
+  optional string aircraft_type = 29;
+  optional string emitter_category = 30;
+  optional bool vdl_mode4 = 31;
+  optional bool mode_s_datalink = 32;
+  optional bool uat_datalink = 33;
+  optional double roll_deg = 34;
+  optional double true_track_deg = 35;
+  optional double bds_gs_kt = 36;
+  optional double track_rate_degs = 37;
+  optional double tas_kt = 38;
+  optional double mag_hdg_deg = 39;
+  optional uint32 ias_kt = 40;
+  optional double mach = 41;
+  optional int32 baro_vr_fpm = 42;
+  optional int32 ivv_fpm = 43;
+  optional uint32 sel_alt_mcp_ft = 44;
+  optional uint32 sel_alt_fms_ft = 45;
+  optional double baro_setting_mb = 46;
+  optional bool vnav_active = 47;
+  optional bool alt_hold = 48;
+  optional bool approach_mode = 49;
+  optional bool acas_ra_active = 50;
+  optional string acas_ra_hex = 51;
+  optional string acas_ra_sense = 52;
+  optional bool acas_ra_corrective = 53;
+  optional bool acas_ra_terminated = 54;
+  optional bool acas_multi_threat = 55;
+  optional uint32 track_num = 56;
+  optional bool monosensor = 57;
+  optional bool ground_bit = 58;
+  optional bool geometric_alt_more_reliable = 59;
+  optional string height_source = 60;
+  optional bool confirmed = 61;
+  optional bool simulated = 62;
+  optional bool track_service_end = 63;
+  optional bool track_service_begin = 64;
+  optional string mode4_friend_foe = 65;
+  optional bool military_emergency = 66;
+  optional bool military_identification = 67;
+  optional bool amalgamated = 68;
+  optional bool spi = 69;
+  optional bool coasting = 70;
+  optional bool flight_plan_correlated = 71;
+  optional bool adsb_inconsistent = 72;
+  optional bool psr_update_stale = 73;
+  optional bool ssr_update_stale = 74;
+  optional bool mode_s_update_stale = 75;
+  optional bool ads_update_stale = 76;
+  optional bool special_used_code = 77;
+  optional bool mode_a_conflict = 78;
+  optional double track_age_psr_s = 79;
+  optional double track_age_ssr_s = 80;
+  optional double track_age_mda_s = 81;
+  optional double track_age_mfl_s = 82;
+  optional double track_age_mds_s = 83;
+  optional double track_age_ads_s = 84;
+  optional double track_age_adb_s = 85;
+  optional double track_age_md1_s = 86;
+  optional double track_age_md2_s = 87;
+  optional double track_age_lop_s = 88;
+  optional double track_age_trk_s = 89;
+  optional double track_age_mul_s = 90;
+  optional string phase_of_flight = 91;
+  optional double flight_level = 92;
+  optional bool qnh_correction = 93;
+  optional double baro_flight_level = 94;
+  optional double geo_alt_ft = 95;
+  optional double climb_rate_fpm = 96;
+  optional uint32 target_length_m = 97;
+  optional double orientation_deg = 98;
+  optional uint32 target_width_m = 99;
+  optional string callsign_fpl = 100;
+  optional uint32 ifps_id_type_raw = 101;
+  optional uint32 ifps_id_number = 102;
+  optional uint32 gat_oat_raw = 103;
+  optional uint32 fr1_fr2_raw = 104;
+  optional uint32 rvsm_raw = 105;
+  optional bool hpr = 106;
+  optional string time_of_arrival = 107;
+  optional string wake_turbulence_cat = 108;
+  optional string departure_airport = 109;
+  optional string destination_airport = 110;
+  optional string runway = 111;
+  optional double cleared_flight_level = 112;
+  optional uint32 control_centre = 113;
+  optional uint32 control_position = 114;
+  optional string aircraft_stand = 115;
+  optional uint32 emp_raw = 116;
+  optional uint32 avl_raw = 117;
+  optional string vehicle_fleet = 118;
+  optional bool on_ground = 119;
+  optional bool in_trouble = 120;
+  optional string preprogrammed_message = 121;
+  optional double pos_accuracy_x_m = 122;
+  optional double pos_accuracy_y_m = 123;
+  optional double pos_accuracy_lat_deg = 124;
+  optional double pos_accuracy_lon_deg = 125;
+  optional double height_accuracy_m = 126;
+  optional double vel_accuracy_x_ms = 127;
+  optional double vel_accuracy_y_ms = 128;
+  optional double rate_accuracy_ms = 129;
+  optional double accel_accuracy_x_ms2 = 130;
+  optional double accel_accuracy_y_ms2 = 131;
+  optional bool alert_acknowledged = 132;
+  optional string alert_severity = 133;
+  optional uint32 alert_type = 134;
+  optional uint32 alert_number = 135;
+  optional uint32 fpps_sac = 136;
+  optional uint32 fpps_sic = 137;
+}
+
+// Unified ASTERIX CAT contract for every category implemented by EFDI.
+// Matches cat.py (EUROCONTROL CAT-010 Ed.1.1).
+message AsterixCat10Track {
+  efdi.data.v2.NormalizedTrack track = 1;
+  optional uint32 sac = 2;
+  optional uint32 sic = 3;
+  optional string msg_type = 4;
+  optional uint32 track_num = 5;
+  optional string icao24 = 6;
+  optional string callsign = 7;
+  optional string squawk = 8;
+  optional double cart_x_m = 9;
+  optional double cart_y_m = 10;
+  optional double speed_ms = 11;
+  optional double heading_deg = 12;
+  optional bool delete_track = 13;
+  optional string target_type = 14;
+
+  // --- generated: full decoder field coverage (see cat.py) ---
+  optional bool acas_multi_threat = 15;
+  optional bool acas_ra_active = 16;
+  optional bool acas_ra_corrective = 17;
+  optional string acas_ra_hex = 18;
+  optional string acas_ra_sense = 19;
+  optional bool acas_ra_terminated = 20;
+  optional double accel_east_ms2 = 21;
+  optional double accel_north_ms2 = 22;
+  optional bool alt_hold = 23;
+  optional bool approach_mode = 24;
+  optional double azimuth_deg = 25;
+  optional double baro_alt_m = 26;
+  optional double baro_setting_mb = 27;
+  optional int64 baro_vr_fpm = 28;
+  optional double bds_gs_kt = 29;
+  optional int64 channel = 30;
+  optional int64 coasting = 31;
+  optional bool confirmed = 32;
+  optional bool corrupted_reply = 33;
+  optional bool differential_correction = 34;
+  optional bool diversity_degraded = 35;
+  optional bool field_monitor = 36;
+  optional double flight_level = 37;
+  optional double geo_alt_m = 38;
+  optional bool ghost_track = 39;
+  optional int64 ias_kt = 40;
+  optional bool in_trouble = 41;
+  optional int64 ivv_fpm = 42;
+  optional double lat_deg = 43;
+  optional double lon_deg = 44;
+  optional string loop_status = 45;
+  optional double mach = 46;
+  optional double mag_hdg_deg = 47;
+  optional bool manoeuvring = 48;
+  optional double measured_height_ft = 49;
+  optional string movement = 50;
+  optional bool on_ground = 51;
+  optional double orientation_deg = 52;
+  optional bool overload = 53;
+  optional int64 preprogrammed_message = 54;
+  optional int64 primary_amplitude = 55;
+  optional int64 range_m = 56;
+  optional double roll_deg = 57;
+  optional int64 sel_alt_fms_ft = 58;
+  optional int64 sel_alt_mcp_ft = 59;
+  optional string sensor_type = 60;
+  optional double sigma_x_m = 61;
+  optional double sigma_xy_m2 = 62;
+  optional double sigma_y_m = 63;
+  optional bool simulated = 64;
+  optional bool smoothed_position = 65;
+  optional bool spi = 66;
+  optional string system_status = 67;
+  optional int64 target_length_m = 68;
+  optional int64 target_width_m = 69;
+  optional double tas_kt = 70;
+  optional bool test_target = 71;
+  optional bool test_target_failure = 72;
+  optional bool time_source_invalid = 73;
+  optional double tod_s = 74;
+  optional double track_rate_degs = 75;
+  optional bool transponder_ground_bit = 76;
+  optional double true_track_deg = 77;
+  optional string vehicle_fleet = 78;
+  optional double velocity_east_ms = 79;
+  optional double velocity_north_ms = 80;
+  optional bool vnav_active = 81;
+}
+
+message AsterixCat10SensorStatus {
+  efdi.data.v2.NormalizedTrack sensor = 1;
+  optional uint32 sac = 2;
+  optional uint32 sic = 3;
+  optional string status = 4;
+}
+
+// Matches EUROCONTROL CAT-020 Ed.1.11 in cat.py.
+message AsterixCat20Track {
+  efdi.data.v2.NormalizedTrack track = 1;
+  optional uint32 sac = 2;
+  optional uint32 sic = 3;
+  optional uint32 track_num = 4;
+  optional string icao24 = 5;
+  optional string callsign = 6;
+  optional string squawk = 7;
+  optional double x_m = 8;
+  optional double y_m = 9;
+  optional double measured_height_ft = 10;
+
+  // --- generated: full decoder field coverage (see cat.py) ---
+  optional bool acas_multi_threat = 11;
+  optional bool acas_ra_active = 12;
+  optional bool acas_ra_corrective = 13;
+  optional string acas_ra_hex = 14;
+  optional string acas_ra_sense = 15;
+  optional bool acas_ra_terminated = 16;
+  optional double accel_east_ms2 = 17;
+  optional double accel_north_ms2 = 18;
+  optional string address_format = 19;
+  optional int64 alt_baro_ft = 20;
+  optional bool alt_baro_garbled = 21;
+  optional bool alt_baro_invalid = 22;
+  optional int64 alt_geom_ft = 23;
+  optional bool alt_hold = 24;
+  optional bool approach_mode = 25;
+  optional double baro_setting_mb = 26;
+  optional int64 baro_vr_fpm = 27;
+  optional double bds_gs_kt = 28;
+  optional int64 channel = 29;
+  optional bool coasting = 30;
+  optional string comms_acas_raw = 31;
+  optional bool confirmed = 32;
+  repeated string contributing_device_masks = 33;
+  optional bool corrupted_reply = 34;
+  optional double dop_x = 35;
+  optional double dop_xy = 36;
+  optional double dop_y = 37;
+  optional bool field_monitor = 38;
+  optional int64 fleet_id = 39;
+  optional bool ghost_track = 40;
+  optional double heading_deg = 41;
+  optional double height_accuracy_m = 42;
+  optional int64 ias_kt = 43;
+  optional bool in_trouble = 44;
+  optional int64 ivv_fpm = 45;
+  optional double lat_deg = 46;
+  optional double lon_deg = 47;
+  optional double mach = 48;
+  optional double mag_hdg_deg = 49;
+  optional bool manoeuvring = 50;
+  repeated string mlat_technologies = 51;
+  optional string mode1 = 52;
+  optional string mode2 = 53;
+  optional int64 mode_c_alt_ft = 54;
+  optional bool on_ground = 55;
+  optional double pos_accuracy_x_m = 56;
+  optional double pos_accuracy_y_m = 57;
+  optional double pos_correlation = 58;
+  optional string preprog_msg = 59;
+  optional double roll_deg = 60;
+  optional int64 sel_alt_fms_ft = 61;
+  optional int64 sel_alt_mcp_ft = 62;
+  optional bool simulated = 63;
+  optional bool smoothed_position = 64;
+  optional double speed_ms = 65;
+  optional bool spi = 66;
+  optional bool squawk_from_track = 67;
+  optional bool squawk_garbled = 68;
+  optional bool squawk_invalid = 69;
+  optional double tas_kt = 70;
+  optional bool test_target = 71;
+  optional double tod_s = 72;
+  optional double track_rate_degs = 73;
+  optional double true_track_deg = 74;
+  optional double velocity_east_ms = 75;
+  optional double velocity_north_ms = 76;
+  optional string vertical_trend = 77;
+  optional bool vnav_active = 78;
+  repeated string warning_error_codes = 79;
+}
+
+// Matches EUROCONTROL CAT-021 Ed.2.7 in cat.py.
+message AsterixCat21Track {
+  efdi.data.v2.NormalizedTrack track = 1;
+  optional uint32 sac = 2;
+  optional uint32 sic = 3;
+  optional string icao24 = 4;
+  optional string callsign = 5;
+  optional string squawk = 6;
+  optional uint32 emitter_category = 7;
+  optional double alt_geom_ft = 8;
+  optional double alt_baro_ft = 9;
+  optional uint32 mops_version = 10;
+  optional uint32 nac_p = 11;
+  optional uint32 nac_v = 12;
+  optional uint32 sil = 13;
+
+  // --- generated: full decoder field coverage (see cat.py) ---
+  optional bool acas_multi_threat = 14;
+  optional bool acas_ra_active = 15;
+  optional bool acas_ra_corrective = 16;
+  optional string acas_ra_hex = 17;
+  optional string acas_ra_sense = 18;
+  optional bool acas_ra_terminated = 19;
+  optional string addr_type = 20;
+  optional bool air_ref_velocity_capable = 21;
+  optional int64 aircraft_operational_status_raw = 22;
+  optional string alert = 23;
+  optional string alt_hold = 24;
+  optional string alt_res = 25;
+  optional bool altitude_hold_mode = 26;
+  optional bool approach_mode = 27;
+  optional string autopilot = 28;
+  optional string baro_setting_mb = 29;
+  optional double baro_vr_fpm = 30;
+  optional double bds_gs_kt = 31;
+  optional bool cdti_airborne_operational = 32;
+  optional bool cdti_surface_operational = 33;
+  optional bool class_b2_low_power = 34;
+  optional int64 confidence_level = 35;
+  optional bool cpr_validation_failed = 36;
+  optional double data_age_acas_ra_s = 37;
+  optional double data_age_air_speed_s = 38;
+  optional double data_age_aircraft_status_s = 39;
+  optional double data_age_amplitude_s = 40;
+  optional double data_age_baro_vr_s = 41;
+  optional double data_age_final_altitude_s = 42;
+  optional double data_age_flight_level_s = 43;
+  optional double data_age_geo_vr_s = 44;
+  optional double data_age_geometric_height_s = 45;
+  optional double data_age_ground_vector_s = 46;
+  optional double data_age_mag_heading_s = 47;
+  optional double data_age_met_s = 48;
+  optional double data_age_mode3a_s = 49;
+  optional double data_age_quality_s = 50;
+  optional double data_age_roll_s = 51;
+  optional double data_age_selected_altitude_s = 52;
+  optional double data_age_surface_capabilities_s = 53;
+  optional double data_age_target_descriptor_s = 54;
+  optional double data_age_target_id_s = 55;
+  optional double data_age_target_status_s = 56;
+  optional double data_age_track_angle_rate_s = 57;
+  optional double data_age_trajectory_s = 58;
+  optional double data_age_true_air_speed_s = 59;
+  optional string diff_correction = 60;
+  optional bool differential_correction = 61;
+  optional string emitter_category_str = 62;
+  optional bool field_monitor = 63;
+  optional int64 final_alt_ft = 64;
+  optional double geo_vr_fpm = 65;
+  optional bool ground_speed_range_exceeded = 66;
+  optional bool ground_station_nogo = 67;
+  optional int64 gva = 68;
+  optional double heading_deg = 69;
+  optional double ias_kt = 70;
+  optional bool ident_switch = 71;
+  optional string iff = 72;
+  optional bool independent_position_check_failed = 73;
+  optional bool intent_change = 74;
+  optional int64 ivv_fpm = 75;
+  optional double lat_deg = 76;
+  optional string link_tech = 77;
+  optional string link_technology = 78;
+  optional bool list_lookup_suspect = 79;
+  optional bool lnav_engaged = 80;
+  optional bool local_position_jump = 81;
+  optional double lon_deg = 82;
+  optional double mach = 83;
+  optional double mag_hdg_deg = 84;
+  optional bool managed_vertical_mode = 85;
+  optional int64 maximum_bits_corrected = 86;
+  optional int64 message_amplitude_dbm = 87;
+  optional bool mil_emergency = 88;
+  optional string mil_ident = 89;
+  optional bool mops_version_unsupported = 90;
+  optional int64 nic = 91;
+  optional bool nic_baro = 92;
+  optional bool on_ground = 93;
+  optional int64 pic = 94;
+  optional bool pic_direct = 95;
+  optional bool position_offset_applied = 96;
+  optional double position_reception_time_hp = 97;
+  optional double position_reception_time_s = 98;
+  optional double position_time_s = 99;
+  optional int64 priority_status = 100;
+  optional string range_check_fail = 101;
+  optional bool range_check_failed = 102;
+  optional bool range_check_passed_cpr_pending = 103;
+  optional int64 receiver_id = 104;
+  optional bool receiving_atc_services = 105;
+  optional double report_period_s = 106;
+  optional double report_transmission_time_s = 107;
+  optional double roll_deg = 108;
+  optional int64 sda = 109;
+  optional string sel_alt_fms_ft = 110;
+  optional string sel_alt_mcp_ft = 111;
+  optional int64 selected_alt_ft = 112;
+  optional string selected_alt_source = 113;
+  optional bool selected_alt_source_available = 114;
+  optional bool selected_altitude_unavailable = 115;
+  optional int64 service_id = 116;
+  optional string signal_amplitude_dbm = 117;
+  optional bool sil_per_sample = 118;
+  optional bool simulated = 119;
+  optional bool single_antenna = 120;
+  optional double speed_ms = 121;
+  optional bool spi = 122;
+  optional int64 surface_length_width_code = 123;
+  optional string surface_vehicle = 124;
+  optional bool target_state_report_capable = 125;
+  optional double tas_kt = 126;
+  optional bool tas_range_exceeded = 127;
+  optional bool tcas_operational = 128;
+  optional string tcas_ra = 129;
+  optional double temp_c = 130;
+  optional bool test_target = 131;
+  optional string tod_accuracy_s = 132;
+  optional string tod_s = 133;
+  optional int64 total_bits_corrected = 134;
+  optional double track_angle_rate_degs = 135;
+  optional int64 track_num = 136;
+  optional double track_rate_degs = 137;
+  optional string trajectory_change_capability = 138;
+  optional double true_track_deg = 139;
+  optional int64 turbulence = 140;
+  optional double velocity_reception_time_hp = 141;
+  optional double velocity_reception_time_s = 142;
+  optional double velocity_time_s = 143;
+  optional bool vertical_rate_range_exceeded = 144;
+  optional string vnav_active = 145;
+  optional int64 wind_dir_deg = 146;
+  optional int64 wind_speed_kt = 147;
+}
+
+// Matches EUROCONTROL CAT-034 Ed.1.29 radar service messages.
+// Matches EUROCONTROL CAT-025 Ed.1.6 CNS/ATM ground system status reports
+// (successor/companion to CAT-023). error_codes, components, and
+// service_statistics are nested — JSON-only, see AsterixCat19Status's
+// comment above for why.
+message AsterixCat25Status {
+  efdi.data.v2.NormalizedTrack sensor = 1;
+  optional uint32 sac = 2;
+  optional uint32 sic = 3;
+  optional uint32 report_type_raw = 4;
+  optional bool event_driven = 5;
+  optional uint32 message_id = 6;
+  optional uint32 service_id = 7;
+  optional string service_designator = 8;
+  optional double tod_s = 9;
+  optional bool nogo = 10;
+  optional string ops_mode = 11;
+  optional string overall_status = 12;
+  optional string system_status = 13;
+  optional string service_status = 14;
+  optional double height_m = 15;
+}
+
+// Matches EUROCONTROL CAT-032 Ed.1.2 Miniplan Reports to an SDPS
+// (FPPS<->SDPS flight-plan/track-number correlation; carries no position).
+// composed_track_numbers, allocated_ssr_codes, and
+// times_of_departure_arrival are nested — JSON-only, see
+// AsterixCat19Status's comment above for why.
+message AsterixCat32Status {
+  efdi.data.v2.NormalizedTrack sensor = 1;
+  optional uint32 server_sac = 2;
+  optional uint32 server_sic = 3;
+  optional uint32 user_number = 4;
+  optional uint32 sac = 5;
+  optional uint32 sic = 6;
+  optional string family = 7;
+  optional string nature = 8;
+  optional uint32 nature_raw = 9;
+  optional double tod_s = 10;
+  optional uint32 track_num = 11;
+  optional string squawk = 12;
+  optional string callsign = 13;
+  optional uint32 plan_number = 14;
+  optional string gat_oat = 15;
+  optional string flight_rules = 16;
+  optional uint32 special_priority_raw = 17;
+  optional string departure_airport = 18;
+  optional string destination_airport = 19;
+  optional double cleared_flight_level = 20;
+  optional uint32 control_centre = 21;
+  optional uint32 control_position = 22;
+  optional string aircraft_type = 23;
+  optional string wake_turbulence_cat = 24;
+  optional string ifps_id_type = 25;
+  optional uint32 ifps_id_number = 26;
+  optional string rvsm = 27;
+  optional bool high_priority_flight = 28;
+  optional string runway = 29;
+  optional string aircraft_stand = 30;
+  optional string stand_status = 31;
+  optional string stand_availability = 32;
+  optional string sid = 33;
+  optional string star = 34;
+}
+
+message AsterixCat34Status {
+  efdi.data.v2.NormalizedTrack sensor = 1;
+  optional uint32 sac = 2;
+  optional uint32 sic = 3;
+  optional string msg_type = 4;
+  optional double sector_deg = 5;
+  optional double antenna_azimuth_deg = 6;
+  optional double rotation_s = 7;
+  optional string system_status = 8;
+  optional string processing_status = 9;
+  optional bool sys_nogo = 10;
+  optional bool rdp_chain_2 = 11;
+  optional bool rdp_restart = 12;
+  optional bool sys_ovl_rdp = 13;
+  optional bool sys_ovl_xmt = 14;
+  optional bool sys_msc_connected = 15;
+  optional bool sys_tsv_invalid = 16;
+  optional string psr_status = 17;
+  optional string ssr_status = 18;
+  optional string mds_status = 19;
+  optional uint32 rdp_reduction_level = 20;
+  optional uint32 xmt_reduction_level = 21;
+  optional uint32 psr_reduction_level = 22;
+  optional uint32 ssr_reduction_level = 23;
+  optional uint32 mds_reduction_level = 24;
+  optional double site_lat = 25;
+  optional double site_lon = 26;
+  optional double site_alt_m = 27;
+  optional double collimation_rng_nm = 28;
+  optional double collimation_az_deg = 29;
+
+  // --- generated: full decoder field coverage (see cat.py) ---
+  optional double coverage_az_end_deg = 30;
+  optional double coverage_az_start_deg = 31;
+  optional double coverage_rho_end_nm = 32;
+  optional double coverage_rho_start_nm = 33;
+  optional string data_filter = 34;
+  optional string heading_deg = 35;
+  optional int64 mds_antenna = 36;
+  optional string mds_channel = 37;
+  optional bool mds_cluster_state = 38;
+  optional int64 mds_dlf_channel = 39;
+  optional bool mds_dlf_overload = 40;
+  optional bool mds_msc_connected = 41;
+  optional bool mds_overload = 42;
+  optional int64 mds_scf_channel = 43;
+  optional bool mds_scf_overload = 44;
+  optional string msg_counts = 45;
+  optional int64 psr_antenna = 46;
+  optional string psr_channel = 47;
+  optional bool psr_msc_connected = 48;
+  optional bool psr_overload = 49;
+  optional string psr_polarization = 50;
+  optional int64 psr_stc_map = 51;
+  optional string radar_clock_s = 52;
+  optional string speed_ms = 53;
+  optional int64 ssr_antenna = 54;
+  optional string ssr_channel = 55;
+  optional bool ssr_msc_connected = 56;
+  optional bool ssr_overload = 57;
+  optional double tod_s = 58;
+}
+
+// Matches EUROCONTROL CAT-015 Ed.1.2 independent non-cooperative surveillance
+// (passive/multi-static) target reports. warning_error_conditions,
+// object_classification, associations_raw, and contours are nested —
+// JSON-only, see AsterixCat19Status's comment above for why.
+message AsterixCat15Track {
+  efdi.data.v2.NormalizedTrack track = 1;
+  optional uint32 sac = 2;
+  optional uint32 sic = 3;
+  optional string msg_type = 4;
+  optional bool event_driven = 5;
+  optional uint32 service_id = 6;
+  optional string momu = 7;
+  optional string ttax = 8;
+  optional string scd = 9;
+  optional double tod_s = 10;
+  optional uint32 track_num = 11;
+  optional bool in_blind_zone = 12;
+  optional bool in_blanked_zone = 13;
+  optional bool terminated_by_user = 14;
+  optional bool coasted_position = 15;
+  optional bool coasted_height = 16;
+  optional bool confirmed = 17;
+  optional double update_period_s = 18;
+  optional double target_length_m = 19;
+  optional double target_width_m = 20;
+  optional double target_height_m = 21;
+  optional double orientation_deg = 22;
+  optional uint32 pair_id = 23;
+  optional uint32 observation_num = 24;
+  optional double hpos_resolution_x_m = 25;
+  optional double hpos_resolution_y_m = 26;
+  optional double hpos_resolution_corr_xy = 27;
+  optional double hpos_precision_x_m = 28;
+  optional double hpos_precision_y_m = 29;
+  optional double hpos_precision_corr_xy = 30;
+  optional double geo_height_m = 31;
+  optional double geo_height_resolution_m = 32;
+  optional double geo_height_precision_m = 33;
+  optional uint32 geo_height_ci_6_upper_m = 34;
+  optional uint32 geo_height_ci_6_lower_m = 35;
+  optional uint32 geo_height_ci_9_upper_m = 36;
+  optional uint32 geo_height_ci_9_lower_m = 37;
+  optional double corr_geo_height_hp_x = 38;
+  optional double corr_geo_height_hp_y = 39;
+  optional double corr_geo_height_hv_x = 40;
+  optional double corr_geo_height_hv_y = 41;
+  optional double corr_geo_height_ha_x = 42;
+  optional double corr_geo_height_ha_y = 43;
+  optional double hvel_x_ms = 44;
+  optional double hvel_y_ms = 45;
+  optional double hvel_resolution_x_ms = 46;
+  optional double hvel_resolution_y_ms = 47;
+  optional double hvel_resolution_corr_xy = 48;
+  optional double hvel_precision_x_ms = 49;
+  optional double hvel_precision_y_ms = 50;
+  optional double hvel_precision_corr_xy = 51;
+  optional double corr_hvel_x_hpos_x = 52;
+  optional double corr_hvel_x_hpos_y = 53;
+  optional double corr_hvel_y_hpos_x = 54;
+  optional double corr_hvel_y_hpos_y = 55;
+  optional double haccel_x_ms2 = 56;
+  optional double haccel_y_ms2 = 57;
+  optional double haccel_precision_x_ms2 = 58;
+  optional double haccel_precision_y_ms2 = 59;
+  optional double haccel_precision_corr_xy = 60;
+  optional double corr_haccel_x_hpos_x = 61;
+  optional double corr_haccel_x_hpos_y = 62;
+  optional double corr_haccel_y_hpos_x = 63;
+  optional double corr_haccel_y_hpos_y = 64;
+  optional double corr_haccel_x_hvel_x = 65;
+  optional double corr_haccel_x_hvel_y = 66;
+  optional double corr_haccel_y_hvel_x = 67;
+  optional double corr_haccel_y_hvel_y = 68;
+  optional double vvel_ms = 69;
+  optional double vvel_resolution_ms = 70;
+  optional double vvel_precision_ms = 71;
+  optional double corr_vvel_geo_height = 72;
+  optional double corr_vvel_hp_x = 73;
+  optional double corr_vvel_hp_y = 74;
+  optional double corr_vvel_hv_x = 75;
+  optional double corr_vvel_hv_y = 76;
+  optional double corr_vvel_ha_x = 77;
+  optional double corr_vvel_ha_y = 78;
+  optional double vaccel_ms2 = 79;
+  optional double vaccel_precision_ms2 = 80;
+  optional double corr_vaccel_geo_height = 81;
+  optional double corr_vaccel_vvel = 82;
+  optional double corr_vaccel_hp_x = 83;
+  optional double corr_vaccel_hp_y = 84;
+  optional double corr_vaccel_hv_x = 85;
+  optional double corr_vaccel_hv_y = 86;
+  optional double corr_vaccel_ha_x = 87;
+  optional double corr_vaccel_ha_y = 88;
+  optional double range_m = 89;
+  optional double range_resolution_m = 90;
+  optional double range_precision_m = 91;
+  optional double range_rate_ms = 92;
+  optional double range_rate_resolution_ms = 93;
+  optional double range_rate_precision_ms = 94;
+  optional double corr_range_rate_range = 95;
+  optional double range_accel_ms2 = 96;
+  optional double range_accel_precision_ms2 = 97;
+  optional double corr_range_accel_range = 98;
+  optional double corr_range_accel_range_rate = 99;
+  optional double doppler_vel_ms = 100;
+  optional double doppler_vel_precision_ms = 101;
+  optional double doppler_accel_ms2 = 102;
+  optional double doppler_accel_precision_ms2 = 103;
+  optional double corr_doppler_accel_vel = 104;
+  optional double corr_doppler_vel_range = 105;
+  optional double corr_doppler_vel_range_rate = 106;
+  optional double corr_doppler_vel_range_accel = 107;
+  optional double corr_doppler_accel_range = 108;
+  optional double corr_doppler_accel_range_rate = 109;
+  optional double corr_doppler_accel_range_accel = 110;
+  optional double azimuth_deg = 111;
+  optional double azimuth_resolution_deg = 112;
+  optional double azimuth_precision_deg = 113;
+  optional double azimuth_rate_degs = 114;
+  optional double azimuth_rate_precision_degs = 115;
+  optional double corr_azimuth_rate_azimuth = 116;
+  optional double azimuth_extent_start_deg = 117;
+  optional double azimuth_extent_end_deg = 118;
+  optional double elevation_deg = 119;
+  optional double elevation_resolution_deg = 120;
+  optional double elevation_precision_deg = 121;
+  optional double elevation_rate_degs = 122;
+  optional double elevation_rate_precision_degs = 123;
+  optional double corr_elevation_rate_elevation = 124;
+  optional double elevation_extent_start_deg = 125;
+  optional double elevation_extent_end_deg = 126;
+  optional int32 direct_path_power_db = 127;
+  optional int32 direct_path_snr_db = 128;
+  optional int32 reflected_path_power_db = 129;
+  optional int32 reflected_path_snr_db = 130;
+}
+
+// Matches EUROCONTROL CAT-016 Ed.1.0 independent non-cooperative surveillance
+// system configuration reports (the INCS ground system's own config/site
+// position — sister status category to CAT-015's target reports, same
+// relationship CAT-019 has to CAT-020). pairs, transmitters, and receivers
+// are nested — JSON-only, see AsterixCat19Status's comment above for why.
+message AsterixCat16Status {
+  efdi.data.v2.NormalizedTrack sensor = 1;
+  optional uint32 sac = 2;
+  optional uint32 sic = 3;
+  optional uint32 service_id = 4;
+  optional string msg_type = 5;
+  optional double tod_s = 6;
+  optional uint32 reporting_period_s = 7;
+  optional double height_m = 8;
+}
+
+// Matches EUROCONTROL CAT-017 Ed.1.3 Mode S Surveillance Coordination
+// Function messages. Ambivalent by design: "Track Data" messages carry a
+// target position (track field), network-management messages (track
+// requests/stops, cluster hand-over) carry none (sensor field instead) —
+// see cat.py's handler for which one a given message uses. cluster_nodes
+// and mode_s_addresses are nested — JSON-only, see AsterixCat19Status's
+// comment above for why.
+message AsterixCat17Track {
+  efdi.data.v2.NormalizedTrack track = 1;
+  efdi.data.v2.NormalizedTrack sensor = 2;
+  optional uint32 sac = 3;
+  optional uint32 sic = 4;
+  optional uint32 dest_sac = 5;
+  optional uint32 dest_sic = 6;
+  optional string msg_type = 7;
+  optional string icao24 = 8;
+  optional uint32 duplicate_address_ref = 9;
+  optional double tod_s = 10;
+  optional bool squawk_not_validated = 11;
+  optional bool squawk_garbled = 12;
+  optional bool squawk_smoothed = 13;
+  optional string squawk = 14;
+  optional bool flight_level_not_validated = 15;
+  optional bool flight_level_garbled = 16;
+  optional double flight_level = 17;
+  optional double ground_speed_kt = 18;
+  optional double heading_deg = 19;
+  optional string comm_capability = 20;
+  optional bool si_capable = 21;
+  optional bool coasted = 22;
+  optional bool flight_level_predicted = 23;
+  optional uint32 cluster_command_state = 24;
+}
+
+// Matches EUROCONTROL CAT-018 Ed.1.8 Mode S Datalink Function messages
+// (GDLP/interrogator uplink-downlink coordination). Ambivalent like
+// AsterixCat17Track: track field when a position is present, sensor field
+// otherwise. packet_numbers, mode_s_addresses, and report_requested_fields
+// are nested — JSON-only, see AsterixCat19Status's comment above for why.
+message AsterixCat18Track {
+  efdi.data.v2.NormalizedTrack track = 1;
+  efdi.data.v2.NormalizedTrack sensor = 2;
+  optional uint32 sac = 3;
+  optional uint32 sic = 4;
+  optional uint32 dest_sac = 5;
+  optional uint32 dest_sic = 6;
+  optional string msg_type = 7;
+  optional string cause = 8;
+  optional string diagnostic = 9;
+  optional string icao24 = 10;
+  optional uint32 packet_number = 11;
+  optional uint32 packet_priority = 12;
+  optional string packet_type = 13;
+  optional string mode_s_packet_hex = 14;
+  optional uint32 gicb_periodicity_s = 15;
+  optional uint32 gicb_priority = 16;
+  optional bool gicb_periodicity_strict = 17;
+  optional bool gicb_async_update = 18;
+  optional bool gicb_no_extraction = 19;
+  optional string gicb_reply_destination = 20;
+  optional uint32 gicb_number = 21;
+  optional string bds_code = 22;
+  optional bool acas_ra_active = 23;
+  optional string acas_ra_hex = 24;
+  optional string acas_ra_sense = 25;
+  optional bool acas_ra_corrective = 26;
+  optional bool acas_ra_terminated = 27;
+  optional bool acas_multi_threat = 28;
+  optional uint32 sel_alt_mcp_ft = 29;
+  optional uint32 sel_alt_fms_ft = 30;
+  optional double baro_setting_mb = 31;
+  optional bool vnav_active = 32;
+  optional bool alt_hold = 33;
+  optional bool approach_mode = 34;
+  optional double mag_hdg_deg = 35;
+  optional uint32 ias_kt = 36;
+  optional double mach = 37;
+  optional int32 baro_vr_fpm = 38;
+  optional int32 ivv_fpm = 39;
+  optional double roll_deg = 40;
+  optional double true_track_deg = 41;
+  optional double bds_gs_kt = 42;
+  optional double track_rate_degs = 43;
+  optional double tas_kt = 44;
+  optional string gicb_extracted_hex = 45;
+  optional double tod_s = 46;
+  optional bool uplink_mask = 47;
+  optional bool downlink_mask = 48;
+  optional bool uplink_stop = 49;
+  optional bool downlink_stop = 50;
+  optional bool uplink_disabled_default = 51;
+  optional bool downlink_disabled_default = 52;
+  optional bool uplink_disabled_current = 53;
+  optional bool downlink_disabled_current = 54;
+  optional bool exit_indication = 55;
+  optional bool interrogator_control_locked = 56;
+  optional string comm_capability = 57;
+  optional string capability_report_hex = 58;
+  optional double range_nm = 59;
+  optional double azimuth_deg = 60;
+  optional double cart_x_nm = 61;
+  optional double cart_y_nm = 62;
+  optional uint32 broadcast_number = 63;
+  optional uint32 broadcast_priority = 64;
+  optional uint32 broadcast_power = 65;
+  optional uint32 broadcast_duration_s = 66;
+  optional string broadcast_coverage_raw = 67;
+  optional uint32 broadcast_prefix_raw = 68;
+  optional string broadcast_message_hex = 69;
+  optional uint32 previous_ii_code = 70;
+  optional uint32 current_ii_code = 71;
+  optional string callsign = 72;
+  optional bool squawk_not_validated = 73;
+  optional bool squawk_garbled = 74;
+  optional string squawk = 75;
+  optional bool flight_level_not_validated = 76;
+  optional bool flight_level_garbled = 77;
+  optional double flight_level = 78;
+  optional double ground_speed_kt = 79;
+  optional double heading_deg = 80;
+  optional bool on_ground = 81;
+  optional bool cqf_supported = 82;
+  optional bool cqf_defined = 83;
+  optional uint32 cqf = 84;
+  optional uint32 cqf_calculation_method = 85;
+}
+
+message AsterixCat19Status {
+  efdi.data.v2.NormalizedTrack sensor = 1;
+  optional uint32 sac = 2;
+  optional uint32 sic = 3;
+  optional string msg_type = 4;
+  optional double tod_s = 5;
+  optional string nogo = 6;
+  optional bool overload = 7;
+  optional bool time_source_invalid = 8;
+  optional bool test_target_failure = 9;
+  optional double site_lat = 10;
+  optional double site_lon = 11;
+  optional double site_alt_m = 12;
+  optional int64 undulation_m = 13;
+  // tracking_processors / remote_sensors / reference_transponders are nested
+  // dicts/lists — richer than this flat contract, so they stay JSON-only
+  // (see track_views.py's _assign — a nested value that doesn't fit a
+  // scalar field is skipped for /proto, never for /json).
+}
+
+// Matches EUROCONTROL CAT-023 Ed.1.3 CNS/ATM ground station service messages.
+message AsterixCat23Status {
+  efdi.data.v2.NormalizedTrack sensor = 1;
+  optional uint32 sac = 2;
+  optional uint32 sic = 3;
+  optional string report_type = 4;
+  optional uint32 service_id = 5;
+  optional string service_type = 6;
+  optional double tod_s = 7;
+  optional bool nogo = 8;
+  optional bool overload_processor = 9;
+  optional bool overload_comms = 10;
+  optional bool monitoring_connected = 11;
+  optional bool time_source_invalid = 12;
+  optional bool spoofing_suspected = 13;
+  optional bool track_id_renumbered = 14;
+  optional uint32 status_report_period_s = 15;
+  optional double cat021_report_period_s = 16;
+  optional uint32 service_class = 17;
+  optional uint32 service_status_report_period_s = 18;
+  optional uint32 operational_range_nm = 19;
+  optional string service_status = 20;
+  // service_statistics is a nested dict — stays JSON-only (see
+  // AsterixCat19Status's comment above for why).
+}
+
+// Matches EUROCONTROL CAT-048 Ed.1.32 target reports.
+message AsterixCat48Track {
+  efdi.data.v2.NormalizedTrack track = 1;
+  optional uint32 sac = 2;
+  optional uint32 sic = 3;
+  optional uint32 track_num = 4;
+  optional string icao24 = 5;
+  optional string callsign = 6;
+  optional string squawk = 7;
+  optional double range_nm = 8;
+  optional double azimuth_deg = 9;
+  optional double alt_baro_ft = 10;
+  optional string track_sensor = 11;
+  optional bool confirmed = 12;
+  optional bool track_end = 13;
+
+  // --- generated: full decoder field coverage (see cat.py) ---
+  optional bool acas_multi_threat = 14;
+  optional bool acas_ra_active = 15;
+  optional bool acas_ra_corrective = 16;
+  optional string acas_ra_hex = 17;
+  optional string acas_ra_sense = 18;
+  optional bool acas_ra_terminated = 19;
+  optional bool aic = 20;
+  optional bool alert = 21;
+  optional int64 alt_3d_ft = 22;
+  optional bool alt_baro_garbled = 23;
+  optional bool alt_baro_invalid = 24;
+  optional bool alt_hold = 25;
+  optional bool altitude_25ft = 26;
+  optional bool approach_mode = 27;
+  optional double baro_setting_mb = 28;
+  optional int64 baro_vr_fpm = 29;
+  optional bool bds10_b1a = 30;
+  optional int64 bds10_b1b = 31;
+  optional double bds_gs_kt = 32;
+  optional double cart_x_nm = 33;
+  optional double cart_y_nm = 34;
+  optional int64 com_capability = 35;
+  optional string detection_type = 36;
+  optional int64 doppler_ambiguity_ms = 37;
+  optional bool doppler_doubtful = 38;
+  optional int64 doppler_frequency_mhz = 39;
+  optional double doppler_kt = 40;
+  optional int64 doppler_ms = 41;
+  optional int64 doppler_raw_ms = 42;
+  optional bool extended_range = 43;
+  optional bool field_monitor = 44;
+  optional double heading_deg = 45;
+  optional int64 ias_kt = 46;
+  optional string iff = 47;
+  optional string interrogator_code_capability = 48;
+  optional int64 ivv_fpm = 49;
+  optional double lat_deg = 50;
+  optional double lon_deg = 51;
+  optional double mach = 52;
+  optional double mag_hdg_deg = 53;
+  optional bool mil_emergency = 54;
+  optional bool mil_ident = 55;
+  optional string mode1 = 56;
+  optional bool mode1_garbled = 57;
+  optional bool mode1_invalid = 58;
+  optional int64 mode1_quality_mask = 59;
+  optional bool mode1_smoothed = 60;
+  optional string mode2 = 61;
+  optional bool mode2_garbled = 62;
+  optional bool mode2_invalid = 63;
+  optional int64 mode2_quality_mask = 64;
+  optional bool mode2_smoothed = 65;
+  optional int64 mode_c_alt_ft = 66;
+  optional bool mssc = 67;
+  optional bool on_ground = 68;
+  optional int64 psr_amplitude_dbm = 69;
+  optional double psr_runlength_deg = 70;
+  optional double psr_ssr_az_diff_deg = 71;
+  optional double psr_ssr_range_diff_nm = 72;
+  optional string radar_id = 73;
+  optional bool rdp_chain = 74;
+  optional double roll_deg = 75;
+  optional int64 sel_alt_fms_ft = 76;
+  optional int64 sel_alt_mcp_ft = 77;
+  optional bool simulated = 78;
+  optional bool slant_range_correction = 79;
+  optional double speed_ms = 80;
+  optional bool spi = 81;
+  optional bool squawk_garbled = 82;
+  optional bool squawk_invalid = 83;
+  optional bool squawk_not_extracted = 84;
+  optional int64 squawk_quality_mask = 85;
+  optional int64 ssr_amplitude_dbm = 86;
+  optional int64 ssr_reply_count = 87;
+  optional double ssr_runlength_deg = 88;
+  optional bool supported_by_neighbour_node = 89;
+  optional string target_type = 90;
+  optional double tas_kt = 91;
+  optional bool test_target = 92;
+  optional double tod_s = 93;
+  optional bool track_doubtful = 94;
+  optional bool track_ghost = 95;
+  optional bool track_manoeuvre = 96;
+  optional double track_rate_degs = 97;
+  optional double track_sigma_heading_deg = 98;
+  optional double track_sigma_v_kt = 99;
+  optional double track_sigma_x_nm = 100;
+  optional double track_sigma_y_nm = 101;
+  optional bool track_tentative = 102;
+  optional string transponder_status = 103;
+  optional double true_track_deg = 104;
+  optional string vertical_trend = 105;
+  optional bool vnav_active = 106;
+  repeated string warning_error_names = 107;
+  repeated string we_conditions = 108;
+  optional bool x_pulse = 109;
+}
+
+// ASTERIX CAT-062 Ed.1.21 system track (cat.py).
+// Current JSON topic: <PREFIX>/<ORG>/air/asterix/cat62/unknown/aircraft/tracks/v1
+// JSON wire format: key _ts → timestamp; optional decoded fields are present.
+// Zero value means "not present/decoded" for numeric optional fields.
+message Cat62Track {
+  double timestamp                 = 1;  // Unix epoch when frame was decoded locally (_ts)
+  optional uint32 sac              = 2;  // System Area Code — I062/010 byte 0
+  optional uint32 sic              = 3;  // System Identification Code — I062/010 byte 1
+  optional uint32 service_id       = 4;  // Service Identification — I062/015
+  optional double tod_s            = 5;  // Seconds since 00:00 UTC, LSB = 1/128 s — I062/070
+  optional double lat_deg          = 6;  // WGS-84 latitude, LSB = 180/2^25 deg — I062/105
+  optional double lon_deg          = 7;  // WGS-84 longitude, LSB = 180/2^25 deg — I062/105
+  optional double x_m              = 8;  // Cartesian X in metres, LSB = 0.5 m — I062/100
+  optional double y_m              = 9;  // Cartesian Y in metres, LSB = 0.5 m — I062/100
+  optional double vx_ms            = 10; // Cartesian velocity Vx in m/s, LSB = 0.25 — I062/185
+  optional double vy_ms            = 11; // Cartesian velocity Vy in m/s, LSB = 0.25 — I062/185
+  optional double speed_ms         = 12; // Derived ground speed |V| = hypot(vx, vy) in m/s
+  optional double heading_deg      = 13; // Derived heading from atan2(vx,vy), degrees CW from N
+  optional double ax_ms2           = 14; // Acceleration X in m/s², LSB = 0.25 — I062/210
+  optional double ay_ms2           = 15; // Acceleration Y in m/s², LSB = 0.25 — I062/210
+  optional string squawk           = 16; // Mode 3/A squawk in octal, e.g. "7700" — I062/060
+  optional uint32 track_num        = 17; // System track number (12-bit) — I062/040
+  optional bool track_monosensor   = 18; // MON bit from I062/080
+  optional bool confirmed          = 19; // True when CNF=0 in I062/080
+  optional double measured_alt_ft  = 20; // Measured flight level in feet — I062/136
+  optional double calc_geo_alt_ft  = 21; // Calculated geometric altitude in feet — I062/130
+  optional double calc_baro_alt_ft = 22; // Calculated barometric altitude in feet — I062/135
+  optional efdi.data.v2.NormalizedTrack normalized = 100;
+
+  // --- generated: full decoder field coverage (see cat.py) ---
+  optional string acas_multi_threat = 101;
+  optional string acas_ra_corrective = 102;
+  optional string acas_ra_sense = 103;
+  optional string acas_ra_terminated = 104;
+  optional double aircraft_geo_alt_ft = 105;
+  optional double aircraft_lat_deg = 106;
+  optional double aircraft_lon_deg = 107;
+  optional string aircraft_stand = 108;
+  optional string aircraft_type = 109;
+  optional string alt_baro_ft = 110;
+  optional bool alt_discrepancy = 111;
+  optional string alt_hold = 112;
+  optional string amalgamated = 113;
+  optional string approach_mode = 114;
+  optional int64 baro_alt_accuracy_ft = 115;
+  optional double baro_setting_mb = 116;
+  optional double baro_vr_fpm = 117;
+  optional string bds_gs_kt = 118;
+  optional string calc_alt_ft = 119;
+  optional string callsign = 120;
+  optional double cleared_fl = 121;
+  optional string current_fl = 122;
+  optional string departure_icao = 123;
+  optional string destination_icao = 124;
+  optional string emergency_code = 125;
+  optional string emergency_str = 126;
+  optional int64 emitter_category = 127;
+  optional int64 final_alt_ft = 128;
+  optional int64 fleet_id = 129;
+  optional string flight_gat = 130;
+  optional string flight_plan_callsign = 131;
+  optional string flight_rules = 132;
+  optional string fp_callsign = 133;
+  optional string fp_correlated = 134;
+  optional double geo_alt_accuracy_ft = 135;
+  optional double geo_vr_fpm = 136;
+  optional string height_src = 137;
+  optional string high_priority = 138;
+  optional double ias_kt = 139;
+  optional string icao24 = 140;
+  optional string ivv_fpm = 141;
+  optional string lateral_trend = 142;
+  optional double mach = 143;
+  optional double mag_hdg_deg = 144;
+  optional int64 meas_alt_ft = 145;
+  optional double meas_az_deg = 146;
+  optional double meas_range_nm = 147;
+  optional string measured_by = 148;
+  optional string mil_emergency = 149;
+  optional string mil_ident = 150;
+  optional string mode1 = 151;
+  optional string mode2 = 152;
+  optional string mode5_active = 153;
+  optional string mode5_data = 154;
+  optional string mode5_iff = 155;
+  optional string mode_c_alt_ft = 156;
+  optional string pos_accuracy_lat_m = 157;
+  optional string pos_accuracy_lon_m = 158;
+  optional double pos_accuracy_x_m = 159;
+  optional double pos_accuracy_y_m = 160;
+  optional bool qnh_corrected = 161;
+  optional double roll_deg = 162;
+  optional string runway = 163;
+  optional string rvsm = 164;
+  optional string sel_alt_fms_ft = 165;
+  optional string sel_alt_mcp_ft = 166;
+  optional int64 selected_alt_ft = 167;
+  optional string sid = 168;
+  optional string simulated = 169;
+  optional string speed_trend = 170;
+  optional string spi = 171;
+  optional string stand_docking = 172;
+  optional string stand_occupied = 173;
+  optional string star = 174;
+  optional int64 target_length_m = 175;
+  optional double target_orientation_deg = 176;
+  optional int64 target_width_m = 177;
+  optional int64 tas_kt = 178;
+  optional double temp_c = 179;
+  optional double track_age_ads_b_es_s = 180;
+  optional double track_age_ads_c_s = 181;
+  optional double track_age_loop_s = 182;
+  optional string track_age_lop_s = 183;
+  optional double track_age_mlat_s = 184;
+  optional string track_age_mlt_s = 185;
+  optional double track_age_mode_s_s = 186;
+  optional double track_age_psr_s = 187;
+  optional double track_age_ssr_s = 188;
+  optional double track_age_track_s = 189;
+  optional double track_age_uat_s = 190;
+  optional double track_age_vdl4_s = 191;
+  optional double track_angle_rate_degs = 192;
+  optional bool track_begin = 193;
+  optional string track_coasting = 194;
+  optional string track_end = 195;
+  optional string track_rate_degs = 196;
+  optional string track_tentative = 197;
+  optional string true_track_deg = 198;
+  optional int64 turbulence = 199;
+  optional double vertical_rate_fpm = 200;
+  optional string vertical_trend = 201;
+  optional string vnav_active = 202;
+  optional string wake_turb_cat = 203;
+  optional int64 wind_dir_deg = 204;
+  optional int64 wind_speed_kt = 205;
+  optional uint32 fpps_sac = 206;                  // I062/390 TAG: FPPS Identification SAC
+  optional uint32 fpps_sic = 207;                  // I062/390 TAG: FPPS Identification SIC
+  optional uint32 ifps_id_type = 208;              // I062/390 IFI: IFPS_FLIGHT_ID type
+  optional uint32 ifps_flight_id = 209;            // I062/390 IFI: IFPS_FLIGHT_ID number
+  optional uint32 runway_nu1 = 210;                // I062/390 RDS: runway number, first digit
+  optional uint32 runway_nu2 = 211;                // I062/390 RDS: runway number, second digit
+  optional uint32 control_centre = 212;            // I062/390 CTL: current control centre
+  optional uint32 control_position = 213;          // I062/390 CTL: current control position
+  optional uint32 stand_emplacement = 214;         // I062/390 STS: stand emplacement status
+  optional uint32 stand_availability = 215;        // I062/390 STS: stand availability status
+  optional bool pre_emergency_squawk_valid = 216;  // I062/390 PEM: VA bit
+  optional string pre_emergency_squawk = 217;      // I062/390 PEM: MODE3A, octal
+  optional string pre_emergency_callsign = 218;    // I062/390 PEC
+}
+
+// Matches EUROCONTROL CAT-063 Ed.1.7 sensor status reports (the sensors
+// feeding a CAT-062 multi-sensor tracker).
+message AsterixCat63Status {
+  efdi.data.v2.NormalizedTrack sensor = 1;
+  optional uint32 sac = 2;
+  optional uint32 sic = 3;
+  optional uint32 service_id = 4;
+  optional double tod_s = 5;
+  optional uint32 sensor_sac = 6;
+  optional uint32 sensor_sic = 7;
+  optional string connection_status = 8;
+  optional bool psr_nogo = 9;
+  optional bool ssr_nogo = 10;
+  optional bool mds_nogo = 11;
+  optional bool ads_nogo = 12;
+  optional bool mlt_nogo = 13;
+  optional bool operational_release_inhibited = 14;
+  optional bool overload_processor = 15;
+  optional bool overload_transmission = 16;
+  optional bool monitoring_disconnected = 17;
+  optional bool time_source_invalid = 18;
+  optional bool no_plot_warning = 19;
+  optional bool test_target_failure = 20;
+  optional bool spoofing_suspected = 21;
+  optional int32 time_stamping_bias_ms = 22;
+  optional double ssr_range_gain = 23;
+  optional double ssr_range_bias_nm = 24;
+  optional double ssr_azimuth_bias_deg = 25;
+  optional double psr_range_gain = 26;
+  optional double psr_range_bias_nm = 27;
+  optional double psr_azimuth_bias_deg = 28;
+  optional double psr_elevation_bias_deg = 29;
+}
+
+// Matches EUROCONTROL CAT-065 Ed.1.6 SDPS Service Status Reports (the
+// SDPS-side companion to CAT-062's system tracks, same relationship
+// CAT-019 has to CAT-020 or CAT-063 has to CAT-062's sensors).
+message AsterixCat65Status {
+  efdi.data.v2.NormalizedTrack sensor = 1;
+  optional uint32 sac = 2;
+  optional uint32 sic = 3;
+  optional string msg_type = 4;
+  optional uint32 service_id = 5;
+  optional double tod_s = 6;
+  optional uint32 batch_number = 7;
+  optional string sdps_status = 8;
+  optional bool overload = 9;
+  optional bool time_source_invalid = 10;
+  optional string processing_system = 11;
+  optional bool track_renumbering_toggle = 12;
+  optional string service_status_report = 13;
+}
+
+// Matches EUROCONTROL CAT-150 Ed.3.0 MADAP Plan Server Flight Data Message
+// (Maastricht UAC legacy flight-plan distribution/correlation/conflict
+// data; carries no position — see cat.py's CAT-150 section comment for why
+// I150/151 WGS-84 route points are absent from this edition's own UAP).
+// route_point_descriptions, route_point_coordinates, route_point_times,
+// route_point_flight_levels, route_point_speeds, newly_correlated_plans,
+// newly_decorrelated_plans, tracks_in_conflict, and
+// route_point_requested_flight_levels are nested — JSON-only, see
+// AsterixCat19Status's comment above for why.
+message AsterixCat150Status {
+  efdi.data.v2.NormalizedTrack sensor = 1;
+  optional uint32 sac = 2;
+  optional uint32 sic = 3;
+  optional uint32 dest_centre = 4;
+  optional uint32 dest_workstation = 5;
+  optional uint32 source_centre = 6;
+  optional uint32 source_workstation = 7;
+  optional string msg_type = 8;
+  optional uint32 plan_ref_number = 9;
+  optional string callsign = 10;
+  optional string present_squawk = 11;
+  optional string next_squawk = 12;
+  optional string departure_airport = 13;
+  optional string destination_airport = 14;
+  optional bool general_air_traffic = 15;
+  optional bool operational_air_traffic = 16;
+  optional bool complete_flight_plan = 17;
+  optional bool short_flight_plan = 18;
+  optional bool in_hold = 19;
+  optional bool rvsm_equipped = 20;
+  optional bool rvsm_capable = 21;
+  optional bool rvsm_exempted = 22;
+  optional string number_of_aircraft = 23;
+  optional string aircraft_type = 24;
+  optional string wake_turbulence_cat = 25;
+  optional string cleared_flight_level = 26;
+  optional string controller_id = 27;
+  optional string field_18 = 28;
+  optional uint32 correlated_track_num = 29;
+  optional uint32 max_plan_count = 30;
+  optional uint32 number_of_plans = 31;
+}
+
+// Matches EUROCONTROL CAT-205 Ed.1.0 Radio Direction Finder Reports (RDF
+// network triangulating a radio transmitter's position, typically an
+// aircraft's VHF radio). contributing_sensors is nested — JSON-only, see
+// AsterixCat19Status's comment above for why.
+message AsterixCat205Track {
+  efdi.data.v2.NormalizedTrack track = 1;
+  optional uint32 sac = 2;
+  optional uint32 sic = 3;
+  optional uint32 service_id = 4;
+  optional string msg_type = 5;
+  optional double tod_s = 6;
+  optional uint32 report_number = 7;
+  optional string radio_channel = 8;
+  optional double cart_x_m = 9;
+  optional double cart_y_m = 10;
+  optional double local_bearing_deg = 11;
+  optional double system_bearing_deg = 12;
+  optional uint32 measurement_quality_raw = 13;
+  optional uint32 position_uncertainty_m = 14;
+  optional double conflicting_lat_deg = 15;
+  optional double conflicting_lon_deg = 16;
+  optional double conflicting_cart_x_m = 17;
+  optional double conflicting_cart_y_m = 18;
+  optional uint32 conflicting_position_uncertainty_m = 19;
+  optional uint32 track_num = 20;
+  optional uint32 sensor_id = 21;
+  optional double signal_level_dbuv = 22;
+  optional uint32 signal_quality = 23;
+  optional double signal_elevation_deg = 24;
+}
+
+// Matches EUROCONTROL CAT-240 Ed.1.3 Radar Video Transmission: raw
+// pre-plot-extraction signal-level video, not a target report. video_block_hex
+// can be up to ~64KB per message (I240/052) — see cat.py's CAT-240 section
+// comment.
+message AsterixCat240Status {
+  efdi.data.v2.NormalizedTrack sensor = 1;
+  optional uint32 sac = 2;
+  optional uint32 sic = 3;
+  optional string msg_type = 4;
+  optional uint32 sequence_number = 5;
+  optional string video_summary = 6;
+  optional double start_azimuth_deg = 7;
+  optional double end_azimuth_deg = 8;
+  optional uint32 start_range_cells = 9;
+  optional uint32 cell_duration_ns = 10;
+  optional uint32 cell_duration_fs = 11;
+  optional bool compression_applied = 12;
+  optional string bit_resolution = 13;
+  optional uint32 valid_octets = 14;
+  optional uint32 valid_cells = 15;
+  optional string video_block_hex = 16;
+  optional uint32 video_block_cells = 17;
+  optional double tod_s = 18;
+}
+
+// Matches EUROCONTROL CAT-247 Ed.1.3 Version Number Exchange: a source
+// reports which edition of each ASTERIX category it transmits.
+// category_versions is nested — JSON-only, see AsterixCat19Status's
+// comment above for why.
+message AsterixCat247Status {
+  efdi.data.v2.NormalizedTrack sensor = 1;
+  optional uint32 sac = 2;
+  optional uint32 sic = 3;
+  optional uint32 service_id = 4;
+  optional double tod_s = 5;
+}

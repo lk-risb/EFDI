@@ -409,7 +409,7 @@ function PublishBuilderPage() {
                   className={inputClass}
                   value={certDir}
                   onChange={e => setCertDir(e.target.value)}
-                  placeholder="/home/debian/zenoh/zenoh-sandbox"
+                  placeholder="/path/to/your/certs"
                 />
               </label>
               <label className="space-y-1">

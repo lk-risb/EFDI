@@ -136,9 +136,9 @@ Take a radar as the worked example:
 3. The ASTERIX decoder process (`protocols/vendors/asterix/cat.py`, selected with
    `--category`) subscribes to that raw key, decodes the binary record into a
    **track dict** (lat/lon, altitude, track number, SAC/SIC sensor id…), handling
-   all the bit-level ASTERIX gotchas (documented in `CLAUDE.md`).
+   all the bit-level ASTERIX gotchas (documented in `../.ai/.claude/CLAUDE.md`).
 4. The decoder calls the **publish helpers** in
-   `protocols/protobuf_codec.py`, which assemble the taxonomy key and publish
+   `protocols/track_views.py`, which assemble the taxonomy key and publish
    **several views of the same track** (§6.4).
 
 Other sources are simpler — partner ADS-B arrives through registered fabric
@@ -176,7 +176,7 @@ The key is where the intelligence lives. Full form (see `topic-taxonomy.md`):
 - **view** — which *encoding* of the same object (§6.4).
 - **`/tracks/v1`** — the mandatory fabric-contract tail (§7).
 
-`semantic_topic()` in `protobuf_codec.py` is the **single** place that assembles
+`semantic_topic()` in `track_views.py` is the **single** place that assembles
 this key, so the taxonomy lives in one function, not at 26 publish sites.
 
 ### 6.4 The four views (one track, four encodings)
@@ -193,45 +193,52 @@ encoding they want without an out-of-band agreement:
 
 The protobuf views are **self-describing**: the encoding string carries the
 protobuf message name so the fabric's schema-viewer can decode them without a
-side lookup (`proto_encoding()` in `protobuf_codec.py`).
+side lookup (`proto_encoding()` in `track_views.py`).
 
 ### 6.5 Egress — from fabric to C2
 
 Output layers subscribe with `**` wildcards (which absorb the `/tracks/v1` tail
 automatically) and convert:
 
-- **`cot_layer.py`** subscribes to track keys, builds **CoT XML**, and streams it
+- **`tak_layer.py`** subscribes to track keys, builds **CoT XML**, and streams it
   to a **TAK Server** over TCP/TLS 8089. Non-JSON views are skipped so protobuf is
   never mis-parsed as JSON.
-- **`nvg_layer.py`** converts tracks to **NVG 2.0.2** items (APP-6 symbols) and
+- **`sitaware_layer.py`** converts tracks to **NVG 2.0.2** items (APP-6 symbols) and
   serves them as one document over HTTP(S); **SitaWare polls** that endpoint.
 
 ### 6.6 Ingress from C2 (the reverse path)
 
 - **`tak_bridge.py`** reads CoT XML from TAK and republishes normalized tracks to
-  Zenoh, tagged so `cot_layer` doesn't echo them straight back.
-- **`nvg_bridge.py`** polls SitaWare's NVG export and republishes items.
+  Zenoh, tagged so `tak_layer` doesn't echo them straight back.
 - **`sitaware_bridge.py`** polls SitaWare's REST API for unit positions and
-  republishes them (a second SitaWare ingress transport alongside NVG).
+  republishes them — the only SitaWare ingress; there is no separate NVG-XML
+  ingest bridge.
 
-### 6.7 Unified gateways (one process per C2 system)
+### 6.7 Runnable reference snippets
 
-Reading a whole C2 integration used to mean opening several files split by
-direction. **`c2/tak_gateway.py`** and **`c2/sitaware_gateway.py`** each run one
-C2 system's *ingress + egress in a single process/service* — the egress leg on
-the main thread (it owns clean shutdown), the ingress leg(s) on supervised
-daemon threads. An ingress exception or unexpected exit wakes the main thread
-and fails the whole gateway, so Runtime Control cannot report a healthy process
-whose receive side has silently died. SitaWare starts only the feed, NVG import,
-and REST legs that have enough configuration; an entirely unconfigured gateway
-fails immediately with a useful error.
-The translation itself still lives in the layer modules (`cot_layer`, `nvg_layer`
-are imported and kept as standalone, independently runnable modules for later
-development); the gateways only orchestrate them. Run a gateway *instead of* the
-split services it replaces, never alongside (that would double-send).
-`start.sh` enforces that mutual exclusion for interactive and Runtime Control
-starts. See
-`docs/superpowers/plans/2026-07-27-c2-gateway-unification.md`.
+`examples/` holds illustrative, not production, reference code for producers
+on the EFDI data fabric — adapt them rather than importing them. The canonical
+contracts live in this document and `topic-taxonomy.md`; these are the "show
+me working code" companions:
+
+| Example | What it shows | Contract |
+|---|---|---|
+| `delivery_reconcile.py` | Producer-side delivery reconciliation — keep an intent ledger, self-canary (read your own output back), and emit an intent heartbeat so you (and the operator monitor) detect when writes silently stop landing. | the delivery-reconciliation pattern |
+| `self_describing_encoding.py` | Set the Zenoh `Encoding` on publish so the wire says what format it carries (JSON / CBOR / protobuf-with-schema); pick a decoder off `sample.encoding` on the consumer instead of an out-of-band lookup. | self-describing payloads |
+| `resilient_subscriber.py` | A subscriber that survives a partition — on (re)connect it catches up history for what it missed, periodically recovers dropped samples, and is notified which samples were missed (with a paired must-deliver publisher). | the advanced-subscriber pattern |
+| `must_deliver_publisher.py` | The Tier-3 companion to delivery reconciliation: an advanced publisher that caches its recent samples (answers retransmission for its own keys), sequence-numbers + heartbeats for true miss detection, and advertises presence — edge-local reliability, not a broker. | the advanced-publisher pattern |
+| `liveliness_presence.py` | Native presence — declare a liveliness token that says "I exist", and watch a presence key expression to learn the instant a peer joins or drops (incl. the current roster via history), instead of guessing from traffic. | the liveliness-presence pattern |
+
+The last four are the "resilient / advanced" patterns — reach for them on the
+streams that actually need catch-up, must-deliver, or presence. For
+loss-tolerant telemetry, plain `put` + Tier-0 reconciliation is the right
+default; don't pay for guarantees a stream doesn't need.
+
+Connection config comes from your pod operator (router endpoint + mTLS
+cert/key/CA-roots, generated by `scripts/gen-certs.sh`) — see each script's
+header for the env vars. Deps: `pip install eclipse-zenoh==1.9.0` (the
+fleet-pinned version); the advanced publisher/subscriber and liveliness APIs
+live in the `zenoh.ext` and `session.liveliness()` surfaces of that package.
 
 ## 7. The fabric contract — why "am I in panoscope?" is a thing
 
@@ -242,7 +249,7 @@ different signals. Three rules govern visibility:
    `/tracks/v1`. Miss it and your data is rejected at the boundary. (This was the
    regression that had everything except OpenSky rejected.)
 2. **Liveliness presence = nodes.** panoscope draws a **node** from a Zenoh
-   *liveliness token*, not from traffic. `compose/presence.py` declares one token
+   *liveliness token*, not from traffic. `compose/control/presence.py` declares one token
    per live feed at `{prefix}/_meta/alive/<service>`. Without it your data shows on
    edges but you are never drawn as a node.
 3. **Self-describing encoding = schema families.** Protobuf tagged with its
@@ -273,7 +280,7 @@ flowchart LR
   publish under `<UUID>/**`.
 - `verify_name_on_connect` is currently **off** because the pod dials the router
   by mesh IP; the on-contract posture is to dial the DNS name with verification on
-  (see the connection notes in `INSTALL.md` / `INTEGRATIONS.md`).
+  (see the connection notes in `INSTALL.md` §7 Integrations).
 
 ## 9. Runtime & process model
 
@@ -301,8 +308,8 @@ supervisor is always running; a crashed feed comes back on its own.
 | **Open-data bridges** | `meteolt` | Poll explicitly retained feeds → tracks |
 | **Sensor bridges** | `asterix`, `sitaware`, `dronuradaras`, `track-fusion`, `*-raw` | Ingest sensors / raw sockets |
 | **Protocols** | `sapient`, `stanag4586/4609`, `cap`, `geojson`, `mqtt`, `sensorthings`, `sparkplug`, `nffi` | Decode a wire protocol on a raw Zenoh topic → tracks |
-| **Output layers** | `cot_layer`, `nvg_layer` | Egress tracks → TAK / SitaWare |
-| **C2 inputs** | `tak-bridge`, `nvg_bridge` | Ingress from TAK / SitaWare |
+| **Output layers** | `tak_layer`, `sitaware_layer` | Egress tracks → TAK / SitaWare |
+| **C2 inputs** | `tak-bridge`, `sitaware` | Ingress from TAK / SitaWare |
 | **Infrastructure** | `zenoh`, `admin-control`, `supervisor`, `presence`, `cert-renewer` | Router, web UI, keep-alive, presence, cert rotation |
 
 ## 11. Security & sovereignty
@@ -341,34 +348,32 @@ tail -f compose/state/logs/<svc>.log    # a service's output
 ```
 
 **Add a new sensor feed** — write a decoder that produces the track dict (§6.2),
-call the `protobuf_codec` publish helpers, and register the service in `start.sh`
+call the `track_views` publish helpers, and register the service in `start.sh`
 (`SERVICES`, `SVC_CAT`, `SVC_DESC`, `svc_ready`, a `launch` case).
 
 **Connect a C2 system** — set the `TAK_*` (CoT) or `SITAWARE_*` (NVG) env in
-`compose/.env`, then start `cot_layer` / `nvg_layer` (egress) and optionally
-`tak-bridge` / `nvg_bridge` (ingress). Post-setup config is meant to be
+`compose/.env`, then start `tak_layer` / `sitaware_layer` (egress) and optionally
+`tak-bridge` / `sitaware` (ingress). Post-setup config is meant to be
 web-UI-driven via `zenoh-admin`.
 
 ## 13. Where the bodies are buried (gotchas & open items)
 
 - **ASTERIX bit numbering** is the #1 bug source — EUROCONTROL counts bits 8→1,
-  Python 7→0. `CLAUDE.md` documents the recurring patterns; treat
+  Python 7→0. `../.ai/.claude/CLAUDE.md` documents the recurring patterns; treat
   `protocols/vendors/asterix/cat.py` as the most bug-sensitive file.
 - **`topic-taxonomy.md`** now reflects the `/tracks/v1` contract; older notes may
   not — trust the taxonomy doc.
 - **Backbone reachability** depends on the NetBird mesh being up and the backbone
   routers being reachable; `netbird status` shows peer state. The four
-  `connect` endpoints in the router config include some stale IPs — only the one
-  behind `zenoh.efdi.netbird.efdi-backbone.net` (→ `100.64.165.203`) is currently
-  real; the others should be pruned to the DNS endpoint.
+  `connect` endpoints in the router config include some stale IPs — only the
+  one behind `zenoh.efdi.netbird.efdi-backbone.net` is currently real; the
+  others should be pruned to the DNS endpoint.
 - **C2 egress** to TAK/SitaWare needs those systems reachable from the pod's
   network; from the backbone mesh they may not be, which is a routing/dual-homing
   question, not an EFDI bug.
-- **Simplification in flight:** merging the four C2 files into two bidirectional
-  gateways — see the plan in `docs/superpowers/plans/`.
 
 ---
 
 *This document is a map, not the territory. The authoritative details live in
-`CLAUDE.md` (coding rules + ASTERIX gotchas), `topic-taxonomy.md` (the key),
-`INSTALL.md` / `INTEGRATIONS.md` (setup + wiring), and the code itself.*
+`../.ai/.claude/CLAUDE.md` (coding rules + ASTERIX gotchas), `topic-taxonomy.md` (the key),
+`INSTALL.md` (setup + wiring), and the code itself.*

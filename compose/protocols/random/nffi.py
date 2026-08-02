@@ -15,22 +15,15 @@ Output:     <PREFIX>/<ORG>/land/nato/c2/friendly/unit/json/tracks
 """
 
 import argparse
-import json
 import os
 import time
 
 import defusedxml.ElementTree as ET
-import zenoh
-from zenoh_auth import apply_zenoh_auth
 from namespace_prefix import topic_root
-from protocols.random.nffi_pb2 import NffiTrack
-from protocols.protobuf_codec import publish_dual
+from protocols.gateway import ZError, open_session, publish_dual, subscribe
+from protocols.proto.nffi_pb2 import NffiTrack
 
-ORG       = os.environ.get("PARTNER_NAMESPACE", "")
 TOPIC_ROOT = topic_root()
-HERE      = os.path.dirname(os.path.abspath(__file__))
-_CERT_DIR = os.environ.get("EFDI_CERT_DIR", HERE)
-_ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", "tcp/127.0.0.1:7448")
 
 MAX_NFFI_XML = 10_000_000
 DEFAULT_INPUT_TOPIC = "{}/raw/nffi/*".format(TOPIC_ROOT)
@@ -48,26 +41,6 @@ _NS = {
 # Fallback: also handle unnamespaced NFFI from some implementations
 _LAT_TAGS = {"Latitude", "lat", "LAT"}
 _LON_TAGS = {"Longitude", "lon", "LON", "Long"}
-
-
-# ---------------------------------------------------------------------------
-# Zenoh
-# ---------------------------------------------------------------------------
-
-def make_config() -> "zenoh.Config":
-    conf = zenoh.Config()
-    conf.insert_json5("mode", '"client"')
-    conf.insert_json5("connect/endpoints", json.dumps([_ENDPOINT]))
-    apply_zenoh_auth(conf)
-    if _ENDPOINT.startswith("tls"):
-        conf.insert_json5("transport/link/tls", json.dumps({
-            "root_ca_certificate": os.path.join(_CERT_DIR, "efdi-ca-root.pem"),
-            "connect_certificate": os.path.join(_CERT_DIR, ORG + "-cert.pem"),
-            "connect_private_key": os.path.join(_CERT_DIR, ORG + "-key.pem"),
-            "enable_mtls": True,
-            "verify_name_on_connect": True,
-        }))
-    return conf
 
 
 # ---------------------------------------------------------------------------
@@ -182,7 +155,7 @@ def make_handler(session, verbose: bool = False):
                 print("NFFI ignored invalid payload size from", sample.key_expr, flush=True)
             return
         for track in parse_nffi(xml_bytes):
-            publish_dual(session, OUTPUT_TOPIC, track, NffiTrack, zenoh)
+            publish_dual(session, OUTPUT_TOPIC, track, NffiTrack)
             if verbose:
                 print(
                     "NFFI {} {} lat={} lon={}".format(
@@ -197,18 +170,19 @@ def make_handler(session, verbose: bool = False):
     return on_sample
 
 
-def _open_session() -> "zenoh.Session":
+def _open_session():
     while True:
         try:
-            return zenoh.open(make_config())
-        except zenoh.ZError as exc:
+            return open_session()
+        except ZError as exc:
             print("NFFI Zenoh connect failed: {} — retry in {}s".format(exc, ZENOH_RETRY_S), flush=True)
             time.sleep(ZENOH_RETRY_S)
 
 
 def run(args):
     session = _open_session()
-    subscriber = session.declare_subscriber(
+    subscriber = subscribe(
+        session,
         args.input_topic,
         make_handler(session, args.verbose),
     )

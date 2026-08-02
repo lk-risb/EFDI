@@ -8,11 +8,9 @@ import json
 import os
 import time
 
-import zenoh
-
-from protocols.random.mission_route_pb2 import MissionRoute
-from protocols.protobuf_codec import publish_dual
-from translation_common import TOPIC_ROOT, make_config, payload_json
+from protocols.proto.mission_route_pb2 import MissionRoute
+from protocols.track_views import publish_dual
+from gateway import TOPIC_ROOT, open_session, subscribe, payload_json
 
 
 INPUT_TOPIC = os.environ.get("MISSION_ROUTE_INPUT_TOPIC") or TOPIC_ROOT + "/raw/routes/**"
@@ -86,7 +84,7 @@ def normalize(value: dict, now: float | None = None) -> dict | None:
 
 
 def run() -> None:
-    session = zenoh.open(make_config())
+    session = open_session()
 
     def on_sample(sample) -> None:
         try:
@@ -95,11 +93,11 @@ def run() -> None:
             for item in values:
                 record = normalize(item)
                 if record:
-                    publish_dual(session, OUTPUT_TOPIC, record, MissionRoute, zenoh)
+                    publish_dual(session, OUTPUT_TOPIC, record, MissionRoute)
         except Exception as exc:
             print("mission route decode error:", exc, flush=True)
 
-    subscriber = session.declare_subscriber(INPUT_TOPIC, on_sample)
+    subscriber = subscribe(session, INPUT_TOPIC, on_sample)
     print("Mission-route translator: {} -> {}".format(INPUT_TOPIC, OUTPUT_TOPIC), flush=True)
     try:
         while True:

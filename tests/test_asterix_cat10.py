@@ -11,6 +11,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, os.fspath(ROOT / "compose"))
+sys.path.insert(0, os.fspath(ROOT / "compose" / "control"))
 sys.path.insert(0, os.fspath(ROOT / "compose" / "protocols"))
 
 from protocols.vendors.asterix.cat import decode_cat010_record  # noqa: E402

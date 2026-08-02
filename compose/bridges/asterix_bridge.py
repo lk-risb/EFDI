@@ -17,12 +17,10 @@ import struct
 import threading
 import time
 from collections import OrderedDict
+from namespace_prefix import topic_root
 
 import zenoh
-
-from namespace_prefix import topic_root
-from zenoh_auth import apply_zenoh_auth
-
+from protocols.gateway import open_session, subscribe
 
 UPSTREAM_ENDPOINT = os.environ.get(
     "ASTERIX_ZENOH_UPSTREAM_ENDPOINT", ""
@@ -104,15 +102,6 @@ class RecentFrames:
         return False
 
 
-def make_config(endpoint: str, *, local: bool) -> "zenoh.Config":
-    config = zenoh.Config()
-    config.insert_json5("mode", '"client"')
-    config.insert_json5("connect/endpoints", json.dumps([endpoint]))
-    if local:
-        apply_zenoh_auth(config)
-    return config
-
-
 def relay_sample(
     local_session,
     sample,
@@ -145,10 +134,8 @@ def run() -> None:
     if not UPSTREAM_ROOT or not LOCAL_ROOT:
         raise SystemExit("ASTERIX upstream and local topic roots must not be empty")
 
-    local_session = zenoh.open(make_config(LOCAL_ENDPOINT, local=True))
-    upstream_session = zenoh.open(
-        make_config(UPSTREAM_ENDPOINT, local=False)
-    )
+    local_session = open_session()
+    upstream_session = open_session(UPSTREAM_ENDPOINT, local=False)
     recent = RecentFrames()
     selector = UPSTREAM_ROOT + "/raw/asterix/*"
     relayed = 0
@@ -186,7 +173,7 @@ def run() -> None:
                 flush=True,
             )
 
-    subscriber = upstream_session.declare_subscriber(selector, on_sample)
+    subscriber = subscribe(upstream_session, selector, on_sample)
     print(
         "ASTERIX Zenoh ingress {} {} -> {} {}/raw/asterix/catN".format(
             UPSTREAM_ENDPOINT,

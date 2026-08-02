@@ -26,27 +26,32 @@ mkdir -p "$OUTPUT"
 # contracts before regenerating so old protocol modules cannot survive a
 # source-removal cleanup.
 find "$OUTPUT" -type f \( -name '*_pb2.py' -o -name '*.pyc' \) -delete
-mapfile -t contracts < <(find "$ROOT/compose/protocols" -type f -name '*.proto' -print | sort)
+VENDOR_ROOT="$ROOT/compose/protocols/vendors/sapient"
+
+mapfile -t contracts < <(find "$ROOT/compose/protocols" -type f -name '*.proto' -not -path "$VENDOR_ROOT/sapient_msg/*" -print | sort)
 (( ${#contracts[@]} > 0 )) || { echo "No protobuf contracts found" >&2; exit 1; }
 contract_names=()
 for contract in "${contracts[@]}"; do
     contract_names+=("${contract#"$ROOT/compose/"}")
 done
 
-# Vendored third-party schemas (compose/vendor) are their own include root: the
-# BSI Flex 335 files import each other as "sapient_msg/bsi_flex_335_v2_0/<f>",
-# which only resolves relative to compose/vendor. They are compiled with
-# paths relative to that root, EFDI's own contracts relative to compose/.
+# The vendored BSI Flex 335 schema (compose/protocols/vendors/sapient/sapient_msg)
+# is its own include root: its files import each other as
+# "sapient_msg/bsi_flex_335_v2_0/<f>", which only resolves relative to
+# VENDOR_ROOT, not compose/. They are compiled with paths relative to that
+# root; EFDI's own contracts relative to compose/. Both roots are passed to
+# one protoc invocation — each file argument is unambiguous under exactly one
+# of the two roots, so there is no double-resolution.
 vendor_names=()
-if [[ -d "$ROOT/compose/vendor" ]]; then
+if [[ -d "$VENDOR_ROOT/sapient_msg" ]]; then
     while IFS= read -r vendored; do
-        vendor_names+=("${vendored#"$ROOT/compose/vendor/"}")
-    done < <(find "$ROOT/compose/vendor" -type f -name '*.proto' -print | sort)
+        vendor_names+=("${vendored#"$VENDOR_ROOT/"}")
+    done < <(find "$VENDOR_ROOT/sapient_msg" -type f -name '*.proto' -print | sort)
 fi
 
 "$PYTHON" -m grpc_tools.protoc \
     -I "$ROOT/compose" \
-    -I "$ROOT/compose/vendor" \
+    -I "$VENDOR_ROOT" \
     --python_out="$OUTPUT" \
     "${contract_names[@]}" "${vendor_names[@]}"
 

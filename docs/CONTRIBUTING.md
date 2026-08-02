@@ -45,7 +45,7 @@ and where it legitimately lives.
 
 ## Where things live
 
-- `docs/architecture.md` — the pod's data flow.
+- `docs/EXPLAINED.md` — the pod's data flow.
 - `clients/` — the connect SDKs + worked examples partners build against.
 - `compose/.env.example` — the per-deployment config (the only place stack-specific values belong).
 - `host/`, `compose/` — the stack-agnostic pod scaffold.

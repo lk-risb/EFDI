@@ -7,9 +7,11 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "compose"))
+sys.path.insert(0, str(ROOT / "compose" / "control"))
 sys.path.insert(0, str(ROOT / "compose" / "layers"))
 
-import cot_layer  # noqa: E402
+import tak_layer  # noqa: E402
 
 
 class _Sender:
@@ -28,11 +30,11 @@ class _Sample:
 
 
 def test_cat34_radar_has_one_dedicated_route_and_neutral_affiliation():
-    assert "land/**/neutral/radar/**" not in cot_layer._TOPIC_COT
-    assert cot_layer._RADAR_COT_TYPE == "a-n-G-E-S-R"
+    assert "land/**/neutral/radar/**" not in tak_layer._TOPIC_COT
+    assert tak_layer._RADAR_COT_TYPE == "a-n-G-E-S-R"
 
     sender = _Sender()
-    handler = cot_layer.make_radar_status_handler(sender, verbose=False)
+    handler = tak_layer.make_radar_status_handler(sender, verbose=False)
     handler(_Sample({
         "_src": "ASTERIX CAT-34 Ed.1.29",
         "_ts": 1_721_000_000,
@@ -60,7 +62,7 @@ def test_cat34_radar_has_one_dedicated_route_and_neutral_affiliation():
 
 def test_cat34_beam_uses_separate_uid_without_changing_affiliation():
     sender = _Sender()
-    handler = cot_layer.make_radar_status_handler(sender, verbose=False)
+    handler = tak_layer.make_radar_status_handler(sender, verbose=False)
     handler(_Sample({
         "_ts": 1_721_000_000,
         "sensor_id": "CAT34-112-64",
@@ -74,7 +76,7 @@ def test_cat34_beam_uses_separate_uid_without_changing_affiliation():
 
     event = ET.fromstring(sender.frames[0])
     assert event.attrib["uid"] == "EFDI-SENS-BEAM-CAT34-112-64"
-    assert event.attrib["type"] == cot_layer._RADAR_COT_TYPE
+    assert event.attrib["type"] == tak_layer._RADAR_COT_TYPE
     sensor = event.find("./detail/sensor")
     assert sensor.attrib["fov"] == "5"
     assert sensor.attrib["azimuth"] == "90"

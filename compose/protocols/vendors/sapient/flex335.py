@@ -25,17 +25,33 @@ import time
 from typing import Iterator
 import uuid
 
-import zenoh
-from zenoh_auth import apply_zenoh_auth
-
 from namespace_prefix import topic_root
-from protocols.protobuf_codec import (
+from protocols.gateway import ZError, open_session, publish_dual, publish_native, subscribe
+from protocols.track_views import (
     native_topic,
-    publish_dual,
-    publish_native,
     semantic_topic,
 )
-from protocols.vendors.sapient.flex335_pb2 import SapientFlex335Track
+from protocols.proto.flex335_pb2 import SapientFlex335Track
+
+# Outbound (EFDI -> SAPIENT) encoders live in this same file, alongside the
+# inbound decoder above — one file per protocol, both directions. Encoding
+# targets the official schema vendored at compose/vendor/sapient_msg
+# (Apache-2.0, see docs/INSTALL.md §7 "Integrations → Vendored third-party schemas"), not a
+# local approximation, so the output is interoperable with real SAPIENT
+# systems.
+from sapient_msg.bsi_flex_335_v2_0.alert_ack_pb2 import AlertAck
+from sapient_msg.bsi_flex_335_v2_0.alert_pb2 import Alert
+from sapient_msg.bsi_flex_335_v2_0.detection_report_pb2 import DetectionReport
+from sapient_msg.bsi_flex_335_v2_0.location_pb2 import (
+    LocationCoordinateSystem,
+    LocationDatum,
+)
+from sapient_msg.bsi_flex_335_v2_0.registration_ack_pb2 import RegistrationAck
+from sapient_msg.bsi_flex_335_v2_0.registration_pb2 import Registration
+from sapient_msg.bsi_flex_335_v2_0.sapient_message_pb2 import SapientMessage
+from sapient_msg.bsi_flex_335_v2_0.status_report_pb2 import StatusReport
+from sapient_msg.bsi_flex_335_v2_0.task_ack_pb2 import TaskAck
+from sapient_msg.bsi_flex_335_v2_0.task_pb2 import Task
 
 
 MAX_FRAME_BYTES = 1_048_576
@@ -105,6 +121,37 @@ _ALERT_STATUS = {
 }
 
 _ALERT_PRIORITY = {0: "unspecified", 1: "low", 2: "medium", 3: "high"}
+
+_SAPIENT_INFO = {0: "unspecified", 1: "new", 2: "unchanged"}
+
+_POWER_SOURCES = {
+    0: "unspecified", 1: "other", 2: "mains", 3: "internal_battery",
+    4: "external_battery", 5: "generator", 6: "solar_pv", 7: "wind_turbine",
+    8: "fuel_cell",
+}
+
+_POWER_STATUS = {0: "unspecified", 1: "ok", 2: "fault"}
+
+_STATUS_LEVELS = {
+    0: "unspecified", 2: "information", 3: "warning", 4: "error",
+}
+
+_STATUS_TYPES = {
+    0: "unspecified", 1: "internal_fault", 2: "external_fault", 3: "illumination",
+    4: "weather", 5: "clutter", 6: "exposure", 7: "motion_sensitivity",
+    8: "ptz_status", 9: "pd", 10: "far", 11: "not_detecting", 12: "platform",
+    13: "other",
+}
+
+_TASK_STATUS = {
+    0: "unspecified", 1: "accepted", 2: "rejected", 3: "completed", 4: "failed",
+}
+
+_ALERT_ACK_STATUS = {
+    0: "unspecified", 1: "accepted", 2: "rejected", 3: "cancelled",
+}
+
+_TASK_CONTROL = {0: "unspecified", 1: "start", 2: "stop", 3: "pause"}
 _DELETE_STATES = frozenset(
     {"clear", "closed", "delete", "deleted", "end", "ended", "lost", "removed", "terminated"}
 )
@@ -127,6 +174,11 @@ class NodeState:
     altitude_m: float | None = None
     horizontal_speed_units: int | None = None
     vertical_speed_units: int | None = None
+    capabilities: list[dict] = field(default_factory=list)
+    status_interval_s: float | None = None
+    dependent_nodes: list[str] = field(default_factory=list)
+    reporting_region_count: int = 0
+    config_data: list[dict] = field(default_factory=list)
 
 
 @dataclass
@@ -394,6 +446,16 @@ def _decode_signals(values: list[bytes]) -> list[dict]:
     return result
 
 
+_TIME_UNITS_S = {1: 1e-9, 2: 1e-6, 3: 1e-3, 4: 1.0, 5: 60.0, 6: 3600.0, 7: 86400.0}
+
+
+def _duration_seconds(units, amount) -> float | None:
+    if not isinstance(units, int) or amount is None:
+        return None
+    scale = _TIME_UNITS_S.get(units)
+    return round(amount * scale, 6) if scale is not None else None
+
+
 def _speed_scale(units: int | None) -> float | None:
     if units == 1:
         return 1.0
@@ -487,6 +549,26 @@ class SapientDecoder:
                 return SapientEvent(kind, node_id, sent_at, track)
             except ValueError as exc:
                 return SapientEvent(kind, node_id, sent_at, warning=str(exc))
+        if kind == "registration_ack":
+            info = self._registration_ack(content.value)
+            print("SAPIENT registration_ack from {}: {}".format(node_id, info), flush=True)
+            return SapientEvent(kind, node_id, sent_at)
+        if kind == "task":
+            info = self._task(content.value)
+            print("SAPIENT task from {}: {}".format(node_id, info), flush=True)
+            return SapientEvent(kind, node_id, sent_at)
+        if kind == "task_ack":
+            info = self._task_ack(content.value)
+            print("SAPIENT task_ack from {}: {}".format(node_id, info), flush=True)
+            return SapientEvent(kind, node_id, sent_at)
+        if kind == "alert_ack":
+            info = self._alert_ack(content.value)
+            print("SAPIENT alert_ack from {}: {}".format(node_id, info), flush=True)
+            return SapientEvent(kind, node_id, sent_at)
+        if kind == "error":
+            info = self._error(content.value)
+            print("SAPIENT error from {}: {}".format(node_id, info), flush=True)
+            return SapientEvent(kind, node_id, sent_at)
         return SapientEvent(kind, node_id, sent_at)
 
     def _registration(self, node: NodeState, data: bytes) -> None:
@@ -527,6 +609,55 @@ class SapientDecoder:
             next(iter(vertical_units)) if len(vertical_units) == 1 else None
         )
 
+        node.capabilities = []
+        for value in _all(fields, 5, 2)[:32]:
+            cap_fields = _field_list(value)
+            category = _text(_first(cap_fields, 1, 2))
+            cap_type = _text(_first(cap_fields, 2, 2))
+            if not category or not cap_type:
+                continue
+            entry = {"category": category, "type": cap_type}
+            cap_value = _text(_first(cap_fields, 3, 2))
+            units = _text(_first(cap_fields, 4, 2))
+            if cap_value:
+                entry["value"] = cap_value
+            if units:
+                entry["units"] = units
+            node.capabilities.append(entry)
+
+        status_def = _first(fields, 6, 2)
+        if isinstance(status_def, bytes):
+            sd_fields = _field_list(status_def)
+            interval = _first(sd_fields, 1, 2)
+            node.status_interval_s = None
+            if isinstance(interval, bytes):
+                duration_fields = _field_list(interval)
+                units = _first(duration_fields, 1, 0)
+                amount = _float(_first(duration_fields, 3, 5))
+                node.status_interval_s = _duration_seconds(units, amount)
+
+        node.dependent_nodes = [
+            text for text in (_text(value) for value in _all(fields, 8, 2)[:64]) if text
+        ]
+
+        node.reporting_region_count = len(_all(fields, 9, 2))
+
+        node.config_data = []
+        for value in _all(fields, 10, 2)[:16]:
+            cfg_fields = _field_list(value)
+            manufacturer = _text(_first(cfg_fields, 1, 2))
+            model = _text(_first(cfg_fields, 2, 2))
+            if not manufacturer or not model:
+                continue
+            entry = {"manufacturer": manufacturer, "model": model}
+            serial = _text(_first(cfg_fields, 3, 2))
+            hw = _text(_first(cfg_fields, 4, 2))
+            sw = _text(_first(cfg_fields, 5, 2))
+            if serial: entry["serial_number"] = serial
+            if hw: entry["hardware_version"] = hw
+            if sw: entry["software_version"] = sw
+            node.config_data.append(entry)
+
     def _status(self, node_id: str, node: NodeState, sent_at: float, data: bytes) -> dict | None:
         fields = _field_list(data)
         location = _first(fields, 7, 2)
@@ -559,6 +690,53 @@ class SapientDecoder:
                 track["_delete"] = True
         if mode:
             track["sensor_mode"] = mode
+
+        info = _first(fields, 3, 0)
+        if isinstance(info, int):
+            track["sapient_info"] = _SAPIENT_INFO.get(info, "info_{}".format(info))
+        active_task_id = _text(_first(fields, 4, 2))
+        if active_task_id:
+            track["sapient_active_task_id"] = active_task_id
+
+        power = _first(fields, 6, 2)
+        if isinstance(power, bytes):
+            power_fields = _field_list(power)
+            level = _first(power_fields, 3, 0)
+            source = _first(power_fields, 4, 0)
+            p_status = _first(power_fields, 5, 0)
+            if isinstance(level, int):
+                track["sapient_power_level_pct"] = level
+            if isinstance(source, int):
+                track["sapient_power_source"] = _POWER_SOURCES.get(source, "source_{}".format(source))
+            if isinstance(p_status, int):
+                track["sapient_power_status"] = _POWER_STATUS.get(p_status, "status_{}".format(p_status))
+
+        if _first(fields, 8, 2) is not None:
+            track["sapient_field_of_view_present"] = True
+        obscuration_count = len(_all(fields, 10, 2))
+        if obscuration_count:
+            track["sapient_obscuration_count"] = obscuration_count
+        coverage_count = len(_all(fields, 12, 2))
+        if coverage_count:
+            track["sapient_coverage_count"] = coverage_count
+
+        statuses = []
+        for value in _all(fields, 11, 2)[:32]:
+            status_fields = _field_list(value)
+            status_level = _first(status_fields, 1, 0)
+            status_type = _first(status_fields, 4, 0)
+            entry = {}
+            if isinstance(status_level, int):
+                entry["level"] = _STATUS_LEVELS.get(status_level, "level_{}".format(status_level))
+            if isinstance(status_type, int):
+                entry["type"] = _STATUS_TYPES.get(status_type, "type_{}".format(status_type))
+            value_text = _text(_first(status_fields, 3, 2))
+            if value_text:
+                entry["value"] = value_text
+            if entry:
+                statuses.append(entry)
+        if statuses:
+            track["sapient_status"] = statuses
         return track
 
     def _position(self, node: NodeState, fields: list[WireField]):
@@ -633,6 +811,79 @@ class SapientDecoder:
         if signals:
             track["sapient_signals"] = signals
 
+        task_id = _text(_first(fields, 3, 2))
+        if task_id:
+            track["sapient_task_id"] = task_id
+
+        prediction = _first(fields, 9, 2)
+        if isinstance(prediction, bytes):
+            pred_fields = _field_list(prediction)
+            pred_location = _first(pred_fields, 2, 2)
+            pred_rb = _first(pred_fields, 1, 2)
+            try:
+                if isinstance(pred_location, bytes):
+                    p_lat, p_lon, p_alt, _meta = _decode_location(pred_location)
+                elif isinstance(pred_rb, bytes):
+                    p_elev, p_az, p_dist, _meta = _decode_range_bearing(pred_rb)
+                    p_lat, p_lon, p_alt = _project(node, p_elev, p_az, p_dist)
+                else:
+                    p_lat = p_lon = p_alt = None
+                if p_lat is not None:
+                    track["sapient_predicted_lat_deg"] = round(p_lat, 7)
+                    track["sapient_predicted_lon_deg"] = round(p_lon, 7)
+                    if p_alt is not None:
+                        track["sapient_predicted_alt_m"] = round(p_alt, 2)
+            except ValueError:
+                pass
+
+        behaviours = []
+        for value in _all(fields, 12, 2)[:16]:
+            b_fields = _field_list(value)
+            b_type = _text(_first(b_fields, 1, 2))
+            if not b_type:
+                continue
+            entry = {"type": b_type}
+            b_conf = _float(_first(b_fields, 2, 5))
+            if b_conf is not None:
+                entry["confidence"] = round(b_conf, 4)
+            behaviours.append(entry)
+        if behaviours:
+            track["sapient_behaviour"] = behaviours
+
+        associated_files = []
+        for value in _all(fields, 13, 2)[:16]:
+            af_fields = _field_list(value)
+            af_type = _text(_first(af_fields, 1, 2))
+            af_url = _text(_first(af_fields, 2, 2))
+            if af_url:
+                associated_files.append({"type": af_type or "unknown", "url": af_url})
+        if associated_files:
+            track["sapient_associated_files"] = associated_files
+
+        associated_detections = []
+        for value in _all(fields, 15, 2)[:32]:
+            ad_fields = _field_list(value)
+            ad_node = _text(_first(ad_fields, 2, 2))
+            ad_object = _text(_first(ad_fields, 3, 2))
+            if ad_node and ad_object:
+                associated_detections.append({"node_id": ad_node, "object_id": ad_object})
+        if associated_detections:
+            track["sapient_associated_detections"] = associated_detections
+
+        derived_detections = []
+        for value in _all(fields, 16, 2)[:32]:
+            dd_fields = _field_list(value)
+            dd_node = _text(_first(dd_fields, 2, 2))
+            dd_object = _text(_first(dd_fields, 3, 2))
+            if dd_node and dd_object:
+                derived_detections.append({"node_id": dd_node, "object_id": dd_object})
+        if derived_detections:
+            track["sapient_derived_detections"] = derived_detections
+
+        sapient_id = _text(_first(fields, 23, 2))
+        if sapient_id:
+            track["sapient_id"] = sapient_id
+
         velocity = _first(fields, 19, 2)
         if isinstance(velocity, bytes):
             velocity_fields = _field_list(velocity)
@@ -695,7 +946,488 @@ class SapientDecoder:
             track["detection_confidence"] = round(confidence, 4)
         if description:
             track["description"] = description
+
+        region_id = _text(_first(fields, 7, 2))
+        if region_id:
+            track["sapient_region_id"] = region_id
+
+        associated_files = []
+        for value in _all(fields, 11, 2)[:16]:
+            af_fields = _field_list(value)
+            af_type = _text(_first(af_fields, 1, 2))
+            af_url = _text(_first(af_fields, 2, 2))
+            if af_url:
+                associated_files.append({"type": af_type or "unknown", "url": af_url})
+        if associated_files:
+            track["sapient_associated_files"] = associated_files
+
+        associated_detections = []
+        for value in _all(fields, 12, 2)[:32]:
+            ad_fields = _field_list(value)
+            ad_node = _text(_first(ad_fields, 2, 2))
+            ad_object = _text(_first(ad_fields, 3, 2))
+            if ad_node and ad_object:
+                associated_detections.append({"node_id": ad_node, "object_id": ad_object})
+        if associated_detections:
+            track["sapient_associated_detections"] = associated_detections
+
+        additional_info = _text(_first(fields, 13, 2))
+        if additional_info:
+            track["sapient_additional_information"] = additional_info
         return track
+
+    def _registration_ack(self, data: bytes) -> dict:
+        fields = _field_list(data)
+        acceptance = _first(fields, 1, 0)
+        reasons = [text for text in (_text(v) for v in _all(fields, 3, 2)[:16]) if text]
+        info = {"accepted": bool(acceptance)}
+        if reasons:
+            info["reasons"] = reasons
+        return info
+
+    def _task(self, data: bytes) -> dict:
+        fields = _field_list(data)
+        task_id = _text(_first(fields, 1, 2))
+        name = _text(_first(fields, 2, 2))
+        description = _text(_first(fields, 3, 2))
+        control = _first(fields, 6, 0)
+        info = {}
+        if task_id: info["task_id"] = task_id
+        if name: info["task_name"] = name
+        if description: info["task_description"] = description
+        if isinstance(control, int):
+            info["control"] = _TASK_CONTROL.get(control, "control_{}".format(control))
+        regions = []
+        for value in _all(fields, 7, 2)[:16]:
+            r_fields = _field_list(value)
+            region_id = _text(_first(r_fields, 2, 2))
+            region_name = _text(_first(r_fields, 3, 2))
+            if region_id or region_name:
+                regions.append({"region_id": region_id, "region_name": region_name})
+        if regions:
+            info["regions"] = regions
+        command = _first(fields, 8, 2)
+        if isinstance(command, bytes):
+            cmd_fields = _field_list(command)
+            request = _text(_first(cmd_fields, 1, 2))
+            mode_change = _text(_first(cmd_fields, 5, 2))
+            param = _text(_first(cmd_fields, 8, 2))
+            if request: info["command_request"] = request
+            if mode_change: info["command_mode_change"] = mode_change
+            if param: info["command_parameter"] = param
+        return info
+
+    def _task_ack(self, data: bytes) -> dict:
+        fields = _field_list(data)
+        task_id = _text(_first(fields, 1, 2))
+        status = _first(fields, 2, 0)
+        reasons = [text for text in (_text(v) for v in _all(fields, 5, 2)[:16]) if text]
+        info = {}
+        if task_id: info["task_id"] = task_id
+        if isinstance(status, int):
+            info["task_status"] = _TASK_STATUS.get(status, "status_{}".format(status))
+        if reasons:
+            info["reasons"] = reasons
+        return info
+
+    def _alert_ack(self, data: bytes) -> dict:
+        fields = _field_list(data)
+        alert_id = _text(_first(fields, 1, 2))
+        reasons = [text for text in (_text(v) for v in _all(fields, 4, 2)[:16]) if text]
+        status = _first(fields, 5, 0)
+        info = {}
+        if alert_id: info["alert_id"] = alert_id
+        if isinstance(status, int):
+            info["alert_ack_status"] = _ALERT_ACK_STATUS.get(status, "status_{}".format(status))
+        if reasons:
+            info["reasons"] = reasons
+        return info
+
+    def _error(self, data: bytes) -> dict:
+        fields = _field_list(data)
+        messages = [text for text in (_text(v) for v in _all(fields, 3, 2)[:32]) if text]
+        packet = _first(fields, 1, 2)
+        info = {"messages": messages}
+        if isinstance(packet, bytes):
+            info["packet_bytes"] = len(packet)
+        return info
+
+
+# ---------------------------------------------------------------------------
+# Encode (EFDI -> SAPIENT)
+#
+# The reading half above decodes SAPIENT arriving from a sensor. This half
+# turns EFDI-side data into real SAPIENT messages, so a consumer needs to
+# understand SAPIENT alone rather than every source protocol. Encoding
+# targets the official schema vendored at compose/vendor/sapient_msg
+# (Apache-2.0), not a local approximation, so the output is interoperable
+# with real SAPIENT systems. SAPIENT is a common-denominator contract: it
+# deliberately cannot express every field a specific sensor knows, so
+# track_to_sapient() is lossy BY DESIGN, published ALONGSIDE the per-protocol
+# /proto message and the byte-exact /raw tier rather than replacing them.
+# ---------------------------------------------------------------------------
+
+# Crockford base32, per the ULID spec — excludes I, L, O and U so the encoded
+# form cannot be misread. report_id/object_id are declared `is_ulid` in the
+# schema, so a plain UUID would be the wrong shape.
+_CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+
+# This pod's SAPIENT node identity. The schema requires a UUID; a deployment
+# that has not set one gets a stable per-process fallback so output is still
+# well-formed rather than empty.
+_NODE_ID = os.environ.get("SAPIENT_NODE_ID", "") or str(uuid.uuid4())
+
+# EFDI classification vocabulary -> SAPIENT classification strings. Values not
+# listed fall through unchanged: an unknown-but-present classification is more
+# useful to a consumer than silently dropping it.
+_CLASSIFICATION = {
+    "aircraft": "Air Vehicle",
+    "uav": "Air Vehicle",
+    "drone": "Air Vehicle",
+    "helicopter": "Air Vehicle",
+    "vessel": "Surface Vessel",
+    "ship": "Surface Vessel",
+    "boat": "Surface Vessel",
+    "vehicle": "Land Vehicle",
+    "car": "Land Vehicle",
+    "truck": "Land Vehicle",
+    "person": "Human",
+    "pedestrian": "Human",
+}
+
+
+def _ulid(value: int | None = None) -> str:
+    """26-character Crockford-base32 ULID.
+
+    With no argument: 48-bit millisecond timestamp + 80 random bits, the normal
+    ULID shape. With an argument the whole 128-bit value is supplied by the
+    caller, which is how a per-object id stays byte-identical across reports.
+    """
+    if value is None:
+        ms = int(time.time() * 1000) & ((1 << 48) - 1)
+        value = (ms << 80) | (uuid.uuid4().int & ((1 << 80) - 1))
+    value &= (1 << 128) - 1
+    out = []
+    for _ in range(26):
+        out.append(_CROCKFORD[value & 0x1F])
+        value >>= 5
+    return "".join(reversed(out))
+
+
+def _stable_object_id(track: dict) -> str:
+    """A ULID derived entirely from the object's identity.
+
+    The whole 128 bits come from the identity hash — NOT just the random half.
+    Deriving only the low bits leaves the timestamp half moving, so two reports
+    for one aircraft a millisecond apart would produce different object_ids and
+    the consumer would see two contacts instead of a track.
+    """
+    ident = str(
+        track.get("uid")
+        or track.get("icao24")
+        or track.get("mmsi")
+        or track.get("track_num")
+        or track.get("callsign")
+        or ""
+    )
+    if not ident:
+        return _ulid()
+    return _ulid(uuid.uuid5(uuid.NAMESPACE_OID, ident).int)
+
+
+def _classification_for(track: dict) -> str | None:
+    for key in ("classification", "sapient_class", "target_type", "entity"):
+        raw = track.get(key)
+        if isinstance(raw, str) and raw.strip():
+            lowered = raw.lower()
+            for token, mapped in _CLASSIFICATION.items():
+                if token in lowered:
+                    return mapped
+            return raw
+    return None
+
+
+def track_to_sapient(track: dict, node_id: str = "") -> SapientMessage | None:
+    """Build a SapientMessage/DetectionReport from a normalized EFDI track.
+
+    Returns None when the track has no position: `location` is inside a
+    mandatory oneof, so a DetectionReport without one is not a valid SAPIENT
+    message and is better not published than published malformed.
+    """
+    lat, lon = track.get("lat_deg"), track.get("lon_deg")
+    if lat is None or lon is None:
+        return None
+
+    message = SapientMessage()
+    message.timestamp.FromNanoseconds(int(float(track.get("_ts") or time.time()) * 1e9))
+    message.node_id = node_id or _NODE_ID
+
+    report = message.detection_report
+    report.report_id = _ulid()
+    report.object_id = _stable_object_id(track)
+
+    location = report.location
+    location.x = float(lon)          # schema: x is normally longitude
+    location.y = float(lat)          # schema: y is normally latitude
+    altitude = track.get("geo_alt_m", track.get("baro_alt_m", track.get("alt_m")))
+    if altitude is not None:
+        location.z = float(altitude)
+    location.coordinate_system = LocationCoordinateSystem.LOCATION_COORDINATE_SYSTEM_LAT_LNG_DEG_M
+    location.datum = LocationDatum.LOCATION_DATUM_WGS84_G
+
+    confidence = track.get("detection_confidence", track.get("confidence"))
+    if confidence is not None:
+        try:
+            report.detection_confidence = max(0.0, min(1.0, float(confidence)))
+        except (TypeError, ValueError):
+            pass
+
+    classification = _classification_for(track)
+    if classification:
+        entry = report.classification.add()
+        entry.type = classification
+
+    # Ground speed + heading describe the same vector ENUVelocity wants, just in
+    # polar form; convert rather than drop it.
+    speed, heading = track.get("speed_ms"), track.get("heading_deg")
+    if speed is not None and heading is not None:
+        try:
+            radians = math.radians(float(heading))
+            velocity = report.enu_velocity
+            velocity.east_rate = float(speed) * math.sin(radians)
+            velocity.north_rate = float(speed) * math.cos(radians)
+            vertical = track.get("vertical_rate_ms")
+            if vertical is not None:
+                velocity.up_rate = float(vertical)
+        except (TypeError, ValueError):
+            pass
+
+    identifier = track.get("callsign") or track.get("icao24") or track.get("uid")
+    if identifier:
+        report.id = str(identifier)[:128]
+
+    return message
+
+
+def sapient_topic(topic: str) -> str:
+    """SAPIENT view of an object key (.../{id} -> .../{id}/sapient/tracks/v1).
+
+    Named like every other view so no format is implicit — a consumer reading
+    the key always knows what the bytes are — and versioned like every other
+    view so the goat boundary admits it.
+    """
+    from protocols.track_views import view_key
+    return view_key(topic, "sapient")
+
+
+def publish_sapient(session, topic: str, track: dict, zenoh, node_id: str = "") -> None:
+    """Publish the SAPIENT view of a track. Best-effort, like the other tiers:
+    a conversion failure must never take down the JSON or protobuf legs."""
+    try:
+        message = track_to_sapient(track, node_id=node_id)
+        if message is None:
+            return
+        payload = message.SerializeToString()
+    except Exception as exc:  # noqa: BLE001 — never break the other tiers
+        print("sapient encode failed for {}: {}".format(topic, exc), flush=True)
+        return
+    from protocols.data_stats import record_out
+    from protocols.track_views import proto_encoding
+    session.put(sapient_topic(topic), payload, encoding=proto_encoding(message, zenoh))
+    record_out("egress-sapient", len(payload))
+
+
+def _envelope(node_id: str = "") -> SapientMessage:
+    message = SapientMessage()
+    message.timestamp.FromNanoseconds(int(time.time() * 1e9))
+    message.node_id = node_id or _NODE_ID
+    return message
+
+
+def registration_to_sapient(
+    node_type: int,
+    icd_version: str,
+    name: str = "",
+    capabilities: list[dict] | None = None,
+    config_data: list[dict] | None = None,
+    node_id: str = "",
+) -> SapientMessage:
+    """Build a SapientMessage/Registration announcing this pod as a SAPIENT node."""
+    message = _envelope(node_id)
+    reg = message.registration
+    reg.node_definition.add().node_type = node_type
+    reg.icd_version = icd_version
+    if name:
+        reg.name = name
+    for cap in capabilities or ():
+        entry = reg.capabilities.add()
+        entry.category = cap.get("category", "")
+        entry.type = cap.get("type", "")
+        if cap.get("value") is not None:
+            entry.value = str(cap["value"])
+        if cap.get("units"):
+            entry.units = cap["units"]
+    for cfg in config_data or ():
+        entry = reg.config_data.add()
+        entry.manufacturer = cfg.get("manufacturer", "EFDI")
+        entry.model = cfg.get("model", "EFDI")
+        if cfg.get("serial_number"):
+            entry.serial_number = cfg["serial_number"]
+        if cfg.get("hardware_version"):
+            entry.hardware_version = cfg["hardware_version"]
+        if cfg.get("software_version"):
+            entry.software_version = cfg["software_version"]
+    return message
+
+
+def status_report_to_sapient(
+    state: int,
+    mode: str,
+    lat: float | None = None,
+    lon: float | None = None,
+    alt_m: float | None = None,
+    node_id: str = "",
+) -> SapientMessage:
+    """Build a SapientMessage/StatusReport announcing this pod's own health."""
+    message = _envelope(node_id)
+    report = message.status_report
+    report.report_id = _ulid()
+    report.system = state
+    report.info = StatusReport.INFO_NEW
+    report.mode = mode
+    if lat is not None and lon is not None:
+        location = report.node_location
+        location.x = float(lon)
+        location.y = float(lat)
+        if alt_m is not None:
+            location.z = float(alt_m)
+        location.coordinate_system = LocationCoordinateSystem.LOCATION_COORDINATE_SYSTEM_LAT_LNG_DEG_M
+        location.datum = LocationDatum.LOCATION_DATUM_WGS84_G
+    return message
+
+
+def alert_to_sapient(
+    alert_type: int,
+    status: int,
+    description: str = "",
+    lat: float | None = None,
+    lon: float | None = None,
+    priority: int = 0,
+    confidence: float | None = None,
+    node_id: str = "",
+) -> SapientMessage:
+    """Build a SapientMessage/Alert reporting this pod's own alert condition."""
+    message = _envelope(node_id)
+    alert = message.alert
+    alert.alert_id = _ulid()
+    alert.alert_type = alert_type
+    alert.status = status
+    if description:
+        alert.description = description
+    if lat is not None and lon is not None:
+        location = alert.location
+        location.x = float(lon)
+        location.y = float(lat)
+        location.coordinate_system = LocationCoordinateSystem.LOCATION_COORDINATE_SYSTEM_LAT_LNG_DEG_M
+        location.datum = LocationDatum.LOCATION_DATUM_WGS84_G
+    if priority:
+        alert.priority = priority
+    if confidence is not None:
+        alert.confidence = max(0.0, min(1.0, float(confidence)))
+    return message
+
+
+def registration_ack_to_sapient(
+    destination_id: str, accepted: bool = True, reasons: list[str] | None = None,
+    node_id: str = "",
+) -> SapientMessage:
+    """Build a proper protobuf SapientMessage/RegistrationAck.
+
+    Prefer this over the hand-rolled `registration_ack()` wire-encoder below
+    when the caller already has a real Zenoh/protobuf runtime available; the
+    hand-rolled encoder exists only so the TCP listener can ack a peer before
+    a Zenoh session might even be open.
+    """
+    message = _envelope(node_id)
+    message.destination_id = destination_id
+    ack = message.registration_ack
+    ack.acceptance = accepted
+    for reason in reasons or ():
+        ack.ack_response_reason.append(reason)
+    return message
+
+
+def task_ack_to_sapient(
+    destination_id: str, task_id: str, status: int, reasons: list[str] | None = None,
+    node_id: str = "",
+) -> SapientMessage:
+    """Build a SapientMessage/TaskAck (accept/reject/complete/fail a tasking command)."""
+    message = _envelope(node_id)
+    message.destination_id = destination_id
+    ack = message.task_ack
+    ack.task_id = task_id
+    ack.task_status = status
+    for reason in reasons or ():
+        ack.reason.append(reason)
+    return message
+
+
+def alert_ack_to_sapient(
+    destination_id: str, alert_id: str, status: int, reasons: list[str] | None = None,
+    node_id: str = "",
+) -> SapientMessage:
+    """Build a SapientMessage/AlertAck (accept/reject/cancel an alert)."""
+    message = _envelope(node_id)
+    message.destination_id = destination_id
+    ack = message.alert_ack
+    ack.alert_id = alert_id
+    ack.alert_ack_status = status
+    for reason in reasons or ():
+        ack.reason.append(reason)
+    return message
+
+
+def error_to_sapient(packet: bytes, error_messages: list[str], node_id: str = "") -> SapientMessage:
+    """Build a SapientMessage/Error reporting a malformed message this pod received."""
+    message = _envelope(node_id)
+    error = message.error
+    error.packet = packet
+    for text in error_messages:
+        error.error_message.append(text)
+    return message
+
+
+def task_to_sapient(
+    destination_id: str,
+    task_id: str,
+    control: int,
+    task_name: str = "",
+    command_request: str = "",
+    mode_change: str = "",
+    node_id: str = "",
+) -> SapientMessage:
+    """Build a SapientMessage/Task tasking a sensor node.
+
+    Covers the top-level task envelope and the scalar Command variants
+    (request, mode_change); the pointing/movement/filter sub-messages
+    (LookAt, MoveTo, Patrol, Follow, region class/behaviour filters) are not
+    modelled — EFDI is a fusion/aggregation node, not a sensor tasking
+    authority, so those deeper tasking paths are out of scope here.
+    """
+    message = _envelope(node_id)
+    message.destination_id = destination_id
+    task = message.task
+    task.task_id = task_id
+    task.control = control
+    if task_name:
+        task.task_name = task_name
+    if command_request or mode_change:
+        command = task.command
+        if command_request:
+            command.request = command_request
+        elif mode_change:
+            command.mode_change = mode_change
+    return message
 
 
 def recv_exact(sock, size: int) -> bytes:
@@ -754,33 +1486,8 @@ def registration_ack(bridge_node_id: str, destination_id: str, accepted: bool = 
 # TCP / Zenoh bridge runtime
 # ---------------------------------------------------------------------------
 
-ORG = os.environ.get("PARTNER_NAMESPACE", "")
 TOPIC_ROOT = topic_root()
-HERE = os.path.dirname(os.path.abspath(__file__))
-_CERT_DIR = os.environ.get("EFDI_CERT_DIR", HERE)
-_ENDPOINT = os.environ.get("ZENOH_LOCAL_ENDPOINT", "tcp/127.0.0.1:7448")
 RECONNECT_S = 5
-
-
-def make_config() -> "zenoh.Config":
-    conf = zenoh.Config()
-    conf.insert_json5("mode", '"client"')
-    conf.insert_json5("connect/endpoints", json.dumps([_ENDPOINT]))
-    apply_zenoh_auth(conf)
-    if _ENDPOINT.startswith("tls"):
-        conf.insert_json5(
-            "transport/link/tls",
-            json.dumps(
-                {
-                    "root_ca_certificate": os.path.join(_CERT_DIR, "efdi-ca-root.pem"),
-                    "connect_certificate": os.path.join(_CERT_DIR, ORG + "-cert.pem"),
-                    "connect_private_key": os.path.join(_CERT_DIR, ORG + "-key.pem"),
-                    "enable_mtls": True,
-                    "verify_name_on_connect": True,
-                }
-            ),
-        )
-    return conf
 
 
 def _allowed(peer: str, rules: list[str]) -> bool:
@@ -808,7 +1515,7 @@ def _publish(session, decoder: SapientDecoder, frame: bytes, verbose: bool, sock
         return
     topic = topic_for_track(TOPIC_ROOT, event.track)
     # /sapient, /json and /proto views on this object's key.
-    publish_dual(session, topic, event.track, SapientFlex335Track, zenoh)
+    publish_dual(session, topic, event.track, SapientFlex335Track)
     # /raw carries the original BSI Flex 335 v2 SapientMessage. `frame` is the
     # bare message — both ingress paths strip the 32-bit little-endian length
     # prefix before this point (iter_frames, and the --zenoh-raw reassembler) —
@@ -816,7 +1523,7 @@ def _publish(session, decoder: SapientDecoder, frame: bytes, verbose: bool, sock
     # dependency on the locally-modelled subset above. Built from the SAME
     # object key publish_dual uses, so all four views sit together.
     publish_native(session, native_topic(semantic_topic(topic, event.track)),
-                   frame, "sapient", zenoh,
+                   frame, "sapient",
                    profile="bsi-flex-335-v2", content_type="application/protobuf")
     if verbose:
         print(
@@ -893,9 +1600,9 @@ def run(args):
         return run_zenoh_raw(args)
     while True:
         try:
-            session = zenoh.open(make_config())
+            session = open_session()
             break
-        except zenoh.ZError as exc:
+        except ZError as exc:
             print("SAPIENT Zenoh connect failed: {} — retry in {}s".format(exc, ZENOH_RETRY_S), flush=True)
             time.sleep(ZENOH_RETRY_S)
     print("SAPIENT FLEX 335 -> Zenoh root: {}".format(TOPIC_ROOT), flush=True)
@@ -914,9 +1621,9 @@ def run_zenoh_raw(args):
     """Decode FLEX 335 length-prefixed bytes received by a raw Zenoh bridge."""
     while True:
         try:
-            session = zenoh.open(make_config())
+            session = open_session()
             break
-        except zenoh.ZError as exc:
+        except ZError as exc:
             print("SAPIENT raw Zenoh connect failed: {} — retry in {}s".format(exc, ZENOH_RETRY_S), flush=True)
             time.sleep(ZENOH_RETRY_S)
     topic = args.raw_topic or TOPIC_ROOT + "/raw/sapient/flex335/**"
@@ -940,7 +1647,7 @@ def run_zenoh_raw(args):
         except Exception as exc:
             print("SAPIENT raw decode error:", exc, flush=True)
 
-    subscriber = session.declare_subscriber(topic, on_sample)
+    subscriber = subscribe(session, topic, on_sample)
     print("SAPIENT FLEX 335 Zenoh raw translator subscribed to {}".format(topic), flush=True)
     try:
         while True:

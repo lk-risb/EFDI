@@ -199,6 +199,7 @@ services:
       - EFDI_SHELL_CONTROL_PORT=${EFDI_SHELL_CONTROL_PORT:-18897}
       - EFDI_SHELL_ENABLED=${EFDI_SHELL_ENABLED:-true}
       - EFDI_RUNTIME_LOG_DIR=/runtime-logs
+      - EFDI_STATS_DIR=/runtime-stats
       - EFDI_LOCAL_FABRIC_LABEL=${EFDI_LOCAL_FABRIC_LABEL:-Local fabric}
       - EFDI_LOCAL_FABRIC_ENDPOINTS=${EFDI_LOCAL_FABRIC_ENDPOINTS:-[]}
       - EFDI_LOCAL_FABRIC_PROFILE=${EFDI_LOCAL_FABRIC_PROFILE:-ltu-local}
@@ -222,6 +223,7 @@ services:
       - ${POD_STATE_DIR}/namespace-prefix:/namespace-prefix:rw
       - ${POD_STATE_DIR}/data-topic-prefix:/data-topic-prefix:rw
       - ${POD_STATE_DIR}/logs:/runtime-logs:ro
+      - ${POD_STATE_DIR}/stats:/runtime-stats:ro
     healthcheck:
       disable: true
 

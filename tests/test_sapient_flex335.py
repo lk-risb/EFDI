@@ -13,14 +13,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, os.fspath(ROOT / "compose" / "protocols"))
 sys.path.insert(0, os.fspath(ROOT / "compose"))
+sys.path.insert(0, os.fspath(ROOT / "compose" / "control"))
 
 import json  # noqa: E402
 
 import zenoh  # noqa: E402
 
-from protocols.protobuf_codec import dual_topic  # noqa: E402
-from protocols.random.raw_envelope_pb2 import RawEnvelope  # noqa: E402
-from protocols.vendors.sapient.flex335_pb2 import SapientFlex335Track  # noqa: E402
+from protocols.track_views import dual_topic  # noqa: E402
+from protocols.proto.raw_envelope_pb2 import RawEnvelope  # noqa: E402
+from protocols.proto.flex335_pb2 import SapientFlex335Track  # noqa: E402
 
 from protocols.vendors.sapient.flex335 import (  # noqa: E402
     SapientDecoder,
