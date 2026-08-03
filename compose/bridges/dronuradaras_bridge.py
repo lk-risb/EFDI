@@ -40,6 +40,12 @@ API_BASE          = "https://radar-api.mainline.inc/api/v1/public"
 AUDIO_URL         = API_BASE + "/detections/{}/audio"
 ORIGIN_HEADER     = "https://dronuradaras.lt"
 REFERER_HEADER    = "https://dronuradaras.lt/"
+# The backend's WAF 403s on Python's default "Python-urllib/x.y" User-Agent
+# specifically (Origin/Referer alone aren't enough) — a real browser UA is
+# required, not an API key.
+_UA_HEADER        = ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+                      "(KHTML, like Gecko) Chrome/120.0 Safari/537.36")
+_HEADERS          = {"Origin": ORIGIN_HEADER, "Referer": REFERER_HEADER, "User-Agent": _UA_HEADER}
 
 # Shared device state — written by run_devices, read/written by run_detections.
 _device_names:     dict[str, str]   = {}   # device_id → display_name
@@ -107,9 +113,14 @@ def run_devices(pub: "zenoh.Publisher", verbose: bool):
                         _device_names[dev["id"]] = dev["display_name"]
                 for dev_id in online_ids:
                     _offline_announced.discard(dev_id)
+                # Only tombstone a device we ourselves previously told TAK was
+                # online — otherwise a cold start tombstones every device the
+                # API has ever seen offline, sending TAK an expire event for
+                # markers it was never shown in the first place (they still
+                # render as a dim "stale" ghost on the map instead of nothing).
                 offline_candidates = {
                     dev["id"] for dev in with_position
-                    if dev["id"] not in online_ids
+                    if dev["id"] not in online_ids and dev["id"] in _online_devices
                 }
                 # A device can disappear from the API response or temporarily
                 # lose its coordinates. Use its last online position for the
