@@ -25,6 +25,7 @@ SIDC battle dimension (char 3):
 Configuration (compose/.env):
     SITAWARE_URL=https://10.0.0.1          # base URL of SitaWare server (LAN, primary)
     SITAWARE_URL_FALLBACK=https://100.x.x.x  # optional second base URL (e.g. NetBird mesh IP)
+    SITAWARE_URL_TAILSCALE=https://100.x.x.x  # optional third base URL (Tailscale mesh IP)
     SITAWARE_USER=admin                    # basic-auth username
     SITAWARE_PASS=secret                   # basic-auth password
     SITAWARE_SOURCE=efdi-live              # source tag written into _src field
@@ -32,9 +33,9 @@ Configuration (compose/.env):
     SITAWARE_POLL_S=10                     # poll interval in seconds (default 10)
     SITAWARE_TLS_VERIFY=1                  # set 0 to skip certificate check (self-signed)
 
-Both base URLs are tried every poll, preferring whichever one last succeeded —
-so it survives losing either the LAN path or the NetBird mesh path without
-manual intervention.
+All configured base URLs are tried every poll, preferring whichever one last
+succeeded — so it survives losing the LAN path, the NetBird mesh path, or the
+Tailscale mesh path without manual intervention.
 
 Run:
     venv/bin/python3 sitaware_bridge.py
@@ -70,9 +71,10 @@ from protocols.track_views import semantic_topic, add_version
 
 TOPIC_ROOT = topic_root()
 
-_BASE_URL_PRIMARY  = os.environ.get("SITAWARE_URL",          "").rstrip("/")
-_BASE_URL_FALLBACK = os.environ.get("SITAWARE_URL_FALLBACK", "").rstrip("/")
-_BASE_URLS   = [u for u in (_BASE_URL_PRIMARY, _BASE_URL_FALLBACK) if u]
+_BASE_URL_PRIMARY   = os.environ.get("SITAWARE_URL",           "").rstrip("/")
+_BASE_URL_FALLBACK  = os.environ.get("SITAWARE_URL_FALLBACK",  "").rstrip("/")
+_BASE_URL_TAILSCALE = os.environ.get("SITAWARE_URL_TAILSCALE", "").rstrip("/")
+_BASE_URLS   = [u for u in (_BASE_URL_PRIMARY, _BASE_URL_FALLBACK, _BASE_URL_TAILSCALE) if u]
 _BASE_URL    = _BASE_URL_PRIMARY   # kept for --discover, which only needs one host
 _active_url_idx = 0                # index into _BASE_URLS of the last-known-good base
 _USER        = os.environ.get("SITAWARE_USER",     "")
@@ -341,8 +343,8 @@ def run(args):
     insecure_urls = [url for url in _BASE_URLS if not url.lower().startswith("https://")]
     if insecure_urls:
         raise SystemExit(
-            "SITAWARE_URL and SITAWARE_URL_FALLBACK must use https://; "
-            "plaintext SitaWare endpoints are not supported"
+            "SITAWARE_URL, SITAWARE_URL_FALLBACK, and SITAWARE_URL_TAILSCALE must "
+            "use https://; plaintext SitaWare endpoints are not supported"
         )
 
     api_path = _API_PATH
