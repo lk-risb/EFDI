@@ -399,7 +399,7 @@ def run(args) -> None:
                     normalized = _normalize_event(elem)
                     if normalized is not None:
                         topic, record = normalized
-                        publish_dual(session, topic, record, NormalizedTrack)
+                        publish_dual(session, topic, record, NormalizedTrack, zenoh)
                         if args.verbose:
                             print("TAK PUB {} uid={} type={}".format(
                                 topic, record.get("uid"), record.get("cot_type", "")), flush=True)

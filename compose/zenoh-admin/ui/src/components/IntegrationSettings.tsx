@@ -26,6 +26,7 @@ const FIELD_GROUPS: { title: string; description: string; fields: { key: string;
   { title: 'TAK and CoT', description: 'Authenticated CoT feed to the TAK Server over mTLS.', fields: [
     { key: 'TAK_HOST', label: 'TAK Server hostname / IP', placeholder: 'tak.efdi.ltu' },
     { key: 'TAK_HOST_FALLBACK', label: 'TAK fallback hostname / IP' },
+    { key: 'TAK_HOST_TAILSCALE', label: 'TAK Tailscale fallback IP', placeholder: '100.x.x.x' },
     { key: 'TAK_PORT', label: 'TAK Server TLS port', placeholder: '8089' },
     { key: 'TAK_TLS', label: 'TAK TLS enabled (1/0)', placeholder: '1' },
     { key: 'TAK_TLS_SERVER_NAME', label: 'TAK certificate DNS name', placeholder: 'takserver' },
@@ -33,6 +34,7 @@ const FIELD_GROUPS: { title: string; description: string; fields: { key: string;
   { title: 'SitaWare HQ', description: 'Bidirectional HQ integration over NVG 2.0.2 and REST. Passwords are write-only.', fields: [
     { key: 'SITAWARE_URL', label: 'SitaWare HQ base URL', placeholder: 'https://swhq.efdi.ltu:10006' },
     { key: 'SITAWARE_URL_FALLBACK', label: 'SitaWare HQ fallback URL', placeholder: 'https://swhq.efdi.ltu:10006' },
+    { key: 'SITAWARE_URL_TAILSCALE', label: 'SitaWare HQ Tailscale fallback URL', placeholder: 'https://100.x.x.x:10006' },
     { key: 'SITAWARE_USER', label: 'SitaWare HQ username' }, { key: 'SITAWARE_PASS', label: 'SitaWare HQ password', secret: true },
     { key: 'SITAWARE_NVG_IMPORT_URL', label: 'NVG import URL — HQ export → Zenoh (nvg_bridge)', placeholder: 'https://host:10006/.../nvg' },
     { key: 'SITAWARE_NVG_IMPORT_CA', label: 'NVG import pinned CA path', placeholder: '/.../sitaware-hq-server.pem' },

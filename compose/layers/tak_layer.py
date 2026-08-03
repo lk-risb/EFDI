@@ -1531,9 +1531,9 @@ def _enable_keepalive(sock: socket.socket) -> None:
 class TcpSender:
     """CoT writer with a single-writer reconnect loop. Plaintext or mutual TLS.
 
-    Accepts multiple (host, port) candidates — e.g. a LAN IP and a NetBird mesh
-    IP for one TAK Server — and rotates through them when a *connect* fails,
-    converging on whichever path is reachable.
+    Accepts multiple (host, port) candidates — e.g. a LAN IP, a NetBird mesh
+    IP, and a Tailscale mesh IP for one TAK Server — and rotates through them
+    when a *connect* fails, converging on whichever path is reachable.
 
     All socket I/O runs on ONE background thread that owns the socket. Callers
     only enqueue; send() never touches the socket. That is deliberate: it closes
@@ -1896,7 +1896,8 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description="Zenoh tracks → TAK Server / ATAK CoT bridge")
     ap.add_argument("--host", action="append", default=None,
                     help="TAK Server host — repeatable (e.g. --host <lan-ip> --host <netbird-ip>) "
-                         "to try multiple network paths; falls back to TAK_HOST env or 127.0.0.1")
+                         "to try multiple network paths; falls back to TAK_HOST/TAK_HOST_FALLBACK/"
+                         "TAK_HOST_TAILSCALE env or 127.0.0.1")
     ap.add_argument("--port", type=int, default=int(os.environ.get("TAK_PORT", "8089")),
                     help="TAK Server port (default: 8089, the mTLS streaming port — the "
                          "anonymous 8087 input is not distributed to 8089 subscribers)")
@@ -1920,6 +1921,7 @@ def main(argv=None):
             for host in (
                 os.environ.get("TAK_HOST", "").strip(),
                 os.environ.get("TAK_HOST_FALLBACK", "").strip(),
+                os.environ.get("TAK_HOST_TAILSCALE", "").strip(),
             )
             if host
         ] or ["127.0.0.1"]

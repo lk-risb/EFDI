@@ -105,8 +105,8 @@ load_launcher_state() {
             SELECTED_SERVICES)
                 REMEMBERED_SERVICES="$val"
                 ;;
-            TAK_HOST|TAK_HOST_FALLBACK|TAK_TLS_SERVER_NAME|\
-            SITAWARE_URL|SITAWARE_URL_FALLBACK|STANAG4609_SRT_URL|STANAG4609_SOURCE|\
+            TAK_HOST|TAK_HOST_FALLBACK|TAK_HOST_TAILSCALE|TAK_TLS_SERVER_NAME|\
+            SITAWARE_URL|SITAWARE_URL_FALLBACK|SITAWARE_URL_TAILSCALE|STANAG4609_SRT_URL|STANAG4609_SOURCE|\
             SAPIENT_HOST|STANAG4586_HOST|STANAG4586_PROFILE)
                 if [[ -z "${!key:-}" ]]; then
                     printf -v "$key" '%s' "$val"
@@ -129,8 +129,8 @@ save_launcher_state() {
     {
         printf '# EFDI launcher memory: selections and endpoint addresses only.\n'
         printf 'SELECTED_SERVICES=%s\n' "$selected"
-        for key in TAK_HOST TAK_HOST_FALLBACK TAK_TLS_SERVER_NAME \
-                   SITAWARE_URL SITAWARE_URL_FALLBACK STANAG4609_SRT_URL STANAG4609_SOURCE \
+        for key in TAK_HOST TAK_HOST_FALLBACK TAK_HOST_TAILSCALE TAK_TLS_SERVER_NAME \
+                   SITAWARE_URL SITAWARE_URL_FALLBACK SITAWARE_URL_TAILSCALE STANAG4609_SRT_URL STANAG4609_SOURCE \
                    SAPIENT_HOST STANAG4586_HOST STANAG4586_PROFILE; do
             # A URL with user-info may contain credentials. Use it for this run,
             # but never copy it into persistent launcher memory.
@@ -231,7 +231,7 @@ svc_ready() {
         stanag4609-raw) [[ "${STANAG4609_SRT_URL:-}" ]] ;;
         stanag5516-raw) return 0 ;;  # UDP listener, default port 3010
         sitaware)     return 0 ;;  # always ready; prompts for server IP at launch if unset
-        tak-bridge)   [[ "${TAK_HOST:-}" || "${TAK_HOST_FALLBACK:-}" ]] ;;
+        tak-bridge)   [[ "${TAK_HOST:-}" || "${TAK_HOST_FALLBACK:-}" || "${TAK_HOST_TAILSCALE:-}" ]] ;;
         sapient) return 0 ;;
         stanag4586) [[ "${STANAG4586_PROFILE:-}" == "legacy_ed3_approx" &&
                        ( -n "${STANAG4586_ZENOH_RAW:-}" || -n "${STANAG4586_HOST:-}" ) ]] ;;
@@ -245,6 +245,7 @@ svc_ready() {
 
 # Short config note shown in status column when not ready
 svc_hint() {
+    local _n
     case "$1" in
         asterix) echo "ASTERIX family bundle" ;;
         mqtt-raw) echo "MQTT_HOST not set" ;;
@@ -289,19 +290,22 @@ svc_hint() {
             fi ;;
         sitaware)
             if [[ "${SITAWARE_URL:-}" ]]; then
-                [[ "${SITAWARE_URL_FALLBACK:-}" ]] && echo "${SITAWARE_URL} (+fallback)" || echo "${SITAWARE_URL}"
+                _n=0; [[ "${SITAWARE_URL_FALLBACK:-}" ]] && ((_n++)); [[ "${SITAWARE_URL_TAILSCALE:-}" ]] && ((_n++))
+                ((_n)) && echo "${SITAWARE_URL} (+${_n} fallback)" || echo "${SITAWARE_URL}"
             else
                 echo "will prompt for address"
             fi ;;
         tak-bridge)
             if [[ "${TAK_HOST:-}" ]]; then
-                [[ "${TAK_HOST_FALLBACK:-}" ]] && echo "${TAK_HOST}:${TAK_PORT:-8087} (+fallback)" || echo "${TAK_HOST}:${TAK_PORT:-8087}"
+                _n=0; [[ "${TAK_HOST_FALLBACK:-}" ]] && ((_n++)); [[ "${TAK_HOST_TAILSCALE:-}" ]] && ((_n++))
+                ((_n)) && echo "${TAK_HOST}:${TAK_PORT:-8087} (+${_n} fallback)" || echo "${TAK_HOST}:${TAK_PORT:-8087}"
             else
                 echo "will prompt for address"
             fi ;;
         tak_layer)
             if [[ "${TAK_HOST:-}" ]]; then
-                [[ "${TAK_HOST_FALLBACK:-}" ]] && echo "${TAK_HOST}:${TAK_PORT:-8087} (+fallback)" || echo "${TAK_HOST}:${TAK_PORT:-8087}"
+                _n=0; [[ "${TAK_HOST_FALLBACK:-}" ]] && ((_n++)); [[ "${TAK_HOST_TAILSCALE:-}" ]] && ((_n++))
+                ((_n)) && echo "${TAK_HOST}:${TAK_PORT:-8087} (+${_n} fallback)" || echo "${TAK_HOST}:${TAK_PORT:-8087}"
             else
                 echo "will prompt for address"
             fi ;;
@@ -811,7 +815,8 @@ launch() {
         tak_layer)
             local tak_host="${TAK_HOST:-}"
             local tak_host2="${TAK_HOST_FALLBACK:-}"
-            if [[ -z "$tak_host" && -z "$tak_host2" ]]; then
+            local tak_host3="${TAK_HOST_TAILSCALE:-}"
+            if [[ -z "$tak_host" && -z "$tak_host2" && -z "$tak_host3" ]]; then
                 _prompt_address "TAK Server" tak_host
                 if [[ -z "$tak_host" ]]; then
                     printf "  ${YELLOW}[skip]${R}  tak_layer          no address entered\n"
@@ -821,6 +826,7 @@ launch() {
             fi
             local tcp_hosts=(); [[ -n "$tak_host"  ]] && tcp_hosts+=(--host "$tak_host")
             [[ -n "$tak_host2" ]] && tcp_hosts+=(--host "$tak_host2")
+            [[ -n "$tak_host3" ]] && tcp_hosts+=(--host "$tak_host3")
             local tcp_args=("${tcp_hosts[@]}" --port "${TAK_PORT:-8089}")
             if [[ "${TAK_TLS:-}" == "1" ]]; then
                 tcp_args+=(--tls --cert "${TAK_CERT:-}" --key "${TAK_KEY:-}" --ca "${TAK_CA:-}")
@@ -831,7 +837,8 @@ launch() {
         tak-bridge)
             local tak_ingest_host="${TAK_HOST:-}"
             local tak_ingest_host2="${TAK_HOST_FALLBACK:-}"
-            if [[ -z "$tak_ingest_host" && -z "$tak_ingest_host2" ]]; then
+            local tak_ingest_host3="${TAK_HOST_TAILSCALE:-}"
+            if [[ -z "$tak_ingest_host" && -z "$tak_ingest_host2" && -z "$tak_ingest_host3" ]]; then
                 _prompt_address "TAK Server CoT feed" tak_ingest_host
                 if [[ -z "$tak_ingest_host" ]]; then
                     printf "  ${YELLOW}[skip]${R}  tak-bridge       no address entered\n"
@@ -842,6 +849,7 @@ launch() {
             local tak_ingest_args=()
             [[ -n "$tak_ingest_host"  ]] && tak_ingest_args+=(--host "$tak_ingest_host")
             [[ -n "$tak_ingest_host2" ]] && tak_ingest_args+=(--host "$tak_ingest_host2")
+            [[ -n "$tak_ingest_host3" ]] && tak_ingest_args+=(--host "$tak_ingest_host3")
             if [[ "${TAK_TLS:-}" == "1" ]]; then
                 tak_ingest_args+=(--tls --cert "${TAK_CERT:-}" --key "${TAK_KEY:-}" --ca "${TAK_CA:-}")
             fi
