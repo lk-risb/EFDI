@@ -16,16 +16,29 @@ tada per vietinę Zenoh magistralę pateikia juos TAK ir SitaWare klientams.
 
 ### Serverio paruošimas nuo tuščios mašinos (pasirinktinai)
 
-Praleiskite šį poskyrį, jei Docker, Python, git ir NetBird jau įdiegti ir
-veikia tiksliniame serveryje, ir pereikite tiesiai prie **Programinė įranga**
-žemiau. Kitu atveju laikoma, kad dar niekas neįdiegta — tik švarus Linux
-serveris su root/sudo teisėmis ir tinklo ryšiu.
+`./install.sh` atnaujina OS (`apt`/`dnf` upgrade) ir savaime įdiegia git,
+Python 3.10+, Docker Engine + Compose papildinį (iš oficialios Docker
+saugyklos, ne distributyvo paketą), openssl ir gettext tiek Debian (apt),
+tiek RHEL/Rocky/Alma (dnf) sistemose, jei jų trūksta — visiškai tuščiame
+serveryje su vien `sudo` teisėmis ir išeinančiu interneto ryšiu pakanka
+paleisti `./install.sh` be jokio rankinio paruošimo. Jei po OS atnaujinimo
+reikia perkrauti (branduolio ar bazinės bibliotekos atnaujinimas), diegyklė
+sustoja ir apie tai praneša — tiesiog perkraukite ir vėl paleiskite tą pačią
+komandą. Jis taip pat pasiūlo įdiegti ir prijungti NetBird arba Tailscale,
+jei nei vienas dar neprijungtas, klausdamas tik setup/auth rakto —
+vienintelio dalyko, kurio diegyklė pati sugalvoti negali.
+
+Likusi šio poskyrio dalis yra rankinė nuoroda, ką diegyklė atlieka
+automatiškai — naudinga suprasti klaidas, izoliuoto tinklo (offline)
+diegimus, ar kitokio distributyvo serverius. Praleiskite ją ir pereikite
+tiesiai prie **Programinė įranga**, jei tiesiog paleidžiate `./install.sh`
+palaikomame distributyve.
 
 #### Pasirinkite ir parinkite serverio dydį
 
 | | Minimalu | Rekomenduojama |
 | --- | --- | --- |
-| OS | Ubuntu 22.04/24.04 LTS arba RHEL 9 / Rocky Linux 9 / AlmaLinux 9 | Ubuntu 24.04 LTS |
+| OS | Debian 13 (trixie) arba RHEL 9/10, Rocky Linux 9/10, AlmaLinux 9/10 | Debian 13 (trixie) |
 | CPU | 2 vCPU | 4 vCPU |
 | RAM | 4 GB | 8 GB |
 | Diskas | 20 GB laisvos vietos | 40 GB+ laisvos vietos (daugiau, jei įjungsite ilgalaikį trasų saugojimą) |
@@ -33,7 +46,9 @@ serveris su root/sudo teisėmis ir tinklo ryšiu.
 
 Bet kuris modernus x86_64 arba arm64 Linux platinys su naujesniu branduoliu ir
 systemd tinka; šios dvi šeimos aprašomos žingsnis po žingsnio žemiau, nes jos
-dažniausiai naudojamos valstybinėse/gynybos aplinkose. Jei naudojate kitą
+dažniausiai naudojamos valstybinėse/gynybos aplinkose. Ubuntu taip pat veikia
+(ta pati apt įrankių bazė), bet Debian yra tikrasis šio projekto taikinys ir
+tai, ką `install.sh` naudoja pagal nutylėjimą — jei naudojate visiškai kitą
 platinį, tiesiog pritaikykite paketų tvarkyklės komandas — likusi vadovo dalis
 galioja nepakitusi.
 
@@ -43,7 +58,7 @@ teisių" žingsnis turėtų prasmę.
 
 #### Atnaujinkite OS
 
-**Ubuntu/Debian:**
+**Debian:**
 ```bash
 sudo apt update && sudo apt upgrade -y
 ```
@@ -53,11 +68,11 @@ sudo apt update && sudo apt upgrade -y
 sudo dnf upgrade -y
 ```
 
-Jei buvo atnaujintas branduolys, perkraukite (`sudo reboot`).
+Jei buvo atnaujintas branduolys, perkraukite (`sudo reboot`). `./install.sh` šį žingsnį atlieka automatiškai — čia jis pateiktas kaip rankinio/offline diegimo nuoroda.
 
 #### Įdiekite git ir bazinius įrankius
 
-**Ubuntu/Debian:**
+**Debian:**
 ```bash
 sudo apt install -y git curl ca-certificates
 ```
@@ -71,11 +86,16 @@ Patikrinkite: `git --version`
 
 #### Įdiekite Python 3.10+
 
-**Ubuntu 22.04** numatytai turi Python 3.10, **Ubuntu 24.04** — 3.12.
-Pirmiausia patikrinkite, ką turite — `python3 --version` — ir diekite tik jei
-versija senesnė nei 3.10:
+**Debian 13 (trixie)** numatytai turi Python **3.13** — jau gerokai virš EFDI
+minimumo, papildomo žingsnio nereikia, tereikia įsitikinti, kad venv/pip yra:
 ```bash
 sudo apt install -y python3 python3-venv python3-pip
+```
+
+**RHEL/Rocky/AlmaLinux 10** numatytai turi Python **3.12** — jau virš EFDI
+minimumo, tas pats vienas žingsnis kaip Debian:
+```bash
+sudo dnf install -y python3 python3-pip
 ```
 
 **RHEL/Rocky/AlmaLinux 9** numatytai turi Python **3.9**, kuris yra žemiau
@@ -85,10 +105,10 @@ nesugadinama):
 ```bash
 sudo dnf install -y python3.11 python3.11-pip
 ```
-RHEL šeimos serveryje visur, kur šio repo scriptai rašo `python3`, naudokite
+RHEL 9 serveryje visur, kur šio repo scriptai rašo `python3`, naudokite
 `python3.11` arba susikurkite venv, nukreiptą į jį.
 
-Patikrinkite: `python3 --version` (arba `python3.11 --version` RHEL šeimoje)
+Patikrinkite: `python3 --version` (arba `python3.11 --version` RHEL 9)
 turi rodyti **3.10 arba naujesnę**.
 
 #### Įdiekite Docker Engine + Compose papildinį
@@ -98,14 +118,14 @@ Naudokite oficialią platinio Docker saugyklą, ne platinio pridedamą
 Compose v2 papildinio, nuo kurio priklauso šis repo (`docker compose`, ne
 senasis atskiras `docker-compose`).
 
-**Ubuntu/Debian:**
+**Debian:**
 ```bash
 # Pridėkite oficialų Docker GPG raktą ir saugyklą
 sudo install -m 0755 -d /etc/apt/keyrings
-sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+sudo curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
 sudo chmod a+r /etc/apt/keyrings/docker.asc
 echo \
-  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian \
   $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
   sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 sudo apt update
@@ -113,6 +133,8 @@ sudo apt update
 # Įdiekite Docker Engine + Compose papildinį
 sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 ```
+(Ubuntu sistemoje abiejose eilutėse pakeiskite `linux/debian` į `linux/ubuntu`
+— Docker skelbia atskiras saugyklas kiekvienam platiniui.)
 
 **RHEL/Rocky/AlmaLinux:**
 ```bash
@@ -139,19 +161,23 @@ docker compose version
 ```
 Abi komandos turi pavykti **be `sudo`**, prieš tęsiant toliau.
 
-#### Įdiekite NetBird klientą
+#### Įdiekite NetBird arba Tailscale
 
-EFDI podai pasiekia fabriką ir vienas kitą per NetBird mesh VPN. Klientą
-diekite vienodai abiejuose platiniuose (NetBird savo skriptu atsineša savo
-saugyklą, todėl atskiro apt/dnf nustatymo nereikia):
+EFDI podai pasiekia fabriką ir vienas kitą per mesh VPN — NetBird arba
+Tailscale, abu tinka. Įdiekite tą, kurį naudoja jūsų organizacija (abu
+skriptai patys atsineša savo saugyklą, todėl atskiro apt/dnf nustatymo
+nereikia):
 ```bash
-curl -fsSL https://pkgs.netbird.io/install.sh | sh
+curl -fsSL https://pkgs.netbird.io/install.sh | sh      # NetBird
+curl -fsSL https://tailscale.com/install.sh | sh        # Tailscale
 ```
-Dar **neprisijunkite** prie tinklo — setup key duoda jūsų organizacijos
-NetBird paskyros administratorius, o prisijungimas aprašytas žemiau §4.
+Dar **neprisijunkite** prie tinklo — setup/auth raktą duoda jūsų organizacijos
+paskyros administratorius, o `./install.sh` pats to paklaus ir prisijungs
+**§2 Diegimas** žemiau (būtent tai daro jo automatinis Tinklo žingsnis).
 Patikrinkite tik, ar dvejetainis failas įdiegtas:
 ```bash
 netbird version
+tailscale version
 ```
 
 #### Atidarykite ugniasienės prievadus
@@ -163,8 +189,9 @@ prievadų sąrašas yra **Tinklas** lentelė žemiau — atidarykite tuos, kuriu
 jūsų diegimas iš tikrųjų naudoja (dauguma podų nepaleidžia visų jutiklių
 tiltų).
 
-**Ubuntu/Debian (ufw):**
+**Debian (ufw):**
 ```bash
+sudo apt install -y ufw   # Debian, skirtingai nei Ubuntu, jo neįdiegia pagal nutylėjimą
 sudo ufw allow 8890/tcp comment 'EFDI admin GUI'
 sudo ufw allow 50048/udp comment 'EFDI CAT-048 pavyzdys — pritaikykite savo jutikliams'
 # kartokite kiekvienam UDP/TCP prievadui, kurį naudoja jūsų integracijos, pagal lentelę žemiau
@@ -189,7 +216,7 @@ git --version
 python3 --version      # 3.10+
 docker run hello-world
 docker compose version
-netbird version
+netbird version         # arba: tailscale version
 ```
 
 Jei kiekviena komanda aukščiau pavyko, tęskite prie **§2** žemiau
@@ -236,9 +263,20 @@ Sugeneruota medžiaga (`efdi-ca-root.pem`, `<NAMESPACE>-cert.pem`, `<NAMESPACE>-
 
 ### 2.1 Repozitorijos klonavimas
 
+Švariame serveryje, kur dar nieko neįdiegta, viena komanda nuklonuoja
+repozitoriją ir paleidžia diegyklę, kuri pati įdiegia visus 1 skyriaus
+reikalavimus:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/risblicencijos/EFDI/main/install.sh | bash
+```
+
+Tas pats, tik pirma nuklonavus rankiniu būdu:
+
 ```bash
 git clone <repo-url> EFDI
 cd EFDI
+./install.sh
 ```
 
 ### 2.2 Sertifikatų generavimas
