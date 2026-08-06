@@ -14,17 +14,42 @@ VENV="$SCRIPT_DIR/compose/venv"
 
 [ -t 0 ] || exec < /dev/tty 2>/dev/null || true
 
+# ── OS package manager detection (Ubuntu/Debian apt, RHEL/Rocky/Alma dnf — the
+# two families docs/INSTALL.md documents) — used throughout this script so a
+# bare host with none of git/Python/Docker/openssl/gettext pre-installed can
+# still complete `./install.sh` unattended, not just error out with a pointer
+# to the manual doc. ─────────────────────────────────────────────────────────
+PKG_MGR=""
+if command -v apt-get >/dev/null 2>&1; then PKG_MGR="apt"
+elif command -v dnf >/dev/null 2>&1; then PKG_MGR="dnf"
+fi
+
+# Docker publishes separate apt repos per distro (different signing metadata,
+# different codename lists) — "apt" alone doesn't distinguish Debian from
+# Ubuntu, so read the real distro ID for the one step that needs it.
+DISTRO_ID=""
+[ -f /etc/os-release ] && DISTRO_ID="$(. /etc/os-release && echo "$ID")"
+
+# pkg_install <apt-package-list> <dnf-package-list> — either list may be empty
+# when a package only exists under one distro family.
+pkg_install() {
+    local apt_pkgs="$1" dnf_pkgs="$2"
+    case "$PKG_MGR" in
+        apt) [ -n "$apt_pkgs" ] && sudo apt-get update -qq && sudo apt-get install -y -qq $apt_pkgs ;;
+        dnf) [ -n "$dnf_pkgs" ] && sudo dnf install -y -q $dnf_pkgs ;;
+        *) return 1 ;;
+    esac
+}
+
 # Match TAK's curl-pipe bootstrap behavior: install into a normal git checkout,
 # then re-exec the checked-in installer.
 if [ ! -f "$COMPOSE_FILE" ]; then
     echo "Bootstrapping — cloning repo to $INSTALL_DIR ..."
     if ! command -v git >/dev/null 2>&1; then
-        command -v sudo >/dev/null 2>&1 \
-            && sudo apt-get update -qq \
-            && sudo apt-get install -y -qq git
+        pkg_install git git
     fi
     command -v git >/dev/null 2>&1 || {
-        echo "git is required to install EFDI." >&2
+        echo "git is required to install EFDI and could not be auto-installed (no apt or dnf found)." >&2
         exit 1
     }
     if [ -d "$INSTALL_DIR/.git" ]; then
@@ -127,37 +152,179 @@ else
     echo -e "  ${GREEN}Production mode${NC}: certs from scripts/gen-certs.sh required, mTLS enforced."
 fi
 
+# ── OS update ─────────────────────────────────────────────────────────────────
+section "OS update"
+case "$PKG_MGR" in
+    apt) sudo apt-get update -qq && sudo apt-get upgrade -y -qq ;;
+    dnf) sudo dnf upgrade -y -q ;;
+    *) warn "No supported package manager (apt/dnf) found — skipping OS update." ;;
+esac
+
+REBOOT_NEEDED=0
+[ -f /var/run/reboot-required ] && REBOOT_NEEDED=1
+if [ "$PKG_MGR" = "dnf" ] && command -v needs-restarting &>/dev/null; then
+    sudo needs-restarting -r &>/dev/null || REBOOT_NEEDED=1
+fi
+if (( REBOOT_NEEDED )); then
+    ok "System updated."
+    warn "A reboot is required (kernel or core library update) — reboot, then re-run ./install.sh to continue."
+    exit 0
+fi
+ok "System up to date."
+
 # ── Prerequisites ─────────────────────────────────────────────────────────────
 section "Prerequisites"
 
-PY_OK=0
-for py in python3.14 python3.13 python3.12 python3.11 python3.10 python3; do
-    if command -v "$py" &>/dev/null; then
-        PY_VER=$("$py" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
-        PY_MAJ=${PY_VER%%.*}; PY_MIN=${PY_VER#*.}
-        if (( PY_MAJ > 3 || (PY_MAJ == 3 && PY_MIN >= 10) )); then
-            PYTHON="$py"
-            ok "Python ${PY_VER} ($py)"
-            PY_OK=1; break
+# Sets PYTHON/PY_VER if a 3.10+ interpreter is found; returns 1 otherwise.
+detect_python() {
+    for py in python3.14 python3.13 python3.12 python3.11 python3.10 python3; do
+        if command -v "$py" &>/dev/null; then
+            PY_VER=$("$py" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null) || continue
+            PY_MAJ=${PY_VER%%.*}; PY_MIN=${PY_VER#*.}
+            if (( PY_MAJ > 3 || (PY_MAJ == 3 && PY_MIN >= 10) )); then
+                PYTHON="$py"; return 0
+            fi
         fi
-    fi
-done
-(( PY_OK )) || err "Python 3.10+ required. Install it and re-run."
+    done
+    return 1
+}
 
-command -v docker &>/dev/null || err "Docker not found. Install Docker Engine 24.0+ and re-run."
+if ! detect_python; then
+    info "Python 3.10+ not found — installing…"
+    # RHEL 9/Rocky/Alma ship Python 3.9 (too old); install 3.11 from AppStream
+    # alongside it rather than replacing the system python3 (matches
+    # docs/INSTALL.md's manual steps for this distro family).
+    pkg_install "python3 python3-venv python3-pip" "python3.11 python3.11-pip" \
+        || err "Python 3.10+ required and no supported package manager (apt/dnf) found — install it manually per docs/INSTALL.md and re-run."
+    detect_python || err "Python 3.10+ still not found after installing — install it manually per docs/INSTALL.md and re-run."
+fi
+ok "Python ${PY_VER} ($PYTHON)"
+
+DOCKER_JUST_INSTALLED=0
+if ! command -v docker &>/dev/null; then
+    info "Docker not found — installing from the official Docker repository (not distro-bundled docker.io)…"
+    case "$PKG_MGR" in
+        apt)
+            # Docker publishes a separate apt repo per distro (Ubuntu vs
+            # Debian) — default to the Debian repo, since Debian is this
+            # project's primary target; only Ubuntu itself gets its own repo.
+            _docker_apt_distro="debian"
+            [ "$DISTRO_ID" = "ubuntu" ] && _docker_apt_distro="ubuntu"
+            sudo install -m 0755 -d /etc/apt/keyrings
+            sudo curl -fsSL "https://download.docker.com/linux/${_docker_apt_distro}/gpg" -o /etc/apt/keyrings/docker.asc
+            sudo chmod a+r /etc/apt/keyrings/docker.asc
+            echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/${_docker_apt_distro} $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
+                | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+            ;;
+        dnf)
+            sudo dnf -y -q install dnf-plugins-core
+            sudo dnf config-manager --add-repo https://download.docker.com/linux/rhel/docker-ce.repo
+            sudo dnf install -y -q docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+            sudo systemctl enable --now docker
+            ;;
+        *) err "Docker not found and no supported package manager (apt/dnf) found — install it manually per docs/INSTALL.md and re-run." ;;
+    esac
+    command -v docker &>/dev/null || err "Docker installation failed — install it manually per docs/INSTALL.md and re-run."
+    sudo groupadd docker 2>/dev/null || true
+    sudo usermod -aG docker "$USER"
+    DOCKER_JUST_INSTALLED=1
+fi
 ok "Docker $(docker --version | awk '{print $3}' | tr -d ,)"
 
 COMPOSE_VER=$(docker compose version --short 2>/dev/null || echo "")
-[ -n "$COMPOSE_VER" ] || err "Docker Compose v2 not found. Install plugin and re-run."
+if [ -z "$COMPOSE_VER" ]; then
+    info "Docker Compose v2 plugin not found — installing…"
+    pkg_install "docker-compose-plugin" "docker-compose-plugin" \
+        || err "Docker Compose v2 plugin not found and no supported package manager (apt/dnf) found — install it manually and re-run."
+    COMPOSE_VER=$(docker compose version --short 2>/dev/null || echo "")
+fi
+[ -n "$COMPOSE_VER" ] || err "Docker Compose v2 plugin still not found after install attempt."
 ok "Docker Compose $COMPOSE_VER"
 
-if [ "$INSTALL_MODE" = "production" ]; then
-    command -v envsubst &>/dev/null || warn "envsubst not found — Zenoh config rendering requires it (install gettext)"
+if [ "$INSTALL_MODE" = "production" ] && ! command -v envsubst &>/dev/null; then
+    info "envsubst not found — installing (gettext)…"
+    pkg_install "gettext-base" "gettext" \
+        || warn "Could not auto-install envsubst (no apt/dnf found) — install gettext manually before generating Zenoh config."
 fi
 
+if [ "$INSTALL_MODE" = "testing" ] && ! command -v openssl &>/dev/null; then
+    info "openssl not found — installing…"
+    pkg_install "openssl" "openssl" \
+        || err "openssl is required to generate test certificates and could not be auto-installed — install it manually and re-run."
+fi
 if [ "$INSTALL_MODE" = "testing" ]; then
-    command -v openssl &>/dev/null || err "openssl not found — required to generate test certificates."
     ok "openssl $(openssl version | awk '{print $2}')"
+fi
+
+# The user was just added to the docker group — that membership only applies
+# to new login sessions, not this one, so any docker command below would fail
+# with a permission error. Rather than fight that with newgrp/sg tricks in a
+# non-interactive script, stop here and ask for a fresh session, same as the
+# manual steps in docs/INSTALL.md.
+if (( DOCKER_JUST_INSTALLED )); then
+    echo ""
+    ok "Docker installed — added $USER to the docker group."
+    warn "Log out and back in (or reboot), then re-run ./install.sh to continue."
+    exit 0
+fi
+
+# ── Networking (NetBird / Tailscale mesh) ─────────────────────────────────────
+# Production mode only — testing mode is explicitly local-only, no fabric.
+if [ "$INSTALL_MODE" = "production" ]; then
+    section "Networking"
+    _NB_IP=$(ip addr show wt0 2>/dev/null | awk '/inet / {print $2}' | cut -d/ -f1 | head -1) || true
+    _TS_IP=$(ip addr show tailscale0 2>/dev/null | awk '/inet / {print $2}' | cut -d/ -f1 | head -1) || true
+
+    if [ -n "$_NB_IP" ] || [ -n "$_TS_IP" ]; then
+        [ -n "$_NB_IP" ] && ok "NetBird connected ($_NB_IP)"
+        [ -n "$_TS_IP" ] && ok "Tailscale connected ($_TS_IP)"
+    else
+        echo "  EFDI pods reach the fabric and each other over a mesh VPN."
+        echo "  Neither NetBird nor Tailscale is connected on this host yet."
+        echo ""
+        while true; do
+            read -rp "$(echo -e "  ${BOLD}Connect now?${NC} [N]etBird / [T]ailscale / [S]kip (manual/offline): ")" _VPN_ACTION
+            case "${_VPN_ACTION:-}" in
+                [Nn]*)
+                    ask_secret NETBIRD_SETUP_KEY "NetBird setup key (app.netbird.io → Keys)"
+                    info "Installing NetBird…"
+                    # Official vendor installer, fetched fresh over HTTPS — not
+                    # checksum-pinned since it's a live, auto-updating script;
+                    # the trust boundary is the TLS connection to NetBird's own domain.
+                    curl -fsSL https://pkgs.netbird.io/install.sh | sh
+                    info "Connecting to NetBird…"
+                    sudo netbird up --setup-key="$NETBIRD_SETUP_KEY" \
+                        || err "NetBird connection failed — check your setup key and re-run."
+                    sleep 3
+                    _NB_IP=$(ip addr show wt0 2>/dev/null | awk '/inet / {print $2}' | cut -d/ -f1 | head -1) || true
+                    [ -n "$_NB_IP" ] && ok "NetBird connected ($_NB_IP)" \
+                        || warn "Could not read wt0's IP after connecting — check 'netbird status'."
+                    break
+                    ;;
+                [Tt]*)
+                    ask_secret TAILSCALE_AUTH_KEY "Tailscale auth key (login.tailscale.com → Settings → Keys)"
+                    info "Installing Tailscale…"
+                    # Official vendor installer — same accepted trust model as above.
+                    curl -fsSL https://tailscale.com/install.sh | sh
+                    info "Connecting to Tailscale…"
+                    sudo tailscale up --authkey="$TAILSCALE_AUTH_KEY" \
+                        || err "Tailscale connection failed — check your auth key and re-run."
+                    sleep 3
+                    _TS_IP=$(ip addr show tailscale0 2>/dev/null | awk '/inet / {print $2}' | cut -d/ -f1 | head -1) || true
+                    [ -n "$_TS_IP" ] && ok "Tailscale connected ($_TS_IP)" \
+                        || warn "Could not read tailscale0's IP after connecting — check 'tailscale status'."
+                    break
+                    ;;
+                [Ss]*)
+                    warn "Skipping — this pod will only reach a local Zenoh router until connected manually."
+                    break
+                    ;;
+                *) echo "    Enter N, T, or S" ;;
+            esac
+        done
+    fi
 fi
 
 # ── EFDI certs / test-certs ────────────────────────────────────────────────────

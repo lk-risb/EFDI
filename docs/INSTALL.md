@@ -15,16 +15,29 @@ SitaWare clients.
 
 ### Bare host bootstrap (optional)
 
-Skip this subsection if Docker, Python, git, and NetBird are already
-installed and working on the target host, and go straight to **Software**
-below. Otherwise, this assumes nothing is installed yet — only a fresh Linux
-server with root/sudo access and a network connection.
+`./install.sh` updates the OS (`apt`/`dnf` upgrade) and auto-installs git,
+Python 3.10+, Docker Engine + the Compose plugin (from Docker's official
+repository, not a distro-bundled package), openssl, and gettext itself on
+both Debian (apt) and RHEL/Rocky/Alma (dnf) hosts if any are missing — a
+completely bare server with just `sudo` and outbound internet access can run
+`./install.sh` directly with no manual setup first. If the OS update needs a
+reboot (kernel or core library update), the installer stops and says so —
+just reboot and re-run the same command. It also offers to install and
+connect NetBird or Tailscale if neither is already up, prompting only for
+the setup/auth key — the one thing an installer can't reasonably fabricate
+on its own.
+
+The rest of this subsection is manual reference for what the installer does
+automatically, useful for understanding failures, air-gapped/offline
+installs, or hosts on a distro other than the two covered below. Skip it and
+go straight to **Software** if you're just running `./install.sh` on a
+supported distro.
 
 #### Choose and size the host
 
 | | Minimum | Recommended |
 | --- | --- | --- |
-| OS | Ubuntu 22.04/24.04 LTS, or RHEL 9 / Rocky Linux 9 / AlmaLinux 9 | Ubuntu 24.04 LTS |
+| OS | Debian 13 (trixie), or RHEL 9/10, Rocky Linux 9/10, AlmaLinux 9/10 | Debian 13 (trixie) |
 | CPU | 2 vCPU | 4 vCPU |
 | RAM | 4 GB | 8 GB |
 | Disk | 20 GB free | 40 GB+ free (more if you enable long-term track storage) |
@@ -32,16 +45,18 @@ server with root/sudo access and a network connection.
 
 Any modern x86_64 or arm64 Linux distribution with a recent kernel and systemd
 works; these two families are covered step-by-step below because they are the
-most common in government/defense environments. If you use a different
-distribution, translate the package-manager commands and the rest of this
-guide applies unchanged.
+most common in government/defense environments. Ubuntu also works (it's the
+same apt tooling), but Debian is this project's actual target and what
+`install.sh` defaults to — if you use a different distribution entirely,
+translate the package-manager commands and the rest of this guide applies
+unchanged.
 
 Run every command below as a regular user with `sudo` access — not as `root`
 directly, so the final "run Docker as a non-root user" step is meaningful.
 
 #### Update the OS
 
-**Ubuntu/Debian:**
+**Debian:**
 ```bash
 sudo apt update && sudo apt upgrade -y
 ```
@@ -51,11 +66,12 @@ sudo apt update && sudo apt upgrade -y
 sudo dnf upgrade -y
 ```
 
-Reboot if the kernel was updated (`sudo reboot`).
+Reboot if the kernel was updated (`sudo reboot`). `./install.sh` does this
+step automatically — it's shown here for manual/offline reference.
 
 #### Install git and basic tools
 
-**Ubuntu/Debian:**
+**Debian:**
 ```bash
 sudo apt install -y git curl ca-certificates
 ```
@@ -69,11 +85,16 @@ Verify: `git --version`
 
 #### Install Python 3.10+
 
-**Ubuntu 22.04** ships Python 3.10 by default; **Ubuntu 24.04** ships 3.12.
-Verify what you have first — `python3 --version` — and only install if it's
-older than 3.10:
+**Debian 13 (trixie)** ships Python **3.13** by default — already well above
+EFDI's minimum, no extra step needed beyond making sure venv/pip are present:
 ```bash
 sudo apt install -y python3 python3-venv python3-pip
+```
+
+**RHEL/Rocky/AlmaLinux 10** ship Python **3.12** by default — already above
+EFDI's minimum, same one-liner as Debian:
+```bash
+sudo dnf install -y python3 python3-pip
 ```
 
 **RHEL/Rocky/AlmaLinux 9** ship Python **3.9** by default, which is below
@@ -83,9 +104,9 @@ does **not** replace the system `python3`, so nothing else on the box breaks):
 sudo dnf install -y python3.11 python3.11-pip
 ```
 Use `python3.11` explicitly wherever this repo's scripts say `python3` on a
-RHEL-family host, or set up an alias/venv that points at it.
+RHEL 9 host, or set up an alias/venv that points at it.
 
-Verify: `python3 --version` (or `python3.11 --version` on RHEL-family) must
+Verify: `python3 --version` (or `python3.11 --version` on RHEL 9) must
 report **3.10 or newer**.
 
 #### Install Docker Engine + the Compose plugin
@@ -95,14 +116,14 @@ Use the distribution's official Docker repository, not a distro-bundled
 be missing the Compose v2 plugin this repo depends on (`docker compose`, not
 the old standalone `docker-compose`).
 
-**Ubuntu/Debian:**
+**Debian:**
 ```bash
 # Add Docker's official GPG key and repository
 sudo install -m 0755 -d /etc/apt/keyrings
-sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+sudo curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
 sudo chmod a+r /etc/apt/keyrings/docker.asc
 echo \
-  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian \
   $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
   sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 sudo apt update
@@ -110,6 +131,8 @@ sudo apt update
 # Install Docker Engine + Compose plugin
 sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 ```
+(On Ubuntu, swap `linux/debian` for `linux/ubuntu` in both lines above —
+Docker publishes separate repos per distro.)
 
 **RHEL/Rocky/AlmaLinux:**
 ```bash
@@ -136,19 +159,22 @@ docker compose version
 ```
 Both must succeed **without `sudo`** before continuing.
 
-#### Install the NetBird client
+#### Install NetBird or Tailscale
 
-EFDI pods reach the fabric and each other over a NetBird mesh VPN. Install the
-client the same way on either distro (NetBird ships its own repository via
-this script, so there's no separate apt/dnf setup):
+EFDI pods reach the fabric and each other over a mesh VPN — NetBird or
+Tailscale, either works. Install whichever your organization uses (both ship
+their own repository via these scripts, so there's no separate apt/dnf setup):
 ```bash
-curl -fsSL https://pkgs.netbird.io/install.sh | sh
+curl -fsSL https://pkgs.netbird.io/install.sh | sh      # NetBird
+curl -fsSL https://tailscale.com/install.sh | sh        # Tailscale
 ```
-Do **not** join a network yet — the setup key comes from whoever administers
-your organization's NetBird account, and joining is covered below in §4.
-Verify only that the binary installed:
+Do **not** join a network yet — the setup/auth key comes from whoever
+administers your organization's account, and `./install.sh` itself prompts
+for it and joins during **§2 Installation** below (this is exactly what its
+automated Networking step does). Verify only that the binary installed:
 ```bash
 netbird version
+tailscale version
 ```
 
 #### Open firewall ports
@@ -159,8 +185,9 @@ radar/sensor's firewall is a different concern). The authoritative, current
 port list is the **Network** table just below — open the ones your
 deployment actually uses (most pods do not run every sensor bridge).
 
-**Ubuntu/Debian (ufw):**
+**Debian (ufw):**
 ```bash
+sudo apt install -y ufw   # not installed by default on Debian, unlike Ubuntu
 sudo ufw allow 8890/tcp comment 'EFDI admin GUI'
 sudo ufw allow 50048/udp comment 'EFDI CAT-048 example — adjust to your sensors'
 # repeat for whichever UDP/TCP ports your integrations use, per the table below
@@ -185,7 +212,7 @@ git --version
 python3 --version      # 3.10+
 docker run hello-world
 docker compose version
-netbird version
+netbird version         # or: tailscale version
 ```
 
 If every command above succeeds, continue to **§2** below (the repository
@@ -236,9 +263,19 @@ The generated material (`efdi-ca-root.pem`, `<NAMESPACE>-cert.pem`, `<NAMESPACE>
 
 ### 2.1 Clone the repository
 
+On a fresh host with nothing installed yet, one command clones the repo and
+runs the installer, which auto-installs every prerequisite from §1 itself:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/risblicencijos/EFDI/main/install.sh | bash
+```
+
+Equivalent to cloning first, then running the same script locally:
+
 ```bash
 git clone <repo-url> EFDI
 cd EFDI
+./install.sh
 ```
 
 ### 2.2 Generate certificates
