@@ -6,6 +6,7 @@
 
 [![Zenoh](https://img.shields.io/badge/Zenoh-1.9.0-blue)](https://zenoh.io/)
 [![Python](https://img.shields.io/badge/Python-3.12-blue?logo=python&logoColor=white)](https://www.python.org/)
+[![Debian](https://img.shields.io/badge/Debian-13_trixie-A81D33?logo=debian&logoColor=white)](https://www.debian.org/)
 [![Docker](https://img.shields.io/badge/Docker%20Compose-2496ED?logo=docker&logoColor=white)](https://docs.docker.com/compose/)
 [![ATAK](https://img.shields.io/badge/ATAK-CoT-4c9a4c)](https://tak.gov/)
 [![SitaWare](https://img.shields.io/badge/SitaWare-NVG%202.0.2-6c5ce7)](https://systematic.com/)
@@ -206,6 +207,14 @@ EFDI/
 ---
 
 ## Deployment
+
+On a fresh Debian 13 (or RHEL/Rocky/Alma) host:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/risblicencijos/EFDI/main/install.sh | bash
+```
+
+`install.sh` auto-installs every prerequisite (git, Python 3.10+, Docker Engine + Compose, openssl, gettext) if missing, then walks through certs and configuration interactively.
 
 See **[INSTALL.md](docs/INSTALL.md)** for the full English deployment guide, or **[DIEGIMAS.md](docs/DIEGIMAS.md)** for the Lithuanian version. Both cover prerequisites, certificate setup, configuration reference, and troubleshooting.
 
