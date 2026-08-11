@@ -14,25 +14,29 @@ tada per vietinę Zenoh magistralę pateikia juos TAK ir SitaWare klientams.
 
 ## 1. Reikalavimai
 
-### Serverio paruošimas nuo tuščios mašinos (pasirinktinai)
+### Serverio paruošimas nuo tuščios mašinos
 
+Debian 13 arba RHEL/Rocky/AlmaLinux 9/10 sistemoje rankiniu būdu įdiegiate
+tik `curl` (paprastai jau yra) — visa kita yra viena komanda:
+```bash
+curl -fsSL https://raw.githubusercontent.com/risblicencijos/EFDI/main/install.sh | bash
+```
 `./install.sh` atnaujina OS (`apt`/`dnf` upgrade) ir savaime įdiegia git,
 Python 3.10+, Docker Engine + Compose papildinį (iš oficialios Docker
 saugyklos, ne distributyvo paketą), openssl ir gettext tiek Debian (apt),
 tiek RHEL/Rocky/Alma (dnf) sistemose, jei jų trūksta — visiškai tuščiame
-serveryje su vien `sudo` teisėmis ir išeinančiu interneto ryšiu pakanka
-paleisti `./install.sh` be jokio rankinio paruošimo. Jei po OS atnaujinimo
-reikia perkrauti (branduolio ar bazinės bibliotekos atnaujinimas), diegyklė
-sustoja ir apie tai praneša — tiesiog perkraukite ir vėl paleiskite tą pačią
-komandą. Jis taip pat pasiūlo įdiegti ir prijungti NetBird arba Tailscale,
-jei nei vienas dar neprijungtas, klausdamas tik setup/auth rakto —
-vienintelio dalyko, kurio diegyklė pati sugalvoti negali.
+serveryje su vien `sudo` teisėmis ir išeinančiu interneto ryšiu prieš tai
+nereikia nieko rankiniu būdu. Jei po OS atnaujinimo reikia perkrauti
+(branduolio ar bazinės bibliotekos atnaujinimas), diegyklė sustoja ir apie
+tai praneša — tiesiog perkraukite ir vėl paleiskite tą pačią komandą. Jis
+taip pat pasiūlo įdiegti ir prijungti NetBird arba Tailscale, jei nei
+vienas dar neprijungtas, klausdamas tik setup/auth rakto — vienintelio
+dalyko, kurio diegyklė pati sugalvoti negali.
 
-Likusi šio poskyrio dalis yra rankinė nuoroda, ką diegyklė atlieka
-automatiškai — naudinga suprasti klaidas, izoliuoto tinklo (offline)
-diegimus, ar kitokio distributyvo serverius. Praleiskite ją ir pereikite
-tiesiai prie **Programinė įranga**, jei tiesiog paleidžiate `./install.sh`
-palaikomame distributyve.
+<details>
+<summary>Rankinis/offline žingsnis po žingsnio (tik jei nepaleidžiate
+<code>install.sh</code> — izoliuoto tinklo diegimas, kitas distributyvas,
+ar norite suprasti, ką jis daro)</summary>
 
 #### Pasirinkite ir parinkite serverio dydį
 
@@ -182,6 +186,10 @@ tailscale version
 
 #### Atidarykite ugniasienės prievadus
 
+Skirtingai nei visa kita šiame poskyryje, `./install.sh` **neatlieka** šio
+žingsnio už jus — kuriuos prievadus atidaryti priklauso nuo to, kuriuos
+jutiklių tiltus įjungsite, o tai yra po-diegimo, WebUI valdomas pasirinkimas
+(žr. **§3 Konfigūracija**), o ne kažkas, ką diegyklė gali nuspręsti iš anksto.
 Atidarykite tik tai, ko šiam serveriui reikia įeinančiai srauto krypčiai;
 likusi žemiau esančioje prievadų lentelėje esanti dalis yra išeinanti ir
 nereikalauja ugniasienės taisyklės šiame serveryje. Autoritetingas, aktualus
@@ -223,6 +231,8 @@ Jei kiekviena komanda aukščiau pavyko, tęskite prie **§2** žemiau
 (repozitorijos klonavimas ir podo paleidimas). Jei kas nors nepavyko, iš
 naujo įvykdykite atitinkamą žingsnį aukščiau, prieš judėdami toliau — niekas
 vėliau diegime negali ištaisyti čia trūkstamos priklausomybės.
+
+</details>
 
 ### Programinė įranga
 

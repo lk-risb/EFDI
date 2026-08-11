@@ -13,25 +13,28 @@ SitaWare clients.
 
 ## 1. Prerequisites
 
-### Bare host bootstrap (optional)
+### Bare host bootstrap
 
+On Debian 13 or RHEL/Rocky/AlmaLinux 9/10, the only thing you install by
+hand is `curl` (usually already present) — everything else is one command:
+```bash
+curl -fsSL https://raw.githubusercontent.com/risblicencijos/EFDI/main/install.sh | bash
+```
 `./install.sh` updates the OS (`apt`/`dnf` upgrade) and auto-installs git,
 Python 3.10+, Docker Engine + the Compose plugin (from Docker's official
 repository, not a distro-bundled package), openssl, and gettext itself on
 both Debian (apt) and RHEL/Rocky/Alma (dnf) hosts if any are missing — a
-completely bare server with just `sudo` and outbound internet access can run
-`./install.sh` directly with no manual setup first. If the OS update needs a
-reboot (kernel or core library update), the installer stops and says so —
-just reboot and re-run the same command. It also offers to install and
-connect NetBird or Tailscale if neither is already up, prompting only for
-the setup/auth key — the one thing an installer can't reasonably fabricate
-on its own.
+completely bare server with just `sudo` and outbound internet access needs
+nothing manual before this. If the OS update needs a reboot (kernel or core
+library update), the installer stops and says so — just reboot and re-run
+the same command. It also offers to install and connect NetBird or
+Tailscale if neither is already up, prompting only for the setup/auth
+key — the one thing an installer can't reasonably fabricate on its own.
 
-The rest of this subsection is manual reference for what the installer does
-automatically, useful for understanding failures, air-gapped/offline
-installs, or hosts on a distro other than the two covered below. Skip it and
-go straight to **Software** if you're just running `./install.sh` on a
-supported distro.
+<details>
+<summary>Manual/offline step-by-step (only if you're not running
+<code>install.sh</code> — air-gapped install, a different distro, or
+debugging what it does)</summary>
 
 #### Choose and size the host
 
@@ -66,8 +69,7 @@ sudo apt update && sudo apt upgrade -y
 sudo dnf upgrade -y
 ```
 
-Reboot if the kernel was updated (`sudo reboot`). `./install.sh` does this
-step automatically — it's shown here for manual/offline reference.
+Reboot if the kernel was updated (`sudo reboot`).
 
 #### Install git and basic tools
 
@@ -179,11 +181,15 @@ tailscale version
 
 #### Open firewall ports
 
-Open only what this host needs inbound; everything else in the port table
-below is outbound and needs no firewall rule on this host (a receiving
-radar/sensor's firewall is a different concern). The authoritative, current
-port list is the **Network** table just below — open the ones your
-deployment actually uses (most pods do not run every sensor bridge).
+`./install.sh` does **not** do this step for you — which ports to open
+depends on which sensor bridges you enable, and that's a post-install,
+WebUI-driven choice (see **§3 Configuration**), not something the installer
+can decide up front. Open only what this host needs inbound; everything
+else in the port table below is outbound and needs no firewall rule on
+this host (a receiving radar/sensor's firewall is a different concern).
+The authoritative, current port list is the **Network** table just below —
+open the ones your deployment actually uses (most pods do not run every
+sensor bridge).
 
 **Debian (ufw):**
 ```bash
@@ -219,6 +225,8 @@ If every command above succeeds, continue to **§2** below (the repository
 clone and pod bootstrap). If anything failed, re-run the matching step above
 before moving on — nothing later in the setup can fix a missing dependency
 here.
+
+</details>
 
 ### Software
 
