@@ -71,8 +71,11 @@ def test_offline_tombstone_is_not_republished_every_poll(monkeypatch):
         ],
     )
 
+    # Polls 1-2: device has never been announced online, so cold-start
+    # never emits a spurious tombstone for it (nothing to retract). Poll 3
+    # brings it online (record, not a delete). Poll 4 takes it back
+    # offline — a real online->offline transition, so that's tombstoned.
     assert [record.get("_delete", False) for record in records] == [
-        True,
         False,
         True,
     ]
