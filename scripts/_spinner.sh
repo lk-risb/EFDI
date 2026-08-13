@@ -29,6 +29,19 @@ spin_stop() {
 }
 trap '[ -n "$_SP_PID" ] && kill "$_SP_PID" 2>/dev/null; printf "\r\033[K"' EXIT
 
+# dump_service_logs <compose-file> <env-file> — a failed `docker compose up`
+# only reports orchestration events ("dependency ... is unhealthy"), never
+# the failing container's own stderr/stdout. Call this right before fail()
+# so the actual reason (bad config, missing cert, port conflict) is visible
+# in the same run instead of needing a manual `docker compose logs` round trip.
+dump_service_logs() {
+    local compose_file="$1" env_file="$2"
+    printf "\n${C}  →  Service logs (diagnosing the failure above):${NC}\n\n"
+    docker compose -f "$compose_file" --env-file "$env_file" ps -a 2>&1 || true
+    printf "\n"
+    docker compose -f "$compose_file" --env-file "$env_file" logs --no-log-prefix --tail=80 2>&1 || true
+}
+
 banner() {
     printf "\n  ${W}EFDI${NC} ${DIM}— %s${NC}\n" "$*"
     printf "  %s\n\n" "$(printf '─%.0s' {1..48})"

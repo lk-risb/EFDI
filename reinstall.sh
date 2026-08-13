@@ -31,7 +31,7 @@ run_spin "Building EFDI infrastructure" "Infrastructure image built" \
 
 run_spin "Starting EFDI infrastructure" "Infrastructure started" \
     docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d \
-    || fail "Infrastructure startup failed"
+    || { dump_service_logs "$COMPOSE_FILE" "$ENV_FILE"; fail "Infrastructure startup failed"; }
 
 db_container="$(docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" ps -q zenoh-admin-db)"
 for _ in $(seq 1 60); do
