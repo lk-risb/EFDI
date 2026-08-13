@@ -1,12 +1,12 @@
 # 11 — Dažniausios problemos
 
-### 11.1 Simptomais pagrįsti sprendimai
+## 11.1 Simptomais pagrįsti sprendimai
 
 Simptomais pagrįsti dažniausių diegimo problemų sprendimai. Infrastruktūros
 lygio pamokoms (DNS, TLS profiliai, atominiai rašymai — dalykai, netinkantys
-vienam simptomui), žr. [§11.2 Pastebėti dalykai](#112-pastebėti-dalykai-jau-apmokėtos-pamokos) žemiau.
+vienam simptomui), žr. [§11.2 Pastebėti dalykai](#112-pastebėti-dalykai--jau-apmokėtos-pamokos) žemiau.
 
-#### Zenoh ryšio klaida
+### Zenoh ryšio klaida
 
 **Simptomas:** `zenoh.ZError: Unable to connect to any of [tls/zenoh.efdi...]`
 
@@ -29,7 +29,7 @@ sutvarko), arba:
 set -a && source compose/.env && set +a
 ```
 
-#### Takeliai neatsiranda ATAK
+### Takeliai neatsiranda ATAK
 
 ```bash
 # 1. Patvirtinkite, kad tak-layer veikia
@@ -41,7 +41,7 @@ ss -tn "( dport = :$TAK_PORT )"
 # 3. Patvirtinkite, kad TAK_HOST/TAK_PORT/TAK_TLS .env atitinka tikrą TAK Server galinį tašką
 ```
 
-#### CAT-34 radaro žymeklis trūksta
+### CAT-34 radaro žymeklis trūksta
 
 Radaras nesiuntė CAT-34 I034/120 (3D-Position), todėl EFDI negali saugiai
 nustatyti vietos. Patikrinkite CAT-34 žurnalą dėl `has no site position`.
@@ -52,7 +52,7 @@ nustatykite atsargines koordinates `.env`:
 grep CAT34_RADAR compose/.env
 ```
 
-#### Drono aptikimai nepublikuojami
+### Drono aptikimai nepublikuojami
 
 Tiltas atmeta aptikimus, senesnius nei 300 s. Patikrinkite API ryšį ir
 duomenų šviežumą:
@@ -69,7 +69,7 @@ print(f'{len(fresh)} fresh / {len(d)} total detections')
 "
 ```
 
-#### SitaWare vienetai neatsiranda ATAK
+### SitaWare vienetai neatsiranda ATAK
 
 **1. Patikrinkite, ar tiltas veikia ir apklausia:**
 
@@ -95,7 +95,7 @@ vienetai (`a-u-G-U-C`). Patikrinkite žalią SIDC reikšmę žurnale:
 grep "sidc=" $POD_STATE_DIR/logs/sitaware.log | head -10
 ```
 
-#### EFDI takeliai neatsiranda SitaWare HQ
+### EFDI takeliai neatsiranda SitaWare HQ
 
 ```bash
 tail -f $POD_STATE_DIR/logs/sitaware-hq-nvg.log
@@ -138,7 +138,7 @@ Srauto prieigos žurnalai turi tik rezultatą, takelio skaičių ir kliento
 adresą, ir yra riboti iki vienos eilutės per minutę sėkmingiems ir
 neautorizuotiems paėmimams.
 
-#### Dubliuoti proceso egzemplioriai
+### Dubliuoti proceso egzemplioriai
 
 Sukelia dukart paleistas `start.sh` be sustabdymo:
 
@@ -148,7 +148,7 @@ rm -f $POD_STATE_DIR/.pids/*.pid
 ./start.sh
 ```
 
-#### Radaro ikona dingsta iš ATAK
+### Radaro ikona dingsta iš ATAK
 
 `asterix` tiltas publikuoja keepalive kas 60 s nepriklausomai nuo takelio
 aktyvumo. Jei ikona dingsta, tiltas sustojo:
@@ -157,7 +157,7 @@ aktyvumo. Jei ikona dingsta, tiltas sustojo:
 tail -20 $POD_STATE_DIR/logs/asterix.log | grep -E "keepalive|startup|error"
 ```
 
-### 11.2 Pastebėti dalykai — jau apmokėtos pamokos
+## 11.2 Pastebėti dalykai — jau apmokėtos pamokos
 
 Tai *eksploatacinis/infrastruktūrinis* palydovas
 [`../.ai/.claude/CLAUDE.md`](../.ai/.claude/CLAUDE.md) ASTERIX bitų lygio
@@ -166,7 +166,7 @@ Kiekvienas čia esantis dalykas buvo tikra, patvirtinta problema, su kuria
 susidurta valdant šį podą — perskaitykite prieš derindami kažką, kas panašu
 į vieną iš šių simptomų, kad tos pačios diagnozės nereikėtų pelnyti iš naujo.
 
-#### NetBird split-DNS nematomas konteinerių viduje
+### NetBird split-DNS nematomas konteinerių viduje
 
 **Simptomas:** Routerio konfigūracija nurodo mesh vardą (pvz.,
 `zenoh2.efdi.ltu`); konteineris net nebando prisijungti — jokio lizdo,
@@ -186,7 +186,7 @@ paslaugoje. Domenų vardai lieka programos konfigūracijoje; tik konteinerio
 vietinio hosts-sprendimo reikia atvaizdavimo. Iš naujo pridėkite/atnaujinkite
 juos, jei NetBird kada nors perpriskiria IP.
 
-#### TLS/mTLS identiteto profilis turi atitikti galinį tašką, kurį jis rinkis
+### TLS/mTLS identiteto profilis turi atitikti galinį tašką, kurį jis rinkis
 
 **Simptomas:** Magistralės ryšio bandymas nesukuria jokios klaidos ir jokio
 ryšio — atrodo identiškai kaip DNS problema aukščiau, ar ugniasienės blokas.
@@ -203,7 +203,7 @@ atominis pasirinkimas, niekada nekoreguojamas nepriklausomai. Jei jūsų
 sertifikato profilį į vieną išankstinį nustatymą, o ne du atskirus laukus,
 kuriuos žmogus gali sumaišyti.
 
-#### Vieno failo bind-mount sulaužo atominius rašymus
+### Vieno failo bind-mount sulaužo atominius rašymus
 
 **Simptomas:** Konfigūracijos-taikymo galinis taškas, kuris rašo mažą
 būsenos failą (pvz., vardų-srities-priešdėlio failą), nesėkmingai baigiasi
@@ -223,7 +223,7 @@ pervadinimo), kai `os.replace` nepavyksta su `EBUSY`. Tai nėra atomiška, bet
 tai vienintelė galimybė bind-mounted vienam failui, ir tai geriau nei visos
 taikymo operacijos nesėkmė dėl nesusijusio failo.
 
-#### Identiškai pavadintos dubliuotos funkcijų apibrėžtys tyliai užstoja
+### Identiškai pavadintos dubliuotos funkcijų apibrėžtys tyliai užstoja
 
 **Simptomas:** Dekoderis/tvarkyklė atrodo akivaizdžiai neteisinga, kai
 skaitote ją (neteisingas lauko plotis, neteisinga skalė, klaida, kuri turėtų
@@ -248,7 +248,7 @@ pridėti laikui bėgant, kiekvienas su "savo" panašios logikos kopija),
 ieškokite funkcijos vardo visame faile — ne tik ten, kur radote pirmą kartą —
 kai kažkas neatrodo teisingai.
 
-#### Paslaugos rinkiniui reikia savos būsenos agregacijos
+### Paslaugos rinkiniui reikia savos būsenos agregacijos
 
 **Simptomas:** WebUI ar būsenos galinis taškas rodo daugiaprocesį rinkinį
 (keli vaikai po viena logine "paslauga") kaip nuolat sustabdytą, nors
@@ -265,7 +265,7 @@ kuri surašo ir agreguoja savo vaikų pidfile, pranešant
 veikia/sutrikusi/sustabdyta pagal tai, kiek jų gyva — ne naivus vieno-pidfile
 tikrinimas.
 
-#### Kodo pataisymas negalioja, kol veikiantis procesas nepersileidžia
+### Kodo pataisymas negalioja, kol veikiantis procesas nepersileidžia
 
 **Simptomas:** Ištaisote klaidą (dekoderyje, admin API, bet kur),
 patvirtinate, kad failas diske pasikeitė, ir veikiančios sistemos elgsena
@@ -284,4 +284,3 @@ prieš darant išvadą, kad pataisymas neveikė, ir prieš pranešant, kad
 simptomas vis dar neišspręstas.
 
 ---
-

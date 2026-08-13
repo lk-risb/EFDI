@@ -1,6 +1,6 @@
 # 11 — Troubleshooting
 
-### 11.1 Symptom-first fixes
+## 11.1 Symptom-first fixes
 
 Symptom-first fixes for the most common deployment problems. For
 infrastructure-level lessons learned (DNS, TLS profiles, atomic writes —
@@ -142,7 +142,7 @@ The `asterix` bridge publishes a keepalive every 60 s regardless of track activi
 tail -20 $POD_STATE_DIR/logs/asterix.log | grep -E "keepalive|startup|error"
 ```
 
-### 11.2 Gotchas
+## 11.2 Gotchas
 
 This is the *operational/infrastructure* companion to
 [`../.ai/.claude/CLAUDE.md`](../.ai/.claude/CLAUDE.md)'s ASTERIX bit-level decode gotchas, and to
@@ -259,4 +259,3 @@ specific process (not just recompile/test it) before concluding the fix
 didn't work, and before reporting a symptom as still-unresolved.
 
 ---
-

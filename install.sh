@@ -15,7 +15,7 @@ VENV="$SCRIPT_DIR/compose/venv"
 [ -t 0 ] || exec < /dev/tty 2>/dev/null || true
 
 # ── OS package manager detection (Ubuntu/Debian apt, RHEL/Rocky/Alma dnf — the
-# two families docs/INSTALL.md documents) — used throughout this script so a
+# two families docs/03-bootstrap-and-install.md documents) — used throughout this script so a
 # bare host with none of git/Python/Docker/openssl/gettext pre-installed can
 # still complete `./install.sh` unattended, not just error out with a pointer
 # to the manual doc. ─────────────────────────────────────────────────────────
@@ -193,10 +193,10 @@ if ! detect_python; then
     info "Python 3.10+ not found — installing…"
     # RHEL 9/Rocky/Alma ship Python 3.9 (too old); install 3.11 from AppStream
     # alongside it rather than replacing the system python3 (matches
-    # docs/INSTALL.md's manual steps for this distro family).
+    # docs/03-bootstrap-and-install.md's manual steps for this distro family).
     pkg_install "python3 python3-venv python3-pip" "python3.11 python3.11-pip" \
-        || err "Python 3.10+ required and no supported package manager (apt/dnf) found — install it manually per docs/INSTALL.md and re-run."
-    detect_python || err "Python 3.10+ still not found after installing — install it manually per docs/INSTALL.md and re-run."
+        || err "Python 3.10+ required and no supported package manager (apt/dnf) found — install it manually per docs/03-bootstrap-and-install.md and re-run."
+    detect_python || err "Python 3.10+ still not found after installing — install it manually per docs/03-bootstrap-and-install.md and re-run."
 fi
 ok "Python ${PY_VER} ($PYTHON)"
 
@@ -224,9 +224,9 @@ if ! command -v docker &>/dev/null; then
             sudo dnf install -y -q docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
             sudo systemctl enable --now docker
             ;;
-        *) err "Docker not found and no supported package manager (apt/dnf) found — install it manually per docs/INSTALL.md and re-run." ;;
+        *) err "Docker not found and no supported package manager (apt/dnf) found — install it manually per docs/03-bootstrap-and-install.md and re-run." ;;
     esac
-    command -v docker &>/dev/null || err "Docker installation failed — install it manually per docs/INSTALL.md and re-run."
+    command -v docker &>/dev/null || err "Docker installation failed — install it manually per docs/03-bootstrap-and-install.md and re-run."
     sudo groupadd docker 2>/dev/null || true
     sudo usermod -aG docker "$USER"
     DOCKER_JUST_INSTALLED=1
@@ -262,7 +262,7 @@ fi
 # to new login sessions, not this one, so any docker command below would fail
 # with a permission error. Rather than fight that with newgrp/sg tricks in a
 # non-interactive script, stop here and ask for a fresh session, same as the
-# manual steps in docs/INSTALL.md.
+# manual steps in docs/03-bootstrap-and-install.md.
 if (( DOCKER_JUST_INSTALLED )); then
     echo ""
     ok "Docker installed — added $USER to the docker group."

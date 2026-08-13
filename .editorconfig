@@ -1,4 +1,4 @@
-# Describes this repo's actual formatting conventions — see docs/INSTALL.md
+# Describes this repo's actual formatting conventions — see docs/11-troubleshooting.md
 # §11.2 Gotchas for why nothing here should trigger an auto-reformat of existing files.
 root = true
 

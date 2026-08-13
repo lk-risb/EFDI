@@ -36,7 +36,7 @@ from protocols.proto.flex335_pb2 import SapientFlex335Track
 # Outbound (EFDI -> SAPIENT) encoders live in this same file, alongside the
 # inbound decoder above — one file per protocol, both directions. Encoding
 # targets the official schema vendored at compose/vendor/sapient_msg
-# (Apache-2.0, see docs/INSTALL.md §7 "Integrations → Vendored third-party schemas"), not a
+# (Apache-2.0, see docs/08-integrations.md "Vendored third-party schemas"), not a
 # local approximation, so the output is interoperable with real SAPIENT
 # systems.
 from sapient_msg.bsi_flex_335_v2_0.alert_ack_pb2 import AlertAck

@@ -1,6 +1,6 @@
 # clients — send & receive data with an EFDI pod
 
-See `docs/INSTALL.md` §7 "Integrations → Client SDKs — connecting to the pod" for the
+See `docs/08-integrations.md` "Client SDKs — connecting to the pod" for the
 full guide: the connection model, required env vars, the mTLS one-block
 gotcha, and per-language/per-stack build and run instructions for everything
 under `connect/` and `examples/` below.

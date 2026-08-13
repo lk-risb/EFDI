@@ -70,7 +70,7 @@ presenting uniform confidence.
   implementation decodes the published KLV local-set tag/length/value
   structure. SRT is EFDI's chosen transport for the metadata stream, not
   part of the KLV schema itself — this is called out in
-  `../../INSTALL.md` §7 Integrations to avoid implying SRT is a STANAG 4609
+  `../../08-integrations.md` to avoid implying SRT is a STANAG 4609
   requirement.
 - **Not verified against real traffic** at time of writing.
 
