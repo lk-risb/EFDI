@@ -242,6 +242,19 @@ if ! detect_python; then
 fi
 ok "Python ${PY_VER} ($PYTHON)"
 
+# Debian/Ubuntu split venv+pip support out of the base python3 package —
+# Debian 13 ships python3.13 by itself, so the branch above (which only
+# installs python3-venv/python3-pip when Python is entirely missing) never
+# runs on a host that already has Python. `python3 -m venv` then silently
+# creates a venv missing pip (no error), which only surfaces later as
+# "venv/bin/pip: No such file or directory". Ensure both unconditionally —
+# idempotent, a no-op if already present.
+if ! "$PYTHON" -m ensurepip --version &>/dev/null; then
+    info "Installing venv/pip support for ${PYTHON}…"
+    pkg_install "python3-venv python3-pip" "python3-pip" \
+        || warn "Could not install python3-venv/python3-pip automatically — venv creation below may fail."
+fi
+
 DOCKER_JUST_INSTALLED=0
 if ! command -v docker &>/dev/null; then
     info "Docker not found — installing from the official Docker repository (not distro-bundled docker.io)…"
