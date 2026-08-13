@@ -1,4 +1,4 @@
-# EFDI topic taxonomy
+# 13 — Topic Taxonomy
 
 Status: **implemented**.
 
