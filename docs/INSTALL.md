@@ -18,7 +18,7 @@ SitaWare clients.
 On Debian 13 or RHEL/Rocky/AlmaLinux 9/10, the only thing you install by
 hand is `curl` (usually already present) — everything else is one command:
 ```bash
-curl -fsSL https://raw.githubusercontent.com/risblicencijos/EFDI/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/lk-risb/EFDI/main/install.sh | bash
 ```
 `./install.sh` updates the OS (`apt`/`dnf` upgrade) and auto-installs git,
 Python 3.10+, Docker Engine + the Compose plugin (from Docker's official
@@ -275,7 +275,7 @@ On a fresh host with nothing installed yet, one command clones the repo and
 runs the installer, which auto-installs every prerequisite from §1 itself:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/risblicencijos/EFDI/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/lk-risb/EFDI/main/install.sh | bash
 ```
 
 Equivalent to cloning first, then running the same script locally:
