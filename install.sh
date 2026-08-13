@@ -650,7 +650,11 @@ ok "compose/.env written (mode 600)"
 
 # ── Python venv ────────────────────────────────────────────────────────────────
 section "Python virtual environment"
-if [ ! -x "$VENV/bin/python3" ]; then
+if [ ! -x "$VENV/bin/pip" ]; then
+    # Also catches a venv left over from before the ensurepip fix above existed
+    # (python3 present, pip missing) — re-running venv creation on an existing
+    # directory doesn't wipe it, it just fills in what's missing, and ensurepip
+    # is now guaranteed available system-wide.
     info "Creating venv at $VENV…"
     "$PYTHON" -m venv "$VENV"
 fi
