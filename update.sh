@@ -18,6 +18,18 @@ PYTHON="$ROOT/compose/venv/bin/python3"
 [ -d "$ROOT/.git" ] || fail "Not a git repo — clone via git, not a manual download"
 cd "$ROOT"
 
+# Same check as reinstall.sh: if install.sh never finished, the Zenoh router
+# config doesn't exist yet — `docker compose up` doesn't error on a missing
+# bind-mount source, Docker silently creates an empty directory there
+# instead, and zenohd then crashes with a confusing "Is a directory" instead
+# of the real problem. Catch it here with an actionable message.
+POD_STATE_DIR="$(grep '^POD_STATE_DIR=' "$ENV_FILE" | head -1 | cut -d= -f2- | tr -d '[:space:]')"
+ZENOH_CONFIG="${POD_STATE_DIR}/zenoh/config.json5"
+if [ -d "$ZENOH_CONFIG" ]; then
+    rmdir "$ZENOH_CONFIG" 2>/dev/null || true
+fi
+[ -f "$ZENOH_CONFIG" ] || fail "Zenoh config not found at $ZENOH_CONFIG — this deployment was never fully installed. Run ./install.sh and choose Full reconfigure first."
+
 banner "Update"
 
 branch="$(git symbolic-ref --quiet --short HEAD)" \
