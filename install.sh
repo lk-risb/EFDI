@@ -536,6 +536,15 @@ fi
 section "Zenoh router config (bootstrap — TCP, no mTLS)"
 mkdir -p "${POD_STATE_DIR}/zenoh/tls" "${POD_STATE_DIR}/zenoh/rocksdb"
 
+# A prior interrupted attempt (pre-degraded-boot install.sh, which never wrote
+# this file in production mode) can leave Docker's own stray artifact here: a
+# missing bind-mount source silently becomes an empty directory. `cat >` can't
+# redirect onto a directory ("Is a directory") — clear it first, same guard
+# reinstall.sh/update.sh already carry for this exact failure mode.
+if [ -d "${POD_STATE_DIR}/zenoh/config.json5" ]; then
+    rmdir "${POD_STATE_DIR}/zenoh/config.json5" 2>/dev/null || true
+fi
+
 cat > "${POD_STATE_DIR}/zenoh/config.json5" << ZCFG
 {
   mode: "router",
