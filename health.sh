@@ -87,6 +87,14 @@ mapfile -t python_files < <(
 ok "Python modules compile"
 
 info "Python tests"
+# pytest is test-only tooling, not a runtime pod dependency — it deliberately
+# isn't in compose/requirements.txt (CI installs it ad hoc too, see
+# .github/workflows/python-tests.yml). install.sh's venv never has it, so a
+# fresh install's first health.sh run always needs to fetch it here.
+if ! "$PYTHON" -m pytest --version &>/dev/null; then
+    info "pytest not found in venv — installing (needed for the self-test)…"
+    "$PYTHON" -m pip install --quiet --disable-pip-version-check pytest
+fi
 PYTHONPATH="$ROOT/compose/generated:$ROOT/compose/generated/protocols:$ROOT/compose" \
     "$PYTHON" -m pytest -q "$ROOT/tests"
 ok "Python tests passed"
