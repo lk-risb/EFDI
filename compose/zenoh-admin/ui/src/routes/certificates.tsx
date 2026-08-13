@@ -172,7 +172,7 @@ function CertificatesPage() {
   return (
     <Layout>
       <div className="mx-auto max-w-7xl p-6">
-        <PageHeader title="Certificate Authority" count={certs?.length} countLabel="local identities" />
+        <PageHeader eyebrow="SECURITY / CERTIFICATES" title="Certificate Authority" count={certs?.length} countLabel="local identities" />
 
         {bootstrapStatus?.bootstrap === true && (
           <section className="hud-card hud-glass hud-frame relative mb-6 border border-amber-500/30 p-4">

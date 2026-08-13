@@ -54,7 +54,7 @@ const emptyForm: TopicForm = {
 }
 
 const inputClass = 'w-full rounded-md border border-zinc-300 bg-zinc-100 px-3 py-2 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-accent-ring dark:border-white/10 dark:bg-[#141416] dark:text-white'
-const cardClass = 'hud-frame relative rounded-md border border-zinc-200 bg-white p-5 dark:border-white/10 dark:bg-[#0c0c0e]'
+const cardClass = 'hud-card hud-glass hud-frame relative border border-zinc-200 p-5 dark:border-white/10'
 
 function formatSeen(value: string): string {
   const date = new Date(value)

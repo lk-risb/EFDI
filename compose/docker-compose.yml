@@ -158,6 +158,8 @@ services:
     environment:
       - EFDI_CERT_DIR=${EFDI_CERT_DIR:-/certs/efdi}
       - EFDI_CERT_HOST_DIR=${BUNDLE_DIR:-}
+      - EFDI_TAK_PACKAGE_DIR=/integrations/tak
+      - EFDI_TAK_PACKAGE_HOST_DIR=${POD_STATE_DIR}/integrations/tak
       - PARTNER_NAMESPACE=${PARTNER_NAMESPACE}
       - EFDI_TRUST_DOMAIN=${EFDI_TRUST_DOMAIN:-efdi.global}
       - NAMESPACE_PREFIX_FILE=/namespace-prefix
@@ -224,6 +226,7 @@ services:
       - ${POD_STATE_DIR}/data-topic-prefix:/data-topic-prefix:rw
       - ${POD_STATE_DIR}/logs:/runtime-logs:ro
       - ${POD_STATE_DIR}/stats:/runtime-stats:ro
+      - ${POD_STATE_DIR}/integrations/tak:/integrations/tak:rw
     healthcheck:
       disable: true
 

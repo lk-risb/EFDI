@@ -59,7 +59,7 @@ function ChangesPage() {
   return (
     <Layout>
       <div className="mx-auto max-w-7xl p-6">
-        <PageHeader title="Configuration Changes" count={revisions?.length} countLabel="revisions" actions={
+        <PageHeader eyebrow="CONFIG / CHANGES" title="Configuration Changes" count={revisions?.length} countLabel="revisions" actions={
           <button onClick={load} className="flex items-center gap-2 rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-600 dark:border-white/10 dark:text-zinc-300">
             <RotateCw size={14} /> Refresh
           </button>
