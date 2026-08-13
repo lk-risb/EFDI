@@ -4,6 +4,7 @@ import { CheckCircle2, Clock3, RotateCw, ShieldAlert } from 'lucide-react'
 import { Layout } from '@/components/Layout'
 import { PageHeader } from '@/components/PageHeader'
 import { HudCorners } from '@/components/HudCorners'
+import { StatusPill } from '@/components/StatusPill'
 import { apiJson, errorMessage } from '@/lib/api'
 import { notify } from '@/lib/notify'
 import { useAuth } from '@/store/auth'
@@ -29,10 +30,10 @@ interface ConfigRevision {
   completed_at: string | null
 }
 
-function stateClass(state: string): string {
-  if (state === 'applied') return 'enterprise-chip enterprise-chip-ok'
-  if (state === 'pending' || state === 'validating') return 'enterprise-chip enterprise-chip-warn'
-  return 'enterprise-chip border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400'
+function stateTone(state: string): 'ok' | 'warn' | 'bad' {
+  if (state === 'applied') return 'ok'
+  if (state === 'pending' || state === 'validating') return 'warn'
+  return 'bad'
 }
 
 function ChangesPage() {
@@ -65,9 +66,9 @@ function ChangesPage() {
         } />
 
         <div className="mb-5 grid gap-3 sm:grid-cols-3">
-          <div className="enterprise-panel"><p className="hud-label text-[10px] text-zinc-500">Pending</p><p className="mt-2 flex items-center gap-2 text-2xl font-display"><Clock3 size={18} className="text-amber-500" />{pending}</p></div>
-          <div className="enterprise-panel"><p className="hud-label text-[10px] text-zinc-500">Applied</p><p className="mt-2 flex items-center gap-2 text-2xl font-display"><CheckCircle2 size={18} className="text-green-500" />{revisions?.filter(item => item.state === 'applied').length ?? 0}</p></div>
-          <div className="enterprise-panel"><p className="hud-label text-[10px] text-zinc-500">Attention</p><p className="mt-2 flex items-center gap-2 text-2xl font-display"><ShieldAlert size={18} className="text-red-500" />{failed}</p></div>
+          <div className="hud-card hud-glass border border-zinc-200 dark:border-white/10 p-4"><p className="hud-label text-[10px] text-zinc-500">Pending</p><p className="mt-2 flex items-center gap-2 text-2xl font-display"><Clock3 size={18} className="text-amber-500" />{pending}</p></div>
+          <div className="hud-card hud-glass border border-zinc-200 dark:border-white/10 p-4"><p className="hud-label text-[10px] text-zinc-500">Applied</p><p className="mt-2 flex items-center gap-2 text-2xl font-display"><CheckCircle2 size={18} className="text-green-500" />{revisions?.filter(item => item.state === 'applied').length ?? 0}</p></div>
+          <div className="hud-card hud-glass border border-zinc-200 dark:border-white/10 p-4"><p className="hud-label text-[10px] text-zinc-500">Attention</p><p className="mt-2 flex items-center gap-2 text-2xl font-display"><ShieldAlert size={18} className="text-red-500" />{failed}</p></div>
         </div>
 
         <div className="hud-frame relative overflow-hidden rounded-md border border-zinc-200 bg-white dark:border-white/10 dark:bg-[#0c0c0e]">
@@ -82,7 +83,7 @@ function ChangesPage() {
           ) : revisions.map(revision => (
             <div key={revision.id} className="grid grid-cols-[minmax(10rem,1.2fr)_7rem_9rem_minmax(9rem,1fr)] gap-3 border-b border-zinc-100 px-4 py-3 text-xs last:border-0 dark:border-white/5">
               <div className="min-w-0"><p className="truncate font-mono text-zinc-800 dark:text-zinc-200">{revision.target_namespace}</p><p className="mt-1 text-zinc-500">{new Date(revision.created_at).toLocaleString()}</p>{revision.detail && <p className="mt-1 truncate text-red-500" title={revision.detail}>{revision.detail}</p>}</div>
-              <div><span className={stateClass(revision.state)}>{revision.state}</span></div>
+              <div><StatusPill text={revision.state} tone={stateTone(revision.state)} /></div>
               <span className="text-zinc-600 dark:text-zinc-400">{revision.source}</span>
               <div className="min-w-0 font-mono text-zinc-500"><p>v{revision.version}</p><p className="truncate" title={revision.config_sha256}>{revision.config_sha256.slice(0, 16)}…</p></div>
             </div>

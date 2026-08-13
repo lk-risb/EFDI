@@ -19,6 +19,7 @@ import {
     WifiOff
 } from 'lucide-react'
 import {HudCorners} from '@/components/HudCorners'
+import {StatusPill} from '@/components/StatusPill'
 import {TopologyMap} from '@/components/TopologyMap'
 import {fetchTopology, type TopologyNode, type TopologyTransportEdge} from '@/lib/topology'
 
@@ -215,12 +216,12 @@ function NetworkPage() {
           ) : undefined}
         />
 
-        <div className="mb-5 flex flex-wrap gap-2 text-xs">
-          <span className="enterprise-chip enterprise-chip-ok"><CheckCircle2 size={13} /> {topology.filter(node => node.online && node.healthy).length} healthy</span>
-          {canManage && <span className="enterprise-chip"><GitBranch size={13} /> {children.length} direct children</span>}
-          {canManage && <span className={`enterprise-chip ${trust?.acl?.state === 'applied' ? 'enterprise-chip-ok' : 'enterprise-chip-warn'}`}><ShieldCheck size={13} /> ACL {trust?.acl ? `v${trust.acl.sequence} ${trust.acl.state}` : 'not generated'}</span>}
-          <span className="enterprise-chip"><ShieldCheck size={13} /> immediate-parent authority</span>
-          <span className="enterprise-chip"><WifiOff size={13} /> child autonomy on disconnect</span>
+        <div className="mb-5 flex flex-wrap items-center gap-2 text-xs">
+          <span className="flex items-center gap-1"><CheckCircle2 size={13} /> <StatusPill text={`${topology.filter(node => node.online && node.healthy).length} healthy`} tone="ok" /></span>
+          {canManage && <span className="flex items-center gap-1"><GitBranch size={13} /> <StatusPill text={`${children.length} direct children`} tone="neutral" /></span>}
+          {canManage && <span className="flex items-center gap-1"><ShieldCheck size={13} /> <StatusPill text={`ACL ${trust?.acl ? `v${trust.acl.sequence} ${trust.acl.state}` : 'not generated'}`} tone={trust?.acl?.state === 'applied' ? 'ok' : 'warn'} /></span>}
+          <span className="flex items-center gap-1"><ShieldCheck size={13} /> <StatusPill text="immediate-parent authority" tone="neutral" /></span>
+          <span className="flex items-center gap-1"><WifiOff size={13} /> <StatusPill text="child autonomy on disconnect" tone="neutral" /></span>
         </div>
         {aclReadiness?.ready === false && (
           <div className="mb-5 rounded-md border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-300">
@@ -264,12 +265,13 @@ function NetworkPage() {
                     </p>
                   )}
                   <div className="mt-2 flex flex-wrap gap-2">
-                    <span className={`enterprise-chip ${node.online && node.healthy ? 'enterprise-chip-ok' : 'enterprise-chip-warn'}`}>
-                      {node.online ? (node.healthy ? 'healthy' : 'degraded') : 'offline'}
-                    </span>
-                    <span className="enterprise-chip">{child ? 'direct child' : node.role === 'hq' ? 'local root' : 'delegated descendant'}</span>
-                    <span className={`enterprise-chip ${node.verified ? 'enterprise-chip-ok' : 'enterprise-chip-warn'}`}>{node.verified ? 'signed identity verified' : 'unverified observation'}</span>
-                    <span className="enterprise-chip">{node.config_status ?? 'no config result'}</span>
+                    <StatusPill
+                      text={node.online ? (node.healthy ? 'healthy' : 'degraded') : 'offline'}
+                      tone={node.online && node.healthy ? 'ok' : 'warn'}
+                    />
+                    <StatusPill text={child ? 'direct child' : node.role === 'hq' ? 'local root' : 'delegated descendant'} tone="neutral" />
+                    <StatusPill text={node.verified ? 'signed identity verified' : 'unverified observation'} tone={node.verified ? 'ok' : 'warn'} />
+                    <StatusPill text={node.config_status ?? 'no config result'} tone="neutral" />
                   </div>
                 </div>
                 <div className="flex gap-2">
@@ -284,20 +286,20 @@ function NetworkPage() {
               </div>
 
               <div className="grid gap-4 lg:grid-cols-2">
-                <div className="enterprise-panel">
-                  <h3 className="enterprise-panel-title">Summary</h3>
-                  <dl className="enterprise-kv">
-                    <dt>Stable Zenoh ID</dt><dd className="font-mono break-all">{node.router_zid ?? 'Not reported'}</dd>
-                    <dt>Process</dt><dd>{node.online ? 'running' : 'unreachable'}</dd>
-                    <dt>Role</dt><dd>{node.role}</dd>
-                    <dt>Parent</dt><dd className="font-mono break-all">{node.parent_namespace ?? 'Local root'}</dd>
-                    <dt>Last presence</dt><dd>{node.last_seen_seconds.toFixed(1)}s ago</dd>
-                    <dt>Config result</dt><dd>{node.config_status ? `${node.config_status} · v${node.config_status_version}` : 'No result reported'}</dd>
+                <div className="hud-card hud-glass border border-zinc-200 dark:border-white/10 p-4">
+                  <h3 className="mb-3 text-sm font-semibold text-zinc-900 dark:text-zinc-100">Summary</h3>
+                  <dl className="grid grid-cols-[minmax(7.5rem,0.65fr)_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm">
+                    <dt className="text-zinc-500">Stable Zenoh ID</dt><dd className="font-mono break-all text-zinc-900 dark:text-zinc-100">{node.router_zid ?? 'Not reported'}</dd>
+                    <dt className="text-zinc-500">Process</dt><dd className="text-zinc-900 dark:text-zinc-100">{node.online ? 'running' : 'unreachable'}</dd>
+                    <dt className="text-zinc-500">Role</dt><dd className="text-zinc-900 dark:text-zinc-100">{node.role}</dd>
+                    <dt className="text-zinc-500">Parent</dt><dd className="font-mono break-all text-zinc-900 dark:text-zinc-100">{node.parent_namespace ?? 'Local root'}</dd>
+                    <dt className="text-zinc-500">Last presence</dt><dd className="text-zinc-900 dark:text-zinc-100">{node.last_seen_seconds.toFixed(1)}s ago</dd>
+                    <dt className="text-zinc-500">Config result</dt><dd className="text-zinc-900 dark:text-zinc-100">{node.config_status ? `${node.config_status} · v${node.config_status_version}` : 'No result reported'}</dd>
                   </dl>
                 </div>
 
-                <div className="enterprise-panel">
-                  <h3 className="enterprise-panel-title">Observed links</h3>
+                <div className="hud-card hud-glass border border-zinc-200 dark:border-white/10 p-4">
+                  <h3 className="mb-3 text-sm font-semibold text-zinc-900 dark:text-zinc-100">Observed links</h3>
                   {links.length === 0 ? (
                     <p className="text-sm text-zinc-500">No established Zenoh transport link has been reported.</p>
                   ) : links.map(link => {
@@ -312,8 +314,8 @@ function NetworkPage() {
                   })}
                 </div>
 
-                <div className="enterprise-panel lg:col-span-2">
-                  <h3 className="enterprise-panel-title">Authority and offline behavior</h3>
+                <div className="hud-card hud-glass border border-zinc-200 dark:border-white/10 p-4 lg:col-span-2">
+                  <h3 className="mb-3 text-sm font-semibold text-zinc-900 dark:text-zinc-100">Authority and offline behavior</h3>
                   <div className="grid gap-4 text-sm md:grid-cols-3">
                     <div><p className="hud-label text-[10px] text-zinc-500">Authority</p><p className="mt-1">Only the immediate parent may sign a change. Deeper requests are verified and re-signed at every registered hop.</p></div>
                     <div><p className="hud-label text-[10px] text-zinc-500">Activation</p><p className="mt-1">Candidate configuration is preflighted by Zenoh, atomically activated, health checked, and rolled back on failure.</p></div>
@@ -327,10 +329,10 @@ function NetworkPage() {
 
         {canManage && (
           <>
-            <h2 className="enterprise-section-title">Direct management relationships</h2>
+            <h2 className="mb-3 mt-6 text-sm font-semibold text-zinc-900 dark:text-zinc-100">Direct management relationships</h2>
             <div className="grid gap-3 md:grid-cols-2">
               {children.length === 0 ? (
-                <div className="enterprise-panel md:col-span-2">
+                <div className="hud-card hud-glass border border-zinc-200 dark:border-white/10 p-4 md:col-span-2">
                   <p className="text-sm text-zinc-500">No enrolled direct children. Create an invitation from Certificate Authority to establish one.</p>
                 </div>
               ) : children.map(c => {
@@ -345,11 +347,11 @@ function NetworkPage() {
                   <p className="mt-1 text-[11px] text-zinc-500">trust: {authority?.state ?? 'not linked'}{authority ? ` · expires ${new Date(authority.not_after).toLocaleDateString()}` : ''}</p>
                 </div>
                 {authority && <div className="relative z-10 flex gap-1">
-                  <button title="Rotate link credential" disabled={changing !== null || authority.state !== 'active'} onClick={() => rotateLink(authority)} className="rounded p-2 text-zinc-500 hover:bg-zinc-100 disabled:opacity-30 dark:hover:bg-white/5"><RefreshCw size={14} /></button>
+                  <button title="Rotate link credential" disabled={changing !== null || authority.state !== 'active'} onClick={() => rotateLink(authority)} className="rounded-none p-2 text-zinc-500 hover:bg-zinc-100 disabled:opacity-30 dark:hover:bg-white/5"><RefreshCw size={14} /></button>
                   {authority.state === 'quarantined' ?
-                    <button title="Restore authority" disabled={changing !== null} onClick={() => lifecycle(authority, 'restore')} className="rounded p-2 text-green-600 hover:bg-green-500/10"><ShieldCheck size={14} /></button> :
-                    <button title="Quarantine authority" disabled={changing !== null || authority.state !== 'active'} onClick={() => lifecycle(authority, 'quarantine')} className="rounded p-2 text-amber-600 hover:bg-amber-500/10 disabled:opacity-30"><Ban size={14} /></button>}
-                  <button title="Irreversibly decommission" disabled={changing !== null || authority.state === 'decommissioned'} onClick={() => lifecycle(authority, 'decommission')} className="rounded p-2 text-red-600 hover:bg-red-500/10 disabled:opacity-30"><ShieldOff size={14} /></button>
+                    <button title="Restore authority" disabled={changing !== null} onClick={() => lifecycle(authority, 'restore')} className="rounded-none p-2 text-green-600 hover:bg-green-500/10"><ShieldCheck size={14} /></button> :
+                    <button title="Quarantine authority" disabled={changing !== null || authority.state !== 'active'} onClick={() => lifecycle(authority, 'quarantine')} className="rounded-none p-2 text-amber-600 hover:bg-amber-500/10 disabled:opacity-30"><Ban size={14} /></button>}
+                  <button title="Irreversibly decommission" disabled={changing !== null || authority.state === 'decommissioned'} onClick={() => lifecycle(authority, 'decommission')} className="rounded-none p-2 text-red-600 hover:bg-red-500/10 disabled:opacity-30"><ShieldOff size={14} /></button>
                 </div>}
               </div>
                 )

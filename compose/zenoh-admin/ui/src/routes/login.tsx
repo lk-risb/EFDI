@@ -57,7 +57,7 @@ function LoginPage() {
       <div className="hud-frame w-full max-w-sm space-y-6 p-8 rounded-md border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#0c0c0e] hud-glass">
         <HudCorners />
         <div>
-          {logoUrl && <img src={logoUrl} alt="" className="w-10 h-10 rounded object-contain mb-3" />}
+          {logoUrl && <img src={logoUrl} alt="" className="w-10 h-10 rounded-none object-contain mb-3" />}
           <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-white">{orgName}</h1>
           <p className="hud-label text-xs text-zinc-500 dark:text-zinc-500 mt-2">Sign in to manage the Zenoh router</p>
         </div>

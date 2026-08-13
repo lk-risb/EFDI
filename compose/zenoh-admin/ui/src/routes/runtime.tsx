@@ -256,14 +256,14 @@ function RuntimePage() {
                         // next launch is another way to lose control of the pod.
                         disabled={!canWrite || selectionBusy === item.name || item.kind === 'infrastructure'}
                         onChange={e => updateSelection(item.name, e.target.checked)}
-                        className="h-4 w-4 rounded border-zinc-400 bg-transparent accent-accent-fill focus:ring-accent-ring disabled:opacity-30 dark:border-zinc-600"
+                        className="h-4 w-4 rounded-none border-zinc-400 bg-transparent accent-accent-fill focus:ring-accent-ring disabled:opacity-30 dark:border-zinc-600"
                       />
                       <span className={`h-2 w-2 shrink-0 rounded-full ${presentation.dot}`} />
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5">
                           <p className="truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">{item.name}</p>
                           {item.kind && (
-                            <span className={`shrink-0 rounded px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide ${KIND_STYLE[item.kind] ?? KIND_STYLE.infrastructure}`}>
+                            <span className={`shrink-0 rounded-none px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide ${KIND_STYLE[item.kind] ?? KIND_STYLE.infrastructure}`}>
                               {item.kind}
                             </span>
                           )}
@@ -278,12 +278,12 @@ function RuntimePage() {
                         )}
                       </div>
                       <span className={`hidden text-[10px] uppercase tracking-[0.18em] sm:inline ${presentation.text}`}>{presentation.label}</span>
-                      <button title={blockedReason ? `Cannot start — ${blockedReason}` : 'Start'} disabled={!canWrite || !!action || state?.running || !!blockedReason} onClick={() => serviceAction(item.name, 'start')} className="rounded p-1.5 text-zinc-500 transition hover:bg-emerald-500/10 hover:text-emerald-500 disabled:opacity-30"><Play size={13} /></button>
-                      <button title={item.kind === 'infrastructure' ? 'Infrastructure cannot be stopped from here' : 'Stop'} disabled={!canWrite || !!action || !state?.running || item.kind === 'infrastructure'} onClick={() => serviceAction(item.name, 'stop')} className="rounded p-1.5 text-zinc-500 transition hover:bg-red-500/10 hover:text-red-500 disabled:opacity-30"><Square size={12} /></button>
-                      <button title={blockedReason ? `Cannot restart — ${blockedReason}` : 'Restart'} disabled={!canWrite || !!action || item.name === 'admin-control' || !!blockedReason} onClick={() => serviceAction(item.name, 'restart')} className="rounded p-1.5 text-zinc-500 transition hover:bg-accent-ring/10 hover:text-accent-ring disabled:opacity-30"><RefreshCw size={13} className={action === 'restart' ? 'animate-spin' : ''} /></button>
-                      <button title="Show logs" onClick={() => showLogs(item.name)} className="rounded p-1.5 text-zinc-500 transition hover:bg-zinc-200 dark:hover:bg-white/10"><FileText size={13} /></button>
+                      <button title={blockedReason ? `Cannot start — ${blockedReason}` : 'Start'} disabled={!canWrite || !!action || state?.running || !!blockedReason} onClick={() => serviceAction(item.name, 'start')} className="rounded-none p-1.5 text-zinc-500 transition hover:bg-emerald-500/10 hover:text-emerald-500 disabled:opacity-30"><Play size={13} /></button>
+                      <button title={item.kind === 'infrastructure' ? 'Infrastructure cannot be stopped from here' : 'Stop'} disabled={!canWrite || !!action || !state?.running || item.kind === 'infrastructure'} onClick={() => serviceAction(item.name, 'stop')} className="rounded-none p-1.5 text-zinc-500 transition hover:bg-red-500/10 hover:text-red-500 disabled:opacity-30"><Square size={12} /></button>
+                      <button title={blockedReason ? `Cannot restart — ${blockedReason}` : 'Restart'} disabled={!canWrite || !!action || item.name === 'admin-control' || !!blockedReason} onClick={() => serviceAction(item.name, 'restart')} className="rounded-none p-1.5 text-zinc-500 transition hover:bg-accent-ring/10 hover:text-accent-ring disabled:opacity-30"><RefreshCw size={13} className={action === 'restart' ? 'animate-spin' : ''} /></button>
+                      <button title="Show logs" onClick={() => showLogs(item.name)} className="rounded-none p-1.5 text-zinc-500 transition hover:bg-zinc-200 dark:hover:bg-white/10"><FileText size={13} /></button>
                     </div>
-                    {openLogs === item.name && <pre className="relative z-10 mt-2 max-h-40 overflow-auto rounded bg-zinc-950 p-2 font-mono text-[10px] leading-4 text-zinc-300">{logLines.join('\n') || 'No log output yet.'}</pre>}
+                    {openLogs === item.name && <pre className="relative z-10 mt-2 max-h-40 overflow-auto rounded-none bg-zinc-950 p-2 font-mono text-[10px] leading-4 text-zinc-300">{logLines.join('\n') || 'No log output yet.'}</pre>}
                   </div>
                 )
               })}

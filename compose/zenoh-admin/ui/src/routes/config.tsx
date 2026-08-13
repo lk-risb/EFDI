@@ -582,7 +582,7 @@ function ConfigPage() {
                 <input type="text" disabled={!canWrite} className={inputClass}
                   value={fields.inbound_namespace} onChange={e => set('inbound_namespace', e.target.value)} />
               </Field>
-              <p className="rounded border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+              <p className="rounded-none border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
                 Namespace changes restart the router. Native bridge processes must also be restarted to publish under the new prefix.
               </p>
             </ConfigSection>

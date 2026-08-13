@@ -143,7 +143,7 @@ function PeerList({ peers }: { peers: PeerInfo[] }) {
             <div key={p.zid} className="flex items-center gap-2 text-sm">
               <Radio size={12} className="text-sky-500 hud-live-dot shrink-0" />
               <span className="font-mono text-xs text-zinc-700 dark:text-zinc-300 truncate flex-1">{p.zid}</span>
-              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded border text-zinc-600 dark:text-zinc-400 bg-zinc-200 dark:bg-zinc-400/10 border-zinc-300 dark:border-zinc-700 shrink-0">
+              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-none border text-zinc-600 dark:text-zinc-400 bg-zinc-200 dark:bg-zinc-400/10 border-zinc-300 dark:border-zinc-700 shrink-0">
                 {WHATAMI_LABEL[p.whatami] ?? p.whatami}
               </span>
               {p.link_count !== null && (
@@ -219,7 +219,7 @@ function TopicTree({ label, items }: { label: string; items: string[] }) {
                 <button onClick={() => toggle(group)}
                   className="flex items-center gap-2 w-full text-left px-2 py-1.5 rounded-md hover:bg-zinc-200/50 dark:hover:bg-white/[0.05] transition-colors">
                   <ChevronRight size={12} className={cn('text-zinc-500 transition-transform shrink-0', isOpen && 'rotate-90')} />
-                  <span className={cn('text-xs font-semibold px-1.5 py-0.5 rounded border shrink-0', colorClass)}>{group}</span>
+                  <span className={cn('text-xs font-semibold px-1.5 py-0.5 rounded-none border shrink-0', colorClass)}>{group}</span>
                   <span className="text-xs text-zinc-500">{groupItems.length}</span>
                 </button>
                 {isOpen && (
