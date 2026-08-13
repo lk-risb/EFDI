@@ -1,6 +1,6 @@
 # Certificate bundle layout
 
-See `docs/INSTALL.md` §2.2 "Generate certificates" for the full certificate
+See `docs/03-bootstrap-and-install.md` "Generate certificates" for the full certificate
 profile legend (which cert authenticates to which fabric, required filenames,
 and preparation steps). This placeholder exists only to keep this gitignored
 directory tree present after `git clone` — every certificate, private key,

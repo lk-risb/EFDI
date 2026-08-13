@@ -9,7 +9,7 @@ the fabric this walkthrough plugs into (the topic taxonomy, the four output
 views, what's already wired). This section is the concrete "now build one"
 steps; that one is the reference for what already exists.
 
-### 10.0 Decide: bridge, or protocol?
+## 10.0 Decide: bridge, or protocol?
 
 - **`compose/bridges/`** — your new integration *connects to a product or
   service*: it polls an HTTP API, opens a TCP socket to a vendor box, listens
@@ -21,7 +21,7 @@ Most new sensors are bridges — a physical or networked device this router
 connects to directly. If in doubt, pick `bridges/`; it's the more common case
 and nothing downstream cares which directory a script lives in.
 
-### 10.1 Do you need a new message schema, or does an existing one fit?
+## 10.1 Do you need a new message schema, or does an existing one fit?
 
 If your sensor reports a moving object — position, optionally speed/heading/
 altitude/identity — it almost certainly fits the existing generic
@@ -44,7 +44,7 @@ a domain-specific compound value). If so:
    developer/deployment regenerates it locally, nothing generated is
    committed.
 
-### 10.2 Write the script
+## 10.2 Write the script
 
 Every bridge/protocol script follows the same shape. This is the complete,
 working reference — `compose/protocols/random/geojson_features.py` (127
@@ -112,7 +112,7 @@ reads to know what to fill in.
 python3 -m py_compile compose/bridges/your_new_bridge.py
 ```
 
-### 10.3 Register it with the launcher
+## 10.3 Register it with the launcher
 
 Four small edits to `start.sh`, following the existing `geojson` entry as the
 template (search for `geojson` in `start.sh` to see all four at once):
@@ -129,7 +129,7 @@ template (search for `geojson` in `start.sh` to see all four at once):
 5. **Launch case** — add `_start your-service-name path/to/your_script.py` in
    the big `case` block that actually launches services.
 
-### 10.4 Verify end-to-end
+## 10.4 Verify end-to-end
 
 ```bash
 ./start.sh --service your-service-name
@@ -141,7 +141,7 @@ open ATAK/WinTAK or the SitaWare map and confirm your object appears with no
 further configuration — that's the proof the fabric contract was followed
 correctly.
 
-### 10.5 New CoT symbol needed? (TAK output only)
+## 10.5 New CoT symbol needed? (TAK output only)
 
 If your sensor's affiliation/entity combination doesn't already map to a CoT
 type, add it to `_TOPIC_COT` in `compose/layers/tak_layer.py`:
@@ -153,7 +153,7 @@ The key is a topic-suffix glob; the value is the MIL-STD-2525C/APP-6 CoT type
 code and a staleness window. Most new sensors already match an existing
 pattern — only add one if your topic path genuinely doesn't.
 
-### 10.6 Document it
+## 10.6 Document it
 
 Add a row to the relevant table in [§7 Integrations](08-integrations.md) (under
 "Source-specific bridges" or the protocol table) describing what it needs

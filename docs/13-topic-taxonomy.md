@@ -21,7 +21,7 @@ Two non-track key families live beside the tracks:
 - **Presence:** `{prefix}/_meta/alive/<service>` — a Zenoh liveliness token per
   running feed, declared by `compose/control/presence.py`. This is what draws the pod as
   a **node** in the fabric inspector (panoscope); track PUTs alone only draw
-  edges. See `EXPLAINED.md`.
+  edges. See [01-architecture.md](01-architecture.md).
 - **Control plane:** `{root}/**/@config/v1` etc. (below), which keep versions.
 
 Protobuf views are published **self-describing**: the Zenoh `Encoding` is

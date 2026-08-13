@@ -128,7 +128,7 @@ EFDI treats ATAK/TAK and SitaWare HQ as first-class, co-equal consumers. Each ha
 | Zenoh → SitaWare HQ | `sitaware_layer` | `SITAWARE_HQ_NVG_PORT` + an HQ NVG Import Subscription pointed at it |
 | SitaWare HQ → Zenoh | `sitaware` | Deployment-documented REST resource, schema, URL and credentials |
 
-SitaWare's REST resource path is **not** assumed — there is no universal `/rest/v2/units`; confirm it against the deployment's ICD. Full commands and the operator-side HQ subscription fields are in [INSTALL.md §8](docs/INSTALL.md#8-c2--zenoh-bidirectional-runbook).
+SitaWare's REST resource path is **not** assumed — there is no universal `/rest/v2/units`; confirm it against the deployment's ICD. Full commands and the operator-side HQ subscription fields are in [09 — C2 ↔ Zenoh Runbook](docs/09-c2-zenoh-runbook.md).
 
 Inbound C2 records are written under this pod's normal `{NAMESPACE_PREFIX}/{PARTNER_NAMESPACE}/…` namespace, becoming ordinary Zenoh data for authorized subscribers and federated partner routers; the router ACL and federation policy — not the C2 adapter — decide which pods receive them.
 
@@ -153,7 +153,7 @@ Every pod dials a single fabric endpoint over mutual TLS — it writes only with
 | TCP `<SITAWARE_HQ_NVG_PORT>` (default 8088) | inbound | SitaWare HQ polls the EFDI NVG feed |
 | HTTPS | outbound | SitaWare HQ and dronuradaras.lt |
 
-See [INSTALL.md](docs/INSTALL.md) for the full network prerequisites table.
+See [03 — Bootstrap & Install](docs/03-bootstrap-and-install.md) for the full network prerequisites table.
 
 ---
 
@@ -181,14 +181,16 @@ See [INSTALL.md](docs/INSTALL.md) for the full network prerequisites table.
 ```
 EFDI/
 ├── README.md                    this file
+├── CONTRIBUTING.md               contribution guide
+├── SECURITY.md                   vulnerability reporting policy
 ├── CLAUDE.md, AGENTS.md         agent / contributor instructions
-├── docs/                        guides + reference (tracked)
-│   ├── INSTALL.md               English deployment guide (integrations, C2 runbook, adding a
-│   │                            sensor, troubleshooting, panel walkthrough — all in one)
-│   ├── DIEGIMAS.md              Lithuanian deployment guide (same scope as INSTALL.md)
-│   ├── SECURITY.md              vulnerability reporting policy
-│   ├── CONTRIBUTING.md          contribution guide
-│   └── superpowers/             (gitignored) design specs, working notes
+├── docs/                        numbered operator manual + reference (see docs/00-start-here.md)
+│   ├── 00-start-here.md         doc map + where to start
+│   ├── 01-14-*.md               architecture, install, config, ATAK/SitaWare, integrations,
+│   │                            C2 runbook, adding a sensor, troubleshooting, admin GUI, CI —
+│   │                            03-11 and 14 have English + Lithuanian pairs
+│   ├── references/              source-and-trust notes per external spec (ASTERIX/SAPIENT/STANAG/TAK/SitaWare)
+│   └── superpowers/              (gitignored) design specs, working notes
 ├── compose/
 │   ├── docker-compose.yml       Zenoh router + zenoh-admin containers
 │   ├── .env.example             configuration template
@@ -216,7 +218,7 @@ curl -fsSL https://raw.githubusercontent.com/lk-risb/EFDI/main/install.sh | bash
 
 `install.sh` auto-installs every prerequisite (git, Python 3.10+, Docker Engine + Compose, openssl, gettext) if missing, then walks through certs and configuration interactively.
 
-See **[INSTALL.md](docs/INSTALL.md)** for the full English deployment guide, or **[DIEGIMAS.md](docs/DIEGIMAS.md)** for the Lithuanian version. Both cover prerequisites, certificate setup, configuration reference, and troubleshooting.
+See **[docs/00-start-here.md](docs/00-start-here.md)** for the full operator manual (English/Lithuanian) — prerequisites, certificate setup, configuration reference, and troubleshooting, split into numbered topic docs.
 
 Wondering where a protocol decoder's wire-format knowledge came from and how trustworthy it is? See **[docs/references/](docs/references/README.md)** — per-category source URLs, verification method, and a copy of the actual spec text used.
 
@@ -224,8 +226,8 @@ Wondering where a protocol decoder's wire-format knowledge came from and how tru
 
 ## Operations
 
-New to the admin panel? **[INSTALL.md § 10](docs/INSTALL.md#10-zenoh-admin-gui)** has a
-plain-language, page-by-page walkthrough of every tab (Lithuanian: **[DIEGIMAS.md § 10](docs/DIEGIMAS.md)**).
+New to the admin panel? **[12 — Zenoh Admin GUI](docs/12-zenoh-admin-gui.md)** has a
+plain-language, page-by-page walkthrough of every tab.
 
 ```bash
 ./start.sh                            # interactive launcher — pick services, prompts for missing config

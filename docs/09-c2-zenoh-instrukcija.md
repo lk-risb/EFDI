@@ -3,7 +3,7 @@
 Kryptys yra nepriklausomos. Užbaikite tik tuos kelius, kurie atskleisti ir
 licencijuoti konkretaus diegimo, tada pasirinkite jų paslaugas `./start.sh`.
 
-### 9.1 Patikrinkite bendrą Zenoh pusę
+## 9.1 Patikrinkite bendrą Zenoh pusę
 
 Laikykite kiekvieną Python adapterį nukreiptą į vietinį routerį:
 
@@ -18,7 +18,7 @@ adresų. C2 kilmės įrašai publikuojami po
 `{NAMESPACE_PREFIX}/{PARTNER_NAMESPACE}/...`. Federacijos ACL nusprendžia,
 kurie partnerių routeriai gali gauti šią temą.
 
-### 9.2 Zenoh → TAK Server
+## 9.2 Zenoh → TAK Server
 
 Sukonfigūruokite TAK TCP paskirties tašką ir pasirinkite `tak-layer`:
 
@@ -61,7 +61,7 @@ TAK Server pusėje:
    kelius aukščiau, pasirinkite `tak-layer` `./start.sh` ir patvirtinkite,
    kad identitetas rodomas prisijungęs TAK Server.
 
-### 9.3 TAK Server → Zenoh
+## 9.3 TAK Server → Zenoh
 
 Naudokite tą patį TAK išduotą kliento identitetą atvirkštiniam CoT srautui,
 paprastai dedikuotą `efdi-bridge` paskyrą/sertifikatą. Pasirinkite
@@ -83,7 +83,7 @@ prenumeruoti serveryje matomą CoT tuo pačiu metu. Tiltas republikuoja gautus
 `<event>...</event>` kadrus į Zenoh ir pažymi juos kaip TAK įėjimą, kad
 išvesties CoT sluoksnis jų neatsiųstų atgal į serverį uždarame rate.
 
-### 9.4 Zenoh → SitaWare HQ
+## 9.4 Zenoh → SitaWare HQ
 
 Įjunkite `sitaware-hq-nvg`, sukonfigūruokite TLS ir dedikuotus srauto
 kredencialus, tada sukurkite HQ NVG Import Subscription, nukreiptą į
@@ -118,7 +118,7 @@ Jei sluoksnio `EFDI Live Tracks` nėra, pirmiausia sukurkite jį. Windows
 sistemoje patikimai nustatykite srauto sertifikatą išduodančią CA; po
 ryšio testo neišjunkite sertifikatų tikrinimo.
 
-### 9.5 SitaWare HQ → Zenoh
+## 9.5 SitaWare HQ → Zenoh
 
 Tam reikia tikro JSON vienetų resurso, dokumentuoto tam HQ diegimui; nespėkite
 `/rest/v2/units`. Sukonfigūruokite ir pasirinkite `sitaware`:
@@ -149,7 +149,7 @@ universalaus vienetų resurso; jei administratorius negali identifikuoti to
 ekrano/resurso, neįjunkite `sitaware`. Vietoj to naudokite diegimo NFFI ar
 CoT Gateway sąsają.
 
-### 9.6 Dalinkitės C2 kilmės duomenimis su partneriais
+## 9.6 Dalinkitės C2 kilmės duomenimis su partneriais
 
 Nerašykite įrašo iš naujo į kito partnerio vardų sritį. Patvirtinkite, kad
 kilmės vardų sritis leidžiama routerio/federacijos politikos ir kad gaunantis
@@ -157,7 +157,7 @@ partneris ją prenumeruoja. Jų `cot-*` ar `sitaware-hq-nvg` išvesties
 sluoksniai išvers autorizuotas normalizuotas temas taip pat, kaip vietiniai
 sugeneruoti jutiklio duomenys.
 
-### 9.7 Eksploatacinio personažo testinis pratimas
+## 9.7 Eksploatacinio personažo testinis pratimas
 
 Naudokite keturis atskirus identitetus ar klientus teste. Tai eksploataciniai
 personažai, ne Zenoh Admin panelio `superadmin`, `admin` ir `readonly`
@@ -186,7 +186,7 @@ leidimais.
 > Patvirtinkite gamintojo leidimą prieš jungdami jį; kitokiam ar
 > tiekėjo-specifiniam UAP reikia aiškaus dekoderio profilio.
 
-### 9.8 Zenoh temos schema
+## 9.8 Zenoh temos schema
 
 ```text
 {NAMESPACE}/{DOMAIN}/{SOURCE}/{MODALITY}/{AFFILIATION}/{ENTITY}/{TYPE}/{ID}/{VIEW}
@@ -199,4 +199,3 @@ leidimais.
 | `TYPE` | `aircraft`, `vessel`, `vehicle`, `unit`, `sensor`, `uav`, `radar` |
 
 ---
-

@@ -147,4 +147,3 @@ Do not clear a shared operational layer to work around this limitation.
 > Position, speed, and course on the radar marker update automatically from the live CAT-34 stream. On a mobile platform, ATAK will show a speed vector and movement trail.
 
 ---
-

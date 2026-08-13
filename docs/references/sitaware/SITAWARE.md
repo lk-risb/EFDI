@@ -36,7 +36,7 @@ side (`../tak/TAK.md`) was.
 SitaWare HQ 6.22 Import Subscription — the health-endpoint counters
 (`successful_requests`/`unauthorized_requests`), the "Latest replication"
 timestamp behavior, and the specific HTTP response-code semantics documented
-in `../../INSTALL.md`'s troubleshooting section were all observed against an
+in `../../11-troubleshooting.md` were all observed against an
 actual SitaWare instance, not inferred from the spec. That confirms the
 transport/auth/polling contract works end to end; it is weaker evidence for
 whether every NVG element this file emits renders exactly as SitaWare's
