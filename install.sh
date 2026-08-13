@@ -298,6 +298,21 @@ if [ "$INSTALL_MODE" = "production" ]; then
             case "${_VPN_ACTION:-}" in
                 [Nn]*)
                     ask_secret NETBIRD_SETUP_KEY "NetBird setup key (app.netbird.io → Keys)"
+                    # Reaching this branch means neither wt0 nor tailscale0 had an
+                    # IP (checked above), so any NetBird package already on the
+                    # box is a stale/broken leftover, not a live tunnel — safe to
+                    # purge before the vendor installer runs, which otherwise
+                    # refuses with "NetBird seems to be installed already"
+                    # (same reasoning TAK's install.sh uses for this step).
+                    if command -v netbird >/dev/null 2>&1 || dpkg -l netbird 2>/dev/null | grep -q '^ii' || rpm -q netbird >/dev/null 2>&1; then
+                        info "Removing stale NetBird install…"
+                        sudo netbird down 2>/dev/null
+                        case "$PKG_MGR" in
+                            apt) sudo apt-get purge -y -qq netbird 2>/dev/null ;;
+                            dnf) sudo dnf remove -y -q netbird 2>/dev/null ;;
+                        esac
+                        sudo rm -rf /etc/netbird /var/lib/netbird
+                    fi
                     info "Installing NetBird…"
                     # Official vendor installer, fetched fresh over HTTPS — not
                     # checksum-pinned since it's a live, auto-updating script;
