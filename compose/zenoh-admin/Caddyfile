@@ -3,6 +3,11 @@
 	# in the caddy_data volume so it survives container restarts (otherwise a new
 	# CA would be minted every restart, forcing operators to re-trust it each time).
 	local_certs
+	# This is an admin console reached directly on :8890, not a public site —
+	# no HTTP->HTTPS redirect is needed. Without this, Caddy still tries to
+	# bind :80 for that redirect and crash-loops if anything else on the host
+	# (network_mode: host, so it's the real host port) already holds it.
+	auto_https disable_redirects
 }
 
 :8890 {
