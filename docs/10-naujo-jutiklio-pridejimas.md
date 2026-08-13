@@ -10,7 +10,7 @@ taksonomiją, keturias išvesties temas, kas jau sujungta). Šis skyrius yra
 konkretūs "dabar sukurkite" žingsniai; tas skyrius — nuoroda, kas jau
 egzistuoja.
 
-### 10.0 Nuspręskite: tiltas ar protokolas?
+## 10.0 Nuspręskite: tiltas ar protokolas?
 
 - **`compose/bridges/`** — jūsų nauja integracija *jungiasi prie produkto ar
   paslaugos*: apklausia HTTP API, atidaro TCP lizdą į tiekėjo dėžę, klausosi
@@ -25,7 +25,7 @@ kurio šis routeris jungiasi tiesiogiai. Jei abejojate, rinkitės `bridges/`;
 tai dažnesnis atvejis ir niekam žemiau nesvarbu, kuriame kataloge gyvena
 skriptas.
 
-### 10.1 Ar reikia naujos pranešimo schemos, ar tinka esama?
+## 10.1 Ar reikia naujos pranešimo schemos, ar tinka esama?
 
 Jei jūsų jutiklis praneša judantį objektą — poziciją, pasirinktinai
 greitį/kursą/aukštį/identitetą — jis beveik tikrai tinka esamai bendrai
@@ -49,7 +49,7 @@ Jei taip:
    kūrėjas/diegimas sugeneruoja jį vietiškai, niekas sugeneruotas
    necommitinamas.
 
-### 10.2 Rašykite skriptą
+## 10.2 Rašykite skriptą
 
 Kiekvienas tilto/protokolo skriptas seka tą pačią formą. Tai pilna, veikianti
 nuoroda — `compose/protocols/random/geojson_features.py` (127 eilutės) —
@@ -119,7 +119,7 @@ norėdamas sužinoti, ką užpildyti.
 python3 -m py_compile compose/bridges/your_new_bridge.py
 ```
 
-### 10.3 Registruokite jį paleidiklyje
+## 10.3 Registruokite jį paleidiklyje
 
 Keturi maži pakeitimai `start.sh`, sekant esamu `geojson` įrašu kaip šablonu
 (ieškokite `geojson` `start.sh`, kad matytumėte visus keturis iš karto):
@@ -137,7 +137,7 @@ Keturi maži pakeitimai `start.sh`, sekant esamu `geojson` įrašu kaip šablonu
 5. **Paleidimo atvejis** — pridėkite `_start your-service-name path/to/your_script.py`
    didžiajame `case` bloke, kuris iš tikrųjų paleidžia paslaugas.
 
-### 10.4 Patikrinkite nuo galo iki galo
+## 10.4 Patikrinkite nuo galo iki galo
 
 ```bash
 ./start.sh --service your-service-name
@@ -149,7 +149,7 @@ skriptus) ir patvirtinkite, kad įrašai atvyksta. Jei TAK ar SitaWare išvestis
 jūsų objektas atsiranda be jokios papildomos konfigūracijos — tai įrodymas,
 kad magistralės sutartis buvo teisingai laikomasi.
 
-### 10.5 Reikia naujo CoT simbolio? (tik TAK išvesčiai)
+## 10.5 Reikia naujo CoT simbolio? (tik TAK išvesčiai)
 
 Jei jūsų jutiklio priklausomybės/objekto derinys dar neatvaizduoja į esamą
 CoT tipą, pridėkite jį į `_TOPIC_COT` faile `compose/layers/tak_layer.py`:
@@ -161,7 +161,7 @@ Raktas yra temos-priesagos šablonas; reikšmė — MIL-STD-2525C/APP-6 CoT tipo
 kodas ir pasenimo langas. Dauguma naujų jutiklių jau atitinka esamą šabloną —
 naują pridėkite tik tada, jei jūsų temos kelias iš tikrųjų nesutampa.
 
-### 10.6 Dokumentuokite tai
+## 10.6 Dokumentuokite tai
 
 Pridėkite eilutę į atitinkamą lentelę [§7 Integracijos](08-integracijos.md) (po "Šaltinio-specifiniai
 tiltai" ar protokolo lentele), aprašančią, ko jai reikia sukonfigūruoti. Tai

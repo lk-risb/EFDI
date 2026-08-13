@@ -6,8 +6,8 @@ info:
     EFDI publishes normalized track and status data over Zenoh pub/sub. This
     document maps the channels (Zenoh key expressions) and message schemas
     that an authorized backbone participant can subscribe to. It is generated
-    from the implemented contract in docs/topic-taxonomy.md and
-    docs/INSTALL.md §7 Integrations — every channel and schema below is live code, not
+    from the implemented contract in docs/13-topic-taxonomy.md and
+    docs/08-integrations.md — every channel and schema below is live code, not
     aspirational.
 
     Transport is Zenoh (github.com/eclipse-zenoh/zenoh), a pub/sub and

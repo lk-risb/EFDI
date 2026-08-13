@@ -280,7 +280,7 @@ flowchart LR
   publish under `<UUID>/**`.
 - `verify_name_on_connect` is currently **off** because the pod dials the router
   by mesh IP; the on-contract posture is to dial the DNS name with verification on
-  (see the connection notes in `INSTALL.md` §7 Integrations).
+  (see the connection notes in `08-integrations.md`).
 
 ## 9. Runtime & process model
 
@@ -375,5 +375,5 @@ web-UI-driven via `zenoh-admin`.
 ---
 
 *This document is a map, not the territory. The authoritative details live in
-`../.ai/.claude/CLAUDE.md` (coding rules + ASTERIX gotchas), `topic-taxonomy.md` (the key),
-`INSTALL.md` (setup + wiring), and the code itself.*
+`../.ai/.claude/CLAUDE.md` (coding rules + ASTERIX gotchas), `13-topic-taxonomy.md` (the key),
+`00-start-here.md` (setup + wiring), and the code itself.*

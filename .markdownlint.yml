@@ -13,7 +13,7 @@ default: true
 MD013: false   # line-length — prose and long command lines are both fine
 MD022: false   # blanks-around-headings — this repo doesn't always pad headings
 MD028: false   # blanks-around-blockquotes — used deliberately for two
-               # adjacent-but-separate notes (e.g. INSTALL.md's radar-position
+               # adjacent-but-separate notes (e.g. 04-configuration.md's radar-position
                # + ASTERIX-ports callouts)
 MD031: false   # blanks-around-fences — same, established convention
 MD032: false   # blanks-around-lists — same

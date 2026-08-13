@@ -3,7 +3,7 @@
 The directions are independent. Complete only the paths exposed and licensed
 by the actual deployment, then select their services in `./start.sh`.
 
-### 9.1 Verify the common Zenoh side
+## 9.1 Verify the common Zenoh side
 
 Keep every Python adapter pointed at the local router:
 
@@ -18,7 +18,7 @@ addresses. C2-origin records are
 published below `{NAMESPACE_PREFIX}/{PARTNER_NAMESPACE}/...`. Federation ACLs
 decide which partner routers can receive that namespace.
 
-### 9.2 Zenoh → TAK Server
+## 9.2 Zenoh → TAK Server
 
 Configure the TAK TCP destination and select `tak-layer`:
 
@@ -58,7 +58,7 @@ On the TAK Server side:
    paths above, select `tak-layer` in `./start.sh`, and confirm the identity appears
    as connected in TAK Server.
 
-### 9.3 TAK Server → Zenoh
+## 9.3 TAK Server → Zenoh
 
 Use the same TAK-issued client identity for the reverse CoT feed, typically the
 dedicated `efdi-bridge` account/certificate. Select `tak-bridge` and point it
@@ -80,7 +80,7 @@ subscribe to server-visible CoT at the same time. The bridge republishes the
 received `<event>...</event>` frames into Zenoh and marks them as TAK ingress so
 the outbound CoT layer does not loop them straight back into the server.
 
-### 9.4 Zenoh → SitaWare HQ
+## 9.4 Zenoh → SitaWare HQ
 
 Enable `sitaware-hq-nvg`, configure TLS and dedicated feed credentials, then
 create an HQ NVG Import Subscription pointing to the resulting
@@ -115,7 +115,7 @@ Create the `EFDI Live Tracks` NVG layer first if it is absent. Trust the feed
 certificate's issuing CA in Windows; do not leave certificate verification
 disabled after the connectivity test.
 
-### 9.5 SitaWare HQ → Zenoh
+## 9.5 SitaWare HQ → Zenoh
 
 This requires a real JSON unit resource documented for that HQ deployment; do
 not guess `/rest/v2/units`. Configure and select `sitaware`:
@@ -145,7 +145,7 @@ sequence of public HQ menu clicks for this operation and no universal units
 resource; if the administrator cannot identify that screen/resource, do not
 enable `sitaware`. Use the deployment's NFFI or CoT Gateway interface instead.
 
-### 9.6 Share C2-origin data with partners
+## 9.6 Share C2-origin data with partners
 
 Do not rewrite the record into another partner's namespace. Confirm that the
 origin namespace is permitted by the router/federation policy and that the
@@ -153,7 +153,7 @@ receiving partner subscribes to it. Their `cot-*` or `sitaware-hq-nvg` output
 layers will translate authorized normalized topics in the same way as locally
 generated sensor data.
 
-### 9.7 Operational-persona test exercise
+## 9.7 Operational-persona test exercise
 
 Use four separate identities or clients in a test. These are operational
 personas, not replacements for the Zenoh Admin panel's `superadmin`, `admin`,
@@ -194,4 +194,3 @@ credentials and topic permissions.
 | `TYPE` | `aircraft`, `vessel`, `vehicle`, `unit`, `sensor`, `uav`, `radar` |
 
 ---
-
