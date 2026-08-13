@@ -1,5 +1,5 @@
 import {createFileRoute, redirect} from '@tanstack/react-router'
-import {useEffect, useMemo, useState} from 'react'
+import {useEffect, useMemo, useRef, useState} from 'react'
 import {Layout} from '@/components/Layout'
 import {PageHeader} from '@/components/PageHeader'
 import {HudCorners} from '@/components/HudCorners'
@@ -7,7 +7,7 @@ import {apiFetch, apiJson, errorMessage} from '@/lib/api'
 import {fetchTopology, type TopologyNode} from '@/lib/topology'
 import {notify} from '@/lib/notify'
 import {useAuth} from '@/store/auth'
-import {Download, FileCode2, Play, Plus, RefreshCw, Save, ShieldCheck, Square, X,} from 'lucide-react'
+import {Download, FileCode2, Play, Plus, RefreshCw, Save, ShieldCheck, Square, Upload, X,} from 'lucide-react'
 
 export const Route = createFileRoute('/publish-builder')({
   beforeLoad: () => {
@@ -124,6 +124,20 @@ function PublishBuilderPage() {
   const [routerConfigError, setRouterConfigError] = useState('')
   const [routerEndpointInput, setRouterEndpointInput] = useState('')
   const [routerBusy, setRouterBusy] = useState<string | null>(null)
+  const routerConfigFileRef = useRef<HTMLInputElement>(null)
+
+  function loadRouterConfigFromFile(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      setRouterConfigText(String(reader.result ?? ''))
+      setRouterConfigError('')
+    }
+    reader.onerror = () => setRouterConfigError('Could not read the selected file')
+    reader.readAsText(file)
+  }
 
   const selectedProfile = defaults?.profiles.find(profile => profile.id === tlsProfile) ?? defaults?.profile
 
@@ -565,14 +579,32 @@ function PublishBuilderPage() {
                 <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Router configs</h2>
                 <p className="mt-1 text-xs text-zinc-500">View/edit config.json5 across all known routers</p>
               </div>
-              <button
-                type="button"
-                onClick={() => void refreshRouterConfig(selectedRouter)}
-                disabled={routerConfigLoading}
-                className="flex items-center gap-2 rounded-md px-3 py-2 text-xs text-zinc-600 transition-colors hover:bg-zinc-200/50 hover:text-zinc-900 disabled:opacity-50 dark:text-zinc-400 dark:hover:bg-white/[0.05] dark:hover:text-white"
-              >
-                <RefreshCw size={14} className={routerConfigLoading ? 'animate-spin' : ''} /> Reload from disk
-              </button>
+              <div className="flex items-center gap-1">
+                <input
+                  ref={routerConfigFileRef}
+                  type="file"
+                  accept=".json5,.json,.txt"
+                  className="hidden"
+                  onChange={loadRouterConfigFromFile}
+                />
+                <button
+                  type="button"
+                  onClick={() => routerConfigFileRef.current?.click()}
+                  disabled={selectedRouter !== 'local'}
+                  title="Load a config.json5 file from disk — no SCP needed"
+                  className="flex items-center gap-2 rounded-md px-3 py-2 text-xs text-zinc-600 transition-colors hover:bg-zinc-200/50 hover:text-zinc-900 disabled:opacity-50 dark:text-zinc-400 dark:hover:bg-white/[0.05] dark:hover:text-white"
+                >
+                  <Upload size={14} /> Load from file…
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void refreshRouterConfig(selectedRouter)}
+                  disabled={routerConfigLoading}
+                  className="flex items-center gap-2 rounded-md px-3 py-2 text-xs text-zinc-600 transition-colors hover:bg-zinc-200/50 hover:text-zinc-900 disabled:opacity-50 dark:text-zinc-400 dark:hover:bg-white/[0.05] dark:hover:text-white"
+                >
+                  <RefreshCw size={14} className={routerConfigLoading ? 'animate-spin' : ''} /> Reload from disk
+                </button>
+              </div>
             </div>
 
             <div className="space-y-4">
@@ -691,7 +723,7 @@ function PublishBuilderPage() {
                         title="Start"
                         disabled={!!busy || service.running}
                         onClick={() => void routerAction(service.name, 'start')}
-                        className="rounded p-2 text-zinc-500 transition-colors hover:bg-emerald-500/10 hover:text-emerald-500 disabled:opacity-30"
+                        className="rounded-none p-2 text-zinc-500 transition-colors hover:bg-emerald-500/10 hover:text-emerald-500 disabled:opacity-30"
                       >
                         <Play size={13} />
                       </button>
@@ -700,7 +732,7 @@ function PublishBuilderPage() {
                         title="Stop"
                         disabled={!!busy || !service.running}
                         onClick={() => void routerAction(service.name, 'stop')}
-                        className="rounded p-2 text-zinc-500 transition-colors hover:bg-red-500/10 hover:text-red-500 disabled:opacity-30"
+                        className="rounded-none p-2 text-zinc-500 transition-colors hover:bg-red-500/10 hover:text-red-500 disabled:opacity-30"
                       >
                         <Square size={12} />
                       </button>
@@ -709,7 +741,7 @@ function PublishBuilderPage() {
                         title="Refresh"
                         disabled={!!busy}
                         onClick={() => void loadRuntime()}
-                        className="rounded p-2 text-zinc-500 transition-colors hover:bg-zinc-200/50 hover:text-zinc-900 disabled:opacity-30 dark:hover:bg-white/[0.05] dark:hover:text-white"
+                        className="rounded-none p-2 text-zinc-500 transition-colors hover:bg-zinc-200/50 hover:text-zinc-900 disabled:opacity-30 dark:hover:bg-white/[0.05] dark:hover:text-white"
                       >
                         <RefreshCw size={13} className={busy === 'restart' ? 'animate-spin' : ''} />
                       </button>

@@ -103,26 +103,22 @@
   --color-hud-3: #232326;
   --color-hud-4: #2b2b2f;
 
-  --font-display: "Inter", ui-sans-serif, system-ui, sans-serif;
+  /* Scout aesthetic (ported from TAK's admin UI): monospace display headings
+     are the terminal/technical tell. Body copy stays Inter; only headings,
+     labels, and the org wordmark use the mono display face. */
+  --font-display: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
-  /* 2026 restyle. The app uses `rounded-md` in 104 places, so the radius SCALE
-     is redefined here rather than editing every call site — every existing
-     utility picks up the softer geometry automatically. */
-  --radius-sm: 0.625rem;  /* 10px — chips, tight inputs */
-  --radius-md: 0.875rem;  /* 14px — the app-wide default */
-  --radius-lg: 1.25rem;   /* 20px — cards, panels */
-  --radius-xl: 1.5rem;    /* 24px — modals, hero surfaces */
-  --radius-2xl: 1.75rem;
+  /* Sharp corners — Scout uses square panels/cards/buttons. rounded-full
+     (status dots, avatars) is unaffected; it doesn't read these tokens. */
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-xl: 0;
+  --radius-2xl: 0;
 
-  /* Elevation. Dark mode leans on depth + a hairline rather than heavy shadow,
-     which would be invisible on a near-black canvas anyway. */
   --shadow-e1: 0 1px 2px rgb(0 0 0 / 0.04), 0 1px 3px rgb(0 0 0 / 0.06);
   --shadow-e2: 0 2px 4px rgb(0 0 0 / 0.04), 0 6px 16px rgb(0 0 0 / 0.08);
-  --shadow-e3: 0 8px 24px rgb(0 0 0 / 0.10), 0 2px 6px rgb(0 0 0 / 0.06);
-
-  /* Spring-ish easing — overshoots slightly so motion reads physical rather
-     than linear. Used for hover lift and panel entry. */
   --ease-spring: cubic-bezier(0.22, 1.2, 0.36, 1);
   --ease-out-soft: cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -135,9 +131,7 @@
   letter-spacing: 0.08em;
 }
 
-/* Card surface — modern-minimal. A solid panel one shade above the canvas with
-   a near-invisible hairline and a soft shadow. No blur: the reference language
-   is solid soft-dark cards separated by fill contrast and space, not glass. */
+/* Card surface — flat, solid, no blur/glow (ported from TAK). */
 .hud-glass {
   background: #ffffff;
   box-shadow: var(--shadow-e2);
@@ -149,53 +143,28 @@
 .dark .hud-card,
 .dark .hud-glass { border-color: rgb(255 255 255 / 0.06); }
 
-/* Every accent-colored primary action (buttons using bg-accent-fill) gets an
-   ambient glow tied to the runtime branding accent color, not a fixed hex —
-   so a custom brand color still glows in its own hue. */
-.bg-accent-fill {
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-accent-fill) 25%, transparent);
-  transition: box-shadow 200ms ease, transform 150ms ease;
-}
+/* Flat solid fill, no ambient glow on primary actions — Scout keeps buttons
+   crisp and square (ported from TAK). */
 .bg-accent-fill:hover {
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-accent-fill) 40%, transparent),
-              0 0 16px color-mix(in srgb, var(--color-accent-fill) 20%, transparent);
-  transform: translateY(-1px);
-}
-.dark .bg-accent-fill {
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-accent-fill) 40%, transparent),
-              0 0 20px color-mix(in srgb, var(--color-accent-fill) 25%, transparent);
-}
-.dark .bg-accent-fill:hover {
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-accent-fill) 55%, transparent),
-              0 0 32px color-mix(in srgb, var(--color-accent-fill) 45%, transparent);
+  filter: brightness(1.1);
 }
 
-/* Floating card lift + accent-glow border on hover — applied via the
-   hud-card utility class on Dashboard/table container cards. Light mode
-   gets a softer lift/border cue; dark mode adds the full accent glow. */
-/* Container cards are calm and static in the minimal language — a soft shadow,
-   a whisper of border warming on hover, no lift. (z-index base kept so any
-   animated child still layers correctly.) */
+/* Flat cards — no shadow, no lift. Border brightens toward the accent color
+   on hover as the only feedback cue (ported from TAK). */
 .hud-card {
   position: relative;
   z-index: 0;
-  box-shadow: var(--shadow-e1);
-  transition: border-color 200ms var(--ease-out-soft), box-shadow 200ms var(--ease-out-soft);
+  box-shadow: none;
+  transition: border-color 200ms var(--ease-out-soft);
 }
 .hud-card:hover {
-  border-color: rgb(255 255 255 / 0.10);
+  border-color: color-mix(in srgb, var(--color-accent-fill) 45%, transparent);
 }
-.dark .hud-card {
-  box-shadow: 0 1px 3px rgb(0 0 0 / 0.4), 0 8px 24px rgb(0 0 0 / 0.25);
+.hud-card-active {
+  border-top: 2px solid var(--color-accent-fill);
 }
 
-/* Respect users who ask the OS for less motion: keep the colour/elevation
-   feedback, drop the translation. */
 @media (prefers-reduced-motion: reduce) {
-  .hud-card,
-  .hud-card:hover,
-  .bg-accent-fill,
-  .bg-accent-fill:hover { transform: none; }
   .hud-enter { animation: none; }
   .hud-live-dot { animation: none; }
 }
@@ -209,10 +178,6 @@
   z-index: 1;
   animation: hud-fade-in-up 0.45s var(--ease-spring) both;
 }
-/* Accent primary actions sit above resting surfaces so their hover glow is
-   never clipped by a later-painted sibling. */
-.bg-accent-fill { position: relative; }
-.bg-accent-fill:hover { z-index: 20; }
 .hud-enter-delay-1 { animation-delay: 0.05s; }
 .hud-enter-delay-2 { animation-delay: 0.1s; }
 
@@ -234,10 +199,8 @@
   background-attachment: fixed;
 }
 
-/* `hud-frame` still establishes the positioning context panels rely on. The
-   corner brackets it used to anchor were retired in the 2026 restyle — panels
-   now read as surfaces (radius + elevation + accent ring) rather than reticles.
-   HudCorners.tsx is a no-op; the .hud-corner rules are gone with it. */
+/* `hud-frame` establishes the positioning context panels rely on. Reticle
+   corners were retired; HudCorners.tsx is a no-op kept only for compatibility. */
 .hud-frame {
   position: relative;
 }
@@ -252,51 +215,18 @@
   background-attachment: fixed;
 }
 
-/* Dense management-console primitives used by router hierarchy and PKI views. */
-.enterprise-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  border: 1px solid rgb(212 212 216);
-  border-radius: 9999px;
-  background: rgb(244 244 245);
-  padding: 0.3rem 0.65rem;
-  color: rgb(82 82 91);
-  font-family: var(--font-display);
-  font-weight: 500;
-}
-.enterprise-chip-ok { border-color: rgb(134 239 172); background: rgb(240 253 244); color: rgb(21 128 61); }
-.enterprise-chip-warn { border-color: rgb(253 230 138); background: rgb(255 251 235); color: rgb(180 83 9); }
-.enterprise-panel {
-  border: 1px solid rgb(228 228 231);
-  border-radius: 0.5rem;
-  background: rgb(250 250 250);
-  padding: 1.1rem;
-}
-.enterprise-panel-title,
-.enterprise-section-title {
-  margin-bottom: 0.9rem;
-  font-family: var(--font-display);
-  font-weight: 600;
-  letter-spacing: 0.035em;
-  color: rgb(39 39 42);
-}
-.enterprise-section-title { margin-top: 1.5rem; }
-.enterprise-kv {
+/* Structural definition-list layout for label/value panel content — no
+   enterprise-* naming, just a reusable grid so call sites don't hand-repeat
+   Tailwind classes on every dt/dd pair. */
+.hud-kv {
   display: grid;
   grid-template-columns: minmax(7.5rem, 0.65fr) minmax(0, 1fr);
   gap: 0.55rem 1rem;
   font-size: 0.8rem;
 }
-.enterprise-kv dt { color: rgb(113 113 122); }
-.enterprise-kv dd { color: rgb(39 39 42); }
-.dark .enterprise-chip { border-color: rgb(255 255 255 / 0.1); background: rgb(255 255 255 / 0.04); color: rgb(161 161 170); }
-.dark .enterprise-chip-ok { border-color: rgb(34 197 94 / 0.35); background: rgb(34 197 94 / 0.1); color: rgb(74 222 128); }
-.dark .enterprise-chip-warn { border-color: rgb(245 158 11 / 0.35); background: rgb(245 158 11 / 0.1); color: rgb(251 191 36); }
-.dark .enterprise-panel { border-color: rgb(255 255 255 / 0.06); background: #141518; }
-.dark .enterprise-panel-title,
-.dark .enterprise-section-title,
-.dark .enterprise-kv dd { color: rgb(228 228 231); }
+.hud-kv dt { color: rgb(113 113 122); }
+.hud-kv dd { color: rgb(39 39 42); }
+.dark .hud-kv dd { color: rgb(228 228 231); }
 
 /* SVG node surfaces must set an explicit opaque fill. Tailwind's dark fill
    utility was not reliably emitted for this dynamic SVG class, which allowed
