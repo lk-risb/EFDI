@@ -236,7 +236,7 @@ function NetworkPage() {
 
         <div className="hud-frame relative hud-enter mb-6">
           <HudCorners />
-          <div className="rounded-md border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#0c0c0e] p-4">
+          <div className="hud-glass border border-zinc-200 dark:border-white/10 p-4">
             <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-3">Topology</h2>
             <TopologyMap nodes={topology} transportEdges={transportEdges} selected={selectedNamespace} onSelect={setSelectedNamespace} />
           </div>
@@ -338,7 +338,7 @@ function NetworkPage() {
               ) : children.map(c => {
                 const authority = authorityFor(c.namespace)
                 return (
-              <div key={c.id} className="hud-frame relative hud-card flex items-center justify-between rounded-md border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#0c0c0e] p-4">
+              <div key={c.id} className="hud-frame relative hud-card hud-glass flex items-center justify-between border border-zinc-200 dark:border-white/10 p-4">
                 <HudCorners />
                 <div>
                   <p className="text-sm font-medium text-zinc-800 dark:text-zinc-200">{c.name}</p>

@@ -406,6 +406,16 @@ def _render_config(fields: ConfigFields) -> str:
 
 def atomic_write(path: str, content: str) -> None:
     """Durably replace a state file without exposing readers to partial data."""
+    if os.path.isdir(path):
+        # Docker silently creates an empty directory here instead of erroring
+        # when a bind-mount source file didn't exist at container start (see
+        # docker-compose.yml — config.json5/namespace-prefix/data-topic-prefix
+        # are all individually bind-mounted). Clear that stray artifact so the
+        # real file this function is about to write can take its place.
+        try:
+            os.rmdir(path)
+        except OSError as exc:
+            raise OSError(f"{path} is a non-empty directory, not the expected file — refusing to write") from exc
     directory = os.path.dirname(path) or "."
     try:
         fd, temporary_path = tempfile.mkstemp(prefix=f".{os.path.basename(path)}.", dir=directory)
