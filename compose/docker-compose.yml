@@ -36,7 +36,7 @@ services:
     environment:
       - RUST_LOG=${ZENOH_LOG:-info}
     volumes:
-      # Rendered from host/zenoh-router.json5.tmpl by first-boot.sh.
+      # Rendered from examples/zenoh-router.json5.tmpl by first-boot.sh.
       - ${POD_STATE_DIR:?set in .env}/zenoh/config.json5:/etc/zenoh/config.json5:ro
       - ${POD_STATE_DIR}/zenoh/tls:/etc/zenoh/tls:ro
       - ${POD_STATE_DIR}/zenoh/rocksdb:/var/lib/zenoh/rocksdb
@@ -208,17 +208,17 @@ services:
       - EFDI_BACKBONE_FABRIC_PROFILE=${EFDI_BACKBONE_FABRIC_PROFILE:-backbone}
     volumes:
       # Least-privilege identity mount: never expose efdi-ca-root-key.pem (or a
-      # router-CA key) to the WebUI container. It needs only its own transport
-      # identity for local Zenoh sessions/config signatures and public trust.
-      - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}/efdi/efdi-ca-root.pem:/certs/efdi/efdi-ca-root.pem:ro
-      - ${BUNDLE_DIR}/efdi/${PARTNER_NAMESPACE}-cert.pem:/certs/efdi/${PARTNER_NAMESPACE}-cert.pem:ro
-      - ${BUNDLE_DIR}/efdi/${PARTNER_NAMESPACE}-key.pem:/certs/efdi/${PARTNER_NAMESPACE}-key.pem:ro
+      # router-CA key) to the WebUI container — that file simply never lives
+      # under BUNDLE_DIR/efdi. rw (not ro) so the Certificates page can write
+      # this pod's own uploaded identity directly (api/certs_bootstrap.py)
+      # without a host-side helper handling private key material.
+      - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}/efdi:/certs/efdi:rw
       - ${ZENOH_ADMIN_TRUSTED_PARENT_HOST_CERT_PATH:-/dev/null}:/certs/trusted-parent.pem:ro
       - ${EFDI_ROUTER_CA_CERT_PATH:-/dev/null}:/certs/router-ca-cert.pem:ro
       - ${EFDI_POLICY_SIGNER_CERT_PATH:-/dev/null}:/certs/policy-signer-cert.pem:ro
       - ${EFDI_POLICY_SIGNER_KEY_PATH:-/dev/null}:/certs/policy-signer-key.pem:ro
       - ${POD_STATE_DIR}/zenoh:/zenoh-config
-      - ../host/zenoh-router.json5.tmpl:/zenoh-config-template/zenoh-router.json5.tmpl:ro
+      - ../examples/zenoh-router.json5.tmpl:/zenoh-config-template/zenoh-router.json5.tmpl:ro
       - ${POD_STATE_DIR}/zenoh-admin-data:/data
       - ${POD_STATE_DIR}/namespace-prefix:/namespace-prefix:rw
       - ${POD_STATE_DIR}/data-topic-prefix:/data-topic-prefix:rw
