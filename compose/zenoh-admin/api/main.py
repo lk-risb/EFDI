@@ -14,6 +14,7 @@ from .status import router as status_router
 from .data_stats import router as data_stats_router
 from .config import router as config_router
 from .certs_bootstrap import router as certs_bootstrap_router
+from .tak_package import router as tak_package_router
 from .health import router as health_router
 from .branding import router as branding_router
 from .federation_apply import start_federation_subscriber
@@ -101,6 +102,7 @@ app.include_router(status_router)
 app.include_router(data_stats_router)
 app.include_router(config_router)
 app.include_router(certs_bootstrap_router)
+app.include_router(tak_package_router)
 app.include_router(health_router)
 app.include_router(branding_router)
 app.include_router(federation_router)

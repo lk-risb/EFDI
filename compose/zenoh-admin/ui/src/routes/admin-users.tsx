@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { Layout } from '@/components/Layout'
 import { PageHeader } from '@/components/PageHeader'
 import { HudCorners } from '@/components/HudCorners'
+import { PasswordInput } from '@/components/PasswordInput'
 import { apiJson, apiFetch, errorMessage } from '@/lib/api'
 import { useAuth } from '@/store/auth'
 import { notify } from '@/lib/notify'
@@ -62,7 +63,7 @@ function NewAdminModal({ onClose, onCreated }: { onClose: () => void; onCreated:
           </div>
           <div className="space-y-1">
             <label className="text-sm text-zinc-700 dark:text-zinc-300">Password (min 12 chars)</label>
-            <input type="password" value={password} onChange={e => setPassword(e.target.value)} required
+            <PasswordInput value={password} onChange={e => setPassword(e.target.value)} required
               className="w-full px-3 py-2 rounded-md bg-zinc-200 dark:bg-[#141416] border border-zinc-300 dark:border-white/10 text-zinc-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-accent-ring" />
           </div>
           <div className="space-y-1">
@@ -128,7 +129,7 @@ function AdminUsersPage() {
   return (
     <Layout>
       <div className="p-6">
-        <PageHeader title="Admin Users" count={users.length} countLabel="users" actions={
+        <PageHeader eyebrow="ACCESS / ADMIN USERS" title="Admin Users" count={users.length} countLabel="users" actions={
           <button onClick={() => setShowNew(true)}
             className="flex items-center gap-2 px-4 py-2 bg-accent-fill hover:bg-accent-fill-hover text-accent-text text-sm rounded-md transition-colors">
             <UserPlus size={14} /> New Admin
@@ -140,10 +141,10 @@ function AdminUsersPage() {
           <table className="w-full text-sm">
             <thead className="bg-zinc-100 dark:bg-[#0c0c0e] text-zinc-600 dark:text-zinc-400">
               <tr>
-                <th className="px-4 py-3 text-left font-medium">Username</th>
-                <th className="px-4 py-3 text-left font-medium">Role</th>
-                <th className="px-4 py-3 text-left font-medium">Status</th>
-                <th className="px-4 py-3 text-right font-medium">Actions</th>
+                <th className="px-4 py-3 text-left font-medium hud-label text-xs">Username</th>
+                <th className="px-4 py-3 text-left font-medium hud-label text-xs">Role</th>
+                <th className="px-4 py-3 text-left font-medium hud-label text-xs">Status</th>
+                <th className="px-4 py-3 text-right font-medium hud-label text-xs">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-200 dark:divide-white/10">

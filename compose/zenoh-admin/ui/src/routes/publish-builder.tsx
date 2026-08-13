@@ -85,7 +85,7 @@ const textareaClass = `${inputClass} min-h-24`
 const SAFE_ENDPOINT_RE = /^[A-Za-z0-9._/:-]+$/
 
 function cardClass(extra = '') {
-  return `hud-frame relative rounded-md border border-zinc-200 bg-white p-5 dark:border-white/10 dark:bg-[#0c0c0e] ${extra}`
+  return `hud-card hud-glass hud-frame relative border border-zinc-200 p-5 dark:border-white/10 ${extra}`
 }
 
 function replaceConnectEndpoint(rendered: string, endpoint: string): string | null {
@@ -178,9 +178,10 @@ function PublishBuilderPage() {
     try {
       const [topology, localConfig] = await Promise.all([
         fetchTopology(),
-        apiJson<{ fields: { partner_namespace: string } }>('/api/config'),
+        apiJson<{ fields: { partner_namespace: string } | null }>('/api/config'),
       ])
-      const localNamespace = localConfig.fields.partner_namespace
+      // fields is null during the plaintext bootstrap state (no namespace set yet).
+      const localNamespace = localConfig.fields?.partner_namespace ?? ''
       const nextTargets = topology.nodes
         .filter(node => node.config_fields)
         .map(node => ({

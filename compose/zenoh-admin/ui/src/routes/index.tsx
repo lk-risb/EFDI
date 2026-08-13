@@ -386,7 +386,7 @@ function DashboardPage() {
 
         <div className="hud-frame relative hud-enter hud-enter-delay-1 mb-6">
           <HudCorners />
-          <div className="rounded-md border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#0c0c0e] p-5">
+          <div className="hud-glass border border-zinc-200 dark:border-white/10 p-5">
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Federation topology</h2>
               <button

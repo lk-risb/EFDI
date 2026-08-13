@@ -570,6 +570,12 @@ ZCFG
 ok "Zenoh config written: ${POD_STATE_DIR}/zenoh/config.json5"
 printf '%s\n' "${NAMESPACE_PREFIX}" > "${POD_STATE_DIR}/namespace-prefix"
 ok "Namespace prefix written: ${POD_STATE_DIR}/namespace-prefix (${NAMESPACE_PREFIX})"
+# zenoh-admin bind-mounts this file too (docker-compose.yml); a missing
+# source here means Docker silently creates a directory instead of a file,
+# and every later config apply crashes with "[Errno 21] Is a directory"
+# trying to write to it. Defaults to NAMESPACE_PREFIX, matching first-boot.sh.
+printf '%s\n' "${NAMESPACE_PREFIX}" > "${POD_STATE_DIR}/data-topic-prefix"
+ok "Data topic prefix written: ${POD_STATE_DIR}/data-topic-prefix (${NAMESPACE_PREFIX})"
 
 # ── Write compose/.env ─────────────────────────────────────────────────────────
 section "Writing compose/.env"

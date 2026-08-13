@@ -5,6 +5,7 @@ import { errorMessage } from '@/lib/api'
 import { useBranding } from '@/store/branding'
 import { notify } from '@/lib/notify'
 import { HudCorners } from '@/components/HudCorners'
+import { PasswordInput } from '@/components/PasswordInput'
 
 export const Route = createFileRoute('/login')({
   component: LoginPage,
@@ -53,12 +54,12 @@ function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-zinc-50 dark:bg-[#000000] hud-grid-bg">
-      <div className="hud-frame w-full max-w-sm space-y-6 p-8 rounded-md border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#0c0c0e] hud-glass">
+    <div className="min-h-screen flex items-center justify-center bg-zinc-50 dark:bg-hud-0 hud-grid-bg">
+      <div className="hud-frame hud-glass w-full max-w-sm space-y-6 p-8 border border-zinc-200 dark:border-white/10">
         <HudCorners />
-        <div>
-          {logoUrl && <img src={logoUrl} alt="" className="w-10 h-10 rounded-none object-contain mb-3" />}
-          <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-white">{orgName}</h1>
+        <div className="flex flex-col items-center text-center">
+          {logoUrl && <img src={logoUrl} alt="" className="w-20 h-20 rounded-none object-contain mb-4" />}
+          <h1 className="font-display text-3xl font-bold tracking-tight text-zinc-900 dark:text-white">{orgName}</h1>
           <p className="hud-label text-xs text-zinc-500 dark:text-zinc-500 mt-2">Sign in to manage the Zenoh router</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -74,8 +75,7 @@ function LoginPage() {
           </div>
           <div className="space-y-1">
             <label className="hud-label text-xs text-zinc-500 dark:text-zinc-500">Password</label>
-            <input
-              type="password"
+            <PasswordInput
               value={password}
               onChange={e => setPassword(e.target.value)}
               required

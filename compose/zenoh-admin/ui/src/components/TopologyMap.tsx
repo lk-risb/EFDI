@@ -105,7 +105,7 @@ export function TopologyMap({
 
   return (
     <div
-      className="overflow-auto rounded-md border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#0c0c0e]"
+      className="overflow-auto hud-glass border border-zinc-200 dark:border-white/10"
       style={{ maxHeight: compact ? 260 : 600 }}
     >
       <svg

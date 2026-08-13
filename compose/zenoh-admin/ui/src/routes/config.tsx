@@ -1,5 +1,5 @@
 import {createFileRoute, redirect} from '@tanstack/react-router'
-import {useEffect, useState} from 'react'
+import {useEffect, useRef, useState} from 'react'
 import {Layout} from '@/components/Layout'
 import {PageHeader} from '@/components/PageHeader'
 import {apiFetch, apiJson, errorMessage} from '@/lib/api'
@@ -154,16 +154,56 @@ function ConfigPage() {
   const [endpointStatuses, setEndpointStatuses] = useState<Record<string, EndpointStatus>>({})
   const [fabricPresets, setFabricPresets] = useState<FabricPreset[]>([])
   const [tlsProfiles, setTlsProfiles] = useState<Record<string, string>>({})
+  const [bootstrap, setBootstrap] = useState(false)
+  const configFileRef = useRef<HTMLInputElement>(null)
+
+  function loadConfigFromFile(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = async () => {
+      try {
+        const res = await apiFetch('/api/config/rendered', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rendered: String(reader.result ?? '') }),
+        })
+        const body = await res.json().catch(() => ({ detail: res.statusText }))
+        if (!res.ok) throw new Error(body.detail ?? res.statusText)
+        notify.success(body.restarted ? 'Config loaded, activated, and router restarted' : `Config activation status: ${body.status}`)
+        await load()
+      } catch (e) {
+        notify.error(errorMessage(e))
+      }
+    }
+    reader.onerror = () => notify.error('Could not read the selected file')
+    reader.readAsText(file)
+  }
 
   async function load() {
     setLoading(true)
     try {
       const data = await apiJson<{
-        fields: ConfigFields
+        bootstrap?: boolean
+        fields: ConfigFields | null
         path: string
         fabric_presets?: FabricPreset[]
         tls_profiles?: Record<string, string>
       }>('/api/config')
+      setPath(data.path)
+      setFabricPresets(data.fabric_presets ?? [])
+      setTlsProfiles(data.tls_profiles ?? {})
+      if (!data.fields) {
+        // Plaintext bootstrap config — no mTLS fields exist yet on disk. Real
+        // certs/namespace come from the Certificates page's upload flow, or
+        // from loading a prior config.json5 below.
+        setBootstrap(true)
+        setLocalFields(EMPTY_FIELDS)
+        if (target === 'local') setFields(EMPTY_FIELDS)
+        return
+      }
+      setBootstrap(false)
       const normalized = {
         ...data.fields,
         // Keep the new UI compatible with an older admin API during a rolling
@@ -174,9 +214,6 @@ function ConfigPage() {
       }
       setLocalFields(normalized)
       if (target === 'local') setFields(normalized)
-      setPath(data.path)
-      setFabricPresets(data.fabric_presets ?? [])
-      setTlsProfiles(data.tls_profiles ?? {})
     } catch (e) {
       notify.error(errorMessage(e))
     } finally {
