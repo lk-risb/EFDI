@@ -1,4 +1,4 @@
-# Zenoh Admin GUI
+# 12 — Zenoh Admin GUI
 
 A web GUI for operating the pod without SSH: router and system status, starting and stopping bridges and layers, editing configuration and credentials, the certificate authority, and branding. It uses a modern-minimal dark theme (solid soft-dark cards, self-hosted Inter, a teal accent) that a superadmin can rebrand from WebUI Settings.
 

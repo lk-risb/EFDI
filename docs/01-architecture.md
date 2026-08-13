@@ -1,4 +1,4 @@
-# EFDI, explained from A to Z
+# 01 — Architecture (EFDI, explained from A to Z)
 
 A ground-up, read-it-once explanation of the whole project: what it is, why each
 piece exists, how data actually moves, and how to operate it. Written so you can
