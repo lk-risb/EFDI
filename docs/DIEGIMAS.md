@@ -19,7 +19,7 @@ tada per vietinę Zenoh magistralę pateikia juos TAK ir SitaWare klientams.
 Debian 13 arba RHEL/Rocky/AlmaLinux 9/10 sistemoje rankiniu būdu įdiegiate
 tik `curl` (paprastai jau yra) — visa kita yra viena komanda:
 ```bash
-curl -fsSL https://raw.githubusercontent.com/risblicencijos/EFDI/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/lk-risb/EFDI/main/install.sh | bash
 ```
 `./install.sh` atnaujina OS (`apt`/`dnf` upgrade) ir savaime įdiegia git,
 Python 3.10+, Docker Engine + Compose papildinį (iš oficialios Docker
@@ -278,7 +278,7 @@ repozitoriją ir paleidžia diegyklę, kuri pati įdiegia visus 1 skyriaus
 reikalavimus:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/risblicencijos/EFDI/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/lk-risb/EFDI/main/install.sh | bash
 ```
 
 Tas pats, tik pirma nuklonavus rankiniu būdu:

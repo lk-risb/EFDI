@@ -17,7 +17,7 @@ This repo doesn't tag releases — `main` is the only supported branch. Security
 
 Please **do not** open a public GitHub issue for security vulnerabilities.
 
-Use [GitHub Security Advisories](https://github.com/risblicencijos/EFDI/security/advisories/new) to report privately — this keeps the report confidential until a fix ships.
+Use [GitHub Security Advisories](https://github.com/lk-risb/EFDI/security/advisories/new) to report privately — this keeps the report confidential until a fix ships.
 
 Include, where possible:
 - Affected component (a specific bridge/layer, the Zenoh router config, the zenoh-admin API/UI, `start.sh`/deployment scripts)

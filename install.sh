@@ -5,7 +5,7 @@
 
 set -euo pipefail
 
-REPO_URL="https://github.com/risblicencijos/EFDI.git"
+REPO_URL="https://github.com/lk-risb/EFDI.git"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/efdi-router}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || echo "$PWD")"
 ENV_FILE="$SCRIPT_DIR/compose/.env"
