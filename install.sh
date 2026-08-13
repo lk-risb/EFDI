@@ -79,6 +79,18 @@ warn()    { echo -e "${YELLOW}[!]${NC} $*"; }
 err()     { echo -e "${RED}[✗]${NC} $*"; exit 1; }
 section() { echo -e "\n${CYAN}── $* ──────────────────────────────────────────────────────${NC}"; }
 
+# A failed `docker compose up` only reports orchestration events
+# ("dependency ... is unhealthy"), never the failing container's own
+# stderr/stdout. Call this right before err() so the real reason (bad
+# config, missing cert, port conflict) is visible in the same run instead
+# of needing a manual `docker compose logs` round trip.
+dump_service_logs() {
+    echo -e "\n${CYAN}[*]${NC} Service logs (diagnosing the failure above):\n"
+    docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" ps -a 2>&1 || true
+    echo ""
+    docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" logs --no-log-prefix --tail=80 2>&1 || true
+}
+
 ask() {
     local _var="$1" _q="$2" _default="${3:-}" _ans
     if [ -n "$_default" ]; then
@@ -648,7 +660,10 @@ else
     info "Building locally maintained infrastructure…"
     docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" build
     info "Starting router, MariaDB, WebUI, and proxy…"
-    docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d
+    docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d || {
+        dump_service_logs
+        err "Infrastructure startup failed — see logs above."
+    }
 
     db_container="$(docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" ps -q zenoh-admin-db)"
     for _ in $(seq 1 60); do

@@ -101,7 +101,7 @@ run_spin "Building updated infrastructure" "Infrastructure image built" \
 
 info "Recreating changed infrastructure without a full shutdown..."
 docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d --remove-orphans \
-    || fail "Infrastructure restart failed"
+    || { dump_service_logs "$COMPOSE_FILE" "$ENV_FILE"; fail "Infrastructure restart failed"; }
 ok "Infrastructure restarted"
 
 info "Restarting native bridges and layers from the saved selection..."
