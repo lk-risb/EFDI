@@ -433,34 +433,15 @@ else
 fi
 
 # ── Sensor bridges ─────────────────────────────────────────────────────────────
-section "ASTERIX radar (CAT-48/34)"
-echo "  Leave blank if no radar is connected."
-echo ""
-ask_opt CAT48_PORT      "Radar UDP port (CAT48_PORT)"     "50048"
-if [ -n "${CAT48_PORT:-}" ]; then
-    ask_opt CAT48_RADAR_SAC  "Radar SAC (Source Area Code)"    ""
-    ask_opt CAT48_RADAR_SIC  "Radar SIC (Source Identification Code)" ""
-    ask_opt CAT48_RADAR_NAME "Radar display name in C2 clients" "ASTERIX Radar"
-    ask_opt CAT48_RADAR_LAT  "Radar fallback latitude  (or blank for auto from CAT-34)" ""
-    ask_opt CAT48_RADAR_LON  "Radar fallback longitude (or blank for auto from CAT-34)" ""
-    ask_opt CAT21_PORT       "ADS-B CAT-21 UDP port (optional)" ""
-    ask_opt CAT20_PORT       "MLAT  CAT-20 UDP port (optional)" ""
-fi
-
-section "SitaWare friendly-force tracking"
-ask_opt SITAWARE_URL  "SitaWare URL (e.g. https://sitaware.example.com)" ""
-if [ -n "${SITAWARE_URL:-}" ]; then
-    ask_opt SITAWARE_API_PATH "Documented SitaWare JSON resource path" ""
-    ask_opt SITAWARE_USER "SitaWare username" ""
-    ask_opt SITAWARE_PASS "SitaWare password" ""
-    ask_opt SITAWARE_POLL_S "Poll interval in seconds" "10"
-fi
-
-section "TAK Server (optional — for cross-subnet CoT)"
-ask_opt TAK_HOST "TAK Server hostname/IP" ""
-ask_opt TAK_PORT "TAK Server port"        "8087"
-
-section "API keys (optional)"
+# Which sensors/C2 systems to wire up (ASTERIX radar, SitaWare, TAK Server —
+# hostnames, ports, credentials) is deployment-specific detail most people
+# installing for the first time don't have on hand yet, and re-typing every
+# field at every re-run doesn't scale. Configure these after first boot from
+# the Zenoh Admin GUI's Integration Settings page instead — same UI-first
+# convention the rest of post-setup config already follows.
+section "Sensor and C2 integrations"
+info "Configure ASTERIX radar, SitaWare, and TAK Server connections after"
+info "first boot from the Zenoh Admin GUI (Integration Settings)."
 
 # ── Admin credentials and generated secrets ──────────────────────────────────
 section "Zenoh WebUI administrator"
