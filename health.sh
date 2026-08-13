@@ -20,12 +20,33 @@ cd "$ROOT"
 
 banner "Health Check"
 
+if ! command -v pnpm >/dev/null 2>&1 && ! command -v npx >/dev/null 2>&1; then
+    info "Node.js/pnpm not found — installing (needed for the WebUI type-check)…"
+    PKG_MGR=""
+    if command -v apt-get >/dev/null 2>&1; then PKG_MGR="apt"
+    elif command -v dnf >/dev/null 2>&1; then PKG_MGR="dnf"
+    fi
+    case "$PKG_MGR" in
+        apt)
+            curl -fsSL https://deb.nodesource.com/setup_22.x | sudo bash - >/dev/null 2>&1
+            sudo apt-get install -y -qq nodejs
+            ;;
+        dnf)
+            curl -fsSL https://rpm.nodesource.com/setup_22.x | sudo bash - >/dev/null 2>&1
+            sudo dnf install -y -q nodejs
+            ;;
+        *)
+            fail "No supported package manager (apt/dnf) found — install Node.js manually and re-run."
+            ;;
+    esac
+    command -v node >/dev/null 2>&1 || fail "Node.js installation failed — install it manually and re-run."
+    sudo npm install -g pnpm@11.9.0
+fi
+
 if command -v pnpm >/dev/null 2>&1; then
     PNPM=(pnpm)
-elif command -v npx >/dev/null 2>&1; then
-    PNPM=(npx --yes pnpm@11.9.0)
 else
-    fail "pnpm or npx is required to validate the WebUI"
+    PNPM=(npx --yes pnpm@11.9.0)
 fi
 
 git_commit="$(git rev-parse HEAD)"
