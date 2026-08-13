@@ -149,16 +149,28 @@ echo ""
 
 # ── Existing installation ────────────────────────────────────────────────────
 if [ -f "$ENV_FILE" ]; then
-    section "Existing installation"
-    echo "  [R] Reinstall (remove local images/containers, keep certs and data)"
-    echo "  [C] Full reconfigure"
-    echo "  [Q] Cancel"
-    read -rp "  Action [R/c/q]: " _EXISTING_ACTION
-    case "${_EXISTING_ACTION:-R}" in
-        [Rr]*) exec bash "$SCRIPT_DIR/reinstall.sh" ;;
-        [Cc]*) ;;
-        *) echo "Aborted."; exit 0 ;;
-    esac
+    _EXISTING_POD_STATE_DIR="$(env_value POD_STATE_DIR)"
+    if [ -n "$_EXISTING_POD_STATE_DIR" ] && [ ! -f "${_EXISTING_POD_STATE_DIR}/zenoh/config.json5" ]; then
+        # Reinstall only removes containers/images — it never writes this
+        # file, so offering it here is a guaranteed dead end (a prior
+        # install attempt never got this far, e.g. was interrupted).
+        # Skip straight to the flow that actually generates it instead of
+        # asking a question whose "wrong" answer (Reinstall, also the
+        # blank-Enter default) leads nowhere.
+        warn "compose/.env exists but this deployment was never fully installed"
+        warn "(no ${_EXISTING_POD_STATE_DIR}/zenoh/config.json5) — reconfiguring instead of offering Reinstall."
+    else
+        section "Existing installation"
+        echo "  [R] Reinstall (remove local images/containers, keep certs and data)"
+        echo "  [C] Full reconfigure"
+        echo "  [Q] Cancel"
+        read -rp "  Action [R/c/q]: " _EXISTING_ACTION
+        case "${_EXISTING_ACTION:-R}" in
+            [Rr]*) exec bash "$SCRIPT_DIR/reinstall.sh" ;;
+            [Cc]*) ;;
+            *) echo "Aborted."; exit 0 ;;
+        esac
+    fi
 fi
 
 # ── Install mode ──────────────────────────────────────────────────────────────
