@@ -6,7 +6,6 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="$ROOT/compose/.env"
 COMPOSE_FILE="$ROOT/compose/docker-compose.yml"
 PYTHON="$ROOT/compose/venv/bin/python3"
-UI="$ROOT/compose/zenoh-admin/ui"
 
 # shellcheck source=scripts/_spinner.sh
 . "$ROOT/scripts/_spinner.sh"
@@ -20,17 +19,6 @@ UI="$ROOT/compose/zenoh-admin/ui"
 cd "$ROOT"
 
 banner "Update"
-
-if command -v pnpm >/dev/null 2>&1; then
-    PNPM=(pnpm)
-elif command -v npx >/dev/null 2>&1; then
-    PNPM=(npx --yes pnpm@11.9.0)
-else
-    fail "pnpm or npx is required to validate the WebUI"
-fi
-sync_frontend_dependencies() {
-    (cd "$UI" && "${PNPM[@]}" install --frozen-lockfile)
-}
 
 branch="$(git symbolic-ref --quiet --short HEAD)" \
     || fail "Repo is in detached HEAD state — check out a branch first"
@@ -104,9 +92,6 @@ run_spin "Synchronizing Python dependencies" "Python dependencies synchronized" 
         -r "$ROOT/compose/requirements.txt" \
         -r "$ROOT/compose/zenoh-admin/requirements.txt" \
     || fail "Python dependency installation failed"
-run_spin "Synchronizing frontend dependencies" "Frontend dependencies synchronized" \
-    sync_frontend_dependencies \
-    || fail "Frontend dependency installation failed"
 
 GIT_COMMIT="$(git rev-parse HEAD)"
 export GIT_COMMIT
