@@ -25,7 +25,7 @@ router = APIRouter(prefix="/api/config", tags=["config"])
 # Mounted read-write from ${POD_STATE_DIR}/zenoh — same file zenoh-router itself
 # reads from (see compose/docker-compose.yml).
 CONFIG_PATH = os.environ.get("ZENOH_CONFIG_PATH", "/zenoh-config/config.json5")
-# Read-only mount of the repo's own host/zenoh-router.json5.tmpl — the single
+# Read-only mount of the repo's own examples/zenoh-router.json5.tmpl — the single
 # source of truth first-boot.sh also renders from. Re-rendering from here
 # (instead of hand-editing the live JSON5) means a saved config can never
 # drift from the template's structure — only the 5 templated values change.
@@ -38,7 +38,7 @@ TEMPLATE_PATH = os.environ.get("ZENOH_TEMPLATE_PATH", "/zenoh-config-template/ze
 ZENOH_ROUTER_SERVICE_LABEL = os.environ.get("ZENOH_ROUTER_CONTAINER", "efdi-pod-zenoh-router")
 
 # Paths inside the zenoh-router container — fixed by the compose volume layout,
-# never user-editable (see host/zenoh-router.json5.tmpl header + first-boot.sh).
+# never user-editable (see examples/zenoh-router.json5.tmpl header + first-boot.sh).
 # Zenoh 1.x applies one TLS identity to the whole router session.  Keep the
 # credential choices server-side and named, rather than accepting paths from
 # the WebUI.  A profile switch therefore changes the endpoint identity as one
@@ -259,6 +259,21 @@ def _fabric_presets() -> list[dict[str, object]]:
             }
         )
     return presets
+
+
+def _is_bootstrap_config(raw: str) -> bool:
+    """True for the plaintext no-mTLS config install.sh always writes first.
+
+    The bootstrap config has no connect/access_control/transport.link.tls
+    sections — _extract_fields would raise on it. Detect this cheaply before
+    attempting the full parse so GET /api/config can report a clean "not yet
+    secured" state instead of a 500.
+    """
+    try:
+        data = json5.loads(raw)
+    except ValueError:
+        return False
+    return isinstance(data, dict) and "connect" not in data
 
 
 def _extract_fields(raw: str) -> ConfigFields:
@@ -672,18 +687,20 @@ async def get_config(_=Depends(require_role("admin", "superadmin"))):
         raise HTTPException(status_code=404, detail=f"Config file not found at {CONFIG_PATH}")
     with open(CONFIG_PATH, "r") as f:
         raw = f.read()
-    try:
-        fields = _extract_fields(raw)
-    except (ValueError, KeyError, TypeError) as exc:
-        raise HTTPException(status_code=500, detail=f"Could not parse current config: {exc}")
-    return {
-        "fields": fields,
+    common = {
         "path": CONFIG_PATH,
         "fabric_presets": _fabric_presets(),
         "tls_profiles": {
             name: profile["label"] for name, profile in _TLS_PROFILES.items()
         },
     }
+    if _is_bootstrap_config(raw):
+        return {"bootstrap": True, "fields": None, **common}
+    try:
+        fields = _extract_fields(raw)
+    except (ValueError, KeyError, TypeError) as exc:
+        raise HTTPException(status_code=500, detail=f"Could not parse current config: {exc}")
+    return {"bootstrap": False, "fields": fields, **common}
 
 
 @router.get("/rendered")

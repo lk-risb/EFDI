@@ -647,6 +647,32 @@ def _run_script(script: Path, args: list[str]) -> dict:
         return {"ok": False, "returncode": 127, "output": str(exc)}
 
 
+# Only zenoh-admin itself may be recreated this way — it's the one container
+# whose env/bind-mounts are baked at create time and change when the WebUI
+# writes a new PARTNER_NAMESPACE/NAMESPACE_PREFIX via the cert bootstrap flow
+# (see zenoh-admin/api/certs_bootstrap.py). Not a general container-lifecycle
+# endpoint: the docker-socket-proxy this reaches already restricts to
+# container inspect/lifecycle only, but scope this one further still.
+_RECREATABLE_CONTAINERS = {"zenoh-admin"}
+
+
+def _recreate_container(name: str) -> dict:
+    if name not in _RECREATABLE_CONTAINERS:
+        return {"ok": False, "returncode": 400, "output": "unknown container"}
+    try:
+        result = subprocess.run(
+            ["docker", "compose", "-f", str(ROOT / "compose" / "docker-compose.yml"),
+             "--env-file", str(ENV_FILE), "up", "-d", name],
+            cwd=str(ROOT), capture_output=True, text=True, timeout=60, check=False,
+        )
+        output = (result.stdout + result.stderr).strip()
+        return {"ok": result.returncode == 0, "returncode": result.returncode, "output": output[-8000:]}
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "returncode": 124, "output": "container recreate timed out"}
+    except OSError as exc:
+        return {"ok": False, "returncode": 127, "output": str(exc)}
+
+
 def _action(name: str, action: str) -> dict:
     if name not in SERVICE_NAMES:
         return {"ok": False, "returncode": 400, "output": "unknown service"}
@@ -1185,6 +1211,12 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(200, result)
             except (ValueError, json.JSONDecodeError) as exc:
                 self._json(400, {"detail": str(exc)})
+            return
+        match = re.fullmatch(r"/v1/containers/([a-z0-9_-]+)/recreate", path)
+        if match:
+            result = _recreate_container(unquote(match.group(1)))
+            self._json(200 if result["ok"] else 409,
+                       {**result, "container": match.group(1), "action": "recreate"})
             return
         match = re.fullmatch(r"/v1/services/([a-z0-9_-]+)/(start|stop|restart)", path)
         if not match:

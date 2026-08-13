@@ -167,7 +167,7 @@ export CA_ROOTS_PEM="/etc/zenoh/tls/ca-roots.pem"
 # shellcheck disable=SC2016  # envsubst requires literal variable names here.
 envsubst \
   '${ZENOH_LISTEN_PORT} ${ZENOH_LOCAL_TCP_PORT} ${ZENOH_CONNECT_ENDPOINTS} ${PARTNER_NAMESPACE} ${INBOUND_NAMESPACE} ${NAMESPACE_PREFIX} ${NAMESPACE_ROOT} ${DATA_TOPIC_ROOT} ${ZENOH_VERIFY_NAME_ON_CONNECT} ${ZENOH_PLUGINS_LOADING_ENABLED} ${LISTEN_CERT_PEM} ${LISTEN_KEY_PEM} ${CONNECT_CERT_PEM} ${CONNECT_KEY_PEM} ${CA_ROOTS_PEM}' \
-  < "${POD_DIR}/host/zenoh-router.json5.tmpl" \
+  < "${POD_DIR}/examples/zenoh-router.json5.tmpl" \
   > "${POD_STATE_DIR}/zenoh/config.json5"
 echo "    wrote ${POD_STATE_DIR}/zenoh/config.json5"
 printf '%s\n' "${NAMESPACE_PREFIX}" > "${POD_STATE_DIR}/namespace-prefix"

@@ -93,7 +93,7 @@ def _endpoint_statuses(
 def _query_router_admin_space() -> dict:
     """Blocking — runs off the event loop via run_in_executor. Queries the
     router's own admin space (requires the pod-admin-introspect ACL rule;
-    see host/zenoh-router.json5.tmpl). Returns whatever the router actually
+    see examples/zenoh-router.json5.tmpl). Returns whatever the router actually
     exposes — connection health always works, the subscriber/queryable/storage
     breakdown depends on the ACL rule being present."""
     session = open_local_session()

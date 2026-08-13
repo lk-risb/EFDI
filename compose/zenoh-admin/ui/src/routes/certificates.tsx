@@ -1,6 +1,6 @@
 import {createFileRoute, redirect} from '@tanstack/react-router'
 import {useEffect, useState} from 'react'
-import {CheckCircle2, Copy, KeyRound, Network, Plus, ShieldAlert, ShieldCheck} from 'lucide-react'
+import {CheckCircle2, Copy, KeyRound, Lock, Network, Plus, ShieldAlert, ShieldCheck, UploadCloud} from 'lucide-react'
 import {Layout} from '@/components/Layout'
 import {PageHeader} from '@/components/PageHeader'
 import {HudCorners} from '@/components/HudCorners'
@@ -19,6 +19,7 @@ export const Route = createFileRoute('/certificates')({
   component: CertificatesPage,
 })
 
+interface BootstrapStatus { bootstrap: boolean }
 interface CertInfo { name: string; expires_at: string; days_remaining: number }
 interface PkiStatus {
   configured: boolean
@@ -70,18 +71,61 @@ function CertificatesPage() {
   const maximumChildDepth = pki?.path_length == null ? -1 : pki.path_length - 1
   const canDelegate = Boolean(pki?.available && pki.managed_trust.ready && maximumChildDepth >= 0)
 
+  const [bootstrapStatus, setBootstrapStatus] = useState<BootstrapStatus | null>(null)
+  const [caFile, setCaFile] = useState<File | null>(null)
+  const [certFile, setCertFile] = useState<File | null>(null)
+  const [keyFile, setKeyFile] = useState<File | null>(null)
+  const [bootPartnerNamespace, setBootPartnerNamespace] = useState('')
+  const [bootNamespacePrefix, setBootNamespacePrefix] = useState('EFDI')
+  const [uploading, setUploading] = useState(false)
+
   async function load() {
     try {
-      const [health, status, invites] = await Promise.all([
+      const [health, status, invites, boot] = await Promise.all([
         apiJson<{ system: { certs: CertInfo[] } }>('/api/health'),
         apiJson<PkiStatus>('/api/pki/status'),
         apiJson<Invitation[]>('/api/pki/invitations'),
+        apiJson<BootstrapStatus>('/api/certs/bootstrap/status'),
       ])
       setCerts(health.system.certs)
       setPki(status)
       setInvitations(invites)
+      setBootstrapStatus(boot)
     } catch (error) {
       notify.error(errorMessage(error))
+    }
+  }
+
+  async function uploadBootstrapIdentity(event: React.FormEvent) {
+    event.preventDefault()
+    if (!caFile || !certFile || !keyFile) {
+      notify.error('CA root, certificate, and private key are all required')
+      return
+    }
+    setUploading(true)
+    try {
+      const form = new FormData()
+      form.append('ca_root', caFile)
+      form.append('certificate', certFile)
+      form.append('private_key', keyFile)
+      form.append('partner_namespace', bootPartnerNamespace)
+      form.append('namespace_prefix', bootNamespacePrefix)
+      const response = await apiFetch('/api/certs/bootstrap', { method: 'POST', body: form })
+      const body = await response.json().catch(() => ({ detail: response.statusText }))
+      if (!response.ok) throw new Error(body.detail ?? response.statusText)
+      notify.success('Certificates applied — router switched to mTLS. This page may blip for a few seconds while the admin service restarts.')
+      setCaFile(null)
+      setCertFile(null)
+      setKeyFile(null)
+    } catch (error) {
+      notify.error(errorMessage(error))
+    } finally {
+      setUploading(false)
+      // The admin container recreates itself to pick up the new namespace —
+      // this request's own connection may die mid-flight either way, so
+      // always re-check state after a delay rather than trusting the outcome
+      // of this specific fetch.
+      setTimeout(load, 6000)
     }
   }
 
@@ -128,6 +172,60 @@ function CertificatesPage() {
     <Layout>
       <div className="mx-auto max-w-7xl p-6">
         <PageHeader title="Certificate Authority" count={certs?.length} countLabel="local identities" />
+
+        {bootstrapStatus?.bootstrap === true && (
+          <section className="enterprise-panel hud-frame relative mb-6 border-amber-500/30">
+            <HudCorners />
+            <div className="mb-3 flex items-center gap-2">
+              <ShieldAlert size={16} className="text-amber-600 dark:text-amber-400" />
+              <h2 className="enterprise-panel-title mb-0">Router not yet secured — plaintext bootstrap mode</h2>
+            </div>
+            <p className="mb-4 text-xs text-zinc-500">
+              This pod is running on a throwaway self-signed identity with no mTLS. Upload your
+              real CA root, certificate, and private key from <code>scripts/gen-certs.sh</code>{' '}
+              below to switch the router to mTLS. The admin service restarts briefly afterward.
+            </p>
+            <form onSubmit={uploadBootstrapIdentity} className="grid gap-3 sm:grid-cols-2">
+              <label className="text-xs text-zinc-500">
+                CA root (efdi-ca-root.pem)
+                <input type="file" required accept=".pem,.crt,.cer"
+                  onChange={event => setCaFile(event.target.files?.[0] ?? null)}
+                  className="mt-1 block w-full text-xs text-zinc-500 file:mr-3 file:rounded-md file:border-0 file:bg-zinc-200 file:px-3 file:py-1.5 file:text-xs file:text-zinc-900 dark:file:bg-white/10 dark:file:text-white" />
+              </label>
+              <label className="text-xs text-zinc-500">
+                Certificate (&lt;namespace&gt;-cert.pem)
+                <input type="file" required accept=".pem,.crt,.cer"
+                  onChange={event => setCertFile(event.target.files?.[0] ?? null)}
+                  className="mt-1 block w-full text-xs text-zinc-500 file:mr-3 file:rounded-md file:border-0 file:bg-zinc-200 file:px-3 file:py-1.5 file:text-xs file:text-zinc-900 dark:file:bg-white/10 dark:file:text-white" />
+              </label>
+              <label className="text-xs text-zinc-500">
+                Private key (&lt;namespace&gt;-key.pem)
+                <input type="file" required accept=".pem,.key"
+                  onChange={event => setKeyFile(event.target.files?.[0] ?? null)}
+                  className="mt-1 block w-full text-xs text-zinc-500 file:mr-3 file:rounded-md file:border-0 file:bg-zinc-200 file:px-3 file:py-1.5 file:text-xs file:text-zinc-900 dark:file:bg-white/10 dark:file:text-white" />
+              </label>
+              <label className="text-xs text-zinc-500">
+                PARTNER_NAMESPACE
+                <input className={`${inputClass} mt-1 font-mono`} value={bootPartnerNamespace}
+                  onChange={event => setBootPartnerNamespace(event.target.value)}
+                  placeholder="0123456789abcdef0123456789abcdef" required />
+              </label>
+              <label className="text-xs text-zinc-500 sm:col-span-2">
+                NAMESPACE_PREFIX
+                <input className={`${inputClass} mt-1 font-mono`} value={bootNamespacePrefix}
+                  onChange={event => setBootNamespacePrefix(event.target.value)} required />
+              </label>
+              <button disabled={uploading} className="sm:col-span-2 flex items-center justify-center gap-2 rounded-md bg-accent-fill px-4 py-2 text-sm text-accent-text disabled:opacity-50">
+                <UploadCloud size={14} /> {uploading ? 'Applying…' : 'Upload and switch to mTLS'}
+              </button>
+            </form>
+          </section>
+        )}
+        {bootstrapStatus?.bootstrap === false && (
+          <div className="mb-5 flex flex-wrap gap-2 text-xs">
+            <span className="enterprise-chip enterprise-chip-ok"><Lock size={13} /> router secured (mTLS)</span>
+          </div>
+        )}
 
         <div className="mb-5 flex flex-wrap gap-2 text-xs">
           <span className={`enterprise-chip ${pki?.available ? 'enterprise-chip-ok' : 'enterprise-chip-warn'}`}>
