@@ -307,6 +307,9 @@ if [ "$INSTALL_MODE" = "production" ]; then
             case "${_VPN_ACTION:-}" in
                 [Nn]*)
                     ask_key NETBIRD_SETUP_KEY "NetBird setup key (app.netbird.io → Keys)"
+                    # Blank = NetBird's own default (NetBird Cloud, api.netbird.io).
+                    # Only self-hosted management servers need this set.
+                    ask_key NETBIRD_MGMT_URL "Self-hosted management URL (leave blank for NetBird Cloud)"
                     # Reaching this branch means neither wt0 nor tailscale0 had an
                     # IP (checked above), so any NetBird package already on the
                     # box is a stale/broken leftover, not a live tunnel — safe to
@@ -328,8 +331,10 @@ if [ "$INSTALL_MODE" = "production" ]; then
                     # the trust boundary is the TLS connection to NetBird's own domain.
                     curl -fsSL https://pkgs.netbird.io/install.sh | sh
                     info "Connecting to NetBird…"
-                    sudo netbird up --setup-key="$NETBIRD_SETUP_KEY" \
-                        || err "NetBird connection failed — check your setup key and re-run."
+                    _NB_UP_ARGS=(up --setup-key="$NETBIRD_SETUP_KEY")
+                    [ -n "$NETBIRD_MGMT_URL" ] && _NB_UP_ARGS+=(--management-url="$NETBIRD_MGMT_URL")
+                    sudo netbird "${_NB_UP_ARGS[@]}" \
+                        || err "NetBird connection failed — check your setup key${NETBIRD_MGMT_URL:+ and management URL} and re-run."
                     sleep 3
                     _NB_IP=$(ip addr show wt0 2>/dev/null | awk '/inet / {print $2}' | cut -d/ -f1 | head -1) || true
                     [ -n "$_NB_IP" ] && ok "NetBird connected ($_NB_IP)" \
