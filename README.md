@@ -12,11 +12,11 @@
 [![SitaWare](https://img.shields.io/badge/SitaWare-NVG%202.0.2-6c5ce7)](https://systematic.com/)
 [![License](https://img.shields.io/badge/License-Apache--2.0-blue)](https://www.apache.org/licenses/LICENSE-2.0)
 
-[![shellcheck](https://github.com/risblicencijos/EFDI/actions/workflows/shellcheck.yml/badge.svg)](https://github.com/risblicencijos/EFDI/actions/workflows/shellcheck.yml)
-[![compose-validate](https://github.com/risblicencijos/EFDI/actions/workflows/compose-validate.yml/badge.svg)](https://github.com/risblicencijos/EFDI/actions/workflows/compose-validate.yml)
-[![bridge-syntax](https://github.com/risblicencijos/EFDI/actions/workflows/bridge-syntax.yml/badge.svg)](https://github.com/risblicencijos/EFDI/actions/workflows/bridge-syntax.yml)
-[![zenoh-admin-frontend](https://github.com/risblicencijos/EFDI/actions/workflows/zenoh-admin-frontend.yml/badge.svg)](https://github.com/risblicencijos/EFDI/actions/workflows/zenoh-admin-frontend.yml)
-[![docker-build](https://github.com/risblicencijos/EFDI/actions/workflows/docker-build.yml/badge.svg)](https://github.com/risblicencijos/EFDI/actions/workflows/docker-build.yml)
+[![shellcheck](https://github.com/lk-risb/EFDI/actions/workflows/shellcheck.yml/badge.svg)](https://github.com/lk-risb/EFDI/actions/workflows/shellcheck.yml)
+[![compose-validate](https://github.com/lk-risb/EFDI/actions/workflows/compose-validate.yml/badge.svg)](https://github.com/lk-risb/EFDI/actions/workflows/compose-validate.yml)
+[![bridge-syntax](https://github.com/lk-risb/EFDI/actions/workflows/bridge-syntax.yml/badge.svg)](https://github.com/lk-risb/EFDI/actions/workflows/bridge-syntax.yml)
+[![zenoh-admin-frontend](https://github.com/lk-risb/EFDI/actions/workflows/zenoh-admin-frontend.yml/badge.svg)](https://github.com/lk-risb/EFDI/actions/workflows/zenoh-admin-frontend.yml)
+[![docker-build](https://github.com/lk-risb/EFDI/actions/workflows/docker-build.yml/badge.svg)](https://github.com/lk-risb/EFDI/actions/workflows/docker-build.yml)
 
 </div>
 
@@ -211,7 +211,7 @@ EFDI/
 On a fresh Debian 13 (or RHEL/Rocky/Alma) host:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/risblicencijos/EFDI/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/lk-risb/EFDI/main/install.sh | bash
 ```
 
 `install.sh` auto-installs every prerequisite (git, Python 3.10+, Docker Engine + Compose, openssl, gettext) if missing, then walks through certs and configuration interactively.

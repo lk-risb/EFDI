@@ -58,7 +58,7 @@ if [ "$fail" -ne 0 ]; then
   echo
   echo "FAIL: at least one pod image is not anonymously pullable. A partner pod cannot pull it."
   echo "      Make the image public in its registry:"
-  echo "      https://github.com/orgs/risblicencijos/packages/container/<image>/settings (Danger Zone → Public)"
+  echo "      https://github.com/orgs/lk-risb/packages/container/<image>/settings (Danger Zone → Public)"
   exit 1
 fi
 echo
