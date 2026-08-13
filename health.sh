@@ -87,34 +87,37 @@ mapfile -t python_files < <(
 ok "Python modules compile"
 
 info "Python tests"
-# pytest is test-only tooling, not a runtime pod dependency — it deliberately
-# isn't in compose/requirements.txt (CI installs it ad hoc too, see
-# .github/workflows/python-tests.yml). install.sh's venv never has it, so a
-# fresh install's first health.sh run always needs to fetch it here.
-if ! "$PYTHON" -m pytest --version &>/dev/null; then
-    if ! "$PYTHON" -m pip --version &>/dev/null; then
-        # A venv created before install.sh's ensurepip fix existed has
-        # python3 but no pip at all — `pip install` can't bootstrap itself.
-        # Recreate in place with the system interpreter (venv creation on an
-        # existing directory fills in what's missing, it doesn't wipe it);
-        # the system now has python3-venv/python3-pip either from install.sh
-        # or from here, so this repairs pip without losing installed packages.
-        info "pip missing from venv — repairing…"
-        SYSTEM_PYTHON="$(command -v python3)"
-        if ! "$SYSTEM_PYTHON" -m ensurepip --version &>/dev/null; then
-            if command -v apt-get >/dev/null 2>&1; then
-                sudo apt-get update -qq && sudo apt-get install -y -qq python3-venv python3-pip
-            elif command -v dnf >/dev/null 2>&1; then
-                sudo dnf install -y -q python3-pip
-            fi
+if ! "$PYTHON" -m pip --version &>/dev/null; then
+    # A venv created before install.sh's ensurepip fix existed has python3
+    # but no pip at all — `pip install` can't bootstrap itself from nothing.
+    # Recreate in place with the system interpreter (venv creation on an
+    # existing directory fills in what's missing, it doesn't wipe it); the
+    # system now has python3-venv/python3-pip either from install.sh or here.
+    info "pip missing from venv — repairing…"
+    SYSTEM_PYTHON="$(command -v python3)"
+    if ! "$SYSTEM_PYTHON" -m ensurepip --version &>/dev/null; then
+        if command -v apt-get >/dev/null 2>&1; then
+            sudo apt-get update -qq && sudo apt-get install -y -qq python3-venv python3-pip
+        elif command -v dnf >/dev/null 2>&1; then
+            sudo dnf install -y -q python3-pip
         fi
-        "$SYSTEM_PYTHON" -m venv "$ROOT/compose/venv"
-        "$PYTHON" -m pip --version &>/dev/null \
-            || fail "pip is still missing from the venv after repair — delete compose/venv and re-run install.sh"
     fi
-    info "pytest not found in venv — installing (needed for the self-test)…"
-    "$PYTHON" -m pip install --quiet --disable-pip-version-check pytest
+    "$SYSTEM_PYTHON" -m venv "$ROOT/compose/venv"
+    "$PYTHON" -m pip --version &>/dev/null \
+        || fail "pip is still missing from the venv after repair — delete compose/venv and re-run install.sh"
 fi
+# Don't just check for pytest — a venv can have pip+pytest but never have
+# gotten the actual runtime requirements (e.g. install.sh's own dependency
+# sync never completed against it). Cheap and idempotent when everything is
+# already satisfied, so run it unconditionally rather than guessing what's
+# missing. pytest itself is test-only tooling, deliberately not in
+# compose/requirements.txt (CI installs it ad hoc too — see
+# .github/workflows/python-tests.yml).
+info "Synchronizing Python dependencies (runtime + pytest)…"
+"$PYTHON" -m pip install --quiet --disable-pip-version-check \
+    -r "$ROOT/compose/requirements.txt" \
+    -r "$ROOT/compose/zenoh-admin/requirements.txt" \
+    pytest
 PYTHONPATH="$ROOT/compose/generated:$ROOT/compose/generated/protocols:$ROOT/compose" \
     "$PYTHON" -m pytest -q "$ROOT/tests"
 ok "Python tests passed"
