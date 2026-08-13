@@ -5,14 +5,16 @@
 
 set -euo pipefail
 
+# $USER isn't always exported (minimal containers, some non-login shells) —
+# with `set -u` that turns every usage below into a hard crash.
+USER="${USER:-$(whoami)}"
+
 REPO_URL="https://github.com/lk-risb/EFDI.git"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/efdi-router}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || echo "$PWD")"
 ENV_FILE="$SCRIPT_DIR/compose/.env"
 COMPOSE_FILE="$SCRIPT_DIR/compose/docker-compose.yml"
 VENV="$SCRIPT_DIR/compose/venv"
-
-[ -t 0 ] || exec < /dev/tty 2>/dev/null || true
 
 # ── OS package manager detection (Ubuntu/Debian apt, RHEL/Rocky/Alma dnf — the
 # two families docs/03-bootstrap-and-install.md documents) — used throughout this script so a
@@ -60,6 +62,13 @@ if [ ! -f "$COMPOSE_FILE" ]; then
     git -C "$INSTALL_DIR" submodule update --init --recursive
     exec bash "$INSTALL_DIR/install.sh" </dev/tty
 fi
+
+# Safe here (never earlier): bash is now reading this script from a real file,
+# not from the pipe `curl | bash` hands it — the branch above already re-execs
+# with `</dev/tty` for that case. Reassigning stdin before this point would
+# yank the script's own source out from under bash mid-read, breaking curl's
+# write with an EPIPE (`curl: (23) Failure writing output to destination`).
+[ -t 0 ] || exec < /dev/tty 2>/dev/null || true
 
 # ── Colours ───────────────────────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
