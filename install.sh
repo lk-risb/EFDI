@@ -112,6 +112,15 @@ ask_secret() {
     printf -v "$_var" '%s' "$_ans"
 }
 
+# Plaintext, not masked — lets you visually compare against the value shown
+# on the issuing dashboard (e.g. app.netbird.io) while typing/pasting, same
+# as TAK's install.sh does for its NetBird setup key prompt.
+ask_key() {
+    local _var="$1" _q="$2" _ans
+    read -rp "$(echo -e "  ${BOLD}${_q}${NC}: ")" _ans
+    printf -v "$_var" '%s' "$_ans"
+}
+
 env_value() {
     local key="$1"
     [ -f "$ENV_FILE" ] || return 0
@@ -297,7 +306,7 @@ if [ "$INSTALL_MODE" = "production" ]; then
             read -rp "$(echo -e "  ${BOLD}Connect now?${NC} [N]etBird / [T]ailscale / [S]kip (manual/offline): ")" _VPN_ACTION
             case "${_VPN_ACTION:-}" in
                 [Nn]*)
-                    ask_secret NETBIRD_SETUP_KEY "NetBird setup key (app.netbird.io → Keys)"
+                    ask_key NETBIRD_SETUP_KEY "NetBird setup key (app.netbird.io → Keys)"
                     # Reaching this branch means neither wt0 nor tailscale0 had an
                     # IP (checked above), so any NetBird package already on the
                     # box is a stale/broken leftover, not a live tunnel — safe to
