@@ -4,6 +4,7 @@ import {CheckCircle2, Copy, KeyRound, Lock, Network, Plus, ShieldAlert, ShieldCh
 import {Layout} from '@/components/Layout'
 import {PageHeader} from '@/components/PageHeader'
 import {HudCorners} from '@/components/HudCorners'
+import {StatusPill} from '@/components/StatusPill'
 import {Skeleton} from '@/components/Skeleton'
 import {apiFetch, apiJson, errorMessage} from '@/lib/api'
 import {notify} from '@/lib/notify'
@@ -174,11 +175,11 @@ function CertificatesPage() {
         <PageHeader title="Certificate Authority" count={certs?.length} countLabel="local identities" />
 
         {bootstrapStatus?.bootstrap === true && (
-          <section className="enterprise-panel hud-frame relative mb-6 border-amber-500/30">
+          <section className="hud-card hud-glass hud-frame relative mb-6 border border-amber-500/30 p-4">
             <HudCorners />
             <div className="mb-3 flex items-center gap-2">
               <ShieldAlert size={16} className="text-amber-600 dark:text-amber-400" />
-              <h2 className="enterprise-panel-title mb-0">Router not yet secured — plaintext bootstrap mode</h2>
+              <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Router not yet secured — plaintext bootstrap mode</h2>
             </div>
             <p className="mb-4 text-xs text-zinc-500">
               This pod is running on a throwaway self-signed identity with no mTLS. Upload your
@@ -223,32 +224,32 @@ function CertificatesPage() {
         )}
         {bootstrapStatus?.bootstrap === false && (
           <div className="mb-5 flex flex-wrap gap-2 text-xs">
-            <span className="enterprise-chip enterprise-chip-ok"><Lock size={13} /> router secured (mTLS)</span>
+            <span className="flex items-center gap-1"><Lock size={13} /> <StatusPill text="router secured (mTLS)" tone="ok" /></span>
           </div>
         )}
 
-        <div className="mb-5 flex flex-wrap gap-2 text-xs">
-          <span className={`enterprise-chip ${pki?.available ? 'enterprise-chip-ok' : 'enterprise-chip-warn'}`}>
+        <div className="mb-5 flex flex-wrap items-center gap-2 text-xs">
+          <span className="flex items-center gap-1">
             {pki?.available ? <CheckCircle2 size={13} /> : <ShieldAlert size={13} />}
-            {pki?.available ? 'router CA available' : 'router CA unavailable'}
+            <StatusPill text={pki?.available ? 'router CA available' : 'router CA unavailable'} tone={pki?.available ? 'ok' : 'warn'} />
           </span>
-          <span className={`enterprise-chip ${pki?.managed_trust.ready ? 'enterprise-chip-ok' : 'enterprise-chip-warn'}`}>
+          <span className="flex items-center gap-1">
             {pki?.managed_trust.ready ? <ShieldCheck size={13} /> : <ShieldAlert size={13} />}
-            {pki?.managed_trust.ready ? 'delegation chain verified' : 'managed trust unavailable'}
+            <StatusPill text={pki?.managed_trust.ready ? 'delegation chain verified' : 'managed trust unavailable'} tone={pki?.managed_trust.ready ? 'ok' : 'warn'} />
           </span>
-          <span className={`enterprise-chip ${pki?.step_ca_available ? 'enterprise-chip-ok' : 'enterprise-chip-warn'}`}>
+          <span className="flex items-center gap-1">
             {pki?.step_ca_available ? <CheckCircle2 size={13} /> : <ShieldAlert size={13} />}
-            {pki?.step_ca_available ? 'step-ca leaf issuer ready' : 'step-ca leaf issuer unavailable'}
+            <StatusPill text={pki?.step_ca_available ? 'step-ca leaf issuer ready' : 'step-ca leaf issuer unavailable'} tone={pki?.step_ca_available ? 'ok' : 'warn'} />
           </span>
-          <span className="enterprise-chip"><ShieldCheck size={13} /> child-generated private keys</span>
-          <span className="enterprise-chip"><Network size={13} /> bounded delegation depth</span>
+          <span className="flex items-center gap-1"><ShieldCheck size={13} /> <StatusPill text="child-generated private keys" tone="neutral" /></span>
+          <span className="flex items-center gap-1"><Network size={13} /> <StatusPill text="bounded delegation depth" tone="neutral" /></span>
         </div>
 
         <div className="mb-6 grid gap-4 lg:grid-cols-2">
-          <section className="enterprise-panel hud-frame relative">
+          <section className="hud-card hud-glass hud-frame relative border border-zinc-200 dark:border-white/10 p-4">
             <HudCorners />
-            <h2 className="enterprise-panel-title">Issuer status</h2>
-            <dl className="enterprise-kv">
+            <h2 className="mb-3 text-sm font-semibold text-zinc-900 dark:text-zinc-100">Issuer status</h2>
+            <dl className="hud-kv">
               <dt>Mode</dt><dd>{pki?.configured ? 'managed router CA' : 'not configured'}</dd>
               <dt>CA availability</dt><dd className={pki?.available ? 'text-green-600 dark:text-green-400' : 'text-amber-600 dark:text-amber-400'}>{pki?.available ? 'certificate and key verified' : 'signing disabled'}</dd>
               <dt>Managed trust</dt><dd title={pki?.managed_trust.error}>{pki?.managed_trust.ready ? 'identity and delegation chain verified' : (pki?.managed_trust.error ?? 'unavailable')}</dd>
@@ -262,9 +263,9 @@ function CertificatesPage() {
             </dl>
           </section>
 
-          <section className="enterprise-panel hud-frame relative">
+          <section className="hud-card hud-glass hud-frame relative border border-zinc-200 dark:border-white/10 p-4">
             <HudCorners />
-            <h2 className="enterprise-panel-title">Create child enrollment</h2>
+            <h2 className="mb-3 text-sm font-semibold text-zinc-900 dark:text-zinc-100">Create child enrollment</h2>
             <form onSubmit={createInvitation} className="grid gap-3 sm:grid-cols-2">
               <label className="text-xs text-zinc-500">Router name<input className={`${inputClass} mt-1`} value={childName} onChange={event => setChildName(event.target.value)} placeholder="Branch router" required /></label>
               <label className="text-xs text-zinc-500">Namespace<input className={`${inputClass} mt-1 font-mono`} value={namespace} onChange={event => setNamespace(event.target.value)} placeholder="region/branch-1" required /></label>
@@ -280,31 +281,31 @@ function CertificatesPage() {
         {newInvitation?.token && (
           <div className="mb-6 rounded-md border border-amber-500/30 bg-amber-500/10 p-4">
             <p className="hud-label text-xs text-amber-700 dark:text-amber-300">Shown once · enrollment token</p>
-            <div className="mt-2 flex gap-2"><code className="min-w-0 flex-1 break-all rounded bg-black/5 p-2 text-xs dark:bg-black/30">{newInvitation.token}</code><button onClick={copyToken} className="rounded-md border border-amber-500/30 px-3 text-amber-700 dark:text-amber-300" aria-label="Copy token"><Copy size={15} /></button></div>
+            <div className="mt-2 flex gap-2"><code className="min-w-0 flex-1 break-all rounded-none bg-black/5 p-2 text-xs dark:bg-black/30">{newInvitation.token}</code><button onClick={copyToken} className="rounded-md border border-amber-500/30 px-3 text-amber-700 dark:text-amber-300" aria-label="Copy token"><Copy size={15} /></button></div>
             <p className="mt-2 text-xs text-zinc-600 dark:text-zinc-400">The child generates all three private keys locally and submits only its router-CA, transport, and policy-signer CSRs with this token.</p>
           </div>
         )}
 
-        <h2 className="enterprise-section-title">Local trust material</h2>
+        <h2 className="mb-3 mt-6 text-sm font-semibold text-zinc-900 dark:text-zinc-100">Local trust material</h2>
         <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {certs === null ? Array.from({ length: 2 }).map((_, index) => (
-            <div key={index} className="enterprise-panel"><Skeleton className="mb-3 h-3 w-24" /><Skeleton className="mb-2 h-4 w-32" /><Skeleton className="h-3 w-20" /></div>
+            <div key={index} className="hud-card hud-glass border border-zinc-200 dark:border-white/10 p-4"><Skeleton className="mb-3 h-3 w-24" /><Skeleton className="mb-2 h-4 w-32" /><Skeleton className="h-3 w-20" /></div>
           )) : certs.length === 0 ? (
             <p className="col-span-full text-sm text-zinc-500">No local certificates found.</p>
           ) : certs.map(cert => {
             const state = certState(cert.days_remaining)
             const color = state === 'critical' ? 'text-red-600 dark:text-red-400' : state === 'warn' ? 'text-yellow-600 dark:text-yellow-400' : 'text-green-600 dark:text-green-400'
-            return <div key={cert.name} className="enterprise-panel hud-card"><p className="hud-label text-[10px] text-zinc-500">{cert.name}</p><p className="mt-2 font-mono text-sm">{cert.expires_at}</p><p className={cn('mt-2 text-xs', color)}>{cert.days_remaining} days remaining</p></div>
+            return <div key={cert.name} className="hud-card hud-glass border border-zinc-200 dark:border-white/10 p-4"><p className="hud-label text-[10px] text-zinc-500">{cert.name}</p><p className="mt-2 font-mono text-sm">{cert.expires_at}</p><p className={cn('mt-2 text-xs', color)}>{cert.days_remaining} days remaining</p></div>
           })}
         </div>
 
-        <h2 className="enterprise-section-title">Enrollment activity</h2>
+        <h2 className="mb-3 mt-6 text-sm font-semibold text-zinc-900 dark:text-zinc-100">Enrollment activity</h2>
         <div className="hud-frame relative overflow-hidden rounded-md border border-zinc-200 hud-glass dark:border-white/10">
           <HudCorners />
           {invitations === null ? <p className="p-5 text-sm text-zinc-500">Loading invitations…</p> : invitations.length === 0 ? <p className="p-5 text-sm text-zinc-500">No router invitations created.</p> : invitations.map(invitation => (
             <div key={invitation.id} className="grid gap-3 border-b border-zinc-100 p-4 last:border-0 sm:grid-cols-[minmax(10rem,1fr)_8rem_8rem_9rem] dark:border-white/5">
               <div><p className="text-sm font-medium">{invitation.child_name}</p><p className="font-mono text-xs text-zinc-500">{invitation.namespace}</p></div>
-              <span className={invitation.status === 'used' ? 'enterprise-chip enterprise-chip-ok' : 'enterprise-chip enterprise-chip-warn'}><KeyRound size={12} />{invitation.status}</span>
+              <span className="flex items-center gap-1"><KeyRound size={12} /><StatusPill text={invitation.status} tone={invitation.status === 'used' ? 'ok' : 'warn'} /></span>
               <span className="text-xs text-zinc-500">depth {invitation.max_delegation_depth}</span>
               <span className="text-xs text-zinc-500">expires {new Date(invitation.expires_at).toLocaleString()}</span>
             </div>

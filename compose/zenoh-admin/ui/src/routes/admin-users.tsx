@@ -75,9 +75,9 @@ function NewAdminModal({ onClose, onCreated }: { onClose: () => void; onCreated:
             </select>
           </div>
           <div className="flex gap-2 pt-1">
-            <button type="button" onClick={onClose} className="flex-1 py-2 rounded bg-zinc-300 dark:bg-zinc-700 hover:bg-zinc-400 dark:hover:bg-zinc-600 text-sm">Cancel</button>
+            <button type="button" onClick={onClose} className="flex-1 py-2 rounded-none bg-zinc-300 dark:bg-zinc-700 hover:bg-zinc-400 dark:hover:bg-zinc-600 text-sm">Cancel</button>
             <button type="submit" disabled={loading}
-              className="flex-1 py-2 rounded bg-accent-fill hover:bg-accent-fill-hover text-accent-text text-sm disabled:opacity-50">
+              className="flex-1 py-2 rounded-none bg-accent-fill hover:bg-accent-fill-hover text-accent-text text-sm disabled:opacity-50">
               {loading ? 'Creating…' : 'Create'}
             </button>
           </div>
@@ -163,7 +163,7 @@ function AdminUsersPage() {
                     </button>
                   </td>
                   <td className="px-4 py-3 flex justify-end">
-                    <button onClick={() => deleteUser(u.id, u.username)} title="Delete" className="p-1.5 rounded hover:bg-zinc-200 dark:hover:bg-zinc-800 text-red-600 dark:text-red-400"><Trash2 size={14} /></button>
+                    <button onClick={() => deleteUser(u.id, u.username)} title="Delete" className="p-1.5 rounded-none hover:bg-zinc-200 dark:hover:bg-zinc-800 text-red-600 dark:text-red-400"><Trash2 size={14} /></button>
                   </td>
                 </tr>
               ))}

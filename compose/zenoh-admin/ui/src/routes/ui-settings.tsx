@@ -115,8 +115,8 @@ function BrandingCard() {
         <div className="flex items-center justify-between gap-3 rounded-md border border-zinc-200 bg-zinc-50 p-3 dark:border-white/10 dark:bg-[#141416]">
           <div className="flex items-center gap-3">
             {logoUrl
-              ? <img src={logoUrl} alt="logo" className="h-9 w-9 rounded object-contain" />
-              : <div className="flex h-9 w-9 items-center justify-center rounded bg-zinc-200 text-zinc-500 dark:bg-white/5"><ImagePlus size={16} /></div>}
+              ? <img src={logoUrl} alt="logo" className="h-9 w-9 rounded-none object-contain" />
+              : <div className="flex h-9 w-9 items-center justify-center rounded-none bg-zinc-200 text-zinc-500 dark:bg-white/5"><ImagePlus size={16} /></div>}
             <div>
               <p className="text-sm text-zinc-700 dark:text-zinc-300">Logo</p>
               <p className="text-xs text-zinc-500">PNG or JPG, up to 2&nbsp;MB.</p>

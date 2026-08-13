@@ -261,7 +261,7 @@ function TopicsPage() {
                         <button
                           onClick={() => void unregister(topic)}
                           aria-label={`Unregister ${topic.key_expr}`}
-                          className="rounded p-2 text-zinc-500 hover:bg-red-500/10 hover:text-red-500"
+                          className="rounded-none p-2 text-zinc-500 hover:bg-red-500/10 hover:text-red-500"
                         >
                           <Trash2 size={15} />
                         </button>

@@ -8,6 +8,7 @@ import {notify} from '@/lib/notify'
 import {useBranding} from '@/store/branding'
 import {useTheme} from '@/store/theme'
 import {useNotifications} from '@/store/notifications'
+import {PasswordInput} from '@/components/PasswordInput'
 import {
     Bell,
     FileCog,
@@ -118,18 +119,18 @@ function ChangePasswordFields({ onClose }: { onClose: () => void }) {
     return (
       <div className="space-y-4">
         <p className="text-green-600 dark:text-green-400 text-sm">Password changed successfully.</p>
-        <button onClick={onClose} className="w-full py-2 rounded bg-zinc-300 dark:bg-[#232326] hover:bg-zinc-400 dark:hover:bg-[#2b2b2f] text-sm">Close</button>
+        <button onClick={onClose} className="w-full py-2 rounded-none bg-zinc-300 dark:bg-[#232326] hover:bg-zinc-400 dark:hover:bg-[#2b2b2f] text-sm">Close</button>
       </div>
     )
   }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
-      <input type="password" placeholder="Current password" value={current} onChange={e => setCurrent(e.target.value)}
-        className="w-full bg-zinc-200 dark:bg-[#141416] border border-zinc-300 dark:border-white/10 rounded px-3 py-2 text-sm" required />
+      <PasswordInput placeholder="Current password" value={current} onChange={e => setCurrent(e.target.value)}
+        className="w-full bg-zinc-200 dark:bg-[#141416] border border-zinc-300 dark:border-white/10 rounded-none px-3 py-2 text-sm" required />
       <div className="space-y-1">
-        <input type="password" placeholder="New password (min 12 chars)" value={next} onChange={e => setNext(e.target.value)}
-          className="w-full bg-zinc-200 dark:bg-[#141416] border border-zinc-300 dark:border-white/10 rounded px-3 py-2 text-sm" required />
+        <PasswordInput placeholder="New password (min 12 chars)" value={next} onChange={e => setNext(e.target.value)}
+          className="w-full bg-zinc-200 dark:bg-[#141416] border border-zinc-300 dark:border-white/10 rounded-none px-3 py-2 text-sm" required />
         {next.length > 0 && (
           <div className="space-y-1">
             <div className="flex gap-1 h-1">
@@ -141,12 +142,12 @@ function ChangePasswordFields({ onClose }: { onClose: () => void }) {
           </div>
         )}
       </div>
-      <input type="password" placeholder="Confirm new password" value={confirm} onChange={e => setConfirm(e.target.value)}
-        className="w-full bg-zinc-200 dark:bg-[#141416] border border-zinc-300 dark:border-white/10 rounded px-3 py-2 text-sm" required />
+      <PasswordInput placeholder="Confirm new password" value={confirm} onChange={e => setConfirm(e.target.value)}
+        className="w-full bg-zinc-200 dark:bg-[#141416] border border-zinc-300 dark:border-white/10 rounded-none px-3 py-2 text-sm" required />
       {error && <p className="text-red-600 dark:text-red-400 text-xs">{error}</p>}
       <div className="flex gap-2 pt-1">
-        <button type="button" onClick={onClose} className="flex-1 py-2 rounded bg-zinc-300 dark:bg-[#232326] hover:bg-zinc-400 dark:hover:bg-[#2b2b2f] text-sm">Cancel</button>
-        <button type="submit" className="flex-1 py-2 rounded bg-accent-fill hover:bg-accent-fill-hover text-accent-text text-sm">Change</button>
+        <button type="button" onClick={onClose} className="flex-1 py-2 rounded-none bg-zinc-300 dark:bg-[#232326] hover:bg-zinc-400 dark:hover:bg-[#2b2b2f] text-sm">Cancel</button>
+        <button type="submit" className="flex-1 py-2 rounded-none bg-accent-fill hover:bg-accent-fill-hover text-accent-text text-sm">Change</button>
       </div>
     </form>
   )
@@ -197,11 +198,11 @@ function UserSettingsModal({ onClose }: { onClose: () => void }) {
           ) : (
             <form onSubmit={handleUsernameSubmit} className="space-y-3">
               <input type="text" placeholder="New username" value={newUsername} onChange={e => setNewUsername(e.target.value)}
-                className="w-full bg-zinc-200 dark:bg-[#141416] border border-zinc-300 dark:border-white/10 rounded px-3 py-2 text-sm" required />
-              <input type="password" placeholder="Current password" value={usernamePassword} onChange={e => setUsernamePassword(e.target.value)}
-                className="w-full bg-zinc-200 dark:bg-[#141416] border border-zinc-300 dark:border-white/10 rounded px-3 py-2 text-sm" required />
+                className="w-full bg-zinc-200 dark:bg-[#141416] border border-zinc-300 dark:border-white/10 rounded-none px-3 py-2 text-sm" required />
+              <PasswordInput placeholder="Current password" value={usernamePassword} onChange={e => setUsernamePassword(e.target.value)}
+                className="w-full bg-zinc-200 dark:bg-[#141416] border border-zinc-300 dark:border-white/10 rounded-none px-3 py-2 text-sm" required />
               {usernameError && <p className="text-red-600 dark:text-red-400 text-xs">{usernameError}</p>}
-              <button type="submit" className="w-full py-2 rounded bg-accent-fill hover:bg-accent-fill-hover text-accent-text text-sm">Change Username</button>
+              <button type="submit" className="w-full py-2 rounded-none bg-accent-fill hover:bg-accent-fill-hover text-accent-text text-sm">Change Username</button>
             </form>
           )}
         </div>
@@ -270,13 +271,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
         >
           <HamburgerIcon open={sidebarOpen} />
         </button>
-        {logoUrl && <img src={logoUrl} alt="" className="w-7 h-7 rounded object-contain shrink-0" />}
+        {logoUrl && <img src={logoUrl} alt="" className="w-7 h-7 rounded-none object-contain shrink-0" />}
         <span className="font-display font-bold text-xl tracking-tight truncate">{orgName}</span>
         <div className="relative ml-auto">
           <button
             onClick={() => setNotifOpen((v) => !v)}
             aria-label="Notifications"
-            className="p-1.5 rounded hover:bg-zinc-200 dark:hover:bg-[#141416] text-zinc-600 dark:text-zinc-400 relative focus:outline-none focus:ring-2 focus:ring-accent-ring"
+            className="p-1.5 rounded-none hover:bg-zinc-200 dark:hover:bg-[#141416] text-zinc-600 dark:text-zinc-400 relative focus:outline-none focus:ring-2 focus:ring-accent-ring"
           >
             <Bell size={16} />
             {notifications.length > 0 && (
@@ -284,7 +285,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             )}
           </button>
           {notifOpen && (
-            <div className="fixed top-14 left-4 right-4 w-auto md:absolute md:top-full md:left-auto md:right-0 md:mt-2 md:w-72 rounded-md border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#0c0c0e] shadow-lg z-50 max-h-80 overflow-y-auto">
+            <div className="fixed top-14 left-4 right-4 w-auto md:absolute md:top-full md:left-auto md:right-0 md:mt-2 md:w-72 rounded-md border border-zinc-200 dark:border-white/10 hud-glass shadow-lg z-50 max-h-80 overflow-y-auto">
               <div className="flex items-center justify-between px-3 py-2 border-b border-zinc-200 dark:border-white/10">
                 <span className="hud-label text-xs font-semibold text-zinc-600 dark:text-zinc-400">Notifications</span>
                 <button onClick={clearNotifications} className="text-xs text-accent-ring hover:underline">Clear all</button>
@@ -311,7 +312,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             {(username ?? '?').slice(0, 2).toUpperCase()}
           </button>
           {userMenuOpen && (
-            <div className="fixed top-14 left-4 right-4 w-auto md:absolute md:top-full md:left-auto md:right-0 md:mt-2 md:w-56 rounded-md border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#0c0c0e] shadow-lg z-50 overflow-hidden">
+            <div className="fixed top-14 left-4 right-4 w-auto md:absolute md:top-full md:left-auto md:right-0 md:mt-2 md:w-56 rounded-md border border-zinc-200 dark:border-white/10 hud-glass shadow-lg z-50 overflow-hidden">
               <div className="px-3 py-2.5 border-b border-zinc-200 dark:border-white/10">
                 <p className="text-sm text-zinc-800 dark:text-zinc-200 truncate">{username}</p>
                 <p className="text-xs text-zinc-500">{role}</p>
@@ -365,14 +366,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
               to={to}
               onClick={() => setSidebarOpen(false)}
               className={cn(
-                'flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors',
+                'flex items-center gap-3 pl-3 pr-3 py-2 text-sm border-l-2 transition-colors',
                 current === to
-                  ? 'bg-zinc-200 dark:bg-[#141416] text-zinc-900 dark:text-white'
-                  : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-200/50 dark:hover:bg-white/[0.05]'
+                  ? 'border-accent-fill text-zinc-900 dark:text-white'
+                  : 'border-transparent text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-200/50 dark:hover:bg-white/[0.05]'
               )}
             >
               <Icon size={16} />
-              {label}
+              {current === to ? `[ ${label} ]` : label}
             </Link>
           ))}
           {extraItems.length > 0 && (
@@ -384,14 +385,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   to={to}
                   onClick={() => setSidebarOpen(false)}
                   className={cn(
-                    'flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors',
+                    'flex items-center gap-3 pl-3 pr-3 py-2 text-sm border-l-2 transition-colors',
                     current === to
-                      ? 'bg-zinc-200 dark:bg-[#141416] text-zinc-900 dark:text-white'
-                      : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-200/50 dark:hover:bg-white/[0.05]'
+                      ? 'border-accent-fill text-zinc-900 dark:text-white'
+                      : 'border-transparent text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-200/50 dark:hover:bg-white/[0.05]'
                   )}
                 >
                   <Icon size={16} />
-                  {label}
+                  {current === to ? `[ ${label} ]` : label}
                 </Link>
               ))}
             </>
