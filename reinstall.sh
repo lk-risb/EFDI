@@ -31,6 +31,16 @@ if [ -d "$ZENOH_CONFIG" ]; then
 fi
 [ -f "$ZENOH_CONFIG" ] || fail "Zenoh config not found at $ZENOH_CONFIG — this deployment was never fully installed. Run ./install.sh (not reinstall.sh) and choose Full reconfigure first."
 
+# Same stray-directory bug, same fix, for the two other individually
+# bind-mounted state files (see docker-compose.yml).
+for state_file in namespace-prefix data-topic-prefix; do
+    path="${POD_STATE_DIR}/${state_file}"
+    if [ -d "$path" ]; then
+        rmdir "$path" 2>/dev/null || true
+    fi
+    [ -f "$path" ] || printf 'EFDI\n' >"$path"
+done
+
 info "Stopping PID-managed bridges and layers..."
 "$ROOT/stop.sh" native
 ok "Native runtime stopped"
