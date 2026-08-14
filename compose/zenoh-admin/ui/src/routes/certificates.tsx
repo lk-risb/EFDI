@@ -79,19 +79,28 @@ function CertificatesPage() {
   const [bootPartnerNamespace, setBootPartnerNamespace] = useState('')
   const [bootNamespacePrefix, setBootNamespacePrefix] = useState('EFDI')
   const [uploading, setUploading] = useState(false)
+  const [showRotate, setShowRotate] = useState(false)
 
   async function load() {
     try {
-      const [health, status, invites, boot] = await Promise.all([
+      const [health, status, invites, boot, config] = await Promise.all([
         apiJson<{ system: { certs: CertInfo[] } }>('/api/health'),
         apiJson<PkiStatus>('/api/pki/status'),
         apiJson<Invitation[]>('/api/pki/invitations'),
         apiJson<BootstrapStatus>('/api/certs/bootstrap/status'),
+        apiJson<{ fields: { partner_namespace: string; namespace_prefix: string } | null }>('/api/config'),
       ])
       setCerts(health.system.certs)
       setPki(status)
       setInvitations(invites)
       setBootstrapStatus(boot)
+      // Prefill so rotating an already-secured identity doesn't require
+      // retyping values the pod already knows — only bootstrap mode (no
+      // fields yet) needs the operator to type these from scratch.
+      if (config.fields) {
+        setBootPartnerNamespace(current => current || config.fields!.partner_namespace)
+        setBootNamespacePrefix(current => (current && current !== 'EFDI') ? current : config.fields!.namespace_prefix)
+      }
     } catch (error) {
       notify.error(errorMessage(error))
     }
@@ -114,10 +123,13 @@ function CertificatesPage() {
       const response = await apiFetch('/api/certs/bootstrap', { method: 'POST', body: form })
       const body = await response.json().catch(() => ({ detail: response.statusText }))
       if (!response.ok) throw new Error(body.detail ?? response.statusText)
-      notify.success('Certificates applied — router switched to mTLS. This page may blip for a few seconds while the admin service restarts.')
+      notify.success(bootstrapStatus?.bootstrap === false
+        ? 'Certificates rotated and applied. This page may blip for a few seconds while the admin service restarts.'
+        : 'Certificates applied — router switched to mTLS. This page may blip for a few seconds while the admin service restarts.')
       setCaFile(null)
       setCertFile(null)
       setKeyFile(null)
+      setShowRotate(false)
     } catch (error) {
       notify.error(errorMessage(error))
     } finally {
@@ -174,17 +186,40 @@ function CertificatesPage() {
       <div className="mx-auto max-w-7xl p-6">
         <PageHeader eyebrow="SECURITY / CERTIFICATES" title="Certificate Authority" count={certs?.length} countLabel="local identities" />
 
-        {bootstrapStatus?.bootstrap === true && (
+        {bootstrapStatus?.bootstrap === false && (
+          <div className="mb-5 flex flex-wrap items-center gap-2 text-xs">
+            <span className="flex items-center gap-1"><Lock size={13} /> <StatusPill text="router secured (mTLS)" tone="ok" /></span>
+            {!showRotate && (
+              <button onClick={() => setShowRotate(true)}
+                className="flex items-center gap-1 rounded-md border border-zinc-300 px-2.5 py-1 text-zinc-600 hover:border-accent-ring hover:text-zinc-900 dark:border-white/10 dark:text-zinc-400 dark:hover:text-white">
+                <UploadCloud size={12} /> Rotate certificates…
+              </button>
+            )}
+          </div>
+        )}
+
+        {(bootstrapStatus?.bootstrap === true || showRotate) && (
           <section className="hud-card hud-glass hud-frame relative mb-6 border border-amber-500/30 p-4">
             <HudCorners />
-            <div className="mb-3 flex items-center gap-2">
-              <ShieldAlert size={16} className="text-amber-600 dark:text-amber-400" />
-              <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Router not yet secured — plaintext bootstrap mode</h2>
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <ShieldAlert size={16} className="text-amber-600 dark:text-amber-400" />
+                <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                  {bootstrapStatus?.bootstrap === true ? 'Router not yet secured — plaintext bootstrap mode' : 'Rotate certificate identity'}
+                </h2>
+              </div>
+              {bootstrapStatus?.bootstrap === false && (
+                <button onClick={() => setShowRotate(false)} className="text-xs text-zinc-500 hover:text-zinc-900 dark:hover:text-white">Cancel</button>
+              )}
             </div>
             <p className="mb-4 text-xs text-zinc-500">
-              This pod is running on a throwaway self-signed identity with no mTLS. Upload your
-              real CA root, certificate, and private key from <code>scripts/gen-certs.sh</code>{' '}
-              below to switch the router to mTLS. The admin service restarts briefly afterward.
+              {bootstrapStatus?.bootstrap === true
+                ? <>This pod is running on a throwaway self-signed identity with no mTLS. Upload your real CA root,
+                    certificate, and private key from <code>scripts/gen-certs.sh</code> below to switch the router to
+                    mTLS. The admin service restarts briefly afterward.</>
+                : <>Replaces this pod's current identity with a newly issued CA root, certificate, and private key
+                    from <code>scripts/gen-certs.sh</code>. The router and admin service restart briefly afterward —
+                    make sure the new material is signed for the same PARTNER_NAMESPACE unless you intend to move slots.</>}
             </p>
             <form onSubmit={uploadBootstrapIdentity} className="grid gap-3 sm:grid-cols-2">
               <label className="text-xs text-zinc-500">
@@ -217,15 +252,10 @@ function CertificatesPage() {
                   onChange={event => setBootNamespacePrefix(event.target.value)} required />
               </label>
               <button disabled={uploading} className="sm:col-span-2 flex items-center justify-center gap-2 rounded-md bg-accent-fill px-4 py-2 text-sm text-accent-text disabled:opacity-50">
-                <UploadCloud size={14} /> {uploading ? 'Applying…' : 'Upload and switch to mTLS'}
+                <UploadCloud size={14} /> {uploading ? 'Applying…' : bootstrapStatus?.bootstrap === true ? 'Upload and switch to mTLS' : 'Upload and rotate identity'}
               </button>
             </form>
           </section>
-        )}
-        {bootstrapStatus?.bootstrap === false && (
-          <div className="mb-5 flex flex-wrap gap-2 text-xs">
-            <span className="flex items-center gap-1"><Lock size={13} /> <StatusPill text="router secured (mTLS)" tone="ok" /></span>
-          </div>
         )}
 
         <div className="mb-5 flex flex-wrap items-center gap-2 text-xs">
