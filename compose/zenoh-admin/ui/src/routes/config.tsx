@@ -5,7 +5,7 @@ import {PageHeader} from '@/components/PageHeader'
 import {apiFetch, apiJson, errorMessage} from '@/lib/api'
 import {useAuth} from '@/store/auth'
 import {notify} from '@/lib/notify'
-import {CheckCircle2, FileCode2, Network, Plus, RotateCw, Save, ShieldCheck, Trash2, Waypoints} from 'lucide-react'
+import {CheckCircle2, FileCode2, Network, Plus, RotateCw, Save, ShieldAlert, ShieldCheck, Trash2, UploadCloud, Waypoints} from 'lucide-react'
 import {HudCorners} from '@/components/HudCorners'
 import {IntegrationSettings} from '@/components/IntegrationSettings'
 import {fetchTopology} from '@/lib/topology'
@@ -435,6 +435,16 @@ function ConfigPage() {
               className="flex items-center gap-2 px-3 py-2 rounded-md text-sm text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-200/50 dark:hover:bg-white/[0.05] transition-colors disabled:opacity-50">
               <RotateCw size={14} /> Reload
             </button>
+            {canWrite && target === 'local' && (
+              <>
+                <input ref={configFileRef} type="file" accept=".json5,.json,.conf,.txt" className="hidden"
+                  onChange={loadConfigFromFile} />
+                <button onClick={() => configFileRef.current?.click()} disabled={loading}
+                  className="flex items-center gap-2 rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-700 transition-colors hover:border-accent-ring hover:text-zinc-900 disabled:opacity-50 dark:border-white/10 dark:text-zinc-300 dark:hover:text-white">
+                  <UploadCloud size={14} /> Load from file…
+                </button>
+              </>
+            )}
             {canWrite && (
               <button onClick={handleValidate} disabled={validating || loading}
                 className="flex items-center gap-2 rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-700 transition-colors hover:border-accent-ring hover:text-zinc-900 disabled:opacity-50 dark:border-white/10 dark:text-zinc-300 dark:hover:text-white">
@@ -480,6 +490,17 @@ function ConfigPage() {
             </div>
           </div>
         </div>
+
+        {bootstrap && (
+          <div className="mb-4 flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-700 dark:text-amber-300">
+            <ShieldAlert size={15} className="mt-0.5 shrink-0" />
+            <span>
+              Router not yet secured — running on a throwaway plaintext bootstrap config. Upload a real
+              CA root, certificate, and private key from the <a href="/certificates" className="underline">Certificates</a> page
+              to switch to mTLS, or load a prior <code>config.json5</code> here with "Load from file…".
+            </span>
+          </div>
+        )}
 
         {!canWrite && (
           <div className="mb-4 rounded-md border border-yellow-500/30 bg-yellow-500/10 px-4 py-3 text-xs text-yellow-700 dark:text-yellow-300">
