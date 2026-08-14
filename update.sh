@@ -30,6 +30,18 @@ if [ -d "$ZENOH_CONFIG" ]; then
 fi
 [ -f "$ZENOH_CONFIG" ] || fail "Zenoh config not found at $ZENOH_CONFIG — this deployment was never fully installed. Run ./install.sh and choose Full reconfigure first."
 
+# Same stray-directory bug, same fix, for the two other individually
+# bind-mounted state files (see docker-compose.yml) — an install predating
+# either file's introduction leaves Docker's empty-directory placeholder
+# behind, which then breaks every config/cert apply with "Is a directory".
+for state_file in namespace-prefix data-topic-prefix; do
+    path="${POD_STATE_DIR}/${state_file}"
+    if [ -d "$path" ]; then
+        rmdir "$path" 2>/dev/null || true
+    fi
+    [ -f "$path" ] || printf 'EFDI\n' >"$path"
+done
+
 banner "Update"
 
 branch="$(git symbolic-ref --quiet --short HEAD)" \
