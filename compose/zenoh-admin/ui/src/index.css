@@ -5,139 +5,107 @@
 /* Self-hosted (not Google Fonts CDN) — this panel needs to work in
    disconnected/air-gapped deployments, so no runtime dependency on an
    external font host. Latin + Latin Extended-A only (covers Lithuanian
-   diacritics); other scripts fall back to the system font. */
+   diacritics); other scripts fall back to the system font.
+   Values ported from Scout's real packages/ui/src/styles/globals.css, not a
+   reverse-engineered mockup: Aldrich display face (single 400 weight — never
+   synthetically bold it), Spline Sans body, Spline Sans Mono data/labels. */
 @font-face {
-  font-family: "Inter";
+  font-family: "Aldrich";
   font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: url("./assets/fonts/Inter-400-latin.woff2") format("woff2");
+  src: url("./assets/fonts/Aldrich-400-latin.woff2") format("woff2");
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122;
 }
 @font-face {
-  font-family: "Inter";
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url("./assets/fonts/Inter-400-latin-ext.woff2") format("woff2");
-  unicode-range: U+0100-024F, U+0300-0331, U+1E00-1EFF;
-}
-@font-face {
-  font-family: "Inter";
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-  src: url("./assets/fonts/Inter-500-latin.woff2") format("woff2");
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122;
-}
-@font-face {
-  font-family: "Inter";
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-  src: url("./assets/fonts/Inter-500-latin-ext.woff2") format("woff2");
-  unicode-range: U+0100-024F, U+0300-0331, U+1E00-1EFF;
-}
-@font-face {
-  font-family: "Inter";
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-  src: url("./assets/fonts/Inter-600-latin.woff2") format("woff2");
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122;
-}
-@font-face {
-  font-family: "Inter";
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-  src: url("./assets/fonts/Inter-600-latin-ext.woff2") format("woff2");
-  unicode-range: U+0100-024F, U+0300-0331, U+1E00-1EFF;
-}
-@font-face {
-  font-family: "Inter";
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-  src: url("./assets/fonts/Inter-700-latin.woff2") format("woff2");
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122;
-}
-@font-face {
-  font-family: "Inter";
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-  src: url("./assets/fonts/Inter-700-latin-ext.woff2") format("woff2");
-  unicode-range: U+0100-024F, U+0300-0331, U+1E00-1EFF;
-}
-@font-face {
-  font-family: "JetBrains Mono";
+  font-family: "Spline Sans";
   font-style: normal;
   font-weight: 400 700;
   font-display: swap;
-  src: url("./assets/fonts/JetBrainsMono-latin.woff2") format("woff2");
+  src: url("./assets/fonts/SplineSans-latin.woff2") format("woff2");
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122;
 }
 @font-face {
-  font-family: "JetBrains Mono";
+  font-family: "Spline Sans";
   font-style: normal;
   font-weight: 400 700;
   font-display: swap;
-  src: url("./assets/fonts/JetBrainsMono-latin-ext.woff2") format("woff2");
+  src: url("./assets/fonts/SplineSans-latin-ext.woff2") format("woff2");
   unicode-range: U+0100-024F, U+0300-0331, U+1E00-1EFF;
 }
-/* Scout aesthetic display face — self-hosted (not the Google Fonts CDN link
-   the reference prototype used) to keep the air-gap guarantee above intact. */
 @font-face {
-  font-family: "Space Grotesk";
+  font-family: "Spline Sans Mono";
   font-style: normal;
-  font-weight: 500 700;
+  font-weight: 400 700;
   font-display: swap;
-  src: url("./assets/fonts/SpaceGrotesk-600-latin.woff2") format("woff2");
+  src: url("./assets/fonts/SplineSansMono-latin.woff2") format("woff2");
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122;
 }
 @font-face {
-  font-family: "Space Grotesk";
+  font-family: "Spline Sans Mono";
   font-style: normal;
-  font-weight: 500 700;
+  font-weight: 400 700;
   font-display: swap;
-  src: url("./assets/fonts/SpaceGrotesk-600-latin-ext.woff2") format("woff2");
+  src: url("./assets/fonts/SplineSansMono-latin-ext.woff2") format("woff2");
   unicode-range: U+0100-024F, U+0300-0331, U+1E00-1EFF;
 }
 
 @theme {
-  --color-accent-fill: var(--brand-accent-fill, #2dd4bf);
-  --color-accent-fill-hover: var(--brand-accent-fill-hover, #5eead4);
-  --color-accent-text: var(--brand-accent-text, #052e2b);
-  --color-accent-ring: var(--brand-accent-ring, #2dd4bf);
+  /* --- Real Scout tokens, read from packages/ui/src/styles/globals.css ---
+     Signal blue primary; steel neutrals; green/amber/red reserved for
+     operational status only. Square corners everywhere, corner-bracket
+     panels instead of shadow for identity. */
+  --color-accent-fill: var(--brand-accent-fill, oklch(0.52 0.22 264));
+  --color-accent-fill-hover: var(--brand-accent-fill-hover, oklch(0.62 0.2 262));
+  --color-accent-text: var(--brand-accent-text, oklch(0.98 0.01 260));
+  --color-accent-ring: var(--brand-accent-ring, oklch(0.62 0.2 262 / 0.5));
 
-  /* HUD dark-surface scale — recalibrated to the Scout prototype's exact
-     canvas (#0d0f13) and card (#181b22) values; hud-2/3/4 interpolate the
-     same tonal step for inputs/hover states the prototype doesn't show. */
-  --color-hud-0: #0d0f13;
-  --color-hud-1: #181b22;
-  --color-hud-2: #1f232c;
-  --color-hud-3: #262b36;
-  --color-hud-4: #2d3340;
+  /* Steel ramp — cool, slightly blue neutral scale (Scout's dark-default). */
+  --color-hud-0: oklch(0.145 0.006 248);
+  --color-hud-1: oklch(0.178 0.007 244);
+  --color-hud-2: oklch(0.208 0.008 240);
+  --color-hud-3: oklch(0.242 0.009 238);
+  --color-hud-4: oklch(0.31 0.011 236);
 
-  /* Scout aesthetic: Space Grotesk display headings, monospace everywhere
-     else (labels, data, nav) — body prose stays Inter. */
-  --font-display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  /* Operational status — trio per tone (text / surface / border), never
+     used decoratively. */
+  --color-nominal: oklch(0.82 0.19 150);
+  --color-nominal-surface: oklch(0.74 0.18 153 / 0.13);
+  --color-nominal-border: oklch(0.74 0.18 153 / 0.34);
+  --color-warning: oklch(0.86 0.16 88);
+  --color-warning-surface: oklch(0.79 0.15 76 / 0.14);
+  --color-warning-border: oklch(0.79 0.15 76 / 0.34);
+  --color-critical: oklch(0.72 0.2 24);
+  --color-critical-surface: oklch(0.64 0.23 26 / 0.15);
+  --color-critical-border: oklch(0.64 0.23 26 / 0.4);
 
-  /* Scout uses near-square panels/cards/buttons (2px, not fully flat).
-     rounded-full (status dots, avatars) is unaffected; it doesn't read
-     these tokens. */
-  --radius-sm: 2px;
-  --radius-md: 2px;
-  --radius-lg: 2px;
-  --radius-xl: 2px;
-  --radius-2xl: 2px;
+  /* Aldrich display headings (single 400 weight — size/tracking carry it,
+     never weight); Spline Sans body; Spline Sans Mono for data, labels, nav. */
+  --font-sans: "Spline Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Aldrich", "Spline Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Spline Sans Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
-  --shadow-e1: 0 1px 2px rgb(0 0 0 / 0.04), 0 1px 3px rgb(0 0 0 / 0.06);
-  --shadow-e2: 0 2px 4px rgb(0 0 0 / 0.04), 0 6px 16px rgb(0 0 0 / 0.08);
+  /* Scout is square everywhere — no rounded corners at all. */
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
+  --radius-2xl: 0px;
+
+  --tracking-label: 0.14em;
+
+  --shadow-e1: 0 1px 2px oklch(0 0 0 / 0.3);
+  --shadow-e2: 0 2px 6px oklch(0 0 0 / 0.35), 0 1px 2px oklch(0 0 0 / 0.3);
   --ease-spring: cubic-bezier(0.22, 1.2, 0.36, 1);
-  --ease-out-soft: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-out-soft: cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* Tailwind v4's preflight only wires --font-sans into the default body font
+   automatically when it's read via the `font-sans` utility; apply it
+   directly so Spline Sans actually renders instead of sitting unused (the
+   Inter faces this replaced had the same gap — declared, never selected). */
+body {
+  font-family: var(--font-sans);
 }
 
 /* HUD identity: uppercase, letter-spaced small labels used for table
@@ -211,10 +179,31 @@
   background-size: 18px 18px;
 }
 
-/* `hud-frame` establishes the positioning context panels rely on. Reticle
-   corners were retired; HudCorners.tsx is a no-op kept only for compatibility. */
+/* Corner-bracket frame — Scout's real "instrument panel" identity motif
+   (ported from packages/ui's .scout-bracketed), restored here rather than in
+   HudCorners.tsx: every existing `.hud-frame` usage (13+ routes already
+   render <HudCorners /> inside one) gets real brackets from this one rule,
+   no per-route edits needed. HudCorners itself stays a no-op on purpose. */
+:root { --bracket-color: rgb(0 0 0 / 0.18); --bracket-size: 10px; }
+.dark { --bracket-color: rgb(255 255 255 / 0.18); }
 .hud-frame {
   position: relative;
+}
+.hud-frame::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(var(--bracket-color), var(--bracket-color)) left 0 top 0 / var(--bracket-size) 1px,
+    linear-gradient(var(--bracket-color), var(--bracket-color)) left 0 top 0 / 1px var(--bracket-size),
+    linear-gradient(var(--bracket-color), var(--bracket-color)) right 0 top 0 / var(--bracket-size) 1px,
+    linear-gradient(var(--bracket-color), var(--bracket-color)) right 0 top 0 / 1px var(--bracket-size),
+    linear-gradient(var(--bracket-color), var(--bracket-color)) left 0 bottom 0 / var(--bracket-size) 1px,
+    linear-gradient(var(--bracket-color), var(--bracket-color)) left 0 bottom 0 / 1px var(--bracket-size),
+    linear-gradient(var(--bracket-color), var(--bracket-color)) right 0 bottom 0 / var(--bracket-size) 1px,
+    linear-gradient(var(--bracket-color), var(--bracket-color)) right 0 bottom 0 / 1px var(--bracket-size);
+  background-repeat: no-repeat;
 }
 
 /* Light theme — same dot-grid texture, inverted to a dark dot on a light canvas. */
