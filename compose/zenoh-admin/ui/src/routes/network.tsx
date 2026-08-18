@@ -2,7 +2,7 @@ import {createFileRoute, redirect, useNavigate} from '@tanstack/react-router'
 import {useEffect, useState} from 'react'
 import {Layout} from '@/components/Layout'
 import {PageHeader} from '@/components/PageHeader'
-import {apiFetch, apiJson, errorMessage} from '@/lib/api'
+import {apiFetch, apiJson, errorDetail, errorMessage} from '@/lib/api'
 import {useAuth} from '@/store/auth'
 import {notify} from '@/lib/notify'
 import {
@@ -97,7 +97,7 @@ function NetworkPage() {
     const body = await response.json().catch(() => ({}))
     return response.ok
       ? { ready: true, reason: null }
-      : { ready: false, reason: body.detail ?? response.statusText }
+      : { ready: false, reason: errorDetail(body, response) }
   }
 
   async function load() {
@@ -144,7 +144,7 @@ function NetworkPage() {
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({ detail: res.statusText }))
-        throw new Error(err.detail ?? res.statusText)
+        throw new Error(errorDetail(err, res))
       }
       notify.success(`Authority ${action} recorded · apply the staged ACL`)
       await load()
@@ -160,7 +160,7 @@ function NetworkPage() {
     try {
       const res = await apiFetch('/api/trust/acl/apply', { method: 'POST' })
       const body = await res.json().catch(() => ({ detail: res.statusText }))
-      if (!res.ok) throw new Error(body.detail ?? res.statusText)
+      if (!res.ok) throw new Error(errorDetail(body, res))
       notify.success(`Identity-bound ACL v${body.sequence} applied`)
       await load()
     } catch (e) {
@@ -176,7 +176,7 @@ function NetworkPage() {
     try {
       const res = await apiFetch(`/api/trust/authorities/${authority.id}/rotate-link`, { method: 'POST' })
       const body = await res.json().catch(() => ({ detail: res.statusText }))
-      if (!res.ok) throw new Error(body.detail ?? res.statusText)
+      if (!res.ok) throw new Error(errorDetail(body, res))
       await navigator.clipboard.writeText(JSON.stringify(body.link_credential))
       notify.success('New child link credential copied once · install it on the child, then apply ACL')
       await load()

@@ -4,7 +4,7 @@ import { Layout } from '@/components/Layout'
 import { PageHeader } from '@/components/PageHeader'
 import { HudCorners } from '@/components/HudCorners'
 import { PasswordInput } from '@/components/PasswordInput'
-import { apiJson, apiFetch, errorMessage } from '@/lib/api'
+import { apiJson, apiFetch, errorDetail, errorMessage } from '@/lib/api'
 import { useAuth } from '@/store/auth'
 import { notify } from '@/lib/notify'
 import { UserPlus, Trash2 } from 'lucide-react'
@@ -107,7 +107,7 @@ function AdminUsersPage() {
       const res = await apiFetch(`/api/admin-users/${id}`, { method: 'DELETE' })
       if (!res.ok) {
         const err = await res.json().catch(() => ({ detail: res.statusText }))
-        throw new Error(err.detail ?? res.statusText)
+        throw new Error(errorDetail(err, res))
       }
       notify.success(`${username} deleted`)
       load()

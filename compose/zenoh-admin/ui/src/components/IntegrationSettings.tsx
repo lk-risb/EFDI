@@ -1,5 +1,5 @@
 import {useEffect, useMemo, useState} from 'react'
-import {apiFetch, apiJson, errorMessage} from '@/lib/api'
+import {apiFetch, apiJson, errorDetail, errorMessage} from '@/lib/api'
 import {notify} from '@/lib/notify'
 import {useAuth} from '@/store/auth'
 import {HudCorners} from '@/components/HudCorners'
@@ -129,7 +129,7 @@ export function IntegrationSettings() {
       if (takKeyFile) form.append('private_key', takKeyFile)
       const response = await apiFetch('/api/integrations/tak', { method: 'POST', body: form })
       const body = await response.json().catch(() => ({ detail: response.statusText }))
-      if (!response.ok) throw new Error(body.detail ?? response.statusText)
+      if (!response.ok) throw new Error(errorDetail(body, response))
       notify.success('TAK client credentials uploaded. Restart the TAK bridge to apply them.')
       setTakCaFile(null); setTakCertFile(null); setTakKeyFile(null)
       await load()

@@ -6,7 +6,7 @@ import {PageHeader} from '@/components/PageHeader'
 import {HudCorners} from '@/components/HudCorners'
 import {StatusPill} from '@/components/StatusPill'
 import {Skeleton} from '@/components/Skeleton'
-import {apiFetch, apiJson, errorMessage} from '@/lib/api'
+import {apiFetch, apiJson, errorDetail, errorMessage} from '@/lib/api'
 import {notify} from '@/lib/notify'
 import {useAuth} from '@/store/auth'
 import {cn} from '@/lib/utils'
@@ -122,7 +122,7 @@ function CertificatesPage() {
       form.append('namespace_prefix', bootNamespacePrefix)
       const response = await apiFetch('/api/certs/bootstrap', { method: 'POST', body: form })
       const body = await response.json().catch(() => ({ detail: response.statusText }))
-      if (!response.ok) throw new Error(body.detail ?? response.statusText)
+      if (!response.ok) throw new Error(errorDetail(body, response))
       notify.success(bootstrapStatus?.bootstrap === false
         ? 'Certificates rotated and applied. This page may blip for a few seconds while the admin service restarts.'
         : 'Certificates applied — router switched to mTLS. This page may blip for a few seconds while the admin service restarts.')
@@ -162,7 +162,7 @@ function CertificatesPage() {
         body: JSON.stringify({ child_name: childName, namespace, max_delegation_depth: depth, expires_in_hours: hours }),
       })
       const body = await response.json().catch(() => ({ detail: response.statusText }))
-      if (!response.ok) throw new Error(body.detail ?? response.statusText)
+      if (!response.ok) throw new Error(errorDetail(body, response))
       setNewInvitation(body)
       setChildName('')
       setNamespace('')
