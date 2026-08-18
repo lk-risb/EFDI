@@ -3,7 +3,7 @@ import {Link, useNavigate, useRouterState} from '@tanstack/react-router'
 import {useAuth} from '@/store/auth'
 import {useRoute} from '@/store/route'
 import {cn} from '@/lib/utils'
-import {apiFetch, errorMessage} from '@/lib/api'
+import {apiFetch, errorDetail, errorMessage} from '@/lib/api'
 import {notify} from '@/lib/notify'
 import {useBranding} from '@/store/branding'
 import {useTheme} from '@/store/theme'
@@ -107,7 +107,7 @@ function ChangePasswordFields({ onClose }: { onClose: () => void }) {
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({ detail: res.statusText }))
-        throw new Error(err.detail ?? res.statusText)
+        throw new Error(errorDetail(err, res))
       }
       setOk(true)
     } catch (err) {
@@ -171,7 +171,7 @@ function UserSettingsModal({ onClose }: { onClose: () => void }) {
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({ detail: res.statusText }))
-        throw new Error(err.detail ?? res.statusText)
+        throw new Error(errorDetail(err, res))
       }
       const data: { access_token: string } = await res.json()
       const payload = JSON.parse(atob(data.access_token.split('.')[1]))

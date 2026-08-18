@@ -2,7 +2,7 @@ import {createFileRoute, redirect} from '@tanstack/react-router'
 import {useEffect, useRef, useState} from 'react'
 import {Layout} from '@/components/Layout'
 import {PageHeader} from '@/components/PageHeader'
-import {apiFetch, apiJson, errorMessage} from '@/lib/api'
+import {apiFetch, apiJson, errorDetail, errorMessage} from '@/lib/api'
 import {useAuth} from '@/store/auth'
 import {notify} from '@/lib/notify'
 import {CheckCircle2, FileCode2, Network, Plus, RotateCw, Save, ShieldAlert, ShieldCheck, Trash2, UploadCloud, Waypoints} from 'lucide-react'
@@ -170,7 +170,7 @@ function ConfigPage() {
           body: JSON.stringify({ rendered: String(reader.result ?? '') }),
         })
         const body = await res.json().catch(() => ({ detail: res.statusText }))
-        if (!res.ok) throw new Error(body.detail ?? res.statusText)
+        if (!res.ok) throw new Error(errorDetail(body, res))
         notify.success(body.restarted ? 'Config loaded, activated, and router restarted' : `Config activation status: ${body.status}`)
         await load()
       } catch (e) {
@@ -387,7 +387,7 @@ function ConfigPage() {
             body: JSON.stringify({ target_namespace: target, fields }),
           })
       const body = await res.json().catch(() => ({ detail: res.statusText }))
-      if (!res.ok) throw new Error(body.detail ?? res.statusText)
+      if (!res.ok) throw new Error(errorDetail(body, res))
       if (target === 'local') {
         const result = body.restarted ? 'Config validated, applied, and router restarted' : `Config activation status: ${body.status}`
         notify.success(body.native_process_restart_required
@@ -413,7 +413,7 @@ function ConfigPage() {
         body: JSON.stringify(fields),
       })
       const body = await res.json().catch(() => ({ detail: res.statusText }))
-      if (!res.ok) throw new Error(body.detail ?? res.statusText)
+      if (!res.ok) throw new Error(errorDetail(body, res))
       notify.success(body.detail ?? 'Zenoh accepted the candidate configuration')
     } catch (e) {
       notify.error(errorMessage(e))

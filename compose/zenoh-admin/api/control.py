@@ -48,7 +48,12 @@ def _control(path: str, method: str = "GET", body: dict | None = None) -> dict:
             return json.loads(response.read(2_000_000).decode("utf-8"))
     except urllib.error.HTTPError as exc:
         try:
-            detail = json.loads(exc.read(256_000).decode("utf-8")).get("detail", exc.reason)
+            # admin_control's own error bodies use "output" (see admin_control.py's
+            # _action/_run_script/_recreate_container), not "detail" — falling back
+            # straight to exc.reason on a miss silently drops the real reason behind
+            # the bare HTTP status phrase (e.g. a 409 becomes just "Conflict").
+            payload = json.loads(exc.read(256_000).decode("utf-8"))
+            detail = payload.get("detail") or payload.get("output") or exc.reason
         except (ValueError, OSError):
             detail = str(exc.reason)
         raise HTTPException(status_code=502, detail=f"Host control agent: {detail}") from exc

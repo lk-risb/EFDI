@@ -499,6 +499,16 @@ read -rp "$(echo -e "  ${BOLD}Proceed?${NC} [Y/n]: ")" _CONFIRM
 # installs replace this entirely via the WebUI's Certificates page.
 section "Generating self-signed bootstrap certificates"
 mkdir -p "$BUNDLE_DIR/efdi"
+# zenoh-admin bind-mounts this directory :rw (docker-compose.yml) so the
+# Certificates page can write an uploaded/rotated identity itself
+# (api/certs_bootstrap.py) — but the container always runs as the fixed
+# non-root uid/gid 10001 (see compose/zenoh-admin/Dockerfile), while this
+# directory is owned by the installing host user. Without group-write for
+# that gid, every such write fails with EACCES ("Operation failed" in the UI,
+# no detail, since Caddy has nothing useful to relay). Best-effort: a
+# non-root installer may not be able to chgrp to an arbitrary gid.
+chgrp 10001 "$BUNDLE_DIR/efdi" 2>/dev/null || true
+chmod 775 "$BUNDLE_DIR/efdi" 2>/dev/null || true
 
 CA_KEY="$BUNDLE_DIR/efdi/efdi-ca-root-key.pem"
 CA_CERT="$BUNDLE_DIR/efdi/efdi-ca-root.pem"

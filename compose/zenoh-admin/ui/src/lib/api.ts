@@ -43,11 +43,22 @@ export function errorMessage(e: unknown): string {
   return message.trim() ? message : 'Operation failed'
 }
 
+// Best available detail for a non-ok response: backend `detail`, else the
+// HTTP reason phrase, else the raw status code — `??` alone lets an empty
+// `statusText` (common under HTTP/2, which has no reason phrases) slip
+// through as '', producing an undiagnosable "Operation failed" toast with
+// no indication of whether the backend even received the request.
+export function errorDetail(body: { detail?: unknown } | null | undefined, res: Response): string {
+  const detail = body?.detail
+  if (typeof detail === 'string' && detail.trim()) return detail
+  return res.statusText || `Request failed (HTTP ${res.status})`
+}
+
 export async function apiJson<T>(path: string, init: RequestInit = {}): Promise<T> {
   const res = await apiFetch(path, init)
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }))
-    throw new Error(err.detail ?? res.statusText)
+    const err = await res.json().catch(() => null)
+    throw new Error(errorDetail(err, res))
   }
   return res.json()
 }
