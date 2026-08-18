@@ -21,6 +21,14 @@ usage() {
 command -v openssl >/dev/null 2>&1 || { echo "openssl not found on PATH"; exit 2; }
 
 mkdir -p "$CERT_DIR"
+# zenoh-admin's own client identity lives here and it bind-mounts this
+# directory :rw (see docker-compose.yml) so the Certificates page can write
+# an uploaded/rotated identity itself (api/certs_bootstrap.py) — but the
+# container always runs as the fixed non-root uid/gid 10001 (see its
+# Dockerfile), while this directory is created here as the host operator.
+# Without group-write for that gid, every such write fails with EACCES.
+chgrp 10001 "$CERT_DIR" 2>/dev/null || true
+chmod 775 "$CERT_DIR"
 
 CA_CERT="${CERT_DIR}/efdi-ca-root.pem"
 CA_KEY="${CERT_DIR}/efdi-ca-root-key.pem"

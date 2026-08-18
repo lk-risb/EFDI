@@ -42,6 +42,21 @@ for state_file in namespace-prefix data-topic-prefix; do
     [ -f "$path" ] || printf 'EFDI\n' >"$path"
 done
 
+# zenoh-admin bind-mounts BUNDLE_DIR/efdi :rw so the Certificates page can
+# write its own uploaded/rotated identity (api/certs_bootstrap.py), but the
+# container always runs as the fixed non-root uid/gid 10001 — a directory
+# created before this self-heal existed (or by scripts/gen-certs.sh, which
+# runs as the host operator) stays owned by the wrong uid with no group-write,
+# so every cert upload/rotation fails with a bare "Operation failed" (a 500
+# with no detail, since Caddy has nothing useful to relay). Safe to re-run;
+# best-effort since a non-root host operator may not be able to chgrp to an
+# arbitrary gid — the group must already exist or map via /etc/subgid.
+BUNDLE_DIR="$(grep '^BUNDLE_DIR=' "$ENV_FILE" | head -1 | cut -d= -f2- | tr -d '[:space:]')"
+if [ -n "$BUNDLE_DIR" ] && [ -d "${BUNDLE_DIR}/efdi" ]; then
+    chgrp 10001 "${BUNDLE_DIR}/efdi" 2>/dev/null || true
+    chmod 775 "${BUNDLE_DIR}/efdi" 2>/dev/null || true
+fi
+
 banner "Update"
 
 branch="$(git symbolic-ref --quiet --short HEAD)" \

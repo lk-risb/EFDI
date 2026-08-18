@@ -4,7 +4,7 @@ import {CheckCircle2, Plus, RadioTower, RefreshCw, Trash2} from 'lucide-react'
 import {HudCorners} from '@/components/HudCorners'
 import {Layout} from '@/components/Layout'
 import {PageHeader} from '@/components/PageHeader'
-import {apiFetch, apiJson, errorMessage} from '@/lib/api'
+import {apiFetch, apiJson, errorDetail, errorMessage} from '@/lib/api'
 import {notify} from '@/lib/notify'
 import {useAuth} from '@/store/auth'
 
@@ -124,7 +124,7 @@ function TopicsPage() {
       const response = await apiFetch(`/api/topics/${topic.id}`, {method: 'DELETE'})
       if (!response.ok) {
         const body = await response.json().catch(() => ({detail: response.statusText}))
-        throw new Error(body.detail ?? response.statusText)
+        throw new Error(errorDetail(body, response))
       }
       notify.success('Topic removed and catalog republished')
       await load()

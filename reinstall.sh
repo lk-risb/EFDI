@@ -41,6 +41,15 @@ for state_file in namespace-prefix data-topic-prefix; do
     [ -f "$path" ] || printf 'EFDI\n' >"$path"
 done
 
+# BUNDLE_DIR/efdi must be group-writable by the container's fixed gid 10001
+# so the Certificates page can write its own identity (api/certs_bootstrap.py)
+# — see update.sh for the full explanation. Best-effort.
+BUNDLE_DIR="$(grep '^BUNDLE_DIR=' "$ENV_FILE" | head -1 | cut -d= -f2- | tr -d '[:space:]')"
+if [ -n "$BUNDLE_DIR" ] && [ -d "${BUNDLE_DIR}/efdi" ]; then
+    chgrp 10001 "${BUNDLE_DIR}/efdi" 2>/dev/null || true
+    chmod 775 "${BUNDLE_DIR}/efdi" 2>/dev/null || true
+fi
+
 info "Stopping PID-managed bridges and layers..."
 "$ROOT/stop.sh" native
 ok "Native runtime stopped"

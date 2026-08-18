@@ -3,7 +3,7 @@ import {useEffect, useMemo, useRef, useState} from 'react'
 import {Layout} from '@/components/Layout'
 import {PageHeader} from '@/components/PageHeader'
 import {HudCorners} from '@/components/HudCorners'
-import {apiFetch, apiJson, errorMessage} from '@/lib/api'
+import {apiFetch, apiJson, errorDetail, errorMessage} from '@/lib/api'
 import {fetchTopology, type TopologyNode} from '@/lib/topology'
 import {notify} from '@/lib/notify'
 import {useAuth} from '@/store/auth'
@@ -287,7 +287,7 @@ function PublishBuilderPage() {
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({ detail: res.statusText }))
-        throw new Error(err.detail ?? res.statusText)
+        throw new Error(errorDetail(err, res))
       }
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
@@ -338,7 +338,7 @@ function PublishBuilderPage() {
         body: JSON.stringify({ rendered: routerConfigText }),
       })
       const body = await res.json().catch(() => ({ detail: res.statusText }))
-      if (!res.ok) throw new Error(body.detail ?? res.statusText)
+      if (!res.ok) throw new Error(errorDetail(body, res))
       const status = body.restarted ? 'Router saved, activated, and restarted' : `Config activation status: ${body.status}`
       notify.success(status)
       await Promise.all([loadRuntime(), loadRouterTargets()])
