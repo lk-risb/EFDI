@@ -1,13 +1,17 @@
 /**
- * Corner-bracket framing, retired in the 2026 restyle.
- *
- * Panels now carry their identity through soft elevation, mica surfaces and the
- * accent ring instead of reticle brackets. This renders nothing on purpose: it
- * is referenced by 13 routes, so keeping the component as a no-op drops the
- * brackets everywhere from one place rather than editing every page. The
- * surrounding `hud-frame` class stays meaningful — it establishes the
- * positioning context those panels rely on.
+ * Corner-bracket frame — the "instrument panel" motif, ported directly from
+ * Scout's real CardBrackets component (packages/ui/src/components/card.tsx):
+ * four positioned corner spans, not a CSS ::before gradient trick. Renders
+ * inside a `.hud-frame` container, which supplies the positioning context.
  */
 export function HudCorners() {
-  return null
+  const corner = "pointer-events-none absolute size-[10px] border-[color:var(--bracket-color)]"
+  return (
+    <span aria-hidden="true" className="pointer-events-none absolute inset-0">
+      <span className={`${corner} -top-px -left-px border-t border-l`} />
+      <span className={`${corner} -top-px -right-px border-t border-r`} />
+      <span className={`${corner} -bottom-px -left-px border-b border-l`} />
+      <span className={`${corner} -bottom-px -right-px border-b border-r`} />
+    </span>
+  )
 }
