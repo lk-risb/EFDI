@@ -179,31 +179,14 @@ body {
   background-size: 18px 18px;
 }
 
-/* Corner-bracket frame — Scout's real "instrument panel" identity motif
-   (ported from packages/ui's .scout-bracketed), restored here rather than in
-   HudCorners.tsx: every existing `.hud-frame` usage (13+ routes already
-   render <HudCorners /> inside one) gets real brackets from this one rule,
-   no per-route edits needed. HudCorners itself stays a no-op on purpose. */
-:root { --bracket-color: rgb(0 0 0 / 0.18); --bracket-size: 10px; }
+/* `hud-frame` establishes the positioning context corner brackets rely on —
+   the actual bracket rendering is DOM-based now (HudCorners.tsx), matching
+   Scout's real CardBrackets component exactly rather than a CSS gradient
+   hack: 4 positioned corner spans, not a ::before background trick. */
+:root { --bracket-color: rgb(0 0 0 / 0.18); }
 .dark { --bracket-color: rgb(255 255 255 / 0.18); }
 .hud-frame {
   position: relative;
-}
-.hud-frame::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background:
-    linear-gradient(var(--bracket-color), var(--bracket-color)) left 0 top 0 / var(--bracket-size) 1px,
-    linear-gradient(var(--bracket-color), var(--bracket-color)) left 0 top 0 / 1px var(--bracket-size),
-    linear-gradient(var(--bracket-color), var(--bracket-color)) right 0 top 0 / var(--bracket-size) 1px,
-    linear-gradient(var(--bracket-color), var(--bracket-color)) right 0 top 0 / 1px var(--bracket-size),
-    linear-gradient(var(--bracket-color), var(--bracket-color)) left 0 bottom 0 / var(--bracket-size) 1px,
-    linear-gradient(var(--bracket-color), var(--bracket-color)) left 0 bottom 0 / 1px var(--bracket-size),
-    linear-gradient(var(--bracket-color), var(--bracket-color)) right 0 bottom 0 / var(--bracket-size) 1px,
-    linear-gradient(var(--bracket-color), var(--bracket-color)) right 0 bottom 0 / 1px var(--bracket-size);
-  background-repeat: no-repeat;
 }
 
 /* Light theme — same dot-grid texture, inverted to a dark dot on a light canvas. */
