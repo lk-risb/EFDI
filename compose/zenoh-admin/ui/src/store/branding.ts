@@ -22,12 +22,18 @@ interface BrandingState {
   uploadLogo: (file: File) => Promise<void>
 }
 
+// Same signal-blue accent TAK's branding.ts already ships (its own port of
+// Scout's blue-600/500) — matched exactly rather than independently
+// converting oklch, so the two consoles' unbranded defaults agree. This is
+// what renders before /api/branding resolves, and what it falls back to if
+// that request fails, so it must match the backend default (branding.py) or
+// an unbranded/offline load shows stale gray.
 const DEFAULTS = {
   orgName: 'EFDI Zenoh Console',
-  accentFill: '#d4d4d8',
-  accentFillHover: '#e4e4e7',
-  accentText: '#18181b',
-  accentRing: '#a1a1aa',
+  accentFill: '#2563eb',
+  accentFillHover: '#3b82f6',
+  accentText: '#ffffff',
+  accentRing: '#2563eb',
   logoUrl: null as string | null,
 }
 
