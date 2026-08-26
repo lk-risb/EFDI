@@ -19,10 +19,13 @@ _HEX_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
 
 _DEFAULTS = {
     "org_name": "EFDI Zenoh Console",
-    "accent_fill": "#d4d4d8",
-    "accent_fill_hover": "#e4e4e7",
-    "accent_text": "#18181b",
-    "accent_ring": "#a1a1aa",
+    # Same signal-blue accent TAK's branding.py already ships (its own port
+    # of Scout's blue-600/500) — matched exactly rather than independently
+    # converting oklch, so the two consoles' unbranded defaults agree.
+    "accent_fill": "#2563eb",
+    "accent_fill_hover": "#3b82f6",
+    "accent_text": "#ffffff",
+    "accent_ring": "#2563eb",
 }
 
 LOGO_DIR = "/data/branding"

@@ -315,7 +315,7 @@ def _extract_fields(raw: str) -> ConfigFields:
                 # Keep GET usable during a rolling upgrade where the state file,
                 # storage expression, and ACL were rendered by different versions.
                 partner_namespace = key.rsplit("/", 1)[-1]
-        if rule.get("id") == "pod-inbound":
+        if rule.get("id") == "pod-inbound" and rule.get("key_exprs"):
             ke = rule["key_exprs"][0]
             inbound_namespace = ke[:-3] if ke.endswith("/**") else ke
             break
@@ -708,7 +708,7 @@ async def get_config(_=Depends(require_role("admin", "superadmin"))):
         return {"bootstrap": True, "fields": None, **common}
     try:
         fields = _extract_fields(raw)
-    except (ValueError, KeyError, TypeError) as exc:
+    except (ValueError, KeyError, TypeError, IndexError) as exc:
         raise HTTPException(status_code=500, detail=f"Could not parse current config: {exc}")
     return {"bootstrap": False, "fields": fields, **common}
 
@@ -805,7 +805,7 @@ async def put_rendered_config(
 ):
     try:
         fields = _extract_fields(body.rendered)
-    except (ValueError, KeyError, TypeError) as exc:
+    except (ValueError, KeyError, TypeError, IndexError) as exc:
         raise HTTPException(status_code=400, detail=f"Could not parse rendered config: {exc}") from exc
 
     version = int(time.time() * 1000)
