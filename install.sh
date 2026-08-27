@@ -510,6 +510,15 @@ mkdir -p "$BUNDLE_DIR/efdi"
 chgrp 10001 "$BUNDLE_DIR/efdi" 2>/dev/null || true
 chmod 775 "$BUNDLE_DIR/efdi" 2>/dev/null || true
 
+# Same non-root-uid bind-mount issue as above, for the TAK Server client
+# credential upload (api/tak_package.py, docker-compose.yml's
+# integrations/tak:rw mount) — without this, uploading a CA root/cert/key
+# from the Integration Settings page fails with an unhandled PermissionError
+# (bare HTTP 500, no detail).
+mkdir -p "$POD_STATE_DIR/integrations/tak"
+chgrp 10001 "$POD_STATE_DIR/integrations/tak" 2>/dev/null || true
+chmod 775 "$POD_STATE_DIR/integrations/tak" 2>/dev/null || true
+
 CA_KEY="$BUNDLE_DIR/efdi/efdi-ca-root-key.pem"
 CA_CERT="$BUNDLE_DIR/efdi/efdi-ca-root.pem"
 NODE_KEY="$BUNDLE_DIR/efdi/${PARTNER_NAMESPACE}-key.pem"
