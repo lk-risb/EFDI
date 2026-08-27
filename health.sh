@@ -12,6 +12,10 @@ PYTHON="$ROOT/compose/venv/bin/python3"
 . "$ROOT/scripts/_spinner.sh"
 # shellcheck source=scripts/_selftest.sh
 . "$ROOT/scripts/_selftest.sh"
+# shellcheck source=scripts/_ask.sh
+. "$ROOT/scripts/_ask.sh"
+# shellcheck source=scripts/reset_admin_password.sh
+. "$ROOT/scripts/reset_admin_password.sh"
 
 [ -f "$ENV_FILE" ] || fail "compose/.env not found — run ./install.sh first"
 [ -d "$ROOT/.git" ] || fail "Not a git repo — clone via git, not a manual download"
@@ -178,3 +182,80 @@ printf '  %b┌─────────────────────�
 printf '  %b│%b  %bHealth check passed%b                          %b│%b\n' \
     "$G" "$NC" "$W" "$NC" "$G" "$NC"
 printf '  %b└────────────────────────────────────────────────┘%b\n\n' "$G" "$NC"
+
+# Interactive troubleshooting menu — only when actually run by hand at a real
+# terminal. update.sh/reinstall.sh call this script unattended as a self-test
+# (see their own EFDI_NONINTERACTIVE=1 before invoking it); without both
+# checks, one of those automated runs would hang forever on `read`.
+if [ -t 0 ] && [ -z "${EFDI_NONINTERACTIVE:-}" ]; then
+    section "Troubleshooting"
+    echo "  [1] Reset the WebUI admin username/password"
+    echo "  [2] Restart a container"
+    echo "  [3] Check for missing/misconfigured state files"
+    echo "  [Q] Done"
+    read -rp "  Action [1/2/3/Q]: " _TS_ACTION
+    case "${_TS_ACTION:-Q}" in
+        1)
+            _TS_CURRENT_USER="$(env_value ZENOH_ADMIN_FIRST_USER)"
+            ask _TS_USER "Admin username" "${_TS_CURRENT_USER:-admin}"
+            while true; do
+                ask_secret _TS_PASS "New password (minimum 12 characters)"
+                [ "${#_TS_PASS}" -ge 12 ] && break
+                warn "Minimum 12 characters required."
+            done
+            if reset_admin_password "$COMPOSE_FILE" "$ENV_FILE" "$_TS_USER" "$_TS_PASS"; then
+                ok "Admin credentials reset for '$_TS_USER'"
+            else
+                warn "Could not reset admin credentials — see output above"
+            fi
+            unset _TS_PASS
+            ;;
+        2)
+            echo "  Services:"
+            docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" ps --format '    {{.Service}}'
+            ask _TS_SERVICE "Service name to restart"
+            if docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" restart "$_TS_SERVICE"; then
+                ok "Restarted $_TS_SERVICE"
+            else
+                warn "Could not restart '$_TS_SERVICE' — check the name matches exactly what's listed above"
+            fi
+            ;;
+        3)
+            info "Checking known state paths..."
+            _TS_MISSING=0
+            _TS_POD_STATE_DIR="$(grep '^POD_STATE_DIR=' "$ENV_FILE" | head -1 | cut -d= -f2- | tr -d '[:space:]')"
+            _TS_BUNDLE_DIR="$(grep '^BUNDLE_DIR=' "$ENV_FILE" | head -1 | cut -d= -f2- | tr -d '[:space:]')"
+            for f in "${_TS_POD_STATE_DIR}/zenoh/config.json5" "${_TS_POD_STATE_DIR}/namespace-prefix" "${_TS_POD_STATE_DIR}/data-topic-prefix"; do
+                if [ -d "$f" ]; then
+                    warn "$f is a directory, not a file (Docker's stray bind-mount placeholder) — removing empty directory"
+                    rmdir "$f" 2>/dev/null || warn "  could not remove — not empty, needs manual attention"
+                    _TS_MISSING=1
+                elif [ ! -f "$f" ]; then
+                    warn "$f is missing"
+                    _TS_MISSING=1
+                fi
+            done
+            if [ -n "$_TS_BUNDLE_DIR" ] && [ -d "${_TS_BUNDLE_DIR}/efdi" ]; then
+                _TS_MODE="$(stat -c '%a' "${_TS_BUNDLE_DIR}/efdi" 2>/dev/null || echo '???')"
+                if [ "$_TS_MODE" != "775" ]; then
+                    warn "${_TS_BUNDLE_DIR}/efdi is mode $_TS_MODE, not 775 — Certificates page uploads may fail with a bare 500"
+                    chgrp 10001 "${_TS_BUNDLE_DIR}/efdi" 2>/dev/null && chmod 775 "${_TS_BUNDLE_DIR}/efdi" 2>/dev/null \
+                        && ok "  fixed" || warn "  could not fix automatically — chgrp/chmod by hand"
+                    _TS_MISSING=1
+                fi
+            fi
+            _TS_TAK_DIR="${_TS_POD_STATE_DIR}/integrations/tak"
+            if [ -d "$_TS_TAK_DIR" ]; then
+                _TS_MODE="$(stat -c '%a' "$_TS_TAK_DIR" 2>/dev/null || echo '???')"
+                if [ "$_TS_MODE" != "775" ]; then
+                    warn "$_TS_TAK_DIR is mode $_TS_MODE, not 775 — TAK credential uploads may fail with a bare 500"
+                    chgrp 10001 "$_TS_TAK_DIR" 2>/dev/null && chmod 775 "$_TS_TAK_DIR" 2>/dev/null \
+                        && ok "  fixed" || warn "  could not fix automatically — chgrp/chmod by hand"
+                    _TS_MISSING=1
+                fi
+            fi
+            [ "$_TS_MISSING" -eq 0 ] && ok "No known state-path issues found"
+            ;;
+        *) ;;
+    esac
+fi
