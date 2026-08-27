@@ -13,6 +13,8 @@ PYTHON="$ROOT/compose/venv/bin/python3"
 . "$ROOT/scripts/_selftest.sh"
 # shellcheck source=scripts/scrub_admin_secret.sh
 . "$ROOT/scripts/scrub_admin_secret.sh"
+# shellcheck source=scripts/cleanup_stale_pycache.sh
+. "$ROOT/scripts/cleanup_stale_pycache.sh"
 
 [ -f "$ENV_FILE" ] || fail "compose/.env not found — run ./install.sh first"
 [ -d "$ROOT/.git" ] || fail "Not a git repo — clone via git, not a manual download"
@@ -84,6 +86,8 @@ spin_stop "Up to date: $(git log -1 --format='%h %s')"
 
 if [ "$old_head" != "$(git rev-parse HEAD)" ]; then
     git --no-pager diff --stat "$old_head" HEAD
+    cleanup_stale_pycache "$old_head" HEAD
+    cleanup_stale_service_state "$old_head" HEAD "$POD_STATE_DIR"
     if ! git diff --quiet "$old_head" HEAD -- update.sh; then
         info "update.sh changed — restarting from the updated version"
         exec bash "$ROOT/update.sh" "$@"
