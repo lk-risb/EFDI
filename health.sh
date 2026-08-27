@@ -65,15 +65,20 @@ if [ "$deployed_commit" != "$git_commit" ]; then
     export GIT_COMMIT="$git_commit"
     docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" build --no-cache zenoh-admin \
         || fail "Clean zenoh-admin rebuild failed"
-    admin_image="$(docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" images -q zenoh-admin)"
-    deployed_commit="$(docker inspect --format \
-        '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$admin_image" 2>/dev/null || true)"
-    [ "$deployed_commit" = "$git_commit" ] \
-        || fail "Clean rebuild still does not carry revision ${git_commit:0:7}"
+    # `docker compose images -q zenoh-admin` reports the image the *running
+    # container* was created from, not the tag build just produced — checked
+    # here, before recreation, it always reports the old (pre-rebuild) image
+    # and this check would fail every single time even on a perfectly good
+    # rebuild. Recreate first, then verify what the container actually runs.
     docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d --remove-orphans \
         || fail "Infrastructure restart failed"
     docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" restart zenoh-admin-proxy \
         || fail "zenoh-admin-proxy restart failed"
+    admin_image="$(docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" images -q zenoh-admin)"
+    deployed_commit="$(docker inspect --format \
+        '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$admin_image" 2>/dev/null || true)"
+    [ "$deployed_commit" = "$git_commit" ] \
+        || fail "Clean rebuild still does not carry revision ${git_commit:0:7} — the running container is not using the image just built"
     ok "Clean build now matches ${git_commit:0:7}"
 else
     ok "Deployed zenoh-admin image matches ${git_commit:0:7}"
@@ -117,14 +122,29 @@ fi
 # missing. pytest itself is test-only tooling, deliberately not in
 # compose/requirements.txt (CI installs it ad hoc too — see
 # .github/workflows/python-tests.yml).
+# Declared here, before the first check that can fail, and never re-declared
+# below: every check from here on reports into this flag and keeps going
+# instead of dying under `set -e` (see the c2_preflight.sh comment further
+# down for why that used to matter — a broken deployment is exactly when the
+# troubleshooting menu at the bottom of this script matters most, and a
+# `set -e`-fatal check anywhere above it silently prevented ever reaching it,
+# with no "FAILED" message at all). shellcheck in particular exits non-zero
+# on info-level style findings alone, not just real problems — that alone
+# used to be enough to kill the whole script here.
+_HEALTH_FAILED=0
+
 info "Synchronizing Python dependencies (runtime + pytest)…"
 "$PYTHON" -m pip install --quiet --disable-pip-version-check \
     -r "$ROOT/compose/requirements.txt" \
     -r "$ROOT/compose/zenoh-admin/requirements.txt" \
     pytest
-PYTHONPATH="$ROOT/compose/generated:$ROOT/compose/generated/protocols:$ROOT/compose" \
-    "$PYTHON" -m pytest -q "$ROOT/tests"
-ok "Python tests passed"
+if PYTHONPATH="$ROOT/compose/generated:$ROOT/compose/generated/protocols:$ROOT/compose" \
+    "$PYTHON" -m pytest -q "$ROOT/tests"; then
+    ok "Python tests passed"
+else
+    warn "Python tests failed (see above)"
+    _HEALTH_FAILED=1
+fi
 
 info "Shell syntax and ShellCheck"
 mapfile -d '' -t shell_files < <(
@@ -135,30 +155,46 @@ for index in "${!shell_files[@]}"; do
     bash -n "${shell_files[index]}"
 done
 if command -v shellcheck >/dev/null 2>&1; then
-    shellcheck "${shell_files[@]}"
+    if shellcheck "${shell_files[@]}"; then
+        ok "Shell checks passed"
+    else
+        warn "ShellCheck found issues (see above)"
+        _HEALTH_FAILED=1
+    fi
 else
     warn "shellcheck is not installed; shell syntax passed but linting was skipped"
 fi
-ok "Shell checks passed"
 
 info "Compose rendering"
-docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" config -q
+if docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" config -q; then
+    _COMPOSE_RENDER_OK=1
+else
+    _COMPOSE_RENDER_OK=0
+fi
 for overlay in docker-compose.child.yml docker-compose.grandchild.yml; do
     if [ -f "$ROOT/compose/$overlay" ]; then
-        docker compose -f "$ROOT/compose/$overlay" --env-file "$ENV_FILE" config -q
+        docker compose -f "$ROOT/compose/$overlay" --env-file "$ENV_FILE" config -q || _COMPOSE_RENDER_OK=0
     fi
 done
-ok "Compose files render"
+if [ "$_COMPOSE_RENDER_OK" -eq 1 ]; then
+    ok "Compose files render"
+else
+    warn "Compose file(s) failed to render (see above)"
+    _HEALTH_FAILED=1
+fi
 
 info "Frontend type-check and build"
 if [ ! -d "$UI/node_modules" ]; then
     (cd "$UI" && "${PNPM[@]}" install --frozen-lockfile)
 fi
-(cd "$UI" && "${PNPM[@]}" type-check && "${PNPM[@]}" build)
-ok "Frontend checks passed"
+if (cd "$UI" && "${PNPM[@]}" type-check && "${PNPM[@]}" build); then
+    ok "Frontend checks passed"
+else
+    warn "Frontend type-check or build failed (see above)"
+    _HEALTH_FAILED=1
+fi
 
 info "Executable tests"
-_HEALTH_FAILED=0
 while IFS= read -r test_script; do
     # Not `set -e`-fatal: tests/c2_preflight.sh exits 1 when a C2 leg is down,
     # which used to kill this whole script right here — silently, with no
@@ -259,6 +295,14 @@ if [ -t 0 ] && [ -z "${EFDI_NONINTERACTIVE:-}" ]; then
                 elif [ ! -f "$f" ]; then
                     warn "$f is missing"
                     _TS_MISSING=1
+                else
+                    _TS_MODE="$(stat -c '%a' "$f" 2>/dev/null || echo '???')"
+                    if [ "$_TS_MODE" != "664" ] && [ "$_TS_MODE" != "666" ]; then
+                        warn "$f is mode $_TS_MODE, not group-writable — zenoh-admin (uid 10001) can't rewrite it, so Save & Restart fails with 'Permission denied'"
+                        chgrp 10001 "$f" 2>/dev/null && chmod 664 "$f" 2>/dev/null \
+                            && ok "  fixed" || warn "  could not fix automatically — chgrp/chmod by hand"
+                        _TS_MISSING=1
+                    fi
                 fi
             done
             if [ -n "$_TS_BUNDLE_DIR" ] && [ -d "${_TS_BUNDLE_DIR}/efdi" ]; then
