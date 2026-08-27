@@ -455,16 +455,16 @@ info "first boot from the Zenoh Admin GUI (Integration Settings)."
 section "Zenoh WebUI administrator"
 ZENOH_ADMIN_FIRST_USER="$(env_value ZENOH_ADMIN_FIRST_USER)"
 ZENOH_ADMIN_FIRST_USER="${ZENOH_ADMIN_FIRST_USER:-admin}"
-if [ "$INSTALL_MODE" = "production" ]; then
-    ask ZENOH_ADMIN_FIRST_USER "Admin username" "$ZENOH_ADMIN_FIRST_USER"
-    while true; do
-        ask_secret ZENOH_ADMIN_FIRST_PASS "Admin password (minimum 12 characters)"
-        [ "${#ZENOH_ADMIN_FIRST_PASS}" -ge 12 ] && break
-        warn "Minimum 12 characters required."
-    done
-else
-    ZENOH_ADMIN_FIRST_PASS="$(openssl rand -base64 18 | tr -d '/+=' | head -c 20)"
-fi
+# Always ask, testing mode included — an auto-generated password here used to
+# get silently scrubbed from .env the moment the first login created the
+# account (scrub_admin_secret.sh), with no other record of it anywhere. A
+# password you chose yourself is one you can still type after that happens.
+ask ZENOH_ADMIN_FIRST_USER "Admin username" "$ZENOH_ADMIN_FIRST_USER"
+while true; do
+    ask_secret ZENOH_ADMIN_FIRST_PASS "Admin password (minimum 12 characters)"
+    [ "${#ZENOH_ADMIN_FIRST_PASS}" -ge 12 ] && break
+    warn "Minimum 12 characters required."
+done
 ZENOH_ADMIN_DB_USER="$(env_value ZENOH_ADMIN_DB_USER)"
 ZENOH_ADMIN_DB_USER="${ZENOH_ADMIN_DB_USER:-zenoh_admin}"
 ZENOH_ADMIN_DB_PASSWORD="$(env_value ZENOH_ADMIN_DB_PASSWORD)"
