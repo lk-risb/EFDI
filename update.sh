@@ -61,6 +61,41 @@ fi
 
 banner "Update"
 
+# Host OS packages — separate from the pinned container/Python/JS dependency
+# versions below, and previously never touched by this script at all. Only
+# apt-based hosts are supported; anything else is skipped with a warning
+# rather than failing the whole update over it.
+if command -v apt-get >/dev/null 2>&1; then
+    _apt=(apt-get)
+    if [ "$(id -u)" -ne 0 ]; then
+        command -v sudo >/dev/null 2>&1 || fail "Host OS update needs root or sudo — install.sh normally runs as root"
+        _apt=(sudo apt-get)
+    fi
+    apt_log="$(mktemp)"
+    spin_start "Updating host OS packages (apt)"
+    if ! DEBIAN_FRONTEND=noninteractive "${_apt[@]}" update >"$apt_log" 2>&1; then
+        spin_stop ""
+        cat "$apt_log"; rm -f "$apt_log"
+        fail "apt-get update failed — check network and configured repos"
+    fi
+    if ! DEBIAN_FRONTEND=noninteractive "${_apt[@]}" upgrade -y >>"$apt_log" 2>&1; then
+        spin_stop ""
+        cat "$apt_log"; rm -f "$apt_log"
+        fail "apt-get upgrade failed — see output above"
+    fi
+    if grep -qE "^0 upgraded, 0 newly installed" "$apt_log"; then
+        spin_stop "Host OS packages already up to date"
+    else
+        spin_stop "Host OS packages updated"
+    fi
+    rm -f "$apt_log"
+    if [ -f /var/run/reboot-required ]; then
+        warn "A host package update requires a reboot (see /var/run/reboot-required) — reboot when convenient, this update continues without one."
+    fi
+else
+    warn "apt-get not found — skipping host OS package update (unsupported host OS)"
+fi
+
 branch="$(git symbolic-ref --quiet --short HEAD)" \
     || fail "Repo is in detached HEAD state — check out a branch first"
 upstream="$(git rev-parse --abbrev-ref "${branch}@{upstream}" 2>/dev/null)" \
@@ -163,7 +198,7 @@ ok "zenoh-admin-proxy restarted"
 printf '\n'
 if ! efdi_selftest; then
     warn "Self-test failed — escalating to health.sh for automatic recovery"
-    bash "$ROOT/health.sh" || fail "Health check failed — see output above"
+    EFDI_NONINTERACTIVE=1 bash "$ROOT/health.sh" || fail "Health check failed — see output above"
 fi
 
 printf '\n'
