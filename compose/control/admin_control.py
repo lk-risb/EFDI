@@ -31,7 +31,16 @@ from pathlib import Path
 from urllib import request as urllib_request
 from urllib.parse import quote, unquote, urlparse
 
-ROOT = Path(__file__).resolve().parents[1]
+# repo-root/compose/control/admin_control.py — three levels down from repo
+# root. This used to be repo-root/compose/admin_control.py (two levels down,
+# parents[1]) before the file moved into a control/ subdirectory in 8535efa;
+# every ROOT-relative path below (ENV_FILE, START_SCRIPT, docker-compose.yml)
+# still assumes repo root, so parents[1] silently resolved one directory too
+# shallow ever since — ENV_FILE became compose/compose/.env, a phantom file
+# WebUI saves were writing to (and reading back from, so it looked like it
+# worked) while the real compose/.env docker-compose and native processes
+# actually read never changed.
+ROOT = Path(__file__).resolve().parents[2]
 STATE_DIR = Path(os.environ.get("POD_STATE_DIR", str(ROOT / "compose" / "state")))
 ENV_FILE = Path(os.environ.get("EFDI_ENV_FILE", str(ROOT / "compose" / ".env")))
 START_SCRIPT = ROOT / "start.sh"
