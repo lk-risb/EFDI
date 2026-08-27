@@ -158,17 +158,36 @@ fi
 ok "Frontend checks passed"
 
 info "Executable tests"
+_HEALTH_FAILED=0
 while IFS= read -r test_script; do
-    "$test_script"
+    # Not `set -e`-fatal: tests/c2_preflight.sh exits 1 when a C2 leg is down,
+    # which used to kill this whole script right here — silently, with no
+    # "FAILED" message — before ever reaching the self-test summary or the
+    # troubleshooting menu below. A broken deployment is exactly when both of
+    # those matter most, so report and keep going instead.
+    if ! "$test_script"; then
+        warn "$test_script exited non-zero"
+        _HEALTH_FAILED=1
+    fi
 done < <(find "$ROOT/tests" -type f -name '*.sh' -perm -u+x -print | sort)
-ok "Executable tests passed"
+if [ "$_HEALTH_FAILED" -eq 0 ]; then
+    ok "Executable tests passed"
+else
+    warn "One or more executable tests failed (see above)"
+fi
 
-efdi_selftest || fail "Live EFDI self-test failed after self-heal"
+if efdi_selftest; then
+    :
+else
+    warn "Live EFDI self-test failed after self-heal"
+    _HEALTH_FAILED=1
+fi
 
 info "Whitespace and optional secret scan"
-git diff --check
+git diff --check || { warn "Whitespace check found issues (see above)"; _HEALTH_FAILED=1; }
 if command -v gitleaks >/dev/null 2>&1; then
-    gitleaks detect --source "$ROOT" --no-banner --redact
+    gitleaks detect --source "$ROOT" --no-banner --redact \
+        || { warn "gitleaks found something (see above)"; _HEALTH_FAILED=1; }
 else
     warn "gitleaks is not installed; tracked-file secret scan was skipped"
 fi
@@ -178,10 +197,17 @@ docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" ps \
     --format 'table {{.Name}}\t{{.Status}}'
 
 printf '\n'
-printf '  %b┌────────────────────────────────────────────────┐%b\n' "$G" "$NC"
-printf '  %b│%b  %bHealth check passed%b                          %b│%b\n' \
-    "$G" "$NC" "$W" "$NC" "$G" "$NC"
-printf '  %b└────────────────────────────────────────────────┘%b\n\n' "$G" "$NC"
+if [ "$_HEALTH_FAILED" -eq 0 ]; then
+    printf '  %b┌────────────────────────────────────────────────┐%b\n' "$G" "$NC"
+    printf '  %b│%b  %bHealth check passed%b                          %b│%b\n' \
+        "$G" "$NC" "$W" "$NC" "$G" "$NC"
+    printf '  %b└────────────────────────────────────────────────┘%b\n\n' "$G" "$NC"
+else
+    printf '  %b┌────────────────────────────────────────────────┐%b\n' "$R" "$NC"
+    printf '  %b│%b  %bHealth check found issues — see above%b          %b│%b\n' \
+        "$R" "$NC" "$W" "$NC" "$R" "$NC"
+    printf '  %b└────────────────────────────────────────────────┘%b\n\n' "$R" "$NC"
+fi
 
 # Interactive troubleshooting menu — only when actually run by hand at a real
 # terminal. update.sh/reinstall.sh call this script unattended as a self-test
@@ -259,3 +285,9 @@ if [ -t 0 ] && [ -z "${EFDI_NONINTERACTIVE:-}" ]; then
         *) ;;
     esac
 fi
+
+# Deferred from earlier failures (executable tests / self-test / whitespace /
+# gitleaks) so an automated caller (update.sh's EFDI_NONINTERACTIVE=1 escalation)
+# still sees a non-zero exit and its own `|| fail` still fires — only the
+# hard, mid-script `exit` was removed, not the failure signal itself.
+exit "$_HEALTH_FAILED"
