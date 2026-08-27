@@ -40,16 +40,23 @@ async def _read_pem(upload: UploadFile, label: str) -> bytes:
 
 
 def _write_pem(name: str, data: bytes, mode: int) -> str:
-    os.makedirs(_PACKAGE_DIR, exist_ok=True, mode=0o700)
-    target = os.path.join(_PACKAGE_DIR, name)
-    fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, mode)
     try:
-        with os.fdopen(fd, "wb") as f:
-            f.write(data)
-            f.flush()
-            os.fsync(f.fileno())
-    finally:
-        os.chmod(target, mode)  # O_CREAT's mode is masked by umask; enforce it
+        os.makedirs(_PACKAGE_DIR, exist_ok=True, mode=0o700)
+        target = os.path.join(_PACKAGE_DIR, name)
+        fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, mode)
+        try:
+            with os.fdopen(fd, "wb") as f:
+                f.write(data)
+                f.flush()
+                os.fsync(f.fileno())
+        finally:
+            os.chmod(target, mode)  # O_CREAT's mode is masked by umask; enforce it
+    except OSError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Could not write {name} to {_PACKAGE_DIR}: {exc}. "
+            f"Check that this directory is writable by uid/gid 10001 (see install.sh).",
+        ) from exc
     return os.path.join(_PACKAGE_HOST_DIR, name)
 
 
