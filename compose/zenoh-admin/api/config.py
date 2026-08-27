@@ -1,6 +1,7 @@
 import asyncio
 import errno
 import hashlib
+import logging
 import os
 import re
 import stat
@@ -20,6 +21,7 @@ from .control import _control
 from .db import get_db
 from .deps import require_role, write_audit
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/config", tags=["config"])
 
 # Mounted read-write from ${POD_STATE_DIR}/zenoh — same file zenoh-router itself
@@ -559,6 +561,8 @@ def validate_rendered_config(rendered: str) -> tuple[bool, str]:
         result = _control("/v1/router/validate-config", method="POST", body={"config": rendered})
     except HTTPException as exc:
         return False, str(exc.detail)
+    if not isinstance(result, dict):
+        return False, "Host control agent returned an unexpected response to the config preflight"
     ok = result.get("ok") is True
     detail = result.get("output")
     if not isinstance(detail, str):
@@ -769,8 +773,9 @@ async def put_config(
             preserve_management=_requires_remote_link(fields),
         )
     except Exception as exc:
+        logger.exception("apply_rendered_config crashed applying config for %s", fields.partner_namespace)
         await set_revision_state(db, revision, "failed", str(exc))
-        raise
+        raise HTTPException(status_code=500, detail=f"Unexpected error applying config: {exc}") from exc
     await set_revision_state(db, revision, result["status"], result.get("error"))
 
     await write_audit(
@@ -826,8 +831,9 @@ async def put_rendered_config(
             restart_native=True,
         )
     except Exception as exc:
+        logger.exception("apply_rendered_config crashed applying raw config for %s", fields.partner_namespace)
         await set_revision_state(db, revision, "failed", str(exc))
-        raise
+        raise HTTPException(status_code=500, detail=f"Unexpected error applying config: {exc}") from exc
     await set_revision_state(db, revision, result["status"], result.get("error"))
 
     await write_audit(
