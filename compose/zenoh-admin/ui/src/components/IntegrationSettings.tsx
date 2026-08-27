@@ -117,6 +117,7 @@ export function IntegrationSettings() {
   const [takCaFile, setTakCaFile] = useState<File | null>(null)
   const [takCertFile, setTakCertFile] = useState<File | null>(null)
   const [takKeyFile, setTakKeyFile] = useState<File | null>(null)
+  const [takZipFile, setTakZipFile] = useState<File | null>(null)
   const [takUploading, setTakUploading] = useState(false)
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set())
 
@@ -207,18 +208,19 @@ export function IntegrationSettings() {
   }
 
   async function uploadTakPackage() {
-    if (!canWrite || (!takCaFile && !takCertFile && !takKeyFile)) return
+    if (!canWrite || (!takCaFile && !takCertFile && !takKeyFile && !takZipFile)) return
     setTakUploading(true)
     try {
       const form = new FormData()
       if (takCaFile) form.append('ca_root', takCaFile)
       if (takCertFile) form.append('certificate', takCertFile)
       if (takKeyFile) form.append('private_key', takKeyFile)
+      if (takZipFile) form.append('service_package', takZipFile)
       const response = await apiFetch('/api/integrations/tak', { method: 'POST', body: form })
       const body = await response.json().catch(() => ({ detail: response.statusText }))
       if (!response.ok) throw new Error(errorDetail(body, response))
       notify.success('TAK client credentials uploaded. Restart the TAK bridge to apply them.')
-      setTakCaFile(null); setTakCertFile(null); setTakKeyFile(null)
+      setTakCaFile(null); setTakCertFile(null); setTakKeyFile(null); setTakZipFile(null)
       await load()
     } catch (e) {
       notify.error(errorMessage(e))
@@ -348,10 +350,11 @@ export function IntegrationSettings() {
                   {groupDef.title === 'TAK and CoT' && (
                     <div className="mt-3 rounded-md border border-zinc-200 p-3 dark:border-white/10">
                       <p className="mb-2 text-[11px] text-zinc-500">
-                        TAK Server client credentials (mTLS). Upload the CA root, certificate, and private key
-                        generated via <code>make add-service NAME=efdi-pod</code> in the TAK repo — each file is
-                        optional and only the ones you select are replaced.
+                        TAK Server client credentials (mTLS), generated via <code>make add-service NAME=efdi-pod</code>
+                        in the TAK repo (writes <code>certs/efdi-pod/{'{ca,cert,key}'}.pem</code>). Two ways to upload —
+                        pick either one, not both.
                       </p>
+                      <p className="mb-1.5 text-[10.5px] font-medium text-zinc-500">Option A — one file at a time</p>
                       <div className="grid gap-3 sm:grid-cols-3">
                         <label className="text-xs text-zinc-500">
                           CA root
@@ -372,8 +375,17 @@ export function IntegrationSettings() {
                             className="mt-1 block w-full text-xs text-zinc-500 file:mr-3 file:rounded-md file:border-0 file:bg-zinc-200 file:px-3 file:py-1.5 file:text-xs file:text-zinc-900 disabled:opacity-50 dark:file:bg-white/10 dark:file:text-white" />
                         </label>
                       </div>
+                      <p className="mb-1.5 mt-3 text-[10.5px] font-medium text-zinc-500">
+                        Option B — zip the whole <code>certs/efdi-pod/</code> folder and upload it as one file
+                      </p>
+                      <label className="text-xs text-zinc-500">
+                        Service package (.zip)
+                        <input type="file" disabled={!canWrite} accept=".zip"
+                          onChange={e => setTakZipFile(e.target.files?.[0] ?? null)}
+                          className="mt-1 block w-full max-w-xs text-xs text-zinc-500 file:mr-3 file:rounded-md file:border-0 file:bg-zinc-200 file:px-3 file:py-1.5 file:text-xs file:text-zinc-900 disabled:opacity-50 dark:file:bg-white/10 dark:file:text-white" />
+                      </label>
                       <button
-                        disabled={!canWrite || takUploading || (!takCaFile && !takCertFile && !takKeyFile)}
+                        disabled={!canWrite || takUploading || (!takCaFile && !takCertFile && !takKeyFile && !takZipFile)}
                         onClick={uploadTakPackage}
                         className="mt-3 flex items-center gap-2 rounded-md border border-accent-ring/50 px-3 py-1.5 text-xs text-accent-ring disabled:opacity-40"
                       >
