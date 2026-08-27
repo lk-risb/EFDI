@@ -54,13 +54,20 @@ fi
 [ -f "$ZENOH_CONFIG" ] || fail "Zenoh config not found at $ZENOH_CONFIG — this deployment was never fully installed. Run ./install.sh (not reinstall.sh) and choose Full reconfigure first."
 
 # Same stray-directory bug, same fix, for the two other individually
-# bind-mounted state files (see docker-compose.yml).
+# bind-mounted state files (see docker-compose.yml). zenoh-admin runs as
+# fixed uid/gid 10001 and rewrites these on every config save; group-only
+# read (644) from whoever ran this script leaves the very next Save & Restart
+# failing with "[Errno 13] Permission denied" — chgrp/chmod every time,
+# not just when the file didn't already exist, since a prior reinstall run
+# (before this fix existed) can leave it behind at the wrong perms.
 for state_file in namespace-prefix data-topic-prefix; do
     path="${POD_STATE_DIR}/${state_file}"
     if [ -d "$path" ]; then
         rmdir "$path" 2>/dev/null || true
     fi
     [ -f "$path" ] || printf 'EFDI\n' >"$path"
+    chgrp 10001 "$path" 2>/dev/null || true
+    chmod 664 "$path" 2>/dev/null || true
 done
 
 # BUNDLE_DIR/efdi must be group-writable by the container's fixed gid 10001
@@ -71,6 +78,15 @@ if [ -n "$BUNDLE_DIR" ] && [ -d "${BUNDLE_DIR}/efdi" ]; then
     chgrp 10001 "${BUNDLE_DIR}/efdi" 2>/dev/null || true
     chmod 775 "${BUNDLE_DIR}/efdi" 2>/dev/null || true
 fi
+
+# Same as BUNDLE_DIR/efdi above, for TAK credential uploads
+# (api/tak_package.py) — this directory never got the same treatment here
+# that install.sh gives it, so a reinstall could silently leave it
+# root-owned and every TAK zip/cert upload would fail with a bare 500.
+TAK_DIR="${POD_STATE_DIR}/integrations/tak"
+mkdir -p "$TAK_DIR"
+chgrp 10001 "$TAK_DIR" 2>/dev/null || true
+chmod 775 "$TAK_DIR" 2>/dev/null || true
 
 info "Stopping PID-managed bridges and layers..."
 "$ROOT/stop.sh" native
