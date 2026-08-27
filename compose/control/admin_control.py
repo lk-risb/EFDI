@@ -798,6 +798,12 @@ def _validate_router_config(config: str) -> dict:
         output = "Zenoh 1.9.0 accepted the candidate configuration"
     else:
         output = output[-8000:]
+        if not output.strip():
+            # zenohd (or docker exec itself) can exit non-zero with nothing on
+            # stdout/stderr — e.g. the binary or its shared libs are missing
+            # inside the container. An empty detail string here used to reach
+            # the WebUI as a bare, undiagnosable "Request failed (HTTP 422)".
+            output = f"Zenoh config preflight exited {result.returncode} with no output"
     return {"ok": result.returncode == 0, "returncode": result.returncode, "output": output}
 
 

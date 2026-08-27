@@ -565,8 +565,8 @@ def validate_rendered_config(rendered: str) -> tuple[bool, str]:
         return False, "Host control agent returned an unexpected response to the config preflight"
     ok = result.get("ok") is True
     detail = result.get("output")
-    if not isinstance(detail, str):
-        detail = "Zenoh config preflight returned an invalid response"
+    if not isinstance(detail, str) or not detail.strip():
+        detail = "Zenoh config preflight returned an invalid or empty response"
     return ok, detail[:8000]
 
 
