@@ -10,10 +10,32 @@ COMPOSE_FILE="$ROOT/compose/docker-compose.yml"
 . "$ROOT/scripts/_spinner.sh"
 # shellcheck source=scripts/scrub_admin_secret.sh
 . "$ROOT/scripts/scrub_admin_secret.sh"
+# shellcheck source=scripts/_ask.sh
+. "$ROOT/scripts/_ask.sh"
+# shellcheck source=scripts/reset_admin_password.sh
+. "$ROOT/scripts/reset_admin_password.sh"
 
 [ -f "$ENV_FILE" ] || fail "compose/.env not found — run ./install.sh first"
 cd "$ROOT"
 banner "Reinstall"
+
+# The admin account already exists in the DB (reinstall.sh never wipes it),
+# so unlike install.sh's first-boot bootstrap (_ensure_first_user in
+# api/auth.py only creates a row when none exists — setting
+# ZENOH_ADMIN_FIRST_PASS again here is a silent no-op), resetting it requires
+# writing a fresh password hash directly. Ask up front; default is to leave
+# it alone, so a routine reinstall never forces an unwanted credential change.
+_RESET_ADMIN_CREDS=0
+ask_yes_no _RESET_ADMIN_CREDS "Reset the WebUI admin username/password?" n
+if [ "$_RESET_ADMIN_CREDS" = "1" ]; then
+    _CURRENT_ADMIN_USER="$(env_value ZENOH_ADMIN_FIRST_USER)"
+    ask _NEW_ADMIN_USER "Admin username" "${_CURRENT_ADMIN_USER:-admin}"
+    while true; do
+        ask_secret _NEW_ADMIN_PASS "New admin password (minimum 12 characters)"
+        [ "${#_NEW_ADMIN_PASS}" -ge 12 ] && break
+        warn "Minimum 12 characters required."
+    done
+fi
 
 # reinstall.sh only removes containers/images — it assumes a prior successful
 # install.sh run already wrote the Zenoh router config. If that never
@@ -81,6 +103,13 @@ if [ -z "$db_container" ] || ! docker exec "$db_container" \
     fail "MariaDB did not become ready"
 fi
 ok "MariaDB ready"
+
+if [ "$_RESET_ADMIN_CREDS" = "1" ]; then
+    reset_admin_password "$COMPOSE_FILE" "$ENV_FILE" "$_NEW_ADMIN_USER" "$_NEW_ADMIN_PASS" \
+        || fail "Could not reset admin credentials"
+    unset _NEW_ADMIN_PASS
+    ok "Admin credentials reset for '$_NEW_ADMIN_USER'"
+fi
 
 scrub_admin_bootstrap_secret "$ENV_FILE" \
     || fail "Admin bootstrap credential could not be removed safely"

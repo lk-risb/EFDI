@@ -3,7 +3,7 @@
 # No whiptail dependency. Requires: set -euo pipefail already active in the caller.
 
 R='\033[0;31m' G='\033[0;32m' Y='\033[1;33m' C='\033[0;36m'
-W='\033[1;37m' DIM='\033[2m' NC='\033[0m'
+W='\033[1;37m' DIM='\033[2m' BOLD='\033[1m' NC='\033[0m'
 ok()   { printf "${G}  ✓${NC}  %s\n" "$*"; }
 fail() { printf "${R}  ✗${NC}  %s\n" "$*"; exit 1; }
 warn() { printf "${Y}  !${NC}  %s\n" "$*"; }
@@ -46,6 +46,8 @@ banner() {
     printf "\n  ${W}EFDI${NC} ${DIM}— %s${NC}\n" "$*"
     printf "  %s\n\n" "$(printf '─%.0s' {1..48})"
 }
+
+section() { echo -e "\n${C}── $* ──────────────────────────────────────────────────────${NC}"; }
 
 # Run a command with a spinner; on failure, dump full output to the terminal
 # (never hide errors behind a spinner, unlike a plain --quiet build).
