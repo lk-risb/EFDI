@@ -22,6 +22,11 @@ Edit `compose/.env`. The file is read by `start.sh` with safe line-by-line parsi
 # Defaults to compose/state/ (in-repo, gitignored) if left unset.
 #POD_STATE_DIR=/var/lib/efdi-pod
 
+# ── Admin panel database data directory ─────────────────────────────────────
+# Where the zenoh-admin panel's PostgreSQL container stores its data.
+# Defaults to <POD_STATE_DIR>/zenoh-admin/postgres.
+#EFDI_DB_DATA_DIR=/var/lib/efdi-pod/zenoh-admin/postgres
+
 # ── Generic UDP ingress (safe ASTERIX CAT-34/48 auto-dispatch) ──────────────
 UDP_INGRESS_PORT=50000
 UDP_INGRESS_BIND=0.0.0.0
@@ -100,5 +105,40 @@ SITAWARE_HQ_NVG_TLS_CERT=
 SITAWARE_HQ_NVG_TLS_KEY=
 
 ```
+
+### Shared storage (JuiceFS) and the database
+
+If `POD_STATE_DIR` is moved onto a shared filesystem such as JuiceFS (see the
+host-level setup in the separate `EFDI-Docs` repo's `02-postgres.md` and
+`03-juicefs.md`), keep the following in mind:
+
+- **`EFDI_DB_DATA_DIR` must stay on local disk, never on `POD_STATE_DIR`.**
+  JuiceFS mounts run with writeback caching, which breaks the `fsync`
+  durability every database relies on — and if `POD_STATE_DIR` and the
+  JuiceFS metadata store are the same PostgreSQL instance, putting the pod's
+  own database there creates a circular boot dependency. `install.sh` and
+  `update.sh` both refuse to start if `EFDI_DB_DATA_DIR` resolves onto a FUSE
+  filesystem.
+- **Docker must start after the mount.** If `dockerd` starts before the
+  JuiceFS mount is up, every `${POD_STATE_DIR}/…` bind mount resolves against
+  an empty directory and Docker silently creates a placeholder there instead
+  of failing loudly. Order the two with a systemd drop-in:
+  ```ini
+  # /etc/systemd/system/docker.service.d/10-juicefs.conf
+  [Unit]
+  After=juicefs.service
+  Requires=juicefs.service
+  ```
+- **uid 10001 ownership still works.** The `chgrp 10001` / `chmod 664|775`
+  handling `install.sh`/`reinstall.sh`/`update.sh` apply to
+  `namespace-prefix`, `data-topic-prefix`, and the TAK/bundle directories
+  works the same on JuiceFS as on local disk, provided the mount uses
+  `allow_other` (see `03-juicefs.md`'s systemd unit) — verify this explicitly
+  on first deployment rather than assuming it.
+- **Other embedded state under `POD_STATE_DIR`** — `zenoh/rocksdb`
+  (currently unused; no per-prefix storages are configured by default) and,
+  if the `managed-ca` profile is enabled, step-ca's own local database —
+  carry the same local-disk-only caveat as `EFDI_DB_DATA_DIR` the moment
+  they are actually used. Neither is addressed by this change.
 
 ---

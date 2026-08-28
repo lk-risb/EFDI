@@ -2316,6 +2316,7 @@ This catches syntax errors, TypeScript errors, and Dockerfile breakage before me
 | 2026-08-02 | Consolidated every EFDI-authored `.proto` schema under `compose/protocols/proto/` (was split across `compose/protocols/random/`, `compose/protocols/vendors/proto/`, and `compose/protocols/vendors/sparkplug/`); vendored third-party schemas (SAPIENT `sapient_msg/`, Sparkplug B) stay under their own `vendors/<name>/` directory |
 | 2026-08-28 | Removed the GeoJSON/OGC Features and RF spectrum-observation translators added on 2026-07-17 (that data path is now classified) and removed SensorThings entirely; CAP, MQTT, Sparkplug B, sensor-health, and mission-route translators are unaffected |
 | 2026-08-28 | Removed the CAT-010/020/021/034/048/062 deterministic dedicated-port listener conventions added on 2026-07-17 — this deployment's radar/gateway sends every category combined as one UDP dump on `UDP_INGRESS_PORT` (50000) instead; `CATNN_PORT` remains available in `vendors/asterix/cat.py` for a producer that genuinely uses a dedicated port |
+| 2026-08-28 | `zenoh-admin`'s backing store switched from MariaDB to PostgreSQL 18 (its own container, port `ZENOH_ADMIN_DB_PORT` default `5433`); new `EFDI_DB_DATA_DIR` variable pins the datadir to local disk, kept deliberately outside `POD_STATE_DIR` now that the latter can live on a JuiceFS mount. `scripts/migrate_mariadb_to_postgres.py` carries existing accounts/audit log/PKI data across for deployments installed before this date. |
 
 ---
 

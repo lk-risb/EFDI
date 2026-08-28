@@ -2296,6 +2296,7 @@ Tai pagauna sintaksės klaidas, TypeScript klaidas ir Dockerfile lūžimus prie�
 | 2026-08-02 | Sujungtos visos EFDI-autorystės `.proto` schemos po `compose/protocols/proto/` (anksčiau paskirstyta tarp `compose/protocols/random/`, `compose/protocols/vendors/proto/` ir `compose/protocols/vendors/sparkplug/`); vendoruotos trečiųjų šalių schemos (SAPIENT `sapient_msg/`, Sparkplug B) lieka savo `vendors/<name>/` kataloge |
 | 2026-08-28 | Pašalinti 2026-07-17 pridėti GeoJSON/OGC Features ir RF spektro stebėjimo vertėjai (tas duomenų kelias dabar yra slaptas) bei visiškai pašalintas SensorThings; CAP, MQTT, Sparkplug B, jutiklių būklės ir misijų maršrutų vertėjai nepakito |
 | 2026-08-28 | Pašalinti 2026-07-17 pridėti CAT-010/020/021/034/048/062 determinuoti dedikuoto prievado susitarimai — šio diegimo radaras/šliuzas siunčia kiekvieną kategoriją sumaišytą viename UDP dump'e per `UDP_INGRESS_PORT` (50000); `CATNN_PORT` lieka prieinamas `vendors/asterix/cat.py` viduje gamintojui, kuris tikrai naudoja dedikuotą prievadą |
+| 2026-08-28 | `zenoh-admin` duomenų bazė perkelta nuo MariaDB prie PostgreSQL 18 (savas konteineris, prievadas `ZENOH_ADMIN_DB_PORT`, numatyta reikšmė `5433`); naujas kintamasis `EFDI_DB_DATA_DIR` prisega duomenų katalogą prie vietinio disko — sąmoningai už `POD_STATE_DIR` ribų, nes pastarasis dabar gali gyventi ant JuiceFS prijungimo. `scripts/migrate_mariadb_to_postgres.py` perkelia esamas paskyras, audito žurnalą ir PKI duomenis diegimams, įdiegtiems iki šios datos. |
 
 ---
 

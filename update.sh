@@ -142,12 +142,24 @@ backfill() {
 }
 backfill ZENOH_ADMIN_DB_USER zenoh_admin
 backfill ZENOH_ADMIN_DB_PASSWORD "$(openssl rand -hex 24)"
-backfill ZENOH_ADMIN_DB_ROOT_PASSWORD "$(openssl rand -hex 24)"
+backfill ZENOH_ADMIN_DB_PORT 5433
+backfill EFDI_DB_DATA_DIR "${POD_STATE_DIR}/zenoh-admin/postgres"
 backfill ZENOH_ADMIN_SECRET_KEY "$(openssl rand -hex 32)"
 backfill ZENOH_ADMIN_FIRST_USER admin
 backfill EFDI_CONTROL_TOKEN "$(openssl rand -hex 32)"
 grep -q '^ZENOH_ADMIN_FIRST_PASS=' "$ENV_FILE" \
     || printf 'ZENOH_ADMIN_FIRST_PASS=\n' >>"$ENV_FILE"
+
+EFDI_DB_DATA_DIR="$(grep '^EFDI_DB_DATA_DIR=' "$ENV_FILE" | head -1 | cut -d= -f2- | tr -d '[:space:]')"
+mkdir -p "$EFDI_DB_DATA_DIR"
+# Same FUSE guard as install.sh — the database must never end up on the
+# JuiceFS-backed POD_STATE_DIR. See docs/04-configuration.md.
+_db_data_fstype="$(stat -f -c %T "$EFDI_DB_DATA_DIR" 2>/dev/null || echo unknown)"
+case "$_db_data_fstype" in
+    fuseblk|fuse*|juicefs)
+        fail "EFDI_DB_DATA_DIR ($EFDI_DB_DATA_DIR) is on a FUSE filesystem ($_db_data_fstype). Set it to a local path in compose/.env before continuing."
+        ;;
+esac
 
 min_free_mb="${EFDI_UPDATE_MIN_FREE_MB:-2048}"
 [[ "$min_free_mb" =~ ^[0-9]+$ ]] || fail "EFDI_UPDATE_MIN_FREE_MB must be a non-negative integer"

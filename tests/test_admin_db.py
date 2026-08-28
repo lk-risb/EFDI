@@ -1,4 +1,4 @@
-"""MariaDB schema and UTC persistence regression tests for zenoh-admin."""
+"""PostgreSQL schema and UTC persistence regression tests for zenoh-admin."""
 
 import asyncio
 import os
@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
-from sqlalchemy.dialects.mysql import mariadb
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.schema import CreateTable
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -20,23 +20,22 @@ from api.db import DATABASE_URL, SessionLocal, engine  # noqa: E402
 from api.models import AdminUser, Base, RefreshToken, UTCDateTime  # noqa: E402
 
 
-def test_admin_database_url_uses_aiomysql_and_preserves_password_characters():
-    assert DATABASE_URL.drivername == "mysql+aiomysql"
+def test_admin_database_url_uses_asyncpg_and_preserves_password_characters():
+    assert DATABASE_URL.drivername == "postgresql+asyncpg"
     assert DATABASE_URL.database == "admin"
     assert DATABASE_URL.password == os.environ["ZENOH_ADMIN_DB_PASSWORD"]
 
 
-def test_every_admin_table_compiles_for_mariadb_without_postgres_types():
-    dialect = mariadb.MariaDBDialect()
+def test_every_admin_table_compiles_for_postgres():
+    dialect = postgresql.dialect()
     statements = [
         str(CreateTable(table).compile(dialect=dialect))
         for table in Base.metadata.sorted_tables
     ]
 
     assert len(statements) == 14
-    assert all(" UUID" not in statement for statement in statements)
-    assert "LONGTEXT" in "\n".join(statements)
-    assert "COLLATE ascii_bin" in "\n".join(statements)
+    assert "TEXT" in "\n".join(statements)
+    assert 'COLLATE "C"' in "\n".join(statements)
 
 
 def test_utc_datetime_round_trip_restores_timezone_awareness():
@@ -53,16 +52,16 @@ def test_utc_datetime_round_trip_restores_timezone_awareness():
         datatype.process_bind_param(datetime(2026, 7, 21, 12, 30), None)
 
 
-def test_live_mariadb_creates_the_complete_schema():
-    if os.environ.get("EFDI_TEST_MARIADB") != "1":
-        pytest.skip("set EFDI_TEST_MARIADB=1 with a disposable MariaDB instance")
+def test_live_postgres_creates_the_complete_schema():
+    if os.environ.get("EFDI_TEST_POSTGRES") != "1":
+        pytest.skip("set EFDI_TEST_POSTGRES=1 with a disposable PostgreSQL instance")
 
     async def verify():
         async with engine.begin() as connection:
             await connection.run_sync(Base.metadata.create_all)
         async with SessionLocal() as session:
             user = AdminUser(
-                username=f"mariadb-test-{uuid4()}",
+                username=f"postgres-test-{uuid4()}",
                 password_hash="test-only",
                 role="readonly",
             )
