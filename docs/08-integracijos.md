@@ -26,17 +26,18 @@ jokios imtuvo aparatinės įrangos ar tiekėjo tvarkyklės.
 
 ### Protokolo prijungimo reikalavimai
 
-ASTERIX kategorijos numeris nenustato TCP ar UDP prievado numerio. Radaro
-arba stebėjimo šliuzo valdymo sąsaja turi būti sukonfigūruota su EFDI serveriu
-kaip paskirties tašku ir su tuo pačiu transportu/prievadu, pasirinktu žemiau.
-EFDI naudoja UDP 50034 CAT-034 ir UDP 50048 CAT-048 kaip determinuotus vietinius
-susitarimus; tai nėra EUROCONTROL ar Saab numatytieji nustatymai. UDP 50000
-yra bendras neapdorotas įėjimas. `udp_ingress_bridge.py` išsaugo kiekvieną
+ASTERIX kategorijos numeris nenustato TCP ar UDP prievado numerio. Šio
+diegimo radaras/šliuzas kategorijų neskirsto po atskirus prievadus — CAT-034
+ir CAT-048 abi ateina sumaišytos viename bendrame UDP dump'e per 50000
+prievadą (`UDP_INGRESS_PORT`). `udp_ingress_bridge.py` išsaugo kiekvieną
 datagramą ir saugiai publikuoja pilnus ASTERIX kadrus nepakeistus į
 `…/raw/asterix/catNN`; kiekvienas kategorijos vertėjas lieka atskiru procesu
-ir prenumeruoja tik savo temą. `ASTERIX_CATEGORIES` pasirenka, kurios
-kategorijos automatiškai išsiunčiamos. Dedikuoti UDP/TCP įėjimai lieka
-aktyvūs tuo pačiu metu.
+ir iš to paties bendro srauto prenumeruoja tik savo temą.
+`ASTERIX_CATEGORIES` pasirenka, kurios kategorijos automatiškai
+išsiunčiamos. Žemiau esančioje lentelėje minimas `CATNN_PORT` dedikuoto
+prievado galimybė `vendors/asterix/cat.py` viduje tebeegzistuoja gamintojui,
+kuris tikrai siunčia vieną kategoriją savo atskiru prievadu — tiesiog šio
+diegimo radaras/šliuzas CAT-034/048 taip nesiunčia.
 
 Kai radaro pusės nešiojamas kompiuteris jau publikuoja pilnus kadrus per kitą
 Zenoh routerį, nustatykite `ASTERIX_ZENOH_UPSTREAM_ENDPOINT` ir pasirinktinai
@@ -98,8 +99,8 @@ testų paleidimu.
 | `vendors/asterix/cat.py --category 23` | UDP klausytojas arba TCP serveris | Gamintojas siunčia į `CAT23_PORT` | EUROCONTROL CAT-023 Ed.1.3 CNS/ATM antžeminės stoties paslaugų pranešimai (ADS-B/TIS-B/FIS-B/GRAS/MLT stoties būsena) |
 | `vendors/asterix/cat.py --category 25` | UDP klausytojas arba TCP serveris | Gamintojas siunčia į `CAT25_PORT` | EUROCONTROL CAT-025 Ed.1.6 CNS/ATM antžeminės sistemos būsenos pranešimai (CAT-023 įpėdinis/palydovas: atskirta sistemos/paslaugos būsena, komponentų sąrašas, paslaugų statistika, vietos pozicija) |
 | `vendors/asterix/cat.py --category 32` | UDP klausytojas arba TCP serveris | Gamintojas siunčia į `CAT32_PORT` | EUROCONTROL CAT-032 Ed.1.2 Miniplan pranešimai SDPS (FPPS/SDPS skrydžio plano-takelio numerio koreliacija; šioje kategorijoje pozicijos lauko nėra) |
-| `vendors/asterix/cat.py --category 34` | UDP klausytojas arba TCP serveris | Radaras siunčia CAT-034 atskirai į `CAT34_PORT` (EFDI susitarimas: UDP 50034) | EUROCONTROL CAT-034 Ed.1.29 radaro paslaugų pranešimai |
-| `vendors/asterix/cat.py --category 48` | UDP klausytojas arba TCP serveris | Radaras siunčia CAT-048 atskirai į `CAT48_PORT` (EFDI susitarimas: UDP 50048); vietinei polinei pozicijai reikia `CAT48_RADAR_LAT/LON` | EUROCONTROL CAT-048 Ed.1.32 taikiniai |
+| `vendors/asterix/cat.py --category 34` | Automatiškai išsiunčiama iš bendro UDP 50000 įėjimo (`ASTERIX_CATEGORIES`) | Šio diegimo radaras siunčia CAT-034 sumaišytą su CAT-048 per UDP 50000, ne atskiru prievadu | EUROCONTROL CAT-034 Ed.1.29 radaro paslaugų pranešimai |
+| `vendors/asterix/cat.py --category 48` | Automatiškai išsiunčiama iš bendro UDP 50000 įėjimo (`ASTERIX_CATEGORIES`) | Šio diegimo radaras siunčia CAT-048 sumaišytą su CAT-034 per UDP 50000, ne atskiru prievadu; vietinei polinei pozicijai reikia `CAT48_RADAR_LAT/LON` | EUROCONTROL CAT-048 Ed.1.32 taikiniai |
 | `vendors/asterix/cat.py --category 62` | TCP klientas arba UDP klausytojas | Nustatykite `CAT62_HOST/PORT`, arba `CAT62_UDP=1`; patvirtinkite 1.21 leidimą | EUROCONTROL CAT-062 Ed.1.21 sistemos takeliai |
 | `vendors/asterix/cat.py --category 63` | UDP klausytojas arba TCP serveris | Gamintojas siunčia į `CAT63_PORT` | EUROCONTROL CAT-063 Ed.1.7 jutiklio būsenos pranešimai (jutikliai, maitinantys CAT-062 sekiklį) |
 | `vendors/asterix/cat.py --category 65` | UDP klausytojas arba TCP serveris | Gamintojas siunčia į `CAT65_PORT` | EUROCONTROL CAT-065 Ed.1.6 SDPS paslaugos būsenos pranešimai (SDPS pusės partneris CAT-062, tas pats ryšys kaip CAT-019 su CAT-020) |
@@ -271,8 +272,9 @@ Relė persiunčia kiekvieną datagramą nepakeistą į `asusrog.efdi.ltu:50000`.
 Perrašykite `--destination-host`, kai mesh DNS nepasiekiamas. Sukonfigūruokite
 šį routerį su `UDP_INGRESS_PORT=50000`. Bendras imtuvas išsaugo kiekvieną
 datagramą savo neapdorotoje Zenoh temoje ir automatiškai išsiunčia tik
-protokolus, kurių kadravimas nedviprasmiškas. UDP 50034 ir 50048 lieka
-atskiri determinuoti CAT-034 ir CAT-048 klausytojai.
+protokolus, kurių kadravimas nedviprasmiškas — atskiro klausytojo kiekvienai
+kategorijai nėra; CAT-034 ir CAT-048 abi dekoduojamos iš to paties bendro
+srauto.
 
 EFDI nešiojamame kompiuteryje patikrinkite srautą, neperimant UDP lizdo
 nuosavybės:

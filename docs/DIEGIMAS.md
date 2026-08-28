@@ -201,14 +201,14 @@ tiltų).
 ```bash
 sudo apt install -y ufw   # Debian, skirtingai nei Ubuntu, jo neįdiegia pagal nutylėjimą
 sudo ufw allow 8890/tcp comment 'EFDI admin GUI'
-sudo ufw allow 50048/udp comment 'EFDI CAT-048 pavyzdys — pritaikykite savo jutikliams'
+sudo ufw allow 50000/udp comment 'EFDI bendras ASTERIX/UDP įėjimo pavyzdys — pritaikykite savo jutikliams'
 # kartokite kiekvienam UDP/TCP prievadui, kurį naudoja jūsų integracijos, pagal lentelę žemiau
 ```
 
 **RHEL/Rocky/AlmaLinux (firewalld):**
 ```bash
 sudo firewall-cmd --permanent --add-port=8890/tcp
-sudo firewall-cmd --permanent --add-port=50048/udp
+sudo firewall-cmd --permanent --add-port=50000/udp
 sudo firewall-cmd --reload
 ```
 
@@ -247,12 +247,7 @@ vėliau diegime negali ištaisyti čia trūkstamos priklausomybės.
 
 | Prievadas / adresas | Kryptis | Paskirtis |
 | --- | --- | --- |
-| UDP 50010 (`CAT10_PORT`) | į serverį | EFDI CAT-010 susitarimas; gamintojo paskirtį nustatykite taip pat |
-| UDP 50020 (`CAT20_PORT`) | į serverį | EFDI CAT-020 susitarimas; gamintojo paskirtį nustatykite taip pat |
-| UDP 50021 (`CAT21_PORT`) | į serverį | EFDI CAT-021 susitarimas; gamintojo paskirtį nustatykite taip pat |
-| UDP 50034 (`CAT34_PORT`) | į serverį | EFDI CAT-034 susitarimas; radaro paskirtį nustatykite taip pat |
-| UDP 50048 (`CAT48_PORT`) | į serverį | EFDI CAT-048 susitarimas; radaro paskirtį nustatykite taip pat |
-| UDP 50062 (`CAT62_PORT`) | į serverį | EFDI CAT-062 susitarimas; gamintojo paskirtį nustatykite taip pat |
+| UDP 50000 (`UDP_INGRESS_PORT`) | į serverį | Bendras ASTERIX įėjimas — visos kategorijos (pagal nutylėjimą CAT-34/48) ateina sumaišytos per šį vienintelį prievadą, ne atskirais prievadais |
 | TCP `<TAK_PORT>` (mTLS, numatytasis 8089) | iš serverio | CoT pristatymas į TAK serverį |
 | TCP 7448 | localhost | Vietinis Zenoh router |
 | TCP 7447 TLS | iš serverio | Nuotolinis Zenoh router (reikia NetBird) |
@@ -404,17 +399,13 @@ ASTERIX_MULTICAST_GROUP=       # pasirinktinė IPv4 multicast grupė
 ASTERIX_MULTICAST_INTERFACE=0.0.0.0
 ASTERIX_ALLOW_SOURCE=          # pasirinktinai siuntėjo IPv4 adresas arba CIDR
 
-# Atskiri leidėjų srautai gali toliau naudoti šiuos tiesioginius listener'ius.
-CAT10_PORT=50010               # EFDI privatus susitarimas; nustatykite gamintojo išvestį
-CAT20_PORT=50020               # EFDI privatus susitarimas; nustatykite gamintojo išvestį
-CAT21_PORT=50021               # EFDI privatus susitarimas; nustatykite gamintojo išvestį
-CAT34_PORT=50034               # EFDI privatus susitarimas; nustatykite radaro išvestį
-CAT48_PORT=50048               # EFDI privatus susitarimas; nustatykite radaro išvestį
+# Radaro/gateway duomenys ateina vienu bendru UDP srautu — atskirų prievadų
+# kiekvienai kategorijai nėra. Šie laukai yra tik dekodavimo metaduomenys
+# (radaro pozicija, SAC/SIC), skaitomi iš to paties bendro srauto, ne prievadai.
 CAT34_RADAR_LAT=               # Vieno radaro atsarginė reikšmė; pirmenybė I034/120
 CAT34_RADAR_LON=               # Vieno radaro atsarginė reikšmė; pirmenybė I034/120
 CAT34_RADAR_NAME=              # Tuščia = atskiri RADAR SACx/SICy vardai; nustatykite vienam radarui
 CAT34_RADAR_RANGE_M=           # Operatoriaus patvirtintas maksimumas; pirmenybė I034/100
-CAT62_PORT=50062               # EFDI privatus susitarimas; nustatykite gamintojo išvestį
 CAT48_RADAR_LAT=<RADAR_LAT>        # Antenos platuma  (WGS-84 dešimtainiai laipsniai)
 CAT48_RADAR_LON=<RADAR_LON>        # Antenos ilguma   (WGS-84 dešimtainiai laipsniai)
 CAT48_RADAR_SAC=<SAC>            # ASTERIX šaltinio srities kodas (Source Area Code)
@@ -423,17 +414,18 @@ CAT48_RADAR_NAME=Giraffe AMB   # Vardas, rodomas ATAK žemėlapyje
 ```
 
 > **ASTERIX prievadai:** ASTERIX aprašo pranešimų formatą, bet nenustato
-> registruoto tinklo prievado. Radaro ar gateway valdymo sąsajoje kaip paskirtį
-> nurodykite EFDI host'ą ir naudokite kategorijų susitarimą: CAT-010→UDP 50010,
-> CAT-020→50020, CAT-021→50021, CAT-034→50034, CAT-048→50048, CAT-062→50062.
-> Tai EFDI susitarimai, ne patvirtinti gamintojų gamykliniai nustatymai.
-> Transportą, leidimą, bendrą ar atskirus srautus ir vendor kadravimą
-> patvirtinkite pagal ICD.
+> registruoto tinklo prievado. Atskirų prievadų kiekvienai kategorijai čia
+> nėra — visos kategorijos ateina vienu bendru UDP dump'u per
+> `UDP_INGRESS_PORT` (50000). Radaro ar gateway valdymo sąsajoje kaip
+> paskirtį nurodykite EFDI host'ą ir šį vienintelį prievadą visam ASTERIX
+> srautui; transportą, leidimą ir vendor kadravimą vis tiek patvirtinkite
+> pagal ICD.
 
 UDP 50000 yra bendras neapdorotų UDP duomenų įėjimas. Jis išsaugo kiekvieną
 datagramą `…/raw/udp/ingress` temoje ir papildomai nukreipia vienareikšmiškai
-atpažintus ASTERIX kadrus į `…/raw/asterix/catNN`. UDP 50034 ir 50048 lieka
-atskiri CAT-034 ir CAT-048 prievadai. Nežinomą srautą pirmiausia patikrinkite:
+atpažintus ASTERIX kadrus į `…/raw/asterix/catNN`; kategorijų vertėjai iš to
+paties bendro srauto dekoduoja tik savo kategoriją. Nežinomą srautą
+pirmiausia patikrinkite:
 
 ```bash
 python3 tools/asterix_probe.py --port 30001
@@ -500,12 +492,12 @@ Interaktyvus paleidiklis rodo visas paslaugas su jų parengties būsena. Įjunki
 
   Protocols
   ──────────────────────────────────────────────────────────
-  [13] [✓] asterix-cat10  ASTERIX CAT-010 airport surface        UDP 50010
-  [14] [✓] asterix-cat20  ASTERIX CAT-020 Ed.1.11 MLAT           UDP 50020
-  [15] [✓] asterix-cat21  ASTERIX CAT-021 Ed.2.7 ADS-B           UDP 50021
-  [16] [✓] asterix-cat34  ASTERIX CAT-034 radar service          UDP 50034
-  [17] [✓] asterix-cat48  ASTERIX CAT-048 radar targets          UDP 50048
-  [18] [✓] asterix-cat62  ASTERIX CAT-062 system tracks          UDP 50062
+  [13] [ ] asterix-cat10  ASTERIX CAT-010 airport surface        set CAT10_PORT to enable
+  [14] [ ] asterix-cat20  ASTERIX CAT-020 Ed.1.11 MLAT           set CAT20_PORT to enable
+  [15] [ ] asterix-cat21  ASTERIX CAT-021 Ed.2.7 ADS-B           set CAT21_PORT to enable
+  [16] [✓] asterix-cat34  ASTERIX CAT-034 radar service          per UDP 50000 (ASTERIX_CATEGORIES)
+  [17] [✓] asterix-cat48  ASTERIX CAT-048 radar targets          per UDP 50000 (ASTERIX_CATEGORIES)
+  [18] [ ] asterix-cat62  ASTERIX CAT-062 system tracks          set CAT62_HOST/CAT62_UDP to enable
   [19] [✓] nffi           NATO NFFI XML Zenoh translator         ready
   [20] [ ] sapient        SAPIENT / BSI Flex 335                 will prompt for address
   [21] [ ] stanag4586     STANAG 4586 UAV feed                   will prompt for address
@@ -740,17 +732,18 @@ jokios imtuvo aparatinės įrangos ar tiekėjo tvarkyklės.
 
 ### Protokolo prijungimo reikalavimai
 
-ASTERIX kategorijos numeris nenustato TCP ar UDP prievado numerio. Radaro
-arba stebėjimo šliuzo valdymo sąsaja turi būti sukonfigūruota su EFDI serveriu
-kaip paskirties tašku ir su tuo pačiu transportu/prievadu, pasirinktu žemiau.
-EFDI naudoja UDP 50034 CAT-034 ir UDP 50048 CAT-048 kaip determinuotus vietinius
-susitarimus; tai nėra EUROCONTROL ar Saab numatytieji nustatymai. UDP 50000
-yra bendras neapdorotas įėjimas. `udp_ingress_bridge.py` išsaugo kiekvieną
+ASTERIX kategorijos numeris nenustato TCP ar UDP prievado numerio. Šio
+diegimo radaras/šliuzas kategorijų neskirsto po atskirus prievadus — CAT-034
+ir CAT-048 abi ateina sumaišytos viename bendrame UDP dump'e per 50000
+prievadą (`UDP_INGRESS_PORT`). `udp_ingress_bridge.py` išsaugo kiekvieną
 datagramą ir saugiai publikuoja pilnus ASTERIX kadrus nepakeistus į
 `…/raw/asterix/catNN`; kiekvienas kategorijos vertėjas lieka atskiru procesu
-ir prenumeruoja tik savo temą. `ASTERIX_CATEGORIES` pasirenka, kurios
-kategorijos automatiškai išsiunčiamos. Dedikuoti UDP/TCP įėjimai lieka
-aktyvūs tuo pačiu metu.
+ir iš to paties bendro srauto prenumeruoja tik savo temą.
+`ASTERIX_CATEGORIES` pasirenka, kurios kategorijos automatiškai
+išsiunčiamos. Žemiau esančioje lentelėje minimas `CATNN_PORT` dedikuoto
+prievado galimybė `vendors/asterix/cat.py` viduje tebeegzistuoja gamintojui,
+kuris tikrai siunčia vieną kategoriją savo atskiru prievadu — tiesiog šio
+diegimo radaras/šliuzas CAT-034/048 taip nesiunčia.
 
 Kai radaro pusės nešiojamas kompiuteris jau publikuoja pilnus kadrus per kitą
 Zenoh routerį, nustatykite `ASTERIX_ZENOH_UPSTREAM_ENDPOINT` ir pasirinktinai
@@ -812,8 +805,8 @@ testų paleidimu.
 | `vendors/asterix/cat.py --category 23` | UDP klausytojas arba TCP serveris | Gamintojas siunčia į `CAT23_PORT` | EUROCONTROL CAT-023 Ed.1.3 CNS/ATM antžeminės stoties paslaugų pranešimai (ADS-B/TIS-B/FIS-B/GRAS/MLT stoties būsena) |
 | `vendors/asterix/cat.py --category 25` | UDP klausytojas arba TCP serveris | Gamintojas siunčia į `CAT25_PORT` | EUROCONTROL CAT-025 Ed.1.6 CNS/ATM antžeminės sistemos būsenos pranešimai (CAT-023 įpėdinis/palydovas: atskirta sistemos/paslaugos būsena, komponentų sąrašas, paslaugų statistika, vietos pozicija) |
 | `vendors/asterix/cat.py --category 32` | UDP klausytojas arba TCP serveris | Gamintojas siunčia į `CAT32_PORT` | EUROCONTROL CAT-032 Ed.1.2 Miniplan pranešimai SDPS (FPPS/SDPS skrydžio plano-takelio numerio koreliacija; šioje kategorijoje pozicijos lauko nėra) |
-| `vendors/asterix/cat.py --category 34` | UDP klausytojas arba TCP serveris | Radaras siunčia CAT-034 atskirai į `CAT34_PORT` (EFDI susitarimas: UDP 50034) | EUROCONTROL CAT-034 Ed.1.29 radaro paslaugų pranešimai |
-| `vendors/asterix/cat.py --category 48` | UDP klausytojas arba TCP serveris | Radaras siunčia CAT-048 atskirai į `CAT48_PORT` (EFDI susitarimas: UDP 50048); vietinei polinei pozicijai reikia `CAT48_RADAR_LAT/LON` | EUROCONTROL CAT-048 Ed.1.32 taikiniai |
+| `vendors/asterix/cat.py --category 34` | Automatiškai išsiunčiama iš bendro UDP 50000 įėjimo (`ASTERIX_CATEGORIES`) | Šio diegimo radaras siunčia CAT-034 sumaišytą su CAT-048 per UDP 50000, ne atskiru prievadu | EUROCONTROL CAT-034 Ed.1.29 radaro paslaugų pranešimai |
+| `vendors/asterix/cat.py --category 48` | Automatiškai išsiunčiama iš bendro UDP 50000 įėjimo (`ASTERIX_CATEGORIES`) | Šio diegimo radaras siunčia CAT-048 sumaišytą su CAT-034 per UDP 50000, ne atskiru prievadu; vietinei polinei pozicijai reikia `CAT48_RADAR_LAT/LON` | EUROCONTROL CAT-048 Ed.1.32 taikiniai |
 | `vendors/asterix/cat.py --category 62` | TCP klientas arba UDP klausytojas | Nustatykite `CAT62_HOST/PORT`, arba `CAT62_UDP=1`; patvirtinkite 1.21 leidimą | EUROCONTROL CAT-062 Ed.1.21 sistemos takeliai |
 | `vendors/asterix/cat.py --category 63` | UDP klausytojas arba TCP serveris | Gamintojas siunčia į `CAT63_PORT` | EUROCONTROL CAT-063 Ed.1.7 jutiklio būsenos pranešimai (jutikliai, maitinantys CAT-062 sekiklį) |
 | `vendors/asterix/cat.py --category 65` | UDP klausytojas arba TCP serveris | Gamintojas siunčia į `CAT65_PORT` | EUROCONTROL CAT-065 Ed.1.6 SDPS paslaugos būsenos pranešimai (SDPS pusės partneris CAT-062, tas pats ryšys kaip CAT-019 su CAT-020) |
@@ -985,8 +978,9 @@ Relė persiunčia kiekvieną datagramą nepakeistą į `asusrog.efdi.ltu:50000`.
 Perrašykite `--destination-host`, kai mesh DNS nepasiekiamas. Sukonfigūruokite
 šį routerį su `UDP_INGRESS_PORT=50000`. Bendras imtuvas išsaugo kiekvieną
 datagramą savo neapdorotoje Zenoh temoje ir automatiškai išsiunčia tik
-protokolus, kurių kadravimas nedviprasmiškas. UDP 50034 ir 50048 lieka
-atskiri determinuoti CAT-034 ir CAT-048 klausytojai.
+protokolus, kurių kadravimas nedviprasmiškas — atskiro klausytojo kiekvienai
+kategorijai nėra; CAT-034 ir CAT-048 abi dekoduojamos iš to paties bendro
+srauto.
 
 EFDI nešiojamame kompiuteryje patikrinkite srautą, neperimant UDP lizdo
 nuosavybės:
@@ -2301,6 +2295,7 @@ Tai pagauna sintaksės klaidas, TypeScript klaidas ir Dockerfile lūžimus prie�
 | 2026-08-02 | Pervadinti `layers/cot_layer.py` → `layers/tak_layer.py` ir `layers/nvg_layer.py` → `layers/sitaware_layer.py` (tiekėjo pavadintas išvestinis sluoksnis, atitinkantis `tak_bridge.py`/`sitaware_bridge.py` gaunamųjų pavadinimus); pašalinti nenaudojami `cot-udp`/`cot-udp-tak` UDP multicast/unicast paleidiklio įrašai ir `nvg_bridge.py` NVG-XML gaunamasis tiltas (SitaWare įėjimas dabar tik REST) |
 | 2026-08-02 | Sujungtos visos EFDI-autorystės `.proto` schemos po `compose/protocols/proto/` (anksčiau paskirstyta tarp `compose/protocols/random/`, `compose/protocols/vendors/proto/` ir `compose/protocols/vendors/sparkplug/`); vendoruotos trečiųjų šalių schemos (SAPIENT `sapient_msg/`, Sparkplug B) lieka savo `vendors/<name>/` kataloge |
 | 2026-08-28 | Pašalinti 2026-07-17 pridėti GeoJSON/OGC Features ir RF spektro stebėjimo vertėjai (tas duomenų kelias dabar yra slaptas) bei visiškai pašalintas SensorThings; CAP, MQTT, Sparkplug B, jutiklių būklės ir misijų maršrutų vertėjai nepakito |
+| 2026-08-28 | Pašalinti 2026-07-17 pridėti CAT-010/020/021/034/048/062 determinuoti dedikuoto prievado susitarimai — šio diegimo radaras/šliuzas siunčia kiekvieną kategoriją sumaišytą viename UDP dump'e per `UDP_INGRESS_PORT` (50000); `CATNN_PORT` lieka prieinamas `vendors/asterix/cat.py` viduje gamintojui, kuris tikrai naudoja dedikuotą prievadą |
 
 ---
 

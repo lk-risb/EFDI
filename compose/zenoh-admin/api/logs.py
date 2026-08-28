@@ -10,7 +10,7 @@ from .auth import consume_ws_ticket
 
 router = APIRouter(tags=["logs"])
 _LOG_DIR = Path(os.environ.get("EFDI_RUNTIME_LOG_DIR", "/runtime-logs")).resolve()
-_SERVICE_RE = re.compile(r"^[a-z0-9-]+$")
+_SERVICE_RE = re.compile(r"^[a-z0-9_-]+$")
 _TAIL_BYTES = 256 * 1024
 _SESSION_MAX_SECONDS = 30 * 60
 
