@@ -146,8 +146,7 @@ Every pod dials a single fabric endpoint over mutual TLS — it writes only with
 |---|---|---|
 | TCP 7448 | localhost | Local Zenoh router (plaintext, bridges + zenoh-admin only) |
 | TCP 7447 TLS | outbound | Remote/fabric Zenoh router (mTLS) |
-| UDP 50010 / 50020 / 50021 / 50034 / 50048 / 50062 | inbound | Category-specific ASTERIX listeners (`CATNN_PORT`) |
-| UDP 50000 | inbound | Generic raw UDP ingress; unknown protocols are preserved without guessing |
+| UDP 50000 | inbound | Generic UDP ingress — all ASTERIX categories (CAT-34/48 by default) arrive combined on this one port; unknown protocols are preserved without guessing |
 | TCP `<TAK_PORT>` (mTLS, default 8089) | outbound | CoT to TAK Server streaming input |
 | HTTP 8890 | inbound | zenoh-admin panel (web UI) |
 | TCP `<SITAWARE_HQ_NVG_PORT>` (default 8088) | inbound | SitaWare HQ polls the EFDI NVG feed |
