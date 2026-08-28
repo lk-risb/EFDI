@@ -16,7 +16,7 @@ paskirtį ir turėtų būti.
 | `update.sh` | Greitas atnaujinimas su talpyklos patikra ir automatiniu atsigavimu, jei kas nepavyksta. |
 | `reinstall.sh` | Pašalina vietinius atvaizdus ir konteinerius, bet palieka sertifikatus bei duomenis nepaliestus — švarus perstatymas be tapatybės praradimo. |
 | `health.sh` | Pirmiausia bando savaime pataisyti diegimą, tada paleidžia visą repozitorijos testų ir statinių patikrų rinkinį. |
-| `dev.sh` | Vienkartinė vietinė MariaDB aplinka zenoh-admin skydo pakeitimams peržiūrėti — pakelia tik administravimo skydą, be viso fabric. |
+| `dev.sh` | Vienkartinė vietinė PostgreSQL aplinka zenoh-admin skydo pakeitimams peržiūrėti — pakelia tik administravimo skydą, be viso fabric. |
 | `compose/` | Pats pod'as: tiltai, sluoksniai, protokolų vertėjai, administravimo skydas, Docker Compose apibrėžimai. |
 | `clients/` | Prisijungimo SDK ir pavyzdžiai, kuriais remiasi partneriai. |
 | `examples/` | Savarankiški vykdomi pavyzdžiai (pirmas leidėjas/prenumeratorius, gyvybingumo patikra, atsparus prenumeratorius ir t.t.) bei `first-boot.sh`. |

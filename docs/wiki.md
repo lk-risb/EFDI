@@ -486,7 +486,7 @@ happen," start here before grepping blind.
 | `update.sh` | Fast-forward update with cache verification and automatic recovery. |
 | `reinstall.sh` | Removes local images/containers, keeps certs and data — a clean rebuild without losing identity. |
 | `health.sh` | Self-heals the deployment, then runs every repository test and static check. |
-| `dev.sh` | Disposable local MariaDB + env for previewing zenoh-admin panel changes — admin panel only, no fabric. |
+| `dev.sh` | Disposable local PostgreSQL + env for previewing zenoh-admin panel changes — admin panel only, no fabric. |
 | `compose/` | The actual pod: bridges, layers, protocol translators, the admin panel, Docker Compose. |
 | `clients/` | Connect SDKs and worked examples partners build against. |
 | `examples/` | Standalone runnable snippets (first publisher/subscriber, liveliness, resilient subscriber, etc.) and `first-boot.sh`. |
@@ -2821,18 +2821,24 @@ Add to `compose/.env` (see `compose/.env.example` for the full block):
 ```bash
 ZENOH_ADMIN_DB_USER=zenoh_admin
 ZENOH_ADMIN_DB_PASSWORD=<random>
-ZENOH_ADMIN_DB_ROOT_PASSWORD=<different-random-value>
-ZENOH_ADMIN_DB_PORT=3307                # non-default: avoids clashing with MariaDB/MySQL on 3306
+ZENOH_ADMIN_DB_PORT=5433                # non-default: avoids clashing with a host PostgreSQL on 5432
+EFDI_DB_DATA_DIR=<local-disk-path>       # never a JuiceFS/network path — see docs/04-configuration.md
 ZENOH_ADMIN_SECRET_KEY=<openssl rand -hex 32>
 ZENOH_ADMIN_FIRST_USER=admin
 ZENOH_ADMIN_FIRST_PASS=<set once, then blank it out after first login>
 ```
 
-`ZENOH_ADMIN_FIRST_PASS` only creates the first `superadmin` account if it doesn't already exist — it is safe to blank it out again after the first login (the account persists in MariaDB).
+`ZENOH_ADMIN_FIRST_PASS` only creates the first `superadmin` account if it doesn't already exist — it is safe to blank it out again after the first login (the account persists in PostgreSQL).
 
-The admin service is MariaDB-only. Historical PostgreSQL migration tooling was
-removed after the deployment cutover; upgrades must back up
-`${POD_STATE_DIR}/zenoh-admin/mariadb` and `compose/.env` before rebuilding.
+The admin service runs its own PostgreSQL container (`zenoh-admin-db`), separate
+from any host-level PostgreSQL you may run for other services (NetBird, a
+JuiceFS filestore, step-ca) — the two never share a database or credentials.
+Back it up with `pg_dump`; a raw filesystem copy of `EFDI_DB_DATA_DIR` is only
+safe while the container is stopped. This service was MariaDB before
+2026-08-28; deployments installed earlier can migrate their existing data with
+`scripts/migrate_mariadb_to_postgres.py` (see that script's own docstring for
+the exact cutover steps) rather than losing accounts, audit history, and
+issued PKI identities.
 
 ## Launching
 
@@ -3359,6 +3365,7 @@ This catches syntax errors, TypeScript errors, and Dockerfile breakage before me
 | 2026-08-02 | Added BDS 1,0/1,7 (Data Link Capability / Common Usage GICB Capability) decoding to the 7 ASTERIX categories that already reuse BDS 3,0/4,0/5,0/6,0 GICB-extraction helpers (CAT-010/011/018/020/021/048/062), sourced from pyModeS |
 | 2026-08-02 | Renamed `layers/cot_layer.py` → `layers/tak_layer.py` and `layers/nvg_layer.py` → `layers/sitaware_layer.py` (vendor-named egress, matching `tak_bridge.py`/`sitaware_bridge.py`'s ingress naming); removed the unused `cot-udp`/`cot-udp-tak` UDP multicast/unicast launcher entries and the `nvg_bridge.py` NVG-XML ingress bridge (SitaWare ingress is REST-only now) |
 | 2026-08-02 | Consolidated every EFDI-authored `.proto` schema under `compose/protocols/proto/` (was split across `compose/protocols/random/`, `compose/protocols/vendors/proto/`, and `compose/protocols/vendors/sparkplug/`); vendored third-party schemas (SAPIENT `sapient_msg/`, Sparkplug B) stay under their own `vendors/<name>/` directory |
+| 2026-08-28 | `zenoh-admin`'s backing store switched from MariaDB to PostgreSQL 18 (its own container, port `ZENOH_ADMIN_DB_PORT` default `5433`); new `EFDI_DB_DATA_DIR` variable pins the datadir to local disk, kept deliberately outside `POD_STATE_DIR` now that the latter can live on a JuiceFS mount. `scripts/migrate_mariadb_to_postgres.py` carries existing accounts/audit log/PKI data across for deployments installed before this date. |
 
 ---
 

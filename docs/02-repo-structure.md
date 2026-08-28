@@ -14,7 +14,7 @@ happen," start here before grepping blind.
 | `update.sh` | Fast-forward update with cache verification and automatic recovery. |
 | `reinstall.sh` | Removes local images/containers, keeps certs and data — a clean rebuild without losing identity. |
 | `health.sh` | Self-heals the deployment, then runs every repository test and static check. |
-| `dev.sh` | Disposable local MariaDB + env for previewing zenoh-admin panel changes — admin panel only, no fabric. |
+| `dev.sh` | Disposable local PostgreSQL + env for previewing zenoh-admin panel changes — admin panel only, no fabric. |
 | `compose/` | The actual pod: bridges, layers, protocol translators, the admin panel, Docker Compose. |
 | `clients/` | Connect SDKs and worked examples partners build against. |
 | `examples/` | Standalone runnable snippets (first publisher/subscriber, liveliness, resilient subscriber, etc.) and `first-boot.sh`. |

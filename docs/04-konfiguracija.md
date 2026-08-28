@@ -22,6 +22,11 @@ Redaguokite `compose/.env`. Failą `start.sh` nuskaito eilutė po eilutės saugi
 # Jei nenustatyta, numatytasis kelias yra compose/state/ (repo viduje, gitignored).
 #POD_STATE_DIR=/var/lib/efdi-pod
 
+# ── Administravimo skydelio duomenų bazės katalogas ─────────────────────────
+# Kur zenoh-admin skydelio PostgreSQL konteineris saugo savo duomenis.
+# Jei nenustatyta, numatytasis kelias yra <POD_STATE_DIR>/zenoh-admin/postgres.
+#EFDI_DB_DATA_DIR=/var/lib/efdi-pod/zenoh-admin/postgres
+
 # ── Mišrus ASTERIX UDP įėjimas (radarai, pvz. VERA-NG: CAT-34/48) ──────────
 # Vienam bendram ASTERIX UDP srautui išvardykite visas jame esančias
 # kategorijas. CAT-010/020/021/062 galima pridėti, kai jos yra sraute.
@@ -92,5 +97,42 @@ SITAWARE_HQ_NVG_TLS_CERT=
 SITAWARE_HQ_NVG_TLS_KEY=
 
 ```
+
+### Bendra saugykla (JuiceFS) ir duomenų bazė
+
+Jei `POD_STATE_DIR` perkeliamas į bendrą failų sistemą, pvz., JuiceFS (žr.
+atskiro `EFDI-Docs` repo failus `02-postgres.md` ir `03-juicefs.md` host lygmens
+sąrankai), turėkite omenyje:
+
+- **`EFDI_DB_DATA_DIR` privalo likti vietiniame diske, niekada ant
+  `POD_STATE_DIR`.** JuiceFS naudoja atidėtą (writeback) rašymo talpyklą, kuri
+  sugadina `fsync` patvarumo garantiją, būtiną kiekvienai duomenų bazei — o jei
+  `POD_STATE_DIR` ir JuiceFS metaduomenų saugykla yra ta pati PostgreSQL
+  instancija, pod'o pačio duomenų bazę joje laikant susidaro uždaras
+  paleidimo ciklas. Tiek `install.sh`, tiek `update.sh` atsisako tęsti, jei
+  `EFDI_DB_DATA_DIR` nurodo į FUSE failų sistemą.
+- **Docker turi startuoti tik po prijungimo.** Jei `dockerd` paleidžiamas
+  anksčiau nei JuiceFS prijungimas, kiekvienas `${POD_STATE_DIR}/…`
+  bind-mount nukreipia į tuščią katalogą, ir Docker tyliai sukuria tuščią
+  vietoje jo, užuot pranešęs klaidą. Sutvarkykite paleidimo tvarką su
+  systemd drop-in failu:
+  ```ini
+  # /etc/systemd/system/docker.service.d/10-juicefs.conf
+  [Unit]
+  After=juicefs.service
+  Requires=juicefs.service
+  ```
+- **uid 10001 nuosavybė veikia ir toliau.** `install.sh`/`reinstall.sh`/
+  `update.sh` naudojamas `chgrp 10001` / `chmod 664|775` katalogams
+  `namespace-prefix`, `data-topic-prefix` ir TAK/bundle katalogams veikia
+  ant JuiceFS taip pat, kaip ir vietiniame diske, jei prijungimas naudoja
+  `allow_other` (žr. `03-juicefs.md` systemd unit'ą) — tai patikrinkite
+  aiškiai per pirmą diegimą, o ne tiesiog manykite, kad veiks.
+- **Kita būsena po `POD_STATE_DIR`** — `zenoh/rocksdb` (šiuo metu
+  nenaudojama; jokios saugyklos kiekvienam prefiksui numatytai
+  nekonfigūruojamos) ir, jei įjungtas `managed-ca` profilis, step-ca savo
+  vietinė duomenų bazė — turi tą pačią „tik vietinis diskas" sąlygą kaip ir
+  `EFDI_DB_DATA_DIR`, kai tik jos realiai pradedamos naudoti. Šis pakeitimas
+  jų nesprendžia.
 
 ---

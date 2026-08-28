@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Disposable local MariaDB + env file for previewing zenoh-admin panel changes
+# Disposable local PostgreSQL + env file for previewing zenoh-admin panel changes
 # without touching the real pod. Admin panel only — no zenoh-router, no certs,
 # no fabric connection.
 #
 # Usage:
-#   ./dev.sh up     start the dev MariaDB container, write dev.env, and
+#   ./dev.sh up     start the dev PostgreSQL container, write dev.env, and
 #                   (once the venv below exists) start the API in the background
-#   ./dev.sh down   stop and remove the dev MariaDB container, its volume,
+#   ./dev.sh down   stop and remove the dev PostgreSQL container, its volume,
 #                   and the background API process
 set -euo pipefail
 
@@ -14,13 +14,12 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=scripts/_spinner.sh
 . "$SCRIPT_DIR/scripts/_spinner.sh"
 
-CONTAINER=zenoh-admin-dev-mariadb
-VOLUME=zenoh-admin-dev-mariadb-data
+CONTAINER=zenoh-admin-dev-postgres
+VOLUME=zenoh-admin-dev-postgres-data
 DB_USER=devuser
 DB_PASSWORD=devpass
-DB_ROOT_PASSWORD=devrootpass
 DB_NAME="admin"
-DEV_DB_PORT="${DEV_DB_PORT:-3307}"
+DEV_DB_PORT="${DEV_DB_PORT:-5433}"
 DEV_API_PORT="${DEV_API_PORT:-8895}"
 DEV_CONTROL_PORT="${DEV_CONTROL_PORT:-8896}"
 VENV_UVICORN="$SCRIPT_DIR/compose/zenoh-admin/.venv/bin/uvicorn"
@@ -41,18 +40,18 @@ cmd_up() {
         saved_control_port="$(sed -n 's/^EFDI_CONTROL_PORT=//p' "$SCRIPT_DIR/dev.env" | head -n 1)"
         [ -n "$saved_control_port" ] && DEV_CONTROL_PORT="$saved_control_port"
     fi
-    # A running pod may already own the default 3307 port. Keep the
+    # A running pod may already own the default 5433 port. Keep the
     # preview disposable and move only its host-side port in that case.
     if docker ps --format '{{.Names}}' | grep -qx "$CONTAINER"; then
         # Reuse the port Docker actually mapped, even when an older dev.env
         # still contains the historical default and another service owns it.
-        mapped_db_port="$(docker port "$CONTAINER" 3306/tcp 2>/dev/null \
+        mapped_db_port="$(docker port "$CONTAINER" 5432/tcp 2>/dev/null \
             | sed -n 's/.*:\([0-9][0-9]*\)$/\1/p' | head -n 1)"
         [ -n "$mapped_db_port" ] && DEV_DB_PORT="$mapped_db_port"
     elif command -v ss >/dev/null \
         && ss -ltn "sport = :$DEV_DB_PORT" 2>/dev/null | grep -q LISTEN; then
-        DEV_DB_PORT="${DEV_DB_PORT_FALLBACK:-53307}"
-        info "Port 3307 is busy; using disposable dev MariaDB port $DEV_DB_PORT"
+        DEV_DB_PORT="${DEV_DB_PORT_FALLBACK:-55433}"
+        info "Port 5433 is busy; using disposable dev PostgreSQL port $DEV_DB_PORT"
     fi
     api_pid_valid=0
     if [ -f "$API_PIDFILE" ] && kill -0 "$(cat "$API_PIDFILE")" 2>/dev/null \
@@ -88,26 +87,26 @@ cmd_up() {
         info "$CONTAINER already running"
     else
         docker rm -f "$CONTAINER" &>/dev/null || true
-        run_spin "Starting dev MariaDB" "dev MariaDB started" docker run -d \
+        run_spin "Starting dev PostgreSQL" "dev PostgreSQL started" docker run -d \
             --name "$CONTAINER" \
             --restart unless-stopped \
-            -e MARIADB_ROOT_PASSWORD="$DB_ROOT_PASSWORD" \
-            -e MARIADB_DATABASE="$DB_NAME" \
-            -e MARIADB_USER="$DB_USER" \
-            -e MARIADB_PASSWORD="$DB_PASSWORD" \
-            -p "127.0.0.1:$DEV_DB_PORT:3306" \
-            -v "$VOLUME":/var/lib/mysql \
-            mariadb:11.4.12-noble@sha256:a794d9eb009e20de605858a11f32f63b4075cbd197c650436f0e3b457e4caed7 \
+            -e POSTGRES_DB="$DB_NAME" \
+            -e POSTGRES_USER="$DB_USER" \
+            -e POSTGRES_PASSWORD="$DB_PASSWORD" \
+            -e POSTGRES_INITDB_ARGS="--locale=C --encoding=UTF8" \
+            -p "127.0.0.1:$DEV_DB_PORT:5432" \
+            -v "$VOLUME":/var/lib/postgresql/data \
+            postgres:18@sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280 \
             || fail "Could not start $CONTAINER (see output above)."
 
-        info "Waiting for MariaDB to accept connections..."
+        info "Waiting for PostgreSQL to accept connections..."
         for _ in $(seq 1 30); do
-            docker exec "$CONTAINER" healthcheck.sh --connect --innodb_initialized &>/dev/null && break
+            docker exec "$CONTAINER" pg_isready -U "$DB_USER" -d "$DB_NAME" &>/dev/null && break
             sleep 1
         done
-        docker exec "$CONTAINER" healthcheck.sh --connect --innodb_initialized &>/dev/null \
-            || fail "MariaDB did not become ready within 30s — check: docker logs $CONTAINER"
-        ok "MariaDB is ready"
+        docker exec "$CONTAINER" pg_isready -U "$DB_USER" -d "$DB_NAME" &>/dev/null \
+            || fail "PostgreSQL did not become ready within 30s — check: docker logs $CONTAINER"
+        ok "PostgreSQL is ready"
     fi
 
     cat > "$SCRIPT_DIR/dev.env" <<EOF

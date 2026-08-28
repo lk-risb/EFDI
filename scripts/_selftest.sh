@@ -16,9 +16,11 @@ efdi_selftest() {
     done
 
     container="$("${dc[@]}" ps -q zenoh-admin-db 2>/dev/null)"
+    local db_user
+    db_user="$(grep '^ZENOH_ADMIN_DB_USER=' "$ENV_FILE" | head -1 | cut -d= -f2-)"
     if [ -n "$container" ] && ! docker exec "$container" \
-        healthcheck.sh --connect --innodb_initialized >/dev/null 2>&1; then
-        warn "Self-test FAILED: MariaDB is not ready"
+        pg_isready -U "$db_user" -d admin >/dev/null 2>&1; then
+        warn "Self-test FAILED: PostgreSQL is not ready"
         failed=1
     fi
 

@@ -68,18 +68,24 @@ Add to `compose/.env` (see `compose/.env.example` for the full block):
 ```bash
 ZENOH_ADMIN_DB_USER=zenoh_admin
 ZENOH_ADMIN_DB_PASSWORD=<random>
-ZENOH_ADMIN_DB_ROOT_PASSWORD=<different-random-value>
-ZENOH_ADMIN_DB_PORT=3307                # non-default: avoids clashing with MariaDB/MySQL on 3306
+ZENOH_ADMIN_DB_PORT=5433                # non-default: avoids clashing with a host PostgreSQL on 5432
+EFDI_DB_DATA_DIR=<local-disk-path>       # never a JuiceFS/network path — see docs/04-configuration.md
 ZENOH_ADMIN_SECRET_KEY=<openssl rand -hex 32>
 ZENOH_ADMIN_FIRST_USER=admin
 ZENOH_ADMIN_FIRST_PASS=<set once, then blank it out after first login>
 ```
 
-`ZENOH_ADMIN_FIRST_PASS` only creates the first `superadmin` account if it doesn't already exist — it is safe to blank it out again after the first login (the account persists in MariaDB).
+`ZENOH_ADMIN_FIRST_PASS` only creates the first `superadmin` account if it doesn't already exist — it is safe to blank it out again after the first login (the account persists in PostgreSQL).
 
-The admin service is MariaDB-only. Historical PostgreSQL migration tooling was
-removed after the deployment cutover; upgrades must back up
-`${POD_STATE_DIR}/zenoh-admin/mariadb` and `compose/.env` before rebuilding.
+The admin service runs its own PostgreSQL container (`zenoh-admin-db`), separate
+from any host-level PostgreSQL you may run for other services (NetBird, a
+JuiceFS filestore, step-ca) — the two never share a database or credentials.
+Back it up with `pg_dump`; a raw filesystem copy of `EFDI_DB_DATA_DIR` is only
+safe while the container is stopped. This service was MariaDB before
+2026-08-28; deployments installed earlier can migrate their existing data with
+`scripts/migrate_mariadb_to_postgres.py` (see that script's own docstring for
+the exact cutover steps) rather than losing accounts, audit history, and
+issued PKI identities.
 
 ## Launching
 
