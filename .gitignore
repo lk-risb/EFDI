@@ -2,6 +2,7 @@
 # they are listed explicitly.
 .ai/.claude/
 .ai/.claude/.compound-engineering/
+.claude/
 .codex/
 .agents/
 .cursor/

@@ -53,7 +53,7 @@ though HQ is the one initiating the HTTP request.
 | --- | --- |
 | `tak_bridge.py`, `sitaware_bridge.py` | C2 → Zenoh |
 | `tak_layer.py`, `sitaware_layer.py` | Zenoh → C2 |
-| `asterix_bridge.py`, `dronuradaras_bridge.py`, `flex335_bridge.py`, `udp_ingress_bridge.py`, `mqtt_bridge.py`, `sensorthings_bridge.py`, `raw_socket_bridge.py`, `meteolt_forecast_bridge.py`, `4586_bridge.py`, `4609_bridge.py`, `5516_bridge.py` | Source → Zenoh |
+| `asterix_bridge.py`, `dronuradaras_bridge.py`, `flex335_bridge.py`, `udp_ingress_bridge.py`, `mqtt_bridge.py`, `raw_socket_bridge.py`, `meteolt_forecast_bridge.py`, `4586_bridge.py`, `4609_bridge.py`, `5516_bridge.py` | Source → Zenoh |
 
 ### `compose/protocols/` layout
 
@@ -65,7 +65,7 @@ though HQ is the one initiating the HTTP request.
 | `track_views.py` | The four-encoding publish helper (`/sapient`, `/json`, `/proto`, `/raw`). |
 | `process_bundle.py` | Shared inbound-process bootstrap for translator CLIs. |
 | `vendors/asterix/`, `vendors/sapient/`, `vendors/stanag/`, `vendors/sparkplug/` | The ASTERIX (`cat.py`), SAPIENT (`flex335.py`), STANAG (`stanag.py`), and Sparkplug B translators. |
-| `random/` | Vendor-neutral translators: CAP 1.2, GeoJSON/OGC Features, mission routes, MQTT-JSON, NFFI, sensor health, RF spectrum observations, OGC SensorThings. |
+| `random/` | Vendor-neutral translators: CAP 1.2, mission routes, MQTT-JSON, NFFI, sensor health. |
 | `proto/` | The `.proto` contracts, one per translator family. |
 
 ## `docs/` — this directory

@@ -265,6 +265,174 @@ kuri surašo ir agreguoja savo vaikų pidfile, pranešant
 veikia/sutrikusi/sustabdyta pagal tai, kiek jų gyva — ne naivus vieno-pidfile
 tikrinimas.
 
+### Prijungtas (bind-mount) būsenos failas priklauso ne tam naudotojui, ne tik blogai prijungtas
+
+**Simptomas:** Konfigūracijos išsaugojimas per WebUI nepavyksta su
+`[Errno 13] Permission denied: '/data-topic-prefix'` (arba
+`/namespace-prefix`, arba TAK/SitaWare kredencialų įkėlimo katalogais) — tai
+kitokia klaida nei aukščiau aprašytas `EBUSY` atominio rašymo atvejis; čia
+tiesiog teisių klaida, o ne pervadinimo per prijungimo tašką klaida.
+
+**Priežastis:** `zenoh-admin` visada veikia fiksuotu ne-root uid/gid
+(`10001`). Keli būsenos keliai yra atskirai per bind-mount prijungti failai ar
+katalogai (`namespace-prefix`, `data-topic-prefix`, `integrations/tak`,
+`$BUNDLE_DIR/efdi`), sukurti **hosto** pusėje to naudotojo, kuris paleido
+`install.sh`/`reinstall.sh` — dažniausiai root. Root sukurtas failas su
+teisėmis `644` yra rašomas tik savininko (root); uid 10001 neturi nei
+savininko bito, nei (nebent grupė jau būtų 10001) grupės rašymo bito, todėl
+kiekvienas rašymas iš konteinerio vidaus nepavyksta.
+
+**Sprendimas:** `install.sh` ir `reinstall.sh` dabar visiems šiems keliams po
+jų sukūrimo atlieka `chgrp 10001` + `chmod 664` (failams) / `775`
+(katalogams). Jei tvarkote dėžę, sukonfigūruotą prieš šį pataisymą, arba
+paleiskite `reinstall.sh` iš naujo, arba ištaisykite tiesiogiai:
+
+```bash
+chgrp 10001 "$POD_STATE_DIR/namespace-prefix" "$POD_STATE_DIR/data-topic-prefix"
+chmod 664   "$POD_STATE_DIR/namespace-prefix" "$POD_STATE_DIR/data-topic-prefix"
+chgrp 10001 "$POD_STATE_DIR/integrations/tak" "$BUNDLE_DIR/efdi"
+chmod 775   "$POD_STATE_DIR/integrations/tak" "$BUNDLE_DIR/efdi"
+```
+
+`health.sh` interaktyvus meniu (3 punktas, „patikrinti trūkstamus/blogai
+sukonfigūruotus būsenos failus") dabar taip pat aptinka ir automatiškai
+ištaiso neteisingas šių kelių teises, ne tik trūkstamus failus.
+
+### Neapdorota išimtis API apdorojime pasirodo kaip tuščias HTTP 500
+
+**Simptomas:** WebUI rodo paprastą pranešimą „Unexpected error applying
+config" arba „Request failed (HTTP 422)" be jokios papildomos informacijos —
+jokios užuominos, kas iš tikrųjų nutrūko, nors serveris *iš tikrųjų* susidūrė
+su konkrečia klaida.
+
+**Priežastis:** Apdorojimo funkcija, kuri sugauna `Exception` tik tam, kad
+ją užregistruotų, o po to tuščiai `raise` ją perduoda toliau, praranda
+originalų pranešimą, kai perima FastAPI numatytasis klaidų apdorojimas —
+klientas mato tik bendrą būsenos kodą. Jei pati pagrindinė klaida grąžino
+tuščią eilutę kaip savo „detail" (pvz., subprocesas, kuris nulūžo dar
+nespėjęs nieko parašyti į stdout/stderr), net teisingai perduota išimtis
+neturi ką parodyti.
+
+**Sprendimas:** Neapdorotą išimtį paverskite `HTTPException` su realiu
+pranešimu (`raise HTTPException(500, detail=f"...: {exc}") from exc`), o bet
+kokį kelią, pranešantį apie subproceso/patikros nesėkmę, priverskite grįžti
+prie aprašomojo pakaitalo (`"exited N with no output"`) vietoj tuščios
+eilutės — kad *kitas* pasikartojimas būtų diagnozuojamas vien iš atsakymo
+turinio, be prieigos prie serverio žurnalo.
+
+### Formos laukas tyliai priima reikšmę, sudarytą visai kitokia forma nei reikia
+
+**Simptomas:** Laukui „bind adresas" arba panašiam vienos paskirties
+nustatymui pateikiamas pilnas URL (`http://0.0.0.0:8088/nvg`) arba ne to
+kompiuterio IP adresas vietoj gryno vietinio IP, o paslauga, kuri jį skaito,
+nulūžta su kažkuo nesuprantamu kaip `socket.gaierror: [Errno -2] Name or
+service not known` ties `socket.bind()`.
+
+**Priežastis:** Bind adresas perduodamas tiesiai į `socket.bind((host,
+port))` — tai niekada nėra URL (nei schemos, nei prievado, nei kelio), ir tai
+yra *šio paties kompiuterio* klausymosi adresas, o ne kompiuterio, kuris prie
+jo jungsis, adresas. Paprastas teksto laukas nesustabdo naudotojo įvedus
+pilną URL arba ne tos mašinos adresą; klaida pasirodo tik toliau, bibliotekos
+viduje, per kelis sluoksnius nuo lauko, kuris ją sukėlė.
+
+**Sprendimas:** Konkrečiai `SITAWARE_HQ_NVG_BIND` reikšmė turi būti grynas
+IP — `0.0.0.0`, kad klausytųsi visų sąsajų (kad *kita* mašina, pvz., SitaWare
+HQ dėžė, galėtų pasiekti), arba `127.0.0.1` tik vietiniam ryšiui. Prievadas ir
+kelias yra atskiri laukai — jų čia neįtraukite. Bendrai: kai laukas nulūžta
+toli nuo vietos, kur jis nustatytas, pirmiausia patikrinkite jo saugomą
+reikšmę (`grep KEY .env`), o tik tada gilinkitės į nulūžimo vietą.
+
+### Naujai veikiantis srautas vis tiek atmetamas — pirma patikrinkite autentifikaciją, ne maršrutą
+
+**Simptomas:** Nuotolinė sistema jau gali pasiekti srautą (nebe „connection
+refused"/timeout), bet kiekviena užklausa vis tiek atmetama, o paties srauto
+žurnale rašoma kažkas panašaus į `rejected unauthorized request from <ip>`.
+
+**Priežastis:** Ryšio pasiekiamumas (teisingas prievadas, teisingas bind
+adresas) yra atskira problema nuo autentifikacijos. Srautas su sukonfigūruota
+Basic autentifikacija (`SITAWARE_HQ_NVG_USER`/`_PASS`) atmeta kiekvieną
+užklausą, kuri nepateikia atitinkančių kredencialų — net iš kliento, kuris
+kitu atveju yra puikiai pasiekiamas.
+
+**Sprendimas:** Arba sukonfigūruokite *nuotolinę* pusę (šiuo atveju —
+SitaWare HQ importo prenumeratą) su tuo pačiu naudotojo vardu/slaptažodžiu
+kaip ir srautas, arba — tik greitam izoliuoto laboratorinio tinklo
+testui — nustatykite `SITAWARE_HQ_NVG_ALLOW_ANONYMOUS=1`, kad visiškai
+praleistumėte autentifikaciją, kol patvirtinsite, jog duomenys teka.
+
+### Takeliai sublyksi / dingsta ir vėl atsiranda fiksuotu ciklu
+
+**Simptomas:** Objektai apklausa pagrįstame sraute (pvz., SitaWare NVG
+importe) sublyksi ir atsiranda periodu, sutampančiu su apklausos intervalu,
+nors pirminis šaltinis iš tikrųjų vis dar teikia duomenis.
+
+**Priežastis:** Srauto talpykla pašalina bet kokį objektą, kuris nebuvo
+atnaujintas per jos „stale" (paseno) langą (`SITAWARE_HQ_NVG_STALE_S`, arba
+atitinkamas nustatymas bet kuriame kitame apklausa pagrįstame sluoksnyje).
+Jei *pirminis* tiltas atnaujina konkretų objektą tik kas N sekundžių
+(pavyzdžiui, `dronuradaras_bridge.py` turi `DEVICE_POLL_S = 60` radaro mazgų
+pozicijoms), o „stale" langas trumpesnis už tai, kiekvienas objektas
+pasensta ir dingsta daliai kiekvieno pirminio ciklo, tada vėl atsiranda,
+kai ateina kitas atnaujinimas — tai slenkantis, nevienalaikis mirgėjimas, o
+ne švarus, vienalaikis.
+
+**Sprendimas:** Nustatykite srauto „stale" ribą gerokai virš lėčiausio
+pirminio atnaujinimo intervalo, kuris jį maitina (bent 2×) — pvz., `120`
+60 sekundžių pirminiam ciklui. Atskirai, žemesnės grandies C2 sistemos
+pačios „sluoksnio galiojimo"/„takelio išsaugojimo" nuostata (SitaWare Layer
+Details puslapyje yra abi) gali tai sustiprinti arba užmaskuoti; jei vien
+„stale" ribos pakėlimas neišsprendžia, patikrinkite ir tą nuostatą.
+
+### `pip install` nepavyksta su „externally-managed-environment"
+
+**Simptomas:** Paleidus `pip install -r requirements.txt` tiesiai prieš
+sisteminį `python3` (o ne per `install.sh`/`start.sh`), nepavyksta su
+`error: externally-managed-environment` / „This environment is externally
+managed" (PEP 668, dažna šiuolaikiniuose Debian/Ubuntu).
+
+**Priežastis:** Sisteminis Python tyčia užrakintas nuo nevaldomų `pip
+install`. `install.sh` ir `start.sh` su tuo nesikovoja — jie sukuria ir
+naudoja savo virtualią aplinką `compose/venv`, iš kurios iš tikrųjų veikia
+kiekviena šio pod'o Python paslauga, paleidžiama hoste.
+
+**Sprendimas:** Naudokite tą virtualią aplinką tiesiogiai, ne sisteminį
+interpretatorių:
+
+```bash
+compose/venv/bin/pip install -r compose/requirements.txt
+compose/venv/bin/python3 layers/some_layer.py
+```
+
+Jei `compose/venv` dar neegzistuoja, sukurkite ją taip pat, kaip tai daro
+`install.sh`: `python3 -m venv compose/venv`, tada diekite į ją. Niekada
+neperduokite `--break-system-packages` sisteminiam `pip` — kiekviena kita
+hoste veikianti paslauga jau tikisi virtualios aplinkos, ne sisteminio
+interpretatoriaus.
+
+### Du skirtingi „Save" mygtukai tame pačiame puslapyje daro skirtingus dalykus
+
+**Simptomas:** Reikšmės išsaugojimas viename WebUI konfigūracijos puslapio
+skyriuje (pvz., Integration Settings lauke, tokiame kaip SitaWare ar TAK
+nustatymas) atrodo, tarsi nieko nedaro, arba sukelia nesusijusią klaidą
+(Zenoh maršrutizatoriaus konfigūracijos patvirtinimo klaidą), kuri neturi
+nieko bendra su tuo, kas iš tikrųjų buvo keičiama.
+
+**Priežastis:** Zenoh Config puslapyje yra dvi nepriklausomos išsaugojimo
+funkcijos: viršuje esantis **„Save & Restart"**, kuris patvirtina ir
+pritaiko *Zenoh maršrutizatoriaus* konfigūraciją (mTLS prievadas, fabric
+galiniai taškai, vardų sritis), ir kiekvienos Integration Settings kortelės
+*savas* Save mygtukas, kuris išsaugo tik tos kortelės `.env` reikšmes ir
+niekada neliečia maršrutizatoriaus konfigūracijos. Paspaudus ne tą, kas
+aktualu, neišsaugoma nieko, o jei maršrutizatoriaus konfigūracija tuo metu
+dar nėra galiojanti (pvz., sertifikatai dar neįkelti) — iškyla klaidinantis,
+nesusijęs 422/500.
+
+**Sprendimas:** Rinkitės mygtuką pagal skyrių: maršrutizatoriaus lygio
+laukams po „Zenoh Config" (Transport, Fabric endpoints, Namespace) reikia
+viršutinio „Save & Restart"; kiekvienam laukui Integration Settings kortelėje
+(TAK, SitaWare, jutiklių srautai ir t.t.) reikia tos kortelės pačios Save
+mygtuko, esančio žemiau puslapyje.
+
 ### Kodo pataisymas negalioja, kol veikiantis procesas nepersileidžia
 
 **Simptomas:** Ištaisote klaidą (dekoderyje, admin API, bet kur),

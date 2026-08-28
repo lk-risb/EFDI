@@ -277,6 +277,45 @@ cd EFDI
 ./install.sh
 ```
 
+### 3.1a Pasirinkite Production arba Testing režimą
+
+`install.sh` to klausia anksti, dar prieš sertifikatus:
+
+```text
+Production  — reikia sertifikatų iš scripts/gen-certs.sh (mTLS, fabric ryšys)
+Testing     — sugeneruoja savarankiškai pasirašytus sertifikatus, tik vietinis Zenoh (be fabric)
+```
+
+**Testing režimas** skirtas išbandyti EFDI vienoje mašinoje be tikro fabric
+ryšio: automatiškai sugeneruojama vardų sritis ir savarankiškai pasirašyti
+sertifikatai, o Zenoh veikia per paprastą TCP be mTLS. Jis taip pat pakeičia
+du kelius, kurių prireiks derinant klaidas:
+
+```text
+BUNDLE_DIR     = <repo>/compose/test-certs   (ne compose/certs/)
+POD_STATE_DIR  = <repo>/.test-pod-state      (šalia compose/, ne jo viduje)
+```
+
+Jei ieškote žurnalų, PID failų ar sugeneruotos Zenoh konfigūracijos
+testing-režimo diegime, tikrinkite `<repo>/.test-pod-state/` (pvz.,
+`.test-pod-state/logs/sitaware_layer.log`), **ne** `compose/state/` —
+numatytasis `compose/state/` kelias galioja tik production diegimui, kai
+`POD_STATE_DIR` paliktas nenustatytas. Patikrinkite, kurį iš jų iš tikrųjų
+naudoja konkreti dėžė: `grep '^POD_STATE_DIR=' compose/.env`.
+
+**Production režimui** reikia tikrų sertifikatų iš `scripts/gen-certs.sh`
+(arba partnerio išduoto rinkinio) ir jis priverstinai naudoja mTLS — žr.
+[§3.2](#32-sertifikatų-generavimas) žemiau.
+
+Abu režimai dabar visada paklausia Zenoh WebUI administratoriaus vartotojo
+vardo ir slaptažodžio diegimo metu (anksčiau testing režime tai būdavo
+praleidžiama su automatiškai sugeneruotu slaptažodžiu, kuris tyliai
+išvalomas iš `.env` po pirmo prisijungimo, ir jokio kito jo įrašo niekur
+neliko — pačiam nustatant slaptažodį šio spąstų išvengiama). `reinstall.sh`
+taip pat gali vėliau atstatyti šiuos kredencialus, jei juos pamiršote, arba
+naudokite `health.sh` interaktyvų problemų sprendimo meniu — žr.
+[Eksploatacija](05-paleidimas-ir-eksploatacija.md).
+
 ### 3.2 Sertifikatų generavimas
 
 ```bash
@@ -324,6 +363,26 @@ compose/venv/bin/pip install -r compose/requirements.txt
 ```
 
 > `eclipse-zenoh` versija turi būti **tiksliai 1.9.0** — net nedideli versijų skirtumai gali pakeisti API.
+
+Visada diekite į šią venv, niekada tiesiai į sisteminį `python3`. Paleidus
+`pip install` prieš sisteminį interpretatorių šiuolaikiniame Debian/Ubuntu
+nepavyksta su `error: externally-managed-environment` (PEP 668) — ta klaida
+yra sistemos apsauga, ne riktas, kurį reikia apeiti su
+`--break-system-packages`. Kiekviena šio pod'o hoste veikianti paslauga
+(tiltai, sluoksniai, protokolų vertėjai) jau tikisi `compose/venv`, tad
+„greitas" klaidos apėjimas paliktų tas paslaugas veikti kitokioje Python
+aplinkoje nei ką tik pakeitėte.
+
+`install.sh` taip pat atlieka `chgrp`/`chmod` keliems atskirai per bind-mount
+prijungtiems būsenos failams ir katalogams (`namespace-prefix`,
+`data-topic-prefix`, `$BUNDLE_DIR/efdi`, `$POD_STATE_DIR/integrations/tak`),
+kad `zenoh-admin` konteineris — visada veikiantis fiksuotu ne-root uid
+`10001` — galėtų į juos rašyti. Jei *vėliau* WebUI išsaugojimas
+(konfigūracija, TAK/SitaWare kredencialai) nepavyksta su „Permission denied"
+viename iš šių kelių, `health.sh` interaktyvus meniu (3 punktas) tai aptinka
+ir ištaiso automatiškai; žr.
+[Problemų sprendimas](11-dazniausios-problemos.md), jei reikia ištaisyti iš
+karto rankiniu būdu.
 
 ### 3.4 Zenoh router paleidimas
 

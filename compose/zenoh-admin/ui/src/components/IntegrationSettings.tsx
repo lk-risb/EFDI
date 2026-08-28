@@ -77,16 +77,13 @@ const FIELD_GROUPS: FieldGroup[] = [
     { key: 'STANAG4609_SRT_URL', label: 'STANAG 4609 SRT URL', placeholder: 'srt://host:port?mode=listener' },
     { key: 'STANAG4609_SOURCE', label: 'STANAG 4609 source label', placeholder: 'stanag_4609' },
   ] },
-  { title: 'MQTT and IoT sensor feeds', icon: Wifi, description: 'MQTT broker ingress and OGC SensorThings polling. The MQTT bridge forwards payloads verbatim; the mqtt translator reads JSON only.', fields: [
+  { title: 'MQTT sensor feeds', icon: Wifi, description: 'MQTT broker ingress. The MQTT bridge forwards payloads verbatim; the mqtt translator reads JSON only.', fields: [
     { key: 'MQTT_HOST', label: 'MQTT broker host', placeholder: 'broker.example' },
     { key: 'MQTT_PORT', label: 'MQTT broker port', placeholder: '1883' },
     { key: 'MQTT_TOPIC', label: 'MQTT subscription filters', placeholder: 'sensors/#' },
     { key: 'MQTT_USER', label: 'MQTT username' },
     { key: 'MQTT_PASS', label: 'MQTT password', secret: true },
     { key: 'MQTT_TLS', label: 'MQTT TLS enabled (1/0)', placeholder: '0' },
-    { key: 'SENSORTHINGS_URL', label: 'SensorThings service root', placeholder: 'https://host/FROST-Server/v1.1' },
-    { key: 'SENSORTHINGS_POLL_S', label: 'SensorThings poll seconds', placeholder: '30' },
-    { key: 'SENSORTHINGS_TOKEN', label: 'SensorThings bearer token', secret: true },
   ] },
   { title: 'Sensors and data sources', icon: Radar, description: 'Common partner endpoints. Protocol-specific CAT and raw-port settings are available under Advanced.', fields: [
     { key: 'ASTERIX_ZENOH_UPSTREAM_ENDPOINT', label: 'ASTERIX upstream Zenoh endpoint', placeholder: 'tcp/zenoh2.example:7448' },

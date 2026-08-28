@@ -296,11 +296,8 @@ start_protocols() {
     start_asterix_protocols
 
     start cap protocols/random/cap.py
-    start geojson protocols/random/geojson_features.py
     start mqtt protocols/random/mqtt_json.py
-    start sensorthings protocols/random/sensorthings.py
     start sparkplug protocols/vendors/sparkplug/sparkplug.py
-    start spectrum protocols/random/spectrum_observation.py
     start sensor-health protocols/random/sensor_health.py
     start mission-route protocols/random/mission_route.py
 
