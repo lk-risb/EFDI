@@ -39,8 +39,8 @@ The interactive launcher displays all services with their readiness state. Toggl
   Zenoh-native translators
   ──────────────────────────────────────────────────────────
   [17] [✓] cap            CAP 1.2 XML → alerts                   ready
-  [18] [✓] geojson        GeoJSON/OGC Features → areas           ready
-  [27] [✓] spectrum       RF spectrum observations               ready
+  [18] [✓] mqtt           MQTT sensor JSON → sensor records      ready
+  [19] [✓] sparkplug      Eclipse Sparkplug B (MQTT) → records   ready
   [28] [✓] sensor-health  Sensor health/heartbeat records       ready
   [29] [✓] mission-route  UAV routes and corridors              ready
 
@@ -104,5 +104,66 @@ tail -f $POD_STATE_DIR/logs/track-fusion.log     # Fused track output
 ls $POD_STATE_DIR/.pids/                                          # List running services
 kill -0 $(cat $POD_STATE_DIR/.pids/asterix.pid) && echo ok        # Check specific service
 ```
+
+### `health.sh` — self-heal, self-test, and interactive troubleshooting
+
+```bash
+./health.sh
+```
+
+Run this any time, standalone — it doesn't pull or fetch anything (that's
+`update.sh`'s job), so it's safe to run on a box that's just misbehaving.
+It does three things in order:
+
+1. **Self-heal.** Compares each running Docker image's baked-in git commit
+   label against the currently checked-out commit; a mismatch (Docker's
+   layer cache silently reused a stale layer after a `git pull`) triggers an
+   automatic `--no-cache` rebuild and restart.
+2. **Self-test.** Runs the full check suite (Python tests, ShellCheck,
+   compose config rendering, frontend type-check/build, every executable
+   test under `tests/`, a live self-test, a whitespace/secret scan). Every
+   one of these reports and continues rather than aborting the script on
+   the first failure — a broken deployment is exactly when you need the
+   menu below, not a script that dies silently partway through.
+3. **Interactive troubleshooting menu** (only at a real terminal —
+   `EFDI_NONINTERACTIVE=1` skips it for automated callers):
+
+   ```text
+   [1] Reset the WebUI admin username/password
+   [2] Restart a container
+   [3] Check for missing/misconfigured state files
+   [Q] Done
+   ```
+
+   Option 1 is the fastest way to recover a forgotten WebUI password without
+   a full `reinstall.sh`. Option 3 checks for the exact bind-mounted state
+   file/permission issues covered in
+   [Troubleshooting](11-troubleshooting.md) and fixes what it can
+   automatically.
+
+### `update.sh` — pull, rebuild, and re-verify
+
+```bash
+./update.sh
+```
+
+Updates the host OS packages, pulls the latest commit, rebuilds anything
+that changed, cleans up state left behind by files removed from the repo
+since the last update, and finishes by running `health.sh` unattended
+(`EFDI_NONINTERACTIVE=1`) as a final check — a failure there fails the whole
+update rather than silently leaving a half-upgraded pod running.
+
+### `reinstall.sh` — full teardown and rebuild
+
+```bash
+./reinstall.sh
+```
+
+Tears down containers and local images, then rebuilds from the current
+checkout. Prompts to reset the WebUI admin username/password (recommended if
+you don't remember the current one) before starting containers back up.
+Reserve this for a genuinely broken install `update.sh` can't fix, or a
+deliberate reset — it's more disruptive than `update.sh` for a routine
+version bump.
 
 ---

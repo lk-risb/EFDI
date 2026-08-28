@@ -29,7 +29,7 @@ services, **Config** to configure them, **Dashboard** to confirm health.
   (local ports, fabric uplink endpoints and certificate identity, namespace,
   connection policy — see *Config tab fields* below). **Integration Settings**
   edits the services' environment without SSH: TAK host/port, SitaWare HQ NVG
-  import/feed and REST paths, MQTT/SensorThings, and ASTERIX ports.
+  import/feed and REST paths, MQTT, and ASTERIX ports.
   Passwords are write-only. Save, then restart the affected service from Runtime
   Control for it to take effect.
 - **Runtime Control** — start / stop / restart every bridge (sensor input),

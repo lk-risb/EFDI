@@ -45,8 +45,8 @@ Interaktyvus paleidiklis rodo visas paslaugas su jų parengties būsena. Įjunki
   Zenoh-native translators
   ──────────────────────────────────────────────────────────
   [24] [✓] cap            CAP 1.2 XML → alerts                   ready
-  [25] [✓] geojson        GeoJSON/OGC Features → areas           ready
-  [33] [✓] spectrum       RF spectrum observations               ready
+  [25] [✓] mqtt           MQTT sensor JSON → sensor records      ready
+  [26] [✓] sparkplug      Eclipse Sparkplug B (MQTT) → records   ready
   [34] [✓] sensor-health  Sensor health/heartbeat records         ready
   [35] [✓] mission-route  UAV routes and corridors                ready
 
@@ -106,5 +106,68 @@ tail -f $POD_STATE_DIR/logs/track-fusion.log     # Sulieta takelio išvestis
 ls $POD_STATE_DIR/.pids/                                          # Veikiančių paslaugų sąrašas
 kill -0 $(cat $POD_STATE_DIR/.pids/asterix.pid) && echo ok        # Konkretaus proceso tikrinimas
 ```
+
+### `health.sh` — savaiminis pataisymas, savitestas ir interaktyvus problemų sprendimas
+
+```bash
+./health.sh
+```
+
+Paleiskite bet kada, savarankiškai — jis nieko netraukia/nesisiunčia (tai
+`update.sh` darbas), tad saugu paleisti dėžėje, kuri tiesiog blogai veikia.
+Jis daro tris dalykus iš eilės:
+
+1. **Savaiminis pataisymas.** Palygina kiekvieno veikiančio Docker
+   atvaizdo įrašytą git commit žymę su dabar išsikeltu commit'u; neatitikimas
+   (Docker sluoksnio talpykla tyliai panaudojo pasenusį sluoksnį po `git
+   pull`) suaktyvina automatinį `--no-cache` perstatymą ir persileidimą.
+2. **Savitestas.** Paleidžia visą patikrų rinkinį (Python testai,
+   ShellCheck, compose konfigūracijos generavimas, frontend tipų
+   tikrinimas/build'as, kiekvienas vykdomasis testas `tests/` kataloge,
+   gyvas savitestas, tarpų/paslapčių skenas). Kiekvienas iš jų praneša ir
+   tęsia, o ne nutraukia scenarijų prie pirmos klaidos — sugedęs diegimas
+   yra būtent tada, kai reikia žemiau esančio meniu, o ne scenarijaus,
+   tyliai nulūžtančio per pusę.
+3. **Interaktyvus problemų sprendimo meniu** (tik tikrame terminale —
+   `EFDI_NONINTERACTIVE=1` jį praleidžia automatizuotiems iškvietėjams):
+
+   ```text
+   [1] Reset the WebUI admin username/password
+   [2] Restart a container
+   [3] Check for missing/misconfigured state files
+   [Q] Done
+   ```
+
+   1 punktas yra greičiausias būdas atkurti pamirštą WebUI slaptažodį be
+   pilno `reinstall.sh`. 3 punktas patikrina tiksliai tas bind-mount
+   būsenos failų/teisių problemas, aprašytas
+   [Problemų sprendimas](11-dazniausios-problemos.md), ir ką gali,
+   ištaiso automatiškai.
+
+### `update.sh` — atsisiuntimas, perstatymas ir pakartotinis patikrinimas
+
+```bash
+./update.sh
+```
+
+Atnaujina hosto OS paketus, atsisiunčia naujausią commit'ą, perstato viską,
+kas pasikeitė, sutvarko būseną, likusią po failų, pašalintų iš repozitorijos
+nuo paskutinio atnaujinimo, ir pabaigoje paleidžia `health.sh` be priežiūros
+(`EFDI_NONINTERACTIVE=1`) kaip galutinę patikrą — jei ji nepavyksta, visas
+atnaujinimas laikomas nepavykusiu, o ne tyliai paliekamas pusiau atnaujintas
+pod'as veikti.
+
+### `reinstall.sh` — pilnas išardymas ir perstatymas
+
+```bash
+./reinstall.sh
+```
+
+Išardo konteinerius ir vietinius atvaizdus, tada perstato iš dabartinės
+išeities. Prieš vėl paleidžiant konteinerius paklausia, ar atstatyti WebUI
+administratoriaus vartotojo vardą/slaptažodį (rekomenduojama, jei
+neatsimenate dabartinio). Naudokite tik tikrai sugedusiam diegimui, kurio
+`update.sh` negali ištaisyti, arba sąmoningam atstatymui — įprastam versijos
+atnaujinimui tai daug ardomiau nei `update.sh`.
 
 ---

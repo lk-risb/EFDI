@@ -121,8 +121,8 @@ python3 -m py_compile compose/bridges/your_new_bridge.py
 
 ## 10.3 Registruokite jį paleidiklyje
 
-Keturi maži pakeitimai `start.sh`, sekant esamu `geojson` įrašu kaip šablonu
-(ieškokite `geojson` `start.sh`, kad matytumėte visus keturis iš karto):
+Keturi maži pakeitimai `start.sh`, sekant esamu `cap` įrašu kaip šablonu
+(ieškokite `cap` `start.sh`, kad matytumėte visus keturis iš karto):
 
 1. **`SERVICES` masyvas** — pridėkite savo paslaugos trumpą vardą į sąrašą.
 2. **`SVC_CAT`** — po kokia kategorija ji rodoma meniu/WebUI
@@ -130,7 +130,7 @@ Keturi maži pakeitimai `start.sh`, sekant esamu `geojson` įrašu kaip šablonu
 3. **`SVC_DESC`** — vienos eilutės žmogui suprantamas aprašymas.
 4. **`svc_ready()`** — kada saugu/prasminga ją paleisti? Jei nereikia jokios
    konfigūracijos, kad būtų naudinga, pridėkite savo vardą į `return 0`
-   atvejį šalia `cap`/`geojson`/ir t.t. Jei reikia env kintamojo iš pradžių
+   atvejį šalia `cap`/`mqtt`/ir t.t. Jei reikia env kintamojo iš pradžių
    (URL, serveris), remkitės tuo — pvz., `admin-control` sąlyga tikrina, ar
    nustatytas slaptas raktas; jūsų gali tikrinti
    `[[ -n "${YOUR_SENSOR_URL:-}" ]]`.

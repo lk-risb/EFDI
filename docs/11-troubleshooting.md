@@ -242,6 +242,167 @@ pidfile *per child* instead (e.g. `asterix-cat10.pid`, `asterix-cat48.pid`,
 aggregates its children's pidfiles, reporting running/degraded/stopped based
 on how many are alive — not a naive single-pidfile check.
 
+### A bind-mounted state file is owned by the wrong user, not just badly mounted
+
+**Symptom:** Saving a config from the WebUI fails with `[Errno 13] Permission
+denied: '/data-topic-prefix'` (or `/namespace-prefix`, or the TAK/SitaWare
+credential upload directories) — a different failure from the `EBUSY`
+atomic-write gotcha above; this one is a plain permission error, not a
+rename-over-mountpoint error.
+
+**Cause:** `zenoh-admin` always runs as a fixed non-root uid/gid (`10001`).
+Several state paths are individually bind-mounted files or directories
+(`namespace-prefix`, `data-topic-prefix`, `integrations/tak`,
+`$BUNDLE_DIR/efdi`) created on the **host** side by whichever user ran
+`install.sh`/`reinstall.sh` — typically root. A file created by root at mode
+`644` is owner-writable only by root; uid 10001 has neither the owner bit nor
+(unless the group happens to already be 10001) the group-write bit, so every
+write from inside the container fails.
+
+**Fix:** `install.sh` and `reinstall.sh` now `chgrp 10001` + `chmod 664`
+(files) / `775` (directories) on every one of these paths after creating
+them. If you're troubleshooting a box that was set up before this existed,
+either re-run `reinstall.sh`, or fix it directly:
+
+```bash
+chgrp 10001 "$POD_STATE_DIR/namespace-prefix" "$POD_STATE_DIR/data-topic-prefix"
+chmod 664   "$POD_STATE_DIR/namespace-prefix" "$POD_STATE_DIR/data-topic-prefix"
+chgrp 10001 "$POD_STATE_DIR/integrations/tak" "$BUNDLE_DIR/efdi"
+chmod 775   "$POD_STATE_DIR/integrations/tak" "$BUNDLE_DIR/efdi"
+```
+
+`health.sh`'s interactive menu (option 3, "check for missing/misconfigured
+state files") now detects and auto-fixes wrong permissions on these paths
+too, not just missing files.
+
+### An unhandled exception in an API handler surfaces as a bare, content-free HTTP 500
+
+**Symptom:** The WebUI shows a plain `Unexpected error applying config` or
+`Request failed (HTTP 422)` toast with no further detail — no hint at all
+about what actually broke, even though the server *did* hit a real,
+specific error.
+
+**Cause:** A handler that catches `Exception` only to log it and then
+bare-`raise`s loses the original message once FastAPI's default error
+handler takes over — the client only ever sees a generic status code, and if
+the underlying failure itself returned an empty string as its "detail" (for
+example, a subprocess that crashed before writing anything to
+stdout/stderr), even a well-behaved re-raise has nothing useful to show.
+
+**Fix:** Convert an unexpected exception into an `HTTPException` carrying the
+real message (`raise HTTPException(500, detail=f"...: {exc}") from exc`), and
+make any code path that reports a subprocess/preflight failure fall back to a
+descriptive placeholder (`"exited N with no output"`) instead of an empty
+string, so the *next* occurrence is diagnosable from the response body alone
+— no server log access required.
+
+### A form field silently accepts a value shaped completely differently than it needs
+
+**Symptom:** A "bind address" or similarly single-purpose config field is
+given a full URL (`http://0.0.0.0:8088/nvg`) or the wrong host's IP instead of
+a bare local IP, and the service that reads it crashes with something
+unhelpful like `socket.gaierror: [Errno -2] Name or service not known` at
+`socket.bind()`.
+
+**Cause:** A bind address is passed straight to `socket.bind((host, port))`
+— it is never a URL (no scheme, no port, no path) and it is *this host's own*
+listening address, not the address of whatever remote system will connect to
+it. Nothing in a plain text input stops a user from typing a full URL or the
+wrong machine's address; the failure only appears downstream, inside a
+library call, several layers away from the field that caused it.
+
+**Fix:** For `SITAWARE_HQ_NVG_BIND` specifically, the value must be a bare IP
+— `0.0.0.0` to listen on every interface (so a *different* machine, like the
+SitaWare HQ box, can reach it), or `127.0.0.1` for loopback-only. Port and
+path are separate fields; don't fold them in. More generally: when a field
+crashes far from where it's set, check its raw stored value first
+(`grep KEY .env`) before chasing the crash site.
+
+### A newly-working feed still gets rejected — check auth before assuming routing is broken
+
+**Symptom:** A remote system can now reach a feed (no more connection
+refused/timeout), but every request is still rejected, and the feed's own
+log says something like `rejected unauthorized request from <ip>`.
+
+**Cause:** Getting past connectivity (right port, right bind address) is a
+separate problem from authentication. A feed with Basic Auth configured
+(`SITAWARE_HQ_NVG_USER`/`_PASS`) rejects any request that doesn't present
+matching credentials — including from a client that's otherwise perfectly
+reachable.
+
+**Fix:** Either configure the *remote* side (the SitaWare HQ import
+subscription, in this case) with the same username/password as the feed, or
+— for a quick isolated-lab test only — set `SITAWARE_HQ_NVG_ALLOW_ANONYMOUS=1`
+to skip auth entirely while you confirm data flows.
+
+### Tracks flash / disappear and reappear on a fixed cycle
+
+**Symptom:** Objects on a pull-based feed (e.g. SitaWare's NVG import) blink
+in and out of existence at a period that lines up with the polling interval,
+even though the underlying source is genuinely still reporting.
+
+**Cause:** A feed cache drops any entity that hasn't been refreshed within
+its staleness window (`SITAWARE_HQ_NVG_STALE_S`, or the equivalent on any
+other pull-based layer). If the *upstream* bridge only refreshes a given
+entity every N seconds (for example, `dronuradaras_bridge.py`'s
+`DEVICE_POLL_S = 60` for radar-node positions) and the staleness window is
+shorter than that, every entity goes stale and vanishes for part of every
+upstream cycle, then reappears once the next refresh lands — a rolling,
+staggered flicker rather than a clean, simultaneous one.
+
+**Fix:** Set the feed's staleness threshold comfortably above the slowest
+upstream refresh interval that feeds it (at least 2×) — e.g. `120` for a
+60-second upstream cycle. Separately, a downstream C2 system's own "layer
+expiration"/"track persistence" setting (SitaWare's Layer Details page has
+both) can compound or mask this; if raising the staleness threshold alone
+doesn't fix it, check that setting too.
+
+### `pip install` fails with "externally-managed-environment"
+
+**Symptom:** Running `pip install -r requirements.txt` directly against the
+system `python3` (rather than through `install.sh`/`start.sh`) fails with
+`error: externally-managed-environment` / `This environment is externally
+managed` (PEP 668, common on modern Debian/Ubuntu).
+
+**Cause:** The system Python is intentionally locked down against
+unmanaged `pip install`s. `install.sh` and `start.sh` don't fight this — they
+create and use their own virtualenv at `compose/venv`, which every
+Python-based host service in this pod actually runs from.
+
+**Fix:** Use that venv directly instead of the system interpreter:
+
+```bash
+compose/venv/bin/pip install -r compose/requirements.txt
+compose/venv/bin/python3 layers/some_layer.py
+```
+
+If `compose/venv` doesn't exist yet, create it the same way `install.sh`
+does: `python3 -m venv compose/venv`, then install into it. Never pass
+`--break-system-packages` to the system `pip` — every other host-native
+service already expects the venv, not the system interpreter.
+
+### Two different "Save" buttons on the same page do different things
+
+**Symptom:** Saving a value in one section of the WebUI's config page (e.g.
+an Integration Settings field like a SitaWare or TAK setting) appears to do
+nothing, or triggers an unrelated error (a Zenoh router validation failure)
+that has nothing to do with what was actually being changed.
+
+**Cause:** The Zenoh Config page hosts two independent save actions: a
+top-level **"Save & Restart"** that validates and applies the *Zenoh router*
+config (mTLS port, fabric endpoints, namespace), and each Integration
+Settings card's *own* Save button, which only writes that card's `.env`
+values and never touches the router config. Clicking the wrong one saves
+nothing relevant, and — if the router config happens to be in a
+not-yet-valid state (e.g. certificates not yet uploaded) — surfaces a
+confusing, unrelated 422/500.
+
+**Fix:** Match the button to the section: router-level fields under
+"Zenoh Config" (Transport, Fabric endpoints, Namespace) need the top
+"Save & Restart"; every field inside an Integration Settings card (TAK,
+SitaWare, sensor feeds, etc.) needs that card's own Save button further down
+the page.
+
 ### A code fix isn't live until the running process restarts
 
 **Symptom:** You fix a bug (in a decoder, in an admin API, anywhere), confirm

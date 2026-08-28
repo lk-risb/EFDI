@@ -376,6 +376,25 @@ compose/venv/bin/pip install -r compose/requirements.txt
 
 > The `eclipse-zenoh` version must be **exactly 1.9.0** — minor version mismatches introduce breaking API changes.
 
+Always install into this venv, never the system `python3` directly. Running
+`pip install` against the system interpreter on a modern Debian/Ubuntu fails
+with `error: externally-managed-environment` (PEP 668) — that error is the
+system protecting itself, not a bug to route around with
+`--break-system-packages`. Every host-native service this pod runs (bridges,
+layers, protocol translators) already expects `compose/venv`, so fixing the
+error the "quick" way would leave those services running against a
+different Python environment than the one you just modified.
+
+`install.sh` also `chgrp`s/`chmod`s a handful of individually bind-mounted
+state files and directories (`namespace-prefix`, `data-topic-prefix`,
+`$BUNDLE_DIR/efdi`, `$POD_STATE_DIR/integrations/tak`) so the `zenoh-admin`
+container — which always runs as a fixed non-root uid `10001` — can write to
+them. If a *later* WebUI save (config, TAK/SitaWare credentials) fails with
+`Permission denied` on one of these paths, `health.sh`'s interactive menu
+(option 3) detects and fixes it automatically; see
+[§11 Troubleshooting](#11-troubleshooting) for the manual `chgrp`/`chmod` if
+you need it immediately.
+
 ### 2.4 Start the Zenoh router
 
 ```bash
@@ -479,7 +498,8 @@ TAK_HOST=127.0.0.1
 TAK_PORT=8087
 
 # ── SitaWare HQ friendly-force tracking (inbound REST pull) ─────────────────
-SITAWARE_URL=https://sitaware.example.com
+# SW 6.22+: reach it by hostname with no port (see §5) — not the old host:port form
+SITAWARE_URL=https://<sitaware-host>
 SITAWARE_USER=
 SITAWARE_PASS=
 SITAWARE_API_PATH=              # required, deployment-specific REST resource
@@ -540,8 +560,6 @@ The interactive launcher displays all services with their readiness state. Toggl
   Zenoh-native translators
   ──────────────────────────────────────────────────────────
   [17] [✓] cap            CAP 1.2 XML → alerts                   ready
-  [18] [✓] geojson        GeoJSON/OGC Features → areas           ready
-  [27] [✓] spectrum       RF spectrum observations               ready
   [28] [✓] sensor-health  Sensor health/heartbeat records       ready
   [29] [✓] mission-route  UAV routes and corridors              ready
 
@@ -604,12 +622,18 @@ Leave `SITAWARE_URL`/`SITAWARE_USER`/`SITAWARE_PASS` unset in `.env` and the lau
 
 ```bash
 SITAWARE_URL=https://<sitaware-host>
-SITAWARE_URL_FALLBACK=https://swhq.efdi.ltu:10006 # optional stable mesh-DNS path
+SITAWARE_URL_FALLBACK=https://sw.efdi.ltu/sw # optional stable mesh-DNS path
 SITAWARE_USER=<username>
 SITAWARE_PASS=<password>
 SITAWARE_API_PATH=/<documented-resource-path>
 SITAWARE_POLL_S=10   # optional — poll interval in seconds (default 10)
 ```
+
+> SitaWare HQ 6.22 and newer are reached by hostname with no explicit port —
+> the application itself is at `https://<host>/sw` (Keycloak auth at
+> `https://<host>/auth/`), fronted by a reverse proxy on the standard HTTPS
+> port. An IP address works the same way if you don't have a hostname set up
+> yet. Don't carry over an older deployment's `:<port>` convention.
 
 The bridge reads MIL-STD-2525B SIDC codes from SitaWare and routes each unit to the correct Zenoh topic by affiliation and battle dimension:
 
@@ -748,11 +772,9 @@ Do not clear a shared operational layer to work around this limitation.
 | `stanag` | `protocols/vendors/stanag/stanag.py --proto {4586,4607,4609,5516}` | `…/raw/stanag_4609/klv`, `…/air/stanag_4609/camera/unknown/uav`, STANAG 4586 track topics, and `…/{air,sea,land}/stanag_5516/c2/**` | Launcher starts each configured `--proto` directly |
 | `sapient-raw`, `stanag4586-raw`, `stanag5516-raw` | `bridges/*_bridge.py` | `…/raw/<protocol>/<source>` | Optional socket ingress; matching protocol runs with `*_ZENOH_RAW=1` |
 | `cap` | `protocols/random/cap.py` | `…/land/cap/c2/neutral/sensor/{type}/{id}/sapient` | Complete CAP 1.2 XML on `…/raw/cap/**` |
-| `geojson` | `protocols/random/geojson_features.py` | `…/land/ogc/c2/neutral/zone/{type}/{id}/sapient` | GeoJSON/OGC Features on `…/raw/geojson/**` |
 | `mqtt` | `protocols/random/mqtt_json.py` | `…/land/mqtt/iot/unknown/sensor/{type}/{id}/sapient` | Vendor JSON on `…/raw/mqtt/**` (bridge forwards any payload verbatim) |
-| `sensorthings` | `protocols/random/sensorthings.py` | `…/land/sensorthings/iot/neutral/sensor/{type}/{id}/sapient` | Observations on `…/raw/sensorthings/**` |
 | `sparkplug` | `protocols/vendors/sparkplug/sparkplug.py` | `…/land/sparkplug/iot/unknown/sensor/{type}/{id}/sapient` | Sparkplug B protobuf on `…/raw/mqtt/spBv1.0/**` |
-| `spectrum` / `sensor-health` / `mission-route` | Matching `protocols/random/*.py` | `…/land/spectrum/**`, `…/land/health/**`, `…/air/mission/**` | JSON on their `…/raw/**` topics |
+| `sensor-health` / `mission-route` | Matching `protocols/random/*.py` | `…/land/health/**`, `…/air/mission/**` | JSON on their `…/raw/**` topics |
 | `tak_layer` | `layers/tak_layer.py` | Subscriber — all topics | Event-driven |
 | `tak-bridge` | `bridges/tak_bridge.py` | Subscriber — all topics | TAK-visible CoT ingress |
 | `sitaware-hq-nvg` | `layers/sitaware_layer.py` | Subscriber — all track topics | Pull-based NVG snapshot |
@@ -774,7 +796,7 @@ binary layout is a historical deployment approximation, not a generic standard
 profile: it stays disabled unless `STANAG4586_PROFILE=legacy_ed3_approx` is
 explicitly set after validating the layout against the deployed VSM ICD.
 
-CAP, GeoJSON, spectrum, health, and route translators are idle-safe
+CAP, health, and route translators are idle-safe
 Zenoh subscribers. A partner publishes complete JSON/XML/NMEA payloads below
 the corresponding `raw/**` topic; no internet URL or receiver is embedded in
 the translator.
@@ -1720,7 +1742,7 @@ a domain-specific compound value). If so:
    (an actual vendored/licensed third-party schema, like the SAPIENT or
    Sparkplug B wire contracts, is the one exception and stays under
    `compose/protocols/vendors/<name>/` next to its own LICENSE) —
-   modeled on an existing one — `geojson_features.proto` is a short example.
+   modeled on an existing one — `cap.proto` is a short example.
 2. Regenerate the Python bindings: `scripts/generate-protobuf.sh` (needs
    `grpc_tools.protoc` + `protobuf` — already in `compose/requirements.txt`).
    This writes into `compose/generated/`, which is gitignored — every
@@ -1730,8 +1752,8 @@ a domain-specific compound value). If so:
 ### 9.2 Write the script
 
 Every bridge/protocol script follows the same shape. This is the complete,
-working reference — `compose/protocols/random/geojson_features.py` (127
-lines) — trimmed to the parts that matter:
+working reference — `compose/protocols/random/cap.py` — trimmed to the
+parts that matter:
 
 ```python
 from namespace_prefix import topic_root
@@ -1797,8 +1819,8 @@ python3 -m py_compile compose/bridges/your_new_bridge.py
 
 ### 9.3 Register it with the launcher
 
-Four small edits to `start.sh`, following the existing `geojson` entry as the
-template (search for `geojson` in `start.sh` to see all four at once):
+Four small edits to `start.sh`, following the existing `cap` entry as the
+template (search for `cap` in `start.sh` to see all four at once):
 
 1. **`SERVICES` array** — add your service's short name to the list.
 2. **`SVC_CAT`** — which category it shows under in the menu/WebUI
@@ -1806,7 +1828,7 @@ template (search for `geojson` in `start.sh` to see all four at once):
 3. **`SVC_DESC`** — a one-line human description.
 4. **`svc_ready()`** — when is it safe/meaningful to start? If it needs no
    configuration to be useful, add your name to a `return 0` case alongside
-   `cap`/`geojson`/etc. If it needs an env var set first (a URL, a host), gate
+   `cap`/`mqtt`/etc. If it needs an env var set first (a URL, a host), gate
    on that instead — e.g. `admin-control`'s gate checks a secret key is set;
    yours might check `[[ -n "${YOUR_SENSOR_URL:-}" ]]`.
 5. **Launch case** — add `_start your-service-name path/to/your_script.py` in
@@ -1879,6 +1901,66 @@ tail -f $POD_STATE_DIR/logs/track-fusion.log     # Fused track output
 ls $POD_STATE_DIR/.pids/                                          # List running services
 kill -0 $(cat $POD_STATE_DIR/.pids/asterix.pid) && echo ok        # Check specific service
 ```
+
+### `health.sh` — self-heal, self-test, and interactive troubleshooting
+
+```bash
+./health.sh
+```
+
+Run this any time, standalone — it doesn't pull or fetch anything (that's
+`update.sh`'s job), so it's safe to run on a box that's just misbehaving. It
+does three things in order:
+
+1. **Self-heal.** Compares each running Docker image's baked-in git commit
+   label against the currently checked-out commit; a mismatch (Docker's
+   layer cache silently reused a stale layer after a `git pull`) triggers an
+   automatic `--no-cache` rebuild and restart.
+2. **Self-test.** Runs the full check suite (Python tests, ShellCheck,
+   compose config rendering, frontend type-check/build, every executable
+   test under `tests/`, a live self-test, a whitespace/secret scan). Every
+   one of these reports and continues rather than aborting the script on the
+   first failure — a broken deployment is exactly when you need the menu
+   below, not a script that dies silently partway through.
+3. **Interactive troubleshooting menu** (only at a real terminal —
+   `EFDI_NONINTERACTIVE=1` skips it for automated callers):
+
+   ```text
+   [1] Reset the WebUI admin username/password
+   [2] Restart a container
+   [3] Check for missing/misconfigured state files
+   [Q] Done
+   ```
+
+   Option 1 is the fastest way to recover a forgotten WebUI password without
+   a full `reinstall.sh`. Option 3 checks for the exact bind-mounted state
+   file/permission issues covered in [§11 Troubleshooting](#11-troubleshooting)
+   and fixes what it can automatically.
+
+### `update.sh` — pull, rebuild, and re-verify
+
+```bash
+./update.sh
+```
+
+Updates the host OS packages, pulls the latest commit, rebuilds anything
+that changed, cleans up state left behind by files removed from the repo
+since the last update, and finishes by running `health.sh` unattended
+(`EFDI_NONINTERACTIVE=1`) as a final check — a failure there fails the whole
+update rather than silently leaving a half-upgraded pod running.
+
+### `reinstall.sh` — full teardown and rebuild
+
+```bash
+./reinstall.sh
+```
+
+Tears down containers and local images, then rebuilds from the current
+checkout. Prompts to reset the WebUI admin username/password (recommended if
+you don't remember the current one) before starting containers back up.
+Reserve this for a genuinely broken install `update.sh` can't fix, or a
+deliberate reset — it's more disruptive than `update.sh` for a routine
+version bump.
 
 ---
 
@@ -2089,6 +2171,31 @@ mounted directory, not over the mount itself.
 for a bind-mounted single file, and it beats failing the whole apply for an
 unrelated file.
 
+### A bind-mounted state file is owned by the wrong user (not just badly mounted)
+
+**Symptom:** A WebUI save (namespace/data-topic prefix, TAK certificate
+upload, general config apply) fails with `PermissionError`, even though the
+file/directory exists and is mounted correctly.
+
+**Cause:** The `zenoh-admin` container always runs as a fixed non-root uid
+`10001`. State files and directories created on the host during install
+(`namespace-prefix`, `data-topic-prefix`, `$POD_STATE_DIR/integrations/tak`,
+etc.) are typically owned by root at mode 644/755 — which gives that uid
+neither owner nor group write access.
+
+**Fix:**
+
+```bash
+chgrp 10001 "$POD_STATE_DIR"/namespace-prefix "$POD_STATE_DIR"/data-topic-prefix
+chmod 664 "$POD_STATE_DIR"/namespace-prefix "$POD_STATE_DIR"/data-topic-prefix
+chgrp -R 10001 "$POD_STATE_DIR"/integrations/tak
+chmod -R 775 "$POD_STATE_DIR"/integrations/tak
+```
+
+`health.sh`'s interactive menu (option 3) detects and fixes this
+automatically — reach for the manual commands above only when you need an
+immediate fix outside that menu.
+
 ### Identically-named duplicate function definitions silently shadow
 
 **Symptom:** A decoder/handler looks obviously wrong when you read it (wrong
@@ -2217,6 +2324,7 @@ This catches syntax errors, TypeScript errors, and Dockerfile breakage before me
 | 2026-08-02 | Added BDS 1,0/1,7 (Data Link Capability / Common Usage GICB Capability) decoding to the 7 ASTERIX categories that already reuse BDS 3,0/4,0/5,0/6,0 GICB-extraction helpers (CAT-010/011/018/020/021/048/062), sourced from pyModeS |
 | 2026-08-02 | Renamed `layers/cot_layer.py` → `layers/tak_layer.py` and `layers/nvg_layer.py` → `layers/sitaware_layer.py` (vendor-named egress, matching `tak_bridge.py`/`sitaware_bridge.py`'s ingress naming); removed the unused `cot-udp`/`cot-udp-tak` UDP multicast/unicast launcher entries and the `nvg_bridge.py` NVG-XML ingress bridge (SitaWare ingress is REST-only now) |
 | 2026-08-02 | Consolidated every EFDI-authored `.proto` schema under `compose/protocols/proto/` (was split across `compose/protocols/random/`, `compose/protocols/vendors/proto/`, and `compose/protocols/vendors/sparkplug/`); vendored third-party schemas (SAPIENT `sapient_msg/`, Sparkplug B) stay under their own `vendors/<name>/` directory |
+| 2026-08-28 | Removed the GeoJSON/OGC Features and RF spectrum-observation translators added on 2026-07-17 (that data path is now classified) and removed SensorThings entirely; CAP, MQTT, Sparkplug B, sensor-health, and mission-route translators are unaffected |
 
 ---
 
