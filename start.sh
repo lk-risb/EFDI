@@ -83,8 +83,8 @@ SERVICES=(
     sitaware dronuradaras asterix track-fusion
     nffi sapient stanag4586 stanag4609 stanag5516
     sapient-raw stanag4586-raw stanag4609-raw stanag5516-raw
-    mqtt-raw sensorthings-raw
-    cap geojson mqtt sensorthings sparkplug spectrum sensor-health mission-route
+    mqtt-raw
+    cap mqtt sparkplug sensor-health mission-route
     tak_layer tak-bridge sitaware_layer
 )
 
@@ -156,16 +156,16 @@ declare -A SVC_CAT=(
     [presence]="Infrastructure"
     [meteolt]="Open-data bridges"
     [asterix]="Sensor bridges"
-    [mqtt]="Protocols" [sensorthings]="Protocols" [sparkplug]="Protocols"
+    [mqtt]="Protocols" [sparkplug]="Protocols"
     [nffi]="Protocols"
     [sitaware]="Sensor bridges" [dronuradaras]="Sensor bridges"
     [sapient]="Protocols" [stanag4586]="Protocols" [stanag4609]="Protocols" [stanag5516]="Protocols"
     [tak-bridge]="C2 inputs"
-    [mqtt-raw]="Sensor bridges" [sensorthings-raw]="Sensor bridges"
+    [mqtt-raw]="Sensor bridges"
     [sapient-raw]="Sensor bridges"
     [stanag4586-raw]="Sensor bridges" [stanag4609-raw]="Sensor bridges" [stanag5516-raw]="Sensor bridges"
-    [cap]="Protocols" [geojson]="Protocols"
-    [spectrum]="Protocols" [sensor-health]="Protocols" [mission-route]="Protocols"
+    [cap]="Protocols"
+    [sensor-health]="Protocols" [mission-route]="Protocols"
     [tak_layer]="Output layers"   [sitaware_layer]="Output layers"
     [track-fusion]="Sensor bridges"
 )
@@ -179,7 +179,6 @@ declare -A SVC_DESC=(
     [meteolt]="meteo.lt weather stations"
     [asterix]="ASTERIX family bundle: UDP ingress + CAT-010/020/021/034/048/062 translators"
     [mqtt]="MQTT sensor JSON on Zenoh → sensor records"
-    [sensorthings]="OGC SensorThings observations → sensor records"
     [sparkplug]="Eclipse Sparkplug B (MQTT protobuf) → sensor records"
     [sitaware]="SitaWare HQ friendly force tracking (inbound REST)"
     [nffi]="Raw NFFI XML on Zenoh → normalized friendly-force tracks"
@@ -189,14 +188,11 @@ declare -A SVC_DESC=(
     [stanag4609]="STANAG 4609 KLV decoder (raw → tracks)"
     [stanag5516]="STANAG 5516 / Link 16 JREAP-C decoder (raw → tracks)"
     [mqtt-raw]="MQTT broker → Zenoh raw"
-    [sensorthings-raw]="OGC SensorThings REST poll → Zenoh raw"
     [sapient-raw]="SAPIENT/FLEX 335 TCP → Zenoh raw"
     [stanag4586-raw]="STANAG 4586 TCP → Zenoh raw"
     [stanag4609-raw]="STANAG 4609 SRT/KLV → Zenoh raw"
     [stanag5516-raw]="STANAG 5516 JREAP-C UDP → Zenoh raw"
     [cap]="CAP 1.2 XML on Zenoh → alerts"
-    [geojson]="GeoJSON/OGC Features on Zenoh → areas"
-    [spectrum]="RF spectrum observations on Zenoh"
     [sensor-health]="Sensor health on Zenoh"
     [mission-route]="UAV routes and corridors on Zenoh"
     [tak_layer]="CoT → TAK Server (mTLS)"
@@ -210,7 +206,7 @@ svc_ready() {
     case "$1" in
         zenoh|meteolt|\
         dronuradaras|nffi|tak_layer|track-fusion|\
-        cap|geojson|spectrum|sensor-health|mission-route)
+        cap|sensor-health|mission-route)
             return 0 ;;
         admin-control) [[ -n "${ZENOH_ADMIN_SECRET_KEY:-}" || -n "${EFDI_CONTROL_TOKEN:-}" ]] ;;
         cert-renewer)
@@ -222,10 +218,8 @@ svc_ready() {
         asterix) return 0 ;;
         presence) [[ -n "${PARTNER_NAMESPACE:-}" ]] ;;
         mqtt)         return 0 ;;
-        sensorthings) return 0 ;;
         sparkplug)    return 0 ;;
         mqtt-raw)     [[ "${MQTT_HOST:-}" ]] ;;
-        sensorthings-raw) [[ "${SENSORTHINGS_URL:-}" ]] ;;
         sapient-raw)  [[ "${SAPIENT_RAW_PORT:-}" ]] ;;
         stanag4586-raw) [[ "${STANAG4586_RAW_PORT:-}" ]] ;;
         stanag4609-raw) [[ "${STANAG4609_SRT_URL:-}" ]] ;;
@@ -249,7 +243,6 @@ svc_hint() {
     case "$1" in
         asterix) echo "ASTERIX family bundle" ;;
         mqtt-raw) echo "MQTT_HOST not set" ;;
-        sensorthings-raw) echo "SENSORTHINGS_URL not set" ;;
         sapient-raw)
             if [[ "${SAPIENT_RAW_PORT:-}" ]]; then
                 echo "TCP port ${SAPIENT_RAW_PORT}"
@@ -656,18 +649,6 @@ launch() {
             _start mqtt-raw bridges/mqtt_bridge.py
             ;;
 
-        sensorthings-raw)
-            if [[ -z "${SENSORTHINGS_URL:-}" ]]; then
-                _prompt_address "OGC SensorThings service root (https://host/v1.1)" SENSORTHINGS_URL
-                if [[ -z "${SENSORTHINGS_URL:-}" ]]; then
-                    printf "  ${YELLOW}[skip]${R}  sensorthings-raw no service root entered\n"
-                    return
-                fi
-                export SENSORTHINGS_URL
-            fi
-            _start sensorthings-raw bridges/sensorthings_bridge.py
-            ;;
-
         sapient-raw)
             _start sapient-raw bridges/flex335_bridge.py --tcp --port "${SAPIENT_RAW_PORT:-7001}"
             ;;
@@ -692,24 +673,12 @@ launch() {
             _start cap protocols/random/cap.py
             ;;
 
-        geojson)
-            _start geojson protocols/random/geojson_features.py
-            ;;
-
         mqtt)
             _start mqtt protocols/random/mqtt_json.py
             ;;
 
-        sensorthings)
-            _start sensorthings protocols/random/sensorthings.py
-            ;;
-
         sparkplug)
             _start sparkplug protocols/vendors/sparkplug/sparkplug.py
-            ;;
-
-        spectrum)
-            _start spectrum protocols/random/spectrum_observation.py
             ;;
 
         sensor-health)

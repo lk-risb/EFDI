@@ -337,6 +337,25 @@ compose/venv/bin/pip install -r compose/requirements.txt
 
 > `eclipse-zenoh` versija turi būti **tiksliai 1.9.0** — net nedideli versijų skirtumai gali pakeisti API.
 
+Diekite paketus tik į šitą virtualią aplinką, niekada tiesiai į sistemos
+`python3`. Modernesnėse Debian/Ubuntu versijose `pip install` prieš sistemos
+interpretatorių baigsis klaida `error: externally-managed-environment` (PEP
+668) — tai pati sistema apsisaugo, ne klaida, kurią reikėtų apeiti su
+`--break-system-packages`. Kiekviena šio pod'o natyviai vykdoma paslauga
+(tiltai, sluoksniai, protokolų vertėjai) jau numato `compose/venv`, tad
+apėjus klaidą „greituoju" būdu, tos paslaugos liktų veikti kitoje Python
+aplinkoje nei ta, kurią ką tik pakeitėte.
+
+`install.sh` taip pat sutvarko keleto pavienių bind-mount'intų būsenos failų
+ir katalogų (`namespace-prefix`, `data-topic-prefix`, `$BUNDLE_DIR/efdi`,
+`$POD_STATE_DIR/integrations/tak`) grupę ir teises (`chgrp`/`chmod`), kad
+`zenoh-admin` konteineris — jis visada veikia fiksuotu ne-root uid `10001` —
+galėtų juos rašyti. Jei *vėliau* WebUI išsaugojimas (konfigūracija, TAK/
+SitaWare kredencialai) nepavyktų su `Permission denied` ant vieno iš šių
+kelių, `health.sh` interaktyvus meniu (3 pasirinkimas) tai aptinka ir
+ištaiso automatiškai; žr. [§11 Dažniausios problemos](#11-dažniausios-problemos)
+dėl rankinio `chgrp`/`chmod`, jei reikia ištaisyti čia pat.
+
 ### 2.4 Zenoh router paleidimas
 
 ```bash
@@ -428,7 +447,8 @@ TAK_HOST=127.0.0.1
 TAK_PORT=8087
 
 # ── SitaWare HQ draugiškų pajėgų sekimas (gaunama REST) ─────────────────────
-SITAWARE_URL=https://sitaware.example.com
+# SW 6.22+: pasiekiama pagal serverio vardą be prievado (žr. §5) — ne senoji host:portas forma
+SITAWARE_URL=https://<sitaware-serveris>
 SITAWARE_USER=
 SITAWARE_PASS=
 SITAWARE_API_PATH=              # privalomas konkretus diegimo REST resursas
@@ -495,8 +515,6 @@ Interaktyvus paleidiklis rodo visas paslaugas su jų parengties būsena. Įjunki
   Zenoh-native translators
   ──────────────────────────────────────────────────────────
   [24] [✓] cap            CAP 1.2 XML → alerts                   ready
-  [25] [✓] geojson        GeoJSON/OGC Features → areas           ready
-  [33] [✓] spectrum       RF spectrum observations               ready
   [34] [✓] sensor-health  Sensor health/heartbeat records         ready
   [35] [✓] mission-route  UAV routes and corridors                ready
 
@@ -549,12 +567,19 @@ Palikite `SITAWARE_URL`/`SITAWARE_USER`/`SITAWARE_PASS` tuščius faile `.env` i
 
 ```bash
 SITAWARE_URL=https://<sitaware-serveris>
-SITAWARE_URL_FALLBACK=https://swhq.efdi.ltu:10006 # neprivalomas stabilus mesh-DNS kelias
+SITAWARE_URL_FALLBACK=https://sw.efdi.ltu/sw # neprivalomas stabilus mesh-DNS kelias
 SITAWARE_USER=<vartotojo vardas>
 SITAWARE_PASS=<slaptažodis>
 SITAWARE_API_PATH=/<dokumentuotas-resurso-kelias>
 SITAWARE_POLL_S=10   # neprivaloma — apklausos intervalas sekundėmis (numatytasis 10)
 ```
+
+> SitaWare HQ 6.22 ir naujesnės versijos pasiekiamos pagal serverio vardą be
+> aiškaus prievado — pati programa yra `https://<host>/sw` (Keycloak
+> autentifikacija `https://<host>/auth/`), už jos stovi reverse proxy
+> standartiniame HTTPS prievade. IP adresas veikia taip pat, jei dar
+> neturite sukonfigūruoto serverio vardo. Neperkelkite senesnio diegimo
+> `:<prievadas>` konvencijos.
 
 Bridge'as nuskaito MIL-STD-2525B SIDC kodus iš SitaWare ir nukreipia kiekvieną vienetą į teisingą Zenoh temą pagal priklausomybę ir kovos dimensiją:
 
@@ -580,21 +605,6 @@ NFFI draugiškų pajėgų sąveiką aprašo ADatP-36 / STANAG 5527. STANAG 4677 
 
 ```bash
 NFFI_INPUT_TOPIC=               # neprivaloma; numatyta: …/raw/nffi/*
-```
-
-### SitaWare HQ (siunčiama kryptis, NVG)
-
-`sitaware-hq-nvg` prenumeruoja visas EFDI takelių temas ir pateikia jas per HQ NVG importo srautą, todėl SitaWare Headquarters automatiškai mato EFDI takelius — atskiros papildomos integracijos nereikia. Tai priešinga kryptis nei `sitaware`/`nffi` aukščiau (EFDI → SitaWare, ne SitaWare → EFDI).
-
-Palikite `SITAWARE_HQ_NVG_URL`/`SITAWARE_HQ_NVG_USER`/`SITAWARE_HQ_NVG_PASS` tuščius ir paleidiklis paklaus adreso bei prisijungimo pasirinkus `sitaware-hq-nvg`.
-
-**`.env` laukai:**
-
-```bash
-SITAWARE_HQ_NVG_URL=https://<sitaware-hq-serveris>:<portas>   # HTTPS privalomas; portas priklauso nuo diegimo
-SITAWARE_HQ_NVG_USER=<vartotojo vardas>
-SITAWARE_HQ_NVG_PASS=<slaptažodis>
-SITAWARE_HQ_NVG_SOURCE=efdi-live    # NVG šaltinio pavadinimas, sukuriamas automatiškai pirmo siuntimo metu
 ```
 
 ### SitaWare Headquarters (siunčiamas NVG srautas, kurį ima HQ)
@@ -1678,7 +1688,7 @@ Jei taip:
    ją valdo (tikra vendoruota/licencijuota trečiosios šalies schema, kaip
    SAPIENT ar Sparkplug B laidiniai kontraktai, yra vienintelė išimtis ir
    lieka po `compose/protocols/vendors/<name>/` šalia savo LICENSE) —
-   pagal esamą pavyzdį — `geojson_features.proto` yra trumpas pavyzdys.
+   pagal esamą pavyzdį — `cap.proto` yra trumpas pavyzdys.
 2. Iš naujo sugeneruokite Python bindingus: `scripts/generate-protobuf.sh`
    (reikia `grpc_tools.protoc` + `protobuf` — jau `compose/requirements.txt`).
    Tai rašo į `compose/generated/`, kuris yra gitignored — kiekvienas
@@ -1688,8 +1698,8 @@ Jei taip:
 ### 9.2 Rašykite skriptą
 
 Kiekvienas tilto/protokolo skriptas seka tą pačią formą. Tai pilna, veikianti
-nuoroda — `compose/protocols/random/geojson_features.py` (127 eilutės) —
-sutrumpinta iki dalių, kurios svarbu:
+nuoroda — `compose/protocols/random/cap.py` — sutrumpinta iki dalių, kurios
+svarbu:
 
 ```python
 from namespace_prefix import topic_root
@@ -1757,8 +1767,8 @@ python3 -m py_compile compose/bridges/your_new_bridge.py
 
 ### 9.3 Registruokite jį paleidiklyje
 
-Keturi maži pakeitimai `start.sh`, sekant esamu `geojson` įrašu kaip šablonu
-(ieškokite `geojson` `start.sh`, kad matytumėte visus keturis iš karto):
+Keturi maži pakeitimai `start.sh`, sekant esamu `cap` įrašu kaip šablonu
+(ieškokite `cap` `start.sh`, kad matytumėte visus keturis iš karto):
 
 1. **`SERVICES` masyvas** — pridėkite savo paslaugos trumpą vardą į sąrašą.
 2. **`SVC_CAT`** — po kokia kategorija ji rodoma meniu/WebUI
@@ -1766,7 +1776,7 @@ Keturi maži pakeitimai `start.sh`, sekant esamu `geojson` įrašu kaip šablonu
 3. **`SVC_DESC`** — vienos eilutės žmogui suprantamas aprašymas.
 4. **`svc_ready()`** — kada saugu/prasminga ją paleisti? Jei nereikia jokios
    konfigūracijos, kad būtų naudinga, pridėkite savo vardą į `return 0`
-   atvejį šalia `cap`/`geojson`/ir t.t. Jei reikia env kintamojo iš pradžių
+   atvejį šalia `cap`/`mqtt`/ir t.t. Jei reikia env kintamojo iš pradžių
    (URL, serveris), remkitės tuo — pvz., `admin-control` sąlyga tikrina, ar
    nustatytas slaptas raktas; jūsų gali tikrinti
    `[[ -n "${YOUR_SENSOR_URL:-}" ]]`.
@@ -1840,6 +1850,73 @@ tail -f $POD_STATE_DIR/logs/track-fusion.log     # Sulieta takelio išvestis
 ls $POD_STATE_DIR/.pids/                                          # Veikiančių paslaugų sąrašas
 kill -0 $(cat $POD_STATE_DIR/.pids/asterix.pid) && echo ok        # Konkretaus proceso tikrinimas
 ```
+
+### `health.sh` — savaiminis pataisymas, savitestavimas ir interaktyvus problemų sprendimas
+
+```bash
+./health.sh
+```
+
+Šį scenarijų galima paleisti bet kada, savarankiškai — jis nieko netraukia
+iš nuotolinio saugyklos ir nieko neatnaujina (tuo užsiima `update.sh`), tad
+saugu paleisti ir tada, kai podas tiesiog kimba. Jis atlieka tris dalykus
+iš eilės:
+
+1. **Savaiminis pataisymas.** Palygina kiekvieno veikiančio Docker atvaizdo
+   viduje įrašytą git commit žymą su realiai atsisiųsta versija; jei jos
+   nesutampa (Docker sluoksnių talpykla tyliai panaudojo seną sluoksnį po
+   `git pull`), automatiškai perstato atvaizdą su `--no-cache` ir paleidžia
+   iš naujo.
+2. **Savitestavimas.** Paleidžia pilną patikrų rinkinį (Python testus,
+   ShellCheck, compose konfigūracijos generavimą, frontend tipų tikrinimą
+   ir build'ą, kiekvieną vykdomąjį testą kataloge `tests/`, gyvą
+   savitestą, tarpų/paslapčių skenavimą). Kiekviena iš šių patikrų
+   praneša apie rezultatą ir tęsia toliau, o ne nutraukia scenarijų ties
+   pirma nesėkme — sugedęs diegimas yra būtent tas atvejis, kai reikia
+   žemiau esančio meniu, o ne scenarijaus, kuris tyliai numiršta pusiaukelėje.
+3. **Interaktyvus problemų sprendimo meniu** (rodomas tik realiame
+   terminale — `EFDI_NONINTERACTIVE=1` jį praleidžia automatizuotiems
+   iškvietimams):
+
+   ```text
+   [1] Reset the WebUI admin username/password
+   [2] Restart a container
+   [3] Check for missing/misconfigured state files
+   [Q] Done
+   ```
+
+   1 pasirinkimas yra greičiausias būdas atkurti pamirštą WebUI slaptažodį
+   be pilno `reinstall.sh`. 3 pasirinkimas tikrina lygiai tuos pačius
+   bind-mounted būsenos failų/teisių trikdžius, aprašytus
+   [§11 Dažniausios problemos](#11-dažniausios-problemos), ir ką gali,
+   ištaiso automatiškai.
+
+### `update.sh` — atsisiuntimas, perstatymas ir pakartotinis patikrinimas
+
+```bash
+./update.sh
+```
+
+Atnaujina hosto OS paketus, atsisiunčia naujausią commit'ą, perstato viską,
+kas pasikeitė, sutvarko būseną, likusią po iš repozitorijos pašalintų
+failų nuo paskutinio atnaujinimo, ir pabaigoje paleidžia `health.sh`
+neprižiūrimu režimu (`EFDI_NONINTERACTIVE=1`) kaip galutinę patikrą — jei
+ji nepavyksta, visas atnaujinimas laikomas nepavykusiu, o ne tyliai
+paliekamas pusiau atnaujintas podas veikti toliau.
+
+### `reinstall.sh` — pilnas išardymas ir perstatymas
+
+```bash
+./reinstall.sh
+```
+
+Išardo konteinerius ir vietinius atvaizdus, tada perstato juos iš dabartinio
+checkout'o. Prieš vėl paleidžiant konteinerius, paklausia, ar norite iš naujo
+nustatyti WebUI administratoriaus vardą/slaptažodį (rekomenduojama, jei
+neprisimenate dabartinio). Naudokite tik tada, kai diegimas iš tikrųjų
+sugedęs taip, kad `update.sh` to nepataiso, arba kai norite sąmoningai
+viską atstatyti iš naujo — tai kur kas labiau ardanti operacija nei
+`update.sh` įprastam versijos atnaujinimui.
 
 ---
 
@@ -2068,6 +2145,32 @@ pervadinimo), kai `os.replace` nepavyksta su `EBUSY`. Tai nėra atomiška, bet
 tai vienintelė galimybė bind-mounted vienam failui, ir tai geriau nei visos
 taikymo operacijos nesėkmė dėl nesusijusio failo.
 
+#### Prijungtas (bind-mount) būsenos failas priklauso ne tam naudotojui (ne vien blogas prijungimas)
+
+**Simptomas:** WebUI išsaugojimas (vardų srities/duomenų temos priešdėlis,
+TAK sertifikato įkėlimas, bendra konfigūracijos taikymo operacija)
+nepavyksta su `PermissionError`, nors failas/katalogas egzistuoja ir yra
+prijungtas teisingai.
+
+**Priežastis:** `zenoh-admin` konteineris visada veikia fiksuotu ne-root uid
+`10001`. Diegimo metu hoste sukurti būsenos failai ir katalogai
+(`namespace-prefix`, `data-topic-prefix`, `$POD_STATE_DIR/integrations/tak`
+ir t.t.) paprastai priklauso root'ui su 644/755 teisėmis — o tai nesuteikia
+šiam uid nei savininko, nei grupės rašymo teisės.
+
+**Sprendimas:**
+
+```bash
+chgrp 10001 "$POD_STATE_DIR"/namespace-prefix "$POD_STATE_DIR"/data-topic-prefix
+chmod 664 "$POD_STATE_DIR"/namespace-prefix "$POD_STATE_DIR"/data-topic-prefix
+chgrp -R 10001 "$POD_STATE_DIR"/integrations/tak
+chmod -R 775 "$POD_STATE_DIR"/integrations/tak
+```
+
+`health.sh` interaktyvus meniu (3 pasirinkimas) tai aptinka ir ištaiso
+automatiškai — aukščiau esančias rankines komandas naudokite tik tada, kai
+reikia ištaisyti čia pat, be to meniu.
+
 #### Identiškai pavadintos dubliuotos funkcijų apibrėžtys tyliai užstoja
 
 **Simptomas:** Dekoderis/tvarkyklė atrodo akivaizdžiai neteisinga, kai
@@ -2197,6 +2300,7 @@ Tai pagauna sintaksės klaidas, TypeScript klaidas ir Dockerfile lūžimus prie�
 | 2026-08-02 | Pridėtas BDS 1,0/1,7 (Data Link Capability / Common Usage GICB Capability) dekodavimas 7 ASTERIX kategorijoms, kurios jau naudoja BDS 3,0/4,0/5,0/6,0 GICB-ištraukimo pagalbininkus (CAT-010/011/018/020/021/048/062), pagal pyModeS |
 | 2026-08-02 | Pervadinti `layers/cot_layer.py` → `layers/tak_layer.py` ir `layers/nvg_layer.py` → `layers/sitaware_layer.py` (tiekėjo pavadintas išvestinis sluoksnis, atitinkantis `tak_bridge.py`/`sitaware_bridge.py` gaunamųjų pavadinimus); pašalinti nenaudojami `cot-udp`/`cot-udp-tak` UDP multicast/unicast paleidiklio įrašai ir `nvg_bridge.py` NVG-XML gaunamasis tiltas (SitaWare įėjimas dabar tik REST) |
 | 2026-08-02 | Sujungtos visos EFDI-autorystės `.proto` schemos po `compose/protocols/proto/` (anksčiau paskirstyta tarp `compose/protocols/random/`, `compose/protocols/vendors/proto/` ir `compose/protocols/vendors/sparkplug/`); vendoruotos trečiųjų šalių schemos (SAPIENT `sapient_msg/`, Sparkplug B) lieka savo `vendors/<name>/` kataloge |
+| 2026-08-28 | Pašalinti 2026-07-17 pridėti GeoJSON/OGC Features ir RF spektro stebėjimo vertėjai (tas duomenų kelias dabar yra slaptas) bei visiškai pašalintas SensorThings; CAP, MQTT, Sparkplug B, jutiklių būklės ir misijų maršrutų vertėjai nepakito |
 
 ---
 

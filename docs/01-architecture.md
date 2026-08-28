@@ -307,7 +307,7 @@ supervisor is always running; a crashed feed comes back on its own.
 |---|---|---|
 | **Open-data bridges** | `meteolt` | Poll explicitly retained feeds → tracks |
 | **Sensor bridges** | `asterix`, `sitaware`, `dronuradaras`, `track-fusion`, `*-raw` | Ingest sensors / raw sockets |
-| **Protocols** | `sapient`, `stanag4586/4609`, `cap`, `geojson`, `mqtt`, `sensorthings`, `sparkplug`, `nffi` | Decode a wire protocol on a raw Zenoh topic → tracks |
+| **Protocols** | `sapient`, `stanag4586/4609`, `cap`, `mqtt`, `sparkplug`, `nffi` | Decode a wire protocol on a raw Zenoh topic → tracks |
 | **Output layers** | `tak_layer`, `sitaware_layer` | Egress tracks → TAK / SitaWare |
 | **C2 inputs** | `tak-bridge`, `sitaware` | Ingress from TAK / SitaWare |
 | **Infrastructure** | `zenoh`, `admin-control`, `supervisor`, `presence`, `cert-renewer` | Router, web UI, keep-alive, presence, cert rotation |

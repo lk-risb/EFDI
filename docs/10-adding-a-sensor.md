@@ -114,8 +114,8 @@ python3 -m py_compile compose/bridges/your_new_bridge.py
 
 ## 10.3 Register it with the launcher
 
-Four small edits to `start.sh`, following the existing `geojson` entry as the
-template (search for `geojson` in `start.sh` to see all four at once):
+Four small edits to `start.sh`, following the existing `cap` entry as the
+template (search for `cap` in `start.sh` to see all four at once):
 
 1. **`SERVICES` array** — add your service's short name to the list.
 2. **`SVC_CAT`** — which category it shows under in the menu/WebUI
@@ -123,7 +123,7 @@ template (search for `geojson` in `start.sh` to see all four at once):
 3. **`SVC_DESC`** — a one-line human description.
 4. **`svc_ready()`** — when is it safe/meaningful to start? If it needs no
    configuration to be useful, add your name to a `return 0` case alongside
-   `cap`/`geojson`/etc. If it needs an env var set first (a URL, a host), gate
+   `cap`/`mqtt`/etc. If it needs an env var set first (a URL, a host), gate
    on that instead — e.g. `admin-control`'s gate checks a secret key is set;
    yours might check `[[ -n "${YOUR_SENSOR_URL:-}" ]]`.
 5. **Launch case** — add `_start your-service-name path/to/your_script.py` in

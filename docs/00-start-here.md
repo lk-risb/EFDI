@@ -46,8 +46,8 @@ flowchart LR
 
 | Document | Type | Covers |
 | --- | --- | --- |
-| [01-architecture.md](01-architecture.md) | Explanation | The whole system ground-up: data flow, topic taxonomy, mesh/certs, runtime model, security, golden paths, gotchas |
-| [02-repo-structure.md](02-repo-structure.md) | Reference | Directories and what owns what |
+| [01-architecture.md](01-architecture.md) *(LT: [01-architektura.md](01-architektura.md))* | Explanation | The whole system ground-up: data flow, topic taxonomy, mesh/certs, runtime model, security, golden paths, gotchas |
+| [02-repo-structure.md](02-repo-structure.md) *(LT: [02-repozitorijos-struktura.md](02-repozitorijos-struktura.md))* | Reference | Directories and what owns what |
 | [03-bootstrap-and-install.md](03-bootstrap-and-install.md) *(LT: [03-diegimas-ir-paruosimas.md](03-diegimas-ir-paruosimas.md))* | How-to | Bare host to running pod — prerequisites, install, certs |
 | [04-configuration.md](04-configuration.md) *(LT: [04-konfiguracija.md](04-konfiguracija.md))* | How-to | `compose/.env` fields, required vs optional |
 | [05-launching-and-operations.md](05-launching-and-operations.md) *(LT: [05-paleidimas-ir-eksploatacija.md](05-paleidimas-ir-eksploatacija.md))* | How-to | Starting the stack, stopping services, log/health checks |
@@ -57,17 +57,16 @@ flowchart LR
 | [09-c2-zenoh-runbook.md](09-c2-zenoh-runbook.md) *(LT: [09-c2-zenoh-instrukcija.md](09-c2-zenoh-instrukcija.md))* | How-to | Verifying and exercising the C2 ↔ Zenoh bidirectional path |
 | [10-adding-a-sensor.md](10-adding-a-sensor.md) *(LT: [10-naujo-jutiklio-pridejimas.md](10-naujo-jutiklio-pridejimas.md))* | How-to | Step-by-step: wire in a new sensor or protocol |
 | [11-troubleshooting.md](11-troubleshooting.md) *(LT: [11-dazniausios-problemos.md](11-dazniausios-problemos.md))* | Troubleshooting | Symptom-first fixes, known gotchas |
-| [12-zenoh-admin-gui.md](12-zenoh-admin-gui.md) | Reference | The web admin panel — setup, pages, roles, managed CA |
-| [13-topic-taxonomy.md](13-topic-taxonomy.md) | Reference | The published Zenoh key contract |
+| [12-zenoh-admin-gui.md](12-zenoh-admin-gui.md) *(LT: [12-zenoh-admin-valdymo-skydas.md](12-zenoh-admin-valdymo-skydas.md))* | Reference | The web admin panel — setup, pages, roles, managed CA |
+| [13-topic-taxonomy.md](13-topic-taxonomy.md) *(LT: [13-temu-taksonomija.md](13-temu-taksonomija.md))* | Reference | The published Zenoh key contract |
 | [14-continuous-integration.md](14-continuous-integration.md) *(LT: [14-tesine-integracija.md](14-tesine-integracija.md))* | Reference | CI checks, changelog |
 | [references/](references/README.md) | Reference | Source-and-trust notes for every external spec (ASTERIX, SAPIENT, STANAG, TAK, SitaWare) |
 | [superpowers/](superpowers/) | Internal | AI-assisted design/planning archive — development history, not operator documentation |
 
 ## Conventions
 
-- Numbered docs 03-11 and 14 are English/Lithuanian pairs, translations of
+- Every numbered doc (00-14) is an English/Lithuanian pair, translations of
   each other cover-to-cover — keep them in step when either changes.
-  01, 02, 12, and 13 are English-only.
 - The authoritative coding rules and ASTERIX bit-level gotchas live in the
   repo-root [`../.ai/.claude/CLAUDE.md`](../.ai/.claude/CLAUDE.md), not here.
 - Root-level [`../CONTRIBUTING.md`](../CONTRIBUTING.md) and

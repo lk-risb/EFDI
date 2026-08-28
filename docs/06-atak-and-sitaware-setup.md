@@ -12,6 +12,29 @@
 
 Set `TAK_HOST` and `TAK_PORT` in `.env`, then select `tak-layer` in the launcher.
 
+#### TAK mTLS client credentials (WebUI upload)
+
+`tak_layer` connects to the TAK Server over mTLS, using client credentials
+generated in the TAK repo with `make add-service NAME=<pod-name>` (writes
+`certs/<pod-name>/{ca,cert,key}.pem`). The WebUI's Integration Settings →
+**TAK and CoT** card accepts these two ways — use one, not both:
+
+- **Option A — one file at a time:** upload `ca.pem`, `cert.pem`, and
+  `key.pem` individually into their three separate fields.
+- **Option B — one zip:** zip the whole `certs/<pod-name>/` directory as-is
+  and upload it in one go; the WebUI extracts and classifies each PEM by
+  content (not just filename), so a differently-named file inside the zip
+  still lands in the right slot as long as it's a valid CA/cert/key.
+
+An explicit single-file upload (Option A) always wins over whatever the same
+slot's zip entry (Option B) contained, so you can correct just one file from
+an otherwise-good zip without re-uploading everything.
+
+If the upload fails with a permission error rather than a validation error,
+the host directory backing this upload (`$POD_STATE_DIR/integrations/tak`)
+is likely owned by the wrong user — see
+[Troubleshooting → bind-mounted state file owned by the wrong user](11-troubleshooting.md#a-bind-mounted-state-file-is-owned-by-the-wrong-user-not-just-badly-mounted).
+
 ### SitaWare HQ REST tracking (optional inbound adapter)
 
 Use `sitaware` only when the target deployment documents a compatible JSON unit resource and authentication method. A `/rest/v2/*` servlet mapping does not imply that `/rest/v2/units` exists; that guessed resource returns 404 on the verified HQ 6.22 installation.
@@ -22,12 +45,18 @@ Leave `SITAWARE_URL`/`SITAWARE_USER`/`SITAWARE_PASS` unset in `.env` and the lau
 
 ```bash
 SITAWARE_URL=https://<sitaware-host>
-SITAWARE_URL_FALLBACK=https://swhq.efdi.ltu:10006 # optional stable mesh-DNS path
+SITAWARE_URL_FALLBACK=https://sw.efdi.ltu/sw # optional stable mesh-DNS path
 SITAWARE_USER=<username>
 SITAWARE_PASS=<password>
 SITAWARE_API_PATH=/<documented-resource-path>
 SITAWARE_POLL_S=10   # optional — poll interval in seconds (default 10)
 ```
+
+> SitaWare HQ 6.22 and newer are reached by hostname with no explicit port —
+> the application itself is at `https://<host>/sw` (Keycloak auth at
+> `https://<host>/auth/`), fronted by a reverse proxy on the standard HTTPS
+> port. An IP address works the same way if you don't have a hostname set up
+> yet. Don't carry over an older deployment's `:<port>` convention.
 
 The bridge reads MIL-STD-2525B SIDC codes from SitaWare and routes each unit to the correct Zenoh topic by affiliation and battle dimension:
 
@@ -69,7 +98,16 @@ Type:                NVG
 Persist tracks:      off
 ```
 
-Configure the feed in `compose/.env`:
+> Two other fields on this same Layer Details page affect how tracks behave
+> once they're flowing: **Read Only**, if checked, may disable click-to-inspect
+> on the layer's own points (test with it off first if points render but don't
+> respond to clicks); and **Layer Expiration Period (Seconds)** works alongside
+> `SITAWARE_HQ_NVG_STALE_S` above — if tracks still flicker after raising the
+> feed's own staleness threshold, try raising this one too (start around the
+> same value, e.g. `120`).
+
+Configure the feed in `compose/.env`, or the WebUI's Integration Settings →
+**SitaWare HQ** card (both write the same values):
 
 ```bash
 SITAWARE_HQ_NVG_ENABLE=1
@@ -83,6 +121,29 @@ SITAWARE_HQ_NVG_TLS_KEY=/path/to/server-key.pem
 SITAWARE_HQ_NVG_STALE_S=120
 SITAWARE_HQ_NVG_MAX_TRACKS=10000
 ```
+
+> **Two traps in the WebUI form specifically:**
+> 1. Several fields (port, bind address, cert/key paths, staleness) show a
+>    grey **example** value until you actually type something — that grey
+>    text is not a saved value. If the service later reports "not set" for a
+>    field that visibly showed a number, retype it for real and Save.
+> 2. **`NVG feed bind address` is a bare IP, nothing else** — `0.0.0.0` or a
+>    pinned IP, never a full URL. Port and path are separate fields; adding
+>    `http://`, a port, or a path to the bind-address field crashes the
+>    service with a `socket.gaierror` at startup. See
+>    [Troubleshooting → a form field silently accepts a value shaped completely differently](11-troubleshooting.md#a-form-field-silently-accepts-a-value-shaped-completely-differently-than-it-needs)
+>    if you hit this.
+>
+> No real TLS certificate yet? Set `SITAWARE_HQ_NVG_ALLOW_INSECURE_HTTP=1`
+> and leave the cert/key fields blank to serve plain HTTP instead — only on
+> an isolated lab network, and switch the HQ subscription's Remote Endpoint
+> to `http://` (not `https://`) to match.
+>
+> `SITAWARE_HQ_NVG_STALE_S` should be set to at least **2× the slowest
+> upstream bridge's refresh interval** feeding this layer (e.g. 120s if the
+> slowest source refreshes every 60s) — too short, and tracks flicker in and
+> out on every HQ poll even though the source is still reporting. See
+> [Troubleshooting → tracks flash / disappear and reappear on a fixed cycle](11-troubleshooting.md#tracks-flash--disappear-and-reappear-on-a-fixed-cycle).
 
 Start `sitaware-hq-nvg` from `./start.sh`, or use `./run.sh all`. Test from the HQ Windows host without printing operational data:
 
@@ -107,7 +168,7 @@ Authentication:            enabled, using the dedicated feed credentials
 Pause Subscription:        no
 ```
 
-The endpoint accepts GET/HEAD only. It requires Basic authentication by default, bounds the cache, removes tracks not refreshed within `SITAWARE_HQ_NVG_STALE_S`, and gives each published NVG object a matching `TimeSpan` expiry. When present in the source, standard NVG modifiers and bounded `ExtendedData` carry callsign, registration/ICAO, aircraft or vessel type, squawk, route, source, vessel IDs, sensor identity, and other safe scalar fields. The Attributes view reuses the CoT/TAK domain formatter, presenting clean sections rather than raw Python field names. Aircraft expose separate barometric and geometric altitude, primary altitude in metres/feet/flight level, climb/descent rate, selected/target altitude, speed/heading, emergency/autopilot state, and ADS-B quality. dronuradaras.lt detections use the HQ-supported generic neutral equipment-sensor symbol; weather observations use the distinct neutral emplaced-sensor symbol because HQ 6.22 renders standards-native METOC symbols as Unknown. Neither is classified as a military-intelligence unit. It refuses cleartext HTTP on a non-loopback address unless `SITAWARE_HQ_NVG_ALLOW_INSECURE_HTTP=1` is explicitly set for an isolated lab. Do not use a Keycloak account or password for this feed.
+The endpoint accepts GET/HEAD only. It requires Basic authentication by default — if the HQ subscription reaches the feed (no more connection-refused/timeout) but the feed log shows `rejected unauthorized request from <hq-ip>`, the subscription's own credentials don't match `SITAWARE_HQ_NVG_USER`/`_PASS`; fix them there, or set `SITAWARE_HQ_NVG_ALLOW_ANONYMOUS=1` for a quick isolated-lab test. It bounds the cache, removes tracks not refreshed within `SITAWARE_HQ_NVG_STALE_S`, and gives each published NVG object a matching `TimeSpan` expiry. When present in the source, standard NVG modifiers and bounded `ExtendedData` carry callsign, registration/ICAO, aircraft or vessel type, squawk, route, source, vessel IDs, sensor identity, and other safe scalar fields. The Attributes view reuses the CoT/TAK domain formatter, presenting clean sections rather than raw Python field names. Aircraft expose separate barometric and geometric altitude, primary altitude in metres/feet/flight level, climb/descent rate, selected/target altitude, speed/heading, emergency/autopilot state, and ADS-B quality. dronuradaras.lt detections use the HQ-supported generic neutral equipment-sensor symbol; weather observations use the distinct neutral emplaced-sensor symbol because HQ 6.22 renders standards-native METOC symbols as Unknown. Neither is classified as a military-intelligence unit. It refuses cleartext HTTP on a non-loopback address unless `SITAWARE_HQ_NVG_ALLOW_INSECURE_HTTP=1` is explicitly set for an isolated lab. Do not use a Keycloak account or password for this feed.
 
 #### One-time cleanup of legacy HQ objects
 

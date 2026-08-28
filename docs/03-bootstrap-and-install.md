@@ -275,6 +275,44 @@ cd EFDI
 ./install.sh
 ```
 
+### 3.1a Choose Production or Testing mode
+
+`install.sh` asks this early, before certificates:
+
+```text
+Production  — requires certs from scripts/gen-certs.sh (mTLS, fabric connectivity)
+Testing     — generates self-signed certs, local Zenoh only (no fabric)
+```
+
+**Testing mode** is for trying EFDI out on one box with no real fabric
+connection: it auto-generates a namespace and self-signed certs, and Zenoh
+runs over plain TCP with no mTLS. It also changes two paths you'll need when
+troubleshooting:
+
+```text
+BUNDLE_DIR     = <repo>/compose/test-certs   (not compose/certs/)
+POD_STATE_DIR  = <repo>/.test-pod-state      (a sibling of compose/, not inside it)
+```
+
+If you're looking for logs, PID files, or the rendered Zenoh config on a
+testing-mode install, check `<repo>/.test-pod-state/` (e.g.
+`.test-pod-state/logs/sitaware_layer.log`), **not** `compose/state/` — the
+default `compose/state/` path only applies to a production install where
+`POD_STATE_DIR` was left unset. Confirm which one a given box actually uses
+with `grep '^POD_STATE_DIR=' compose/.env`.
+
+**Production mode** requires real certificates from `scripts/gen-certs.sh`
+(or a partner-issued bundle) and enforces mTLS — see
+[§3.2](#32-generate-certificates) below.
+
+Both modes now always prompt for the Zenoh WebUI admin username and
+password during install (this used to be skipped in testing mode with an
+auto-generated password that got silently scrubbed from `.env` after first
+login, with no other record of it anywhere — always setting it yourself
+avoids that trap). `reinstall.sh` can also reset these credentials later if
+you forget them, or use `health.sh`'s interactive troubleshooting menu — see
+[Operations](05-launching-and-operations.md).
+
 ### 3.2 Generate certificates
 
 ```bash
@@ -364,6 +402,25 @@ compose/venv/bin/pip install -r compose/requirements.txt
 ```
 
 > The `eclipse-zenoh` version must be **exactly 1.9.0** — minor version mismatches introduce breaking API changes.
+
+Always install into this venv, never the system `python3` directly. Running
+`pip install` against the system interpreter on a modern Debian/Ubuntu fails
+with `error: externally-managed-environment` (PEP 668) — that error is the
+system protecting itself, not a bug to route around with
+`--break-system-packages`. Every host-native service this pod runs (bridges,
+layers, protocol translators) already expects `compose/venv`, so fixing the
+error the "quick" way would leave those services running against a
+different Python environment than the one you just modified.
+
+`install.sh` also `chgrp`s/`chmod`s a handful of individually bind-mounted
+state files and directories (`namespace-prefix`, `data-topic-prefix`,
+`$BUNDLE_DIR/efdi`, `$POD_STATE_DIR/integrations/tak`) so the `zenoh-admin`
+container — which always runs as a fixed non-root uid `10001` — can write to
+them. If a *later* WebUI save (config, TAK/SitaWare credentials) fails with
+`Permission denied` on one of these paths, `health.sh`'s interactive menu
+(option 3) detects and fixes it automatically; see
+[Troubleshooting](11-troubleshooting.md) for the manual `chgrp`/`chmod` if
+you need it immediately.
 
 ### 3.4 Start the Zenoh router
 
