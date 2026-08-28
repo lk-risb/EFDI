@@ -1660,7 +1660,8 @@ def run_zenoh_raw(args):
 
 
 def main():
-    default_bridge_id = str(uuid.uuid5(uuid.NAMESPACE_URL, "efdi:sapient:" + ORG))
+    org = os.environ.get("PARTNER_NAMESPACE", "")
+    default_bridge_id = str(uuid.uuid5(uuid.NAMESPACE_URL, "efdi:sapient:" + org))
     parser = argparse.ArgumentParser(description="BSI Flex 335 v2 SAPIENT -> Zenoh bridge")
     parser.add_argument("--host", default=os.environ.get("SAPIENT_HOST", "127.0.0.1"))
     parser.add_argument(

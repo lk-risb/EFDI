@@ -16,10 +16,15 @@ EXPECTED = {
 
 
 class AsterixPortConventionTests(unittest.TestCase):
-    def test_example_environment_assigns_each_category_port(self):
+    def test_example_environment_uses_the_combined_generic_ingress(self):
+        """This deployment's radar/gateway sends every category combined on
+        one UDP dump (UDP_INGRESS_PORT) — .env.example must not pre-configure
+        per-category dedicated listener ports as if that were the default."""
         text = (ROOT / "compose" / ".env.example").read_text(encoding="utf-8")
-        for category, port in EXPECTED.items():
-            self.assertRegex(text, rf"(?m)^CAT{category}_PORT={port}\s")
+        self.assertRegex(text, r"(?m)^UDP_INGRESS_PORT=50000\s")
+        self.assertRegex(text, r"(?m)^ASTERIX_CATEGORIES=34,48\s")
+        for category in EXPECTED:
+            self.assertNotRegex(text, rf"(?m)^CAT{category}_PORT=")
 
     def test_protocol_defaults_match_the_environment_contract(self):
         for category, port in EXPECTED.items():

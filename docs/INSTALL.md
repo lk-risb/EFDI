@@ -195,14 +195,14 @@ sensor bridge).
 ```bash
 sudo apt install -y ufw   # not installed by default on Debian, unlike Ubuntu
 sudo ufw allow 8890/tcp comment 'EFDI admin GUI'
-sudo ufw allow 50048/udp comment 'EFDI CAT-048 example — adjust to your sensors'
+sudo ufw allow 50000/udp comment 'EFDI generic ASTERIX/UDP ingress example — adjust to your sensors'
 # repeat for whichever UDP/TCP ports your integrations use, per the table below
 ```
 
 **RHEL/Rocky/AlmaLinux (firewalld):**
 ```bash
 sudo firewall-cmd --permanent --add-port=8890/tcp
-sudo firewall-cmd --permanent --add-port=50048/udp
+sudo firewall-cmd --permanent --add-port=50000/udp
 sudo firewall-cmd --reload
 ```
 
@@ -241,12 +241,7 @@ here.
 
 | Port / address | Direction | Purpose |
 | --- | --- | --- |
-| UDP 50010 (`CAT10_PORT`) | inbound | EFDI CAT-010 convention; configure producer destination to match |
-| UDP 50020 (`CAT20_PORT`) | inbound | EFDI CAT-020 convention; configure producer destination to match |
-| UDP 50021 (`CAT21_PORT`) | inbound | EFDI CAT-021 convention; configure producer destination to match |
-| UDP 50034 (`CAT34_PORT`) | inbound | EFDI CAT-034 convention; configure radar destination to match |
-| UDP 50048 (`CAT48_PORT`) | inbound | EFDI CAT-048 convention; configure radar destination to match |
-| UDP 50062 (`CAT62_PORT`) | inbound | EFDI CAT-062 convention; configure producer destination to match |
+| UDP 50000 (`UDP_INGRESS_PORT`) | inbound | Generic ASTERIX ingress — all categories (CAT-34/48 by default) arrive combined on this one port, not on separate per-category ports |
 | TCP `<TAK_PORT>` (mTLS, default 8089) | outbound | CoT delivery to TAK Server |
 | TCP 7448 | localhost | Local Zenoh router |
 | TCP 7447 TLS | outbound | Remote Zenoh router (requires NetBird) |
@@ -448,17 +443,12 @@ ASTERIX_ALLOW_SOURCE=          # optional sender IPv4 address or CIDR
 ASTERIX_ZENOH_UPSTREAM_ENDPOINT=  # e.g. tcp/zenoh2.example:7448 for isolated testing
 ASTERIX_ZENOH_UPSTREAM_ROOT=      # defaults to this pod's complete topic root
 
-# Separate publisher streams can continue using these direct listeners.
-CAT10_PORT=50010               # EFDI private-range convention; configure producer output
-CAT20_PORT=50020               # EFDI private-range convention; configure producer output
-CAT21_PORT=50021               # EFDI private-range convention; configure producer output
-CAT34_PORT=50034               # EFDI private-range convention; configure radar output
-CAT48_PORT=50048               # EFDI private-range convention; configure radar output
+# Per-category radar/site metadata — still read from the single UDP_INGRESS_PORT
+# stream above; these are decode-time fields, not separate listeners/ports.
 CAT34_RADAR_LAT=               # Single-radar fallback; live I034/120 is preferred
 CAT34_RADAR_LON=               # Single-radar fallback; live I034/120 is preferred
 CAT34_RADAR_NAME=              # Blank = distinct RADAR SACx/SICy labels; set for one radar
 CAT34_RADAR_RANGE_M=           # Operator-confirmed maximum; live I034/100 wins
-CAT62_PORT=50062               # EFDI private-range convention; configure producer output
 CAT48_RADAR_SAC=<SAC>          # ASTERIX Source Area Code
 CAT48_RADAR_SIC=<SIC>          # ASTERIX Source Identification Code
 ```
@@ -472,19 +462,17 @@ CAT48_RADAR_SIC=<SIC>          # ASTERIX Source Identification Code
 > placing it at 0°N 0°E.
 
 > **ASTERIX ports:** ASTERIX specifies the message format, not a registered
-> network port. In the radar/gateway management interface, set the EFDI host as
-> the destination and use the EFDI category convention: CAT-010→UDP 50010,
-> CAT-020→50020, CAT-021→50021, CAT-034→50034, CAT-048→50048, CAT-062→50062.
-> These are EFDI conventions, not known vendor factory defaults. Confirm
-> transport, category edition, combined/separate streams, and vendor framing in
-> the ICD.
+> network port. There are no separate per-category listeners — every category
+> arrives as one generic UDP dump on `UDP_INGRESS_PORT` (50000). In the
+> radar/gateway management interface, set the EFDI host and this single port
+> as the destination for all ASTERIX traffic; confirm transport, category
+> edition, and vendor framing in the ICD.
 
 Port 50000 accepts generic UDP and preserves every datagram under
 `…/raw/udp/ingress`. Complete ASTERIX frames are additionally published to
 `…/raw/asterix/cat34` and `…/raw/asterix/cat48`; the per-category translators
-decode only their category. Dedicated category ports remain active. Do not send
-the same frames to both paths unless duplicates are acceptable. Inspect an
-unknown feed first:
+decode only their category from that single stream. Inspect an unknown feed
+first:
 
 ```bash
 python3 tools/asterix_probe.py --port 30001
@@ -833,16 +821,18 @@ router hosts therefore need no receiver hardware or vendor driver.
 
 ### Protocol connection requirements
 
-ASTERIX category numbers do not define TCP or UDP port numbers. The radar or
-surveillance gateway management interface must be configured with the EFDI
-host as its destination and with the same transport/port selected below. EFDI
-uses UDP 50034 for CAT-034 and UDP 50048 for CAT-048 as deterministic local
-conventions; these are not EUROCONTROL or Saab defaults. UDP 50000 is the
-generic raw ingress. `udp_ingress_bridge.py` preserves every datagram and safely
-publishes complete ASTERIX frames unchanged to `…/raw/asterix/catNN`; every
-category translator remains a separate process and subscribes only to its own
-topic. `ASTERIX_CATEGORIES` selects which categories are auto-dispatched.
-Dedicated UDP/TCP inputs remain active at the same time.
+ASTERIX category numbers do not define TCP or UDP port numbers. This
+deployment's radar/gateway does not send categories on separate dedicated
+ports — CAT-034 and CAT-048 both arrive combined as one generic UDP dump on
+port 50000 (`UDP_INGRESS_PORT`). `udp_ingress_bridge.py` preserves every
+datagram and safely publishes complete ASTERIX frames unchanged to
+`…/raw/asterix/catNN`; every category translator remains a separate process
+and subscribes only to its own topic from that shared stream.
+`ASTERIX_CATEGORIES` selects which categories are auto-dispatched. The
+per-category `CATNN_PORT` dedicated-listener option in the reference table
+below still exists in `vendors/asterix/cat.py` for a producer that genuinely
+puts one category on its own port — it just isn't how this deployment's
+radar/gateway sends CAT-034/048.
 
 When the radar-side laptop already publishes complete frames through another
 Zenoh router, set `ASTERIX_ZENOH_UPSTREAM_ENDPOINT` and optionally
@@ -901,8 +891,8 @@ share with the decoders, so changes here are caught by the normal test run.
 | `vendors/asterix/cat.py --category 23` | UDP listener or TCP server | Producer sends to `CAT23_PORT` | EUROCONTROL CAT-023 Ed.1.3 CNS/ATM ground station service messages (ADS-B/TIS-B/FIS-B/GRAS/MLT station status) |
 | `vendors/asterix/cat.py --category 25` | UDP listener or TCP server | Producer sends to `CAT25_PORT` | EUROCONTROL CAT-025 Ed.1.6 CNS/ATM ground system status reports (successor/companion to CAT-023: split system/service status, per-component status list, service statistics, site position) |
 | `vendors/asterix/cat.py --category 32` | UDP listener or TCP server | Producer sends to `CAT32_PORT` | EUROCONTROL CAT-032 Ed.1.2 Miniplan Reports to an SDPS (FPPS/SDPS flight-plan-to-track-number correlation; no position field exists in this category) |
-| `vendors/asterix/cat.py --category 34` | UDP listener or TCP server | Radar sends CAT-034 alone to `CAT34_PORT` (EFDI convention: UDP 50034) | EUROCONTROL CAT-034 Ed.1.29 radar service messages |
-| `vendors/asterix/cat.py --category 48` | UDP listener or TCP server | Radar sends CAT-048 alone to `CAT48_PORT` (EFDI convention: UDP 50048); local polar positions require `CAT48_RADAR_LAT/LON` | EUROCONTROL CAT-048 Ed.1.32 targets |
+| `vendors/asterix/cat.py --category 34` | Auto-dispatched from the generic UDP 50000 ingress (`ASTERIX_CATEGORIES`) | This deployment's radar sends CAT-034 combined with CAT-048 on UDP 50000, not a dedicated port | EUROCONTROL CAT-034 Ed.1.29 radar service messages |
+| `vendors/asterix/cat.py --category 48` | Auto-dispatched from the generic UDP 50000 ingress (`ASTERIX_CATEGORIES`) | This deployment's radar sends CAT-048 combined with CAT-034 on UDP 50000, not a dedicated port; local polar positions require `CAT48_RADAR_LAT/LON` | EUROCONTROL CAT-048 Ed.1.32 targets |
 | `vendors/asterix/cat.py --category 62` | TCP client or UDP listener | Set `CAT62_HOST/PORT`, or `CAT62_UDP=1`; confirm Edition 1.21 | EUROCONTROL CAT-062 Ed.1.21 system tracks |
 | `vendors/asterix/cat.py --category 63` | UDP listener or TCP server | Producer sends to `CAT63_PORT` | EUROCONTROL CAT-063 Ed.1.7 sensor status reports (the sensors feeding a CAT-062 tracker) |
 | `vendors/asterix/cat.py --category 65` | UDP listener or TCP server | Producer sends to `CAT65_PORT` | EUROCONTROL CAT-065 Ed.1.6 SDPS service status reports (the SDPS-side companion to CAT-062, same relationship CAT-019 has to CAT-020) |
@@ -1066,9 +1056,9 @@ py .\radar_udp_relay.py --listen-port 50048
 The relay forwards every datagram unchanged to `asusrog.efdi.ltu:50000`.
 Override `--destination-host` when mesh DNS is unavailable. Configure this
 router with `UDP_INGRESS_PORT=50000`. The generic receiver preserves every
-datagram on its raw Zenoh topic and only auto-dispatches protocols whose framing
-is unambiguous. UDP 50034 and 50048 remain separate deterministic CAT-034 and
-CAT-048 listeners.
+datagram on its raw Zenoh topic and only auto-dispatches protocols whose
+framing is unambiguous — there is no separate dedicated listener per
+category; CAT-034 and CAT-048 both decode from this same combined stream.
 
 On the EFDI laptop, inspect traffic without taking ownership of the UDP socket:
 
@@ -2325,6 +2315,7 @@ This catches syntax errors, TypeScript errors, and Dockerfile breakage before me
 | 2026-08-02 | Renamed `layers/cot_layer.py` → `layers/tak_layer.py` and `layers/nvg_layer.py` → `layers/sitaware_layer.py` (vendor-named egress, matching `tak_bridge.py`/`sitaware_bridge.py`'s ingress naming); removed the unused `cot-udp`/`cot-udp-tak` UDP multicast/unicast launcher entries and the `nvg_bridge.py` NVG-XML ingress bridge (SitaWare ingress is REST-only now) |
 | 2026-08-02 | Consolidated every EFDI-authored `.proto` schema under `compose/protocols/proto/` (was split across `compose/protocols/random/`, `compose/protocols/vendors/proto/`, and `compose/protocols/vendors/sparkplug/`); vendored third-party schemas (SAPIENT `sapient_msg/`, Sparkplug B) stay under their own `vendors/<name>/` directory |
 | 2026-08-28 | Removed the GeoJSON/OGC Features and RF spectrum-observation translators added on 2026-07-17 (that data path is now classified) and removed SensorThings entirely; CAP, MQTT, Sparkplug B, sensor-health, and mission-route translators are unaffected |
+| 2026-08-28 | Removed the CAT-010/020/021/034/048/062 deterministic dedicated-port listener conventions added on 2026-07-17 — this deployment's radar/gateway sends every category combined as one UDP dump on `UDP_INGRESS_PORT` (50000) instead; `CATNN_PORT` remains available in `vendors/asterix/cat.py` for a producer that genuinely uses a dedicated port |
 
 ---
 

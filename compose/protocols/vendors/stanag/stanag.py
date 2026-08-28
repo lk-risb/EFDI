@@ -1639,7 +1639,7 @@ def _5516_main():
     print("Link 16 bridge started", flush=True)
     print("  Topics:", flush=True)
     for (dom, aff), topic in _5516_TOPIC_MAP.items():
-        print("    {} {} -> {}".format(dom, aff, topic.split(_5516_ORG + "/")[1]), flush=True)
+        print("    {} {} -> {}".format(dom, aff, topic.split(_5516_TOPIC_ROOT + "/")[1]), flush=True)
 
     try:
         _5516_run_udp(args.port, session, args.verbose)

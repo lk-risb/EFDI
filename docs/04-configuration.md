@@ -38,17 +38,12 @@ ASTERIX_ALLOW_SOURCE=          # optional sender IPv4 address or CIDR
 ASTERIX_ZENOH_UPSTREAM_ENDPOINT=  # e.g. tcp/zenoh2.example:7448 for isolated testing
 ASTERIX_ZENOH_UPSTREAM_ROOT=      # defaults to this pod's complete topic root
 
-# Separate publisher streams can continue using these direct listeners.
-CAT10_PORT=50010               # EFDI private-range convention; configure producer output
-CAT20_PORT=50020               # EFDI private-range convention; configure producer output
-CAT21_PORT=50021               # EFDI private-range convention; configure producer output
-CAT34_PORT=50034               # EFDI private-range convention; configure radar output
-CAT48_PORT=50048               # EFDI private-range convention; configure radar output
+# Per-category radar/site metadata — still read from the single UDP_INGRESS_PORT
+# stream above; these are decode-time fields, not separate listeners/ports.
 CAT34_RADAR_LAT=               # Single-radar fallback; live I034/120 is preferred
 CAT34_RADAR_LON=               # Single-radar fallback; live I034/120 is preferred
 CAT34_RADAR_NAME=              # Blank = distinct RADAR SACx/SICy labels; set for one radar
 CAT34_RADAR_RANGE_M=           # Operator-confirmed maximum; live I034/100 wins
-CAT62_PORT=50062               # EFDI private-range convention; configure producer output
 CAT48_RADAR_SAC=<SAC>          # ASTERIX Source Area Code
 CAT48_RADAR_SIC=<SIC>          # ASTERIX Source Identification Code
 ```
@@ -62,19 +57,17 @@ CAT48_RADAR_SIC=<SIC>          # ASTERIX Source Identification Code
 > placing it at 0°N 0°E.
 
 > **ASTERIX ports:** ASTERIX specifies the message format, not a registered
-> network port. In the radar/gateway management interface, set the EFDI host as
-> the destination and use the EFDI category convention: CAT-010→UDP 50010,
-> CAT-020→50020, CAT-021→50021, CAT-034→50034, CAT-048→50048, CAT-062→50062.
-> These are EFDI conventions, not known vendor factory defaults. Confirm
-> transport, category edition, combined/separate streams, and vendor framing in
-> the ICD.
+> network port. There are no separate per-category listeners — every category
+> arrives as one generic UDP dump on `UDP_INGRESS_PORT` (50000). In the
+> radar/gateway management interface, set the EFDI host and this single port
+> as the destination for all ASTERIX traffic; confirm transport, category
+> edition, and vendor framing in the ICD.
 
 Port 50000 accepts generic UDP and preserves every datagram under
 `…/raw/udp/ingress`. Complete ASTERIX frames are additionally published to
 `…/raw/asterix/cat34` and `…/raw/asterix/cat48`; the per-category translators
-decode only their category. Dedicated category ports remain active. Do not send
-the same frames to both paths unless duplicates are acceptable. Inspect an
-unknown feed first:
+decode only their category from that single stream. Inspect an unknown feed
+first:
 
 ```bash
 python3 tools/asterix_probe.py --port 30001

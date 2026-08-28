@@ -33,17 +33,13 @@ ASTERIX_MULTICAST_GROUP=       # pasirinktinė IPv4 multicast grupė
 ASTERIX_MULTICAST_INTERFACE=0.0.0.0
 ASTERIX_ALLOW_SOURCE=          # pasirinktinai siuntėjo IPv4 adresas arba CIDR
 
-# Atskiri leidėjų srautai gali toliau naudoti šiuos tiesioginius listener'ius.
-CAT10_PORT=50010               # EFDI privatus susitarimas; nustatykite gamintojo išvestį
-CAT20_PORT=50020               # EFDI privatus susitarimas; nustatykite gamintojo išvestį
-CAT21_PORT=50021               # EFDI privatus susitarimas; nustatykite gamintojo išvestį
-CAT34_PORT=50034               # EFDI privatus susitarimas; nustatykite radaro išvestį
-CAT48_PORT=50048               # EFDI privatus susitarimas; nustatykite radaro išvestį
+# Radaro/gateway duomenys ateina vienu bendru UDP srautu — atskirų prievadų
+# kiekvienai kategorijai nėra. Šie laukai yra tik dekodavimo metaduomenys
+# (radaro pozicija, SAC/SIC), skaitomi iš to paties bendro srauto, ne prievadai.
 CAT34_RADAR_LAT=               # Vieno radaro atsarginė reikšmė; pirmenybė I034/120
 CAT34_RADAR_LON=               # Vieno radaro atsarginė reikšmė; pirmenybė I034/120
 CAT34_RADAR_NAME=              # Tuščia = atskiri RADAR SACx/SICy vardai; nustatykite vienam radarui
 CAT34_RADAR_RANGE_M=           # Operatoriaus patvirtintas maksimumas; pirmenybė I034/100
-CAT62_PORT=50062               # EFDI privatus susitarimas; nustatykite gamintojo išvestį
 CAT48_RADAR_LAT=<RADAR_LAT>        # Antenos platuma  (WGS-84 dešimtainiai laipsniai)
 CAT48_RADAR_LON=<RADAR_LON>        # Antenos ilguma   (WGS-84 dešimtainiai laipsniai)
 CAT48_RADAR_SAC=<SAC>            # ASTERIX šaltinio srities kodas (Source Area Code)
@@ -52,17 +48,18 @@ CAT48_RADAR_NAME=Giraffe AMB   # Vardas, rodomas ATAK žemėlapyje
 ```
 
 > **ASTERIX prievadai:** ASTERIX aprašo pranešimų formatą, bet nenustato
-> registruoto tinklo prievado. Radaro ar gateway valdymo sąsajoje kaip paskirtį
-> nurodykite EFDI host'ą ir naudokite kategorijų susitarimą: CAT-010→UDP 50010,
-> CAT-020→50020, CAT-021→50021, CAT-034→50034, CAT-048→50048, CAT-062→50062.
-> Tai EFDI susitarimai, ne patvirtinti gamintojų gamykliniai nustatymai.
-> Transportą, leidimą, bendrą ar atskirus srautus ir vendor kadravimą
-> patvirtinkite pagal ICD.
+> registruoto tinklo prievado. Atskirų prievadų kiekvienai kategorijai čia
+> nėra — visos kategorijos ateina vienu bendru UDP dump'u per
+> `UDP_INGRESS_PORT` (50000). Radaro ar gateway valdymo sąsajoje kaip
+> paskirtį nurodykite EFDI host'ą ir šį vienintelį prievadą visam ASTERIX
+> srautui; transportą, leidimą ir vendor kadravimą vis tiek patvirtinkite
+> pagal ICD.
 
 UDP 50000 yra bendras neapdorotų UDP duomenų įėjimas. Jis išsaugo kiekvieną
 datagramą `…/raw/udp/ingress` temoje ir papildomai nukreipia vienareikšmiškai
-atpažintus ASTERIX kadrus į `…/raw/asterix/catNN`. UDP 50034 ir 50048 lieka
-atskiri CAT-034 ir CAT-048 prievadai. Nežinomą srautą pirmiausia patikrinkite:
+atpažintus ASTERIX kadrus į `…/raw/asterix/catNN`; kategorijų vertėjai iš to
+paties bendro srauto dekoduoja tik savo kategoriją. Nežinomą srautą
+pirmiausia patikrinkite:
 
 ```bash
 python3 tools/asterix_probe.py --port 30001
