@@ -1,7 +1,6 @@
 import uuid
 from datetime import datetime, timezone
 from sqlalchemy import String, Boolean, DateTime, ForeignKey, Text, BigInteger, UniqueConstraint
-from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import TypeDecorator
 from .db import Base
@@ -32,9 +31,9 @@ class UTCDateTime(TypeDecorator):
         return value.astimezone(timezone.utc)
 
 
-UUID_STRING = String(36, collation="ascii_bin")
-ASCII_REFERENCE = String(768, collation="ascii_bin")
-LONG_TEXT = Text().with_variant(LONGTEXT(), "mysql", "mariadb")
+UUID_STRING = String(36, collation="C")
+ASCII_REFERENCE = String(768, collation="C")
+LONG_TEXT = Text()
 
 
 class AdminUser(Base):
@@ -131,7 +130,7 @@ class TopicRegistration(Base):
 
     id: Mapped[str] = mapped_column(UUID_STRING, primary_key=True, default=_uuid)
     key_expr: Mapped[str] = mapped_column(
-        String(512, collation="ascii_bin"),
+        String(512, collation="C"),
         unique=True,
         nullable=False,
         index=True,

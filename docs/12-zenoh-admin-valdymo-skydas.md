@@ -101,8 +101,8 @@ Prie `compose/.env` pridėkite (pilną bloką rasite `compose/.env.example`):
 ```bash
 ZENOH_ADMIN_DB_USER=zenoh_admin
 ZENOH_ADMIN_DB_PASSWORD=<atsitiktinis>
-ZENOH_ADMIN_DB_ROOT_PASSWORD=<kitas-atsitiktinis>
-ZENOH_ADMIN_DB_PORT=3307                # ne numatytasis: išvengia konflikto su MariaDB/MySQL ant 3306
+ZENOH_ADMIN_DB_PORT=5433                 # ne numatytasis: išvengia konflikto su PostgreSQL ant 5432
+EFDI_DB_DATA_DIR=<vietinio-disko-kelias>  # niekada JuiceFS/tinklo kelias — žr. docs/04-konfiguracija.md
 ZENOH_ADMIN_SECRET_KEY=<openssl rand -hex 32>
 ZENOH_ADMIN_FIRST_USER=admin
 ZENOH_ADMIN_FIRST_PASS=<nustatykite kartą, tada išvalykite po pirmo prisijungimo>
@@ -110,13 +110,17 @@ ZENOH_ADMIN_FIRST_PASS=<nustatykite kartą, tada išvalykite po pirmo prisijungi
 
 `ZENOH_ADMIN_FIRST_PASS` sukuria pirmą `superadmin` paskyrą, tik jei tokios
 dar visai nėra — todėl po pirmo prisijungimo šį laukelį galite drąsiai
-vėl ištuštinti: pati paskyra jau saugiai lieka MariaDB duomenų bazėje.
+vėl ištuštinti: pati paskyra jau saugiai lieka PostgreSQL duomenų bazėje.
 
-Administravimo paslauga dirba tik su MariaDB. Senesni PostgreSQL
-migracijos įrankiai jau pašalinti po perkėlimo prie MariaDB; jei
-atnaujinate diegimą, prieš perstatydami būtinai pasidarykite atsarginę
-kopiją katalogo `${POD_STATE_DIR}/zenoh-admin/mariadb` ir failo
-`compose/.env`.
+Administravimo paslauga turi savo atskirą PostgreSQL konteinerį
+(`zenoh-admin-db`) — jis niekaip nesusijęs su jokia kita, host lygmenyje
+veikiančia PostgreSQL (pvz., naudojama NetBird, JuiceFS filestore ar step-ca):
+duomenų bazė ir prisijungimo duomenys atskiri. Atsarginę kopiją darykite su
+`pg_dump` — failų sistemos kopija iš `EFDI_DB_DATA_DIR` saugi tik sustabdytam
+konteineriui. Ši paslauga iki 2026-08-28 veikė su MariaDB; anksčiau įdiegti
+pod'ai gali perkelti esamus duomenis su `scripts/migrate_mariadb_to_postgres.py`
+(tikslūs žingsniai aprašyti paties skripto dokumentacijoje), o ne prarasti
+paskyras, audito žurnalą ir išduotas PKI tapatybes.
 
 ## Paleidimas
 

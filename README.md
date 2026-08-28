@@ -202,7 +202,7 @@ EFDI/
 │   └── layers/                  C2-egress output layers (tak_layer, sitaware_layer)
 ├── start.sh                     interactive service launcher
 ├── stop.sh                      service teardown
-└── dev.sh                       disposable local MariaDB + API for admin UI preview
+└── dev.sh                       disposable local PostgreSQL + API for admin UI preview
 ```
 
 ---
@@ -233,7 +233,7 @@ plain-language, page-by-page walkthrough of every tab.
 ./start.sh --check-all                # pre-flight: which services are ready vs blocked (run before a demo)
 ./tests/c2_preflight.sh               # one-glance C2 readiness — all three TAK/SitaWare legs green
 ./stop.sh                             # tear down running services
-./dev.sh up                           # live zenoh-admin preview — disposable MariaDB + API + Vite UI
+./dev.sh up                           # live zenoh-admin preview — disposable PostgreSQL + API + Vite UI
 docker compose logs -f zenoh-router   # follow the router's logs
 ```
 
@@ -245,7 +245,7 @@ The admin panel's **Runtime Control** page can start, stop, restart, and inspect
 
 The panel also provides managed-router operation for a hierarchy of HQ and branch routers:
 
-- **Network** shows direct children and observed descendants, link freshness, management authority, and last-known state. A branch keeps its local router, MariaDB, WebUI, and child-management capability when its parent is offline.
+- **Network** shows direct children and observed descendants, link freshness, management authority, and last-known state. A branch keeps its local router, PostgreSQL, WebUI, and child-management capability when its parent is offline — the database's own datadir stays on local disk even if the branch's other pod state lives on shared storage.
 - **Zenoh Config** validates a candidate with the pinned Zenoh binary before touching the active file, waits for router health on activation, and restores the last-known-good config automatically if restart or health checks fail.
 - **Changes** records local and relayed revisions, target, hash, and final applied/rejected/rolled-back state without storing configuration bodies.
 - **Certificate Authority** creates single-use child invitations. The child generates router-CA, transport, and non-CA policy-signer keys locally, submits only CSRs, and receives a cryptographically bounded delegation chain. An optional step-ca intermediate issues and renews short-lived transport certificates without exposing a router-CA key to the WebUI.

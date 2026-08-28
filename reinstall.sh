@@ -106,19 +106,20 @@ run_spin "Starting EFDI infrastructure" "Infrastructure started" \
     docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d \
     || { dump_service_logs "$COMPOSE_FILE" "$ENV_FILE"; fail "Infrastructure startup failed"; }
 
+ZENOH_ADMIN_DB_USER="$(grep '^ZENOH_ADMIN_DB_USER=' "$ENV_FILE" | head -1 | cut -d= -f2-)"
 db_container="$(docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" ps -q zenoh-admin-db)"
 for _ in $(seq 1 60); do
     if [ -n "$db_container" ] && docker exec "$db_container" \
-        healthcheck.sh --connect --innodb_initialized >/dev/null 2>&1; then
+        pg_isready -U "$ZENOH_ADMIN_DB_USER" -d admin >/dev/null 2>&1; then
         break
     fi
     sleep 2
 done
 if [ -z "$db_container" ] || ! docker exec "$db_container" \
-    healthcheck.sh --connect --innodb_initialized >/dev/null 2>&1; then
-    fail "MariaDB did not become ready"
+    pg_isready -U "$ZENOH_ADMIN_DB_USER" -d admin >/dev/null 2>&1; then
+    fail "PostgreSQL did not become ready"
 fi
-ok "MariaDB ready"
+ok "PostgreSQL ready"
 
 if [ "$_RESET_ADMIN_CREDS" = "1" ]; then
     reset_admin_password "$COMPOSE_FILE" "$ENV_FILE" "$_NEW_ADMIN_USER" "$_NEW_ADMIN_PASS" \

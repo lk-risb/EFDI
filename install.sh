@@ -422,8 +422,20 @@ ZENOH_ADMIN_DB_USER="$(env_value ZENOH_ADMIN_DB_USER)"
 ZENOH_ADMIN_DB_USER="${ZENOH_ADMIN_DB_USER:-zenoh_admin}"
 ZENOH_ADMIN_DB_PASSWORD="$(env_value ZENOH_ADMIN_DB_PASSWORD)"
 ZENOH_ADMIN_DB_PASSWORD="${ZENOH_ADMIN_DB_PASSWORD:-$(openssl rand -hex 24)}"
-ZENOH_ADMIN_DB_ROOT_PASSWORD="$(env_value ZENOH_ADMIN_DB_ROOT_PASSWORD)"
-ZENOH_ADMIN_DB_ROOT_PASSWORD="${ZENOH_ADMIN_DB_ROOT_PASSWORD:-$(openssl rand -hex 24)}"
+EFDI_DB_DATA_DIR="$(env_value EFDI_DB_DATA_DIR)"
+EFDI_DB_DATA_DIR="${EFDI_DB_DATA_DIR:-${POD_STATE_DIR}/zenoh-admin/postgres}"
+mkdir -p "$EFDI_DB_DATA_DIR"
+# The Postgres datadir must never sit on a FUSE-backed shared filesystem
+# (e.g. JuiceFS on POD_STATE_DIR): writeback caching there breaks the fsync
+# durability every database relies on, and if that FUSE mount's own metadata
+# lives in a database, booting this one first becomes circular. Local disk
+# only — fail loudly rather than let this go unnoticed.
+_db_data_fstype="$(stat -f -c %T "$EFDI_DB_DATA_DIR" 2>/dev/null || echo unknown)"
+case "$_db_data_fstype" in
+    fuseblk|fuse*|juicefs)
+        err "EFDI_DB_DATA_DIR ($EFDI_DB_DATA_DIR) is on a FUSE filesystem ($_db_data_fstype). The database must live on local disk — set EFDI_DB_DATA_DIR to a local path outside POD_STATE_DIR."
+        ;;
+esac
 ZENOH_ADMIN_SECRET_KEY="$(env_value ZENOH_ADMIN_SECRET_KEY)"
 ZENOH_ADMIN_SECRET_KEY="${ZENOH_ADMIN_SECRET_KEY:-$(openssl rand -hex 32)}"
 EFDI_CONTROL_TOKEN="$(env_value EFDI_CONTROL_TOKEN)"
@@ -570,7 +582,7 @@ if [ -f "$ENV_FILE" ]; then
     MANAGED_KEYS+="|CAT21_PORT|CAT21_TCP|CAT20_PORT|CAT20_TCP"
     MANAGED_KEYS+="|SITAWARE_URL|SITAWARE_API_PATH|SITAWARE_USER|SITAWARE_PASS|SITAWARE_POLL_S|SITAWARE_DISCOVER"
     MANAGED_KEYS+="|TAK_HOST|TAK_PORT"
-    MANAGED_KEYS+="|ZENOH_ADMIN_DB_USER|ZENOH_ADMIN_DB_PASSWORD|ZENOH_ADMIN_DB_ROOT_PASSWORD"
+    MANAGED_KEYS+="|ZENOH_ADMIN_DB_USER|ZENOH_ADMIN_DB_PASSWORD|ZENOH_ADMIN_DB_PORT|EFDI_DB_DATA_DIR"
     MANAGED_KEYS+="|ZENOH_ADMIN_SECRET_KEY|ZENOH_ADMIN_FIRST_USER|ZENOH_ADMIN_FIRST_PASS|EFDI_CONTROL_TOKEN"
     EXTRA_LINES=$(grep -Ev "^(#|[[:space:]]*$)" "$ENV_FILE" 2>/dev/null \
                   | grep -Ev "^(${MANAGED_KEYS})=" || true)
@@ -618,10 +630,12 @@ fi
     echo ""
     echo "# ── API keys ──────────────────────────────────────────────────────────"
     echo ""
-    echo "# ── Zenoh WebUI and MariaDB ───────────────────────────────────────────"
+    echo "# ── Zenoh WebUI and PostgreSQL ────────────────────────────────────────"
     echo "ZENOH_ADMIN_DB_USER=${ZENOH_ADMIN_DB_USER}"
     echo "ZENOH_ADMIN_DB_PASSWORD=${ZENOH_ADMIN_DB_PASSWORD}"
-    echo "ZENOH_ADMIN_DB_ROOT_PASSWORD=${ZENOH_ADMIN_DB_ROOT_PASSWORD}"
+    echo "ZENOH_ADMIN_DB_PORT=5433"
+    echo "# Local disk only — never a JuiceFS/FUSE path. See docs/04-configuration.md."
+    echo "EFDI_DB_DATA_DIR=${EFDI_DB_DATA_DIR}"
     echo "ZENOH_ADMIN_SECRET_KEY=${ZENOH_ADMIN_SECRET_KEY}"
     echo "ZENOH_ADMIN_FIRST_USER=${ZENOH_ADMIN_FIRST_USER}"
     echo "ZENOH_ADMIN_FIRST_PASS=${ZENOH_ADMIN_FIRST_PASS}"
@@ -657,7 +671,7 @@ GIT_COMMIT="$(git -C "$SCRIPT_DIR" rev-parse HEAD 2>/dev/null || printf unknown)
 export GIT_COMMIT
 info "Building locally maintained infrastructure…"
 docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" build
-info "Starting router, MariaDB, WebUI, and proxy…"
+info "Starting router, PostgreSQL, WebUI, and proxy…"
 docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d || {
     dump_service_logs
     err "Infrastructure startup failed — see logs above."
@@ -666,16 +680,16 @@ docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d || {
 db_container="$(docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" ps -q zenoh-admin-db)"
 for _ in $(seq 1 60); do
     if [ -n "$db_container" ] && docker exec "$db_container" \
-        healthcheck.sh --connect --innodb_initialized >/dev/null 2>&1; then
+        pg_isready -U "$ZENOH_ADMIN_DB_USER" -d admin >/dev/null 2>&1; then
         break
     fi
     sleep 2
 done
 if [ -z "$db_container" ] || ! docker exec "$db_container" \
-    healthcheck.sh --connect --innodb_initialized >/dev/null 2>&1; then
-    err "MariaDB did not become ready."
+    pg_isready -U "$ZENOH_ADMIN_DB_USER" -d admin >/dev/null 2>&1; then
+    err "PostgreSQL did not become ready."
 fi
-ok "MariaDB ready"
+ok "PostgreSQL ready"
 
 # shellcheck source=scripts/scrub_admin_secret.sh
 . "$SCRIPT_DIR/scripts/scrub_admin_secret.sh"
