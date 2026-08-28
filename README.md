@@ -56,7 +56,7 @@ This repository is the EFDI-partner collaboration surface. It carries **no partn
 
 Each inbound bridge or protocol publishes normalized tracks under a structured topic hierarchy (`{namespace}/{partner}/{domain}/{source}/{protocol}/{affiliation}/{type}/…`). Output layers subscribe to wildcard patterns, translate to their target format, and deliver downstream. Adding a sensor never requires touching an output layer — the CoT and NVG translators derive symbology from the topic, not from per-source code.
 
-Zenoh-native translators are also bundled for CAP 1.2 alerts, GeoJSON/OGC Features, RF spectrum observations, sensor health, and mission routes. Their raw publishers write complete payloads below `raw/**`, so a router host needs no radio or sensor hardware of its own.
+Zenoh-native translators are also bundled for CAP 1.2 alerts, sensor health, and mission routes. Their raw publishers write complete payloads below `raw/**`, so a router host needs no radio or sensor hardware of its own.
 
 The live data-plane payload is JSON. The `.proto` files beside each translator under `compose/protocols/` describe the intended typed contracts but do not by themselves make a topic Protobuf; a binary migration would dual-publish onto a new topic version so existing CoT, TAK, NVG, and fusion consumers keep decoding safely.
 
@@ -80,9 +80,9 @@ The live data-plane payload is JSON. The `.proto` files beside each translator u
 | `flex335_bridge` | → Zenoh | SAPIENT BSI Flex 335 v2 sensor/detection ingress |
 | `4586_bridge` / `5516_bridge` | → Zenoh | Optional STANAG 4586 / 5516 socket ingress; publishes raw bytes only |
 | `nffi` | protocol | NATO NFFI / ADatP-36 (STANAG 5527) friendly-force XML translator |
-| `cap` / `geojson_features` / `mission_route` | protocol | Alerts/areas, zones/overlays, UAV routes and corridors |
-| `spectrum_observation` / `sensor_health` | protocol | Vendor-neutral RF and sensor-status translators |
-| `mqtt_bridge` / `sensorthings_bridge` | → Zenoh | Generic MQTT and OGC SensorThings ingress |
+| `cap` / `mission_route` | protocol | Alerts/areas, UAV routes and corridors |
+| `sensor_health` | protocol | Vendor-neutral sensor-status translator |
+| `mqtt_bridge` | → Zenoh | Generic MQTT ingress |
 | `sparkplug` | protocol | Eclipse Sparkplug B (MQTT protobuf); resolves BIRTH-declared metric aliases |
 | `fusion` | fabric | ASTERIX CAT-48 / CAT-21 correlation |
 | `zenoh-admin` | — | FastAPI + React panel — router status, config, lifecycle, endpoints, write-only credentials |
