@@ -95,6 +95,12 @@ services:
       - POSTGRES_INITDB_ARGS=--locale=C --encoding=UTF8
       - TZ=UTC
       - PGTZ=UTC
+      # postgres:18's image defaults PGDATA to /var/lib/postgresql/MAJOR/docker
+      # (docker-library/postgres#1259) and refuses to start against an
+      # existing pre-18-style data directory mounted at .../data without
+      # this set explicitly — this keeps the original layout, no data move
+      # needed. See https://github.com/docker-library/postgres/issues/37.
+      - PGDATA=/var/lib/postgresql/data
     volumes:
       - ${EFDI_DB_DATA_DIR:?set EFDI_DB_DATA_DIR in .env}:/var/lib/postgresql/data
     healthcheck:
