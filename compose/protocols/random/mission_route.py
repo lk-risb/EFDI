@@ -9,8 +9,7 @@ import os
 import time
 
 from protocols.proto.mission_route_pb2 import MissionRoute
-from protocols.track_views import publish_dual
-from gateway import TOPIC_ROOT, open_session, subscribe, payload_json
+from gateway import TOPIC_ROOT, open_session, publish_dual, subscribe, payload_json
 
 
 INPUT_TOPIC = os.environ.get("MISSION_ROUTE_INPUT_TOPIC") or TOPIC_ROOT + "/raw/routes/**"
