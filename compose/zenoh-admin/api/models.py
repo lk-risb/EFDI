@@ -257,6 +257,25 @@ class LinkCredential(Base):
     rotated_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
 
 
+class SitawareTarget(Base):
+    """One independent SitaWare HQ ingress source. Each enabled row gets its
+    own bridges/sitaware_bridge.py process, reconciled by admin_control.py —
+    see control/admin_control.py's _reconcile_sitaware_targets() and
+    api/sitaware_targets.py for the manifest/secrets hand-off. Live
+    running/pid status is reported by admin_control.py at request time
+    (not cached here) — this table is desired-state only."""
+    __tablename__ = "sitaware_targets"
+
+    id: Mapped[str] = mapped_column(UUID_STRING, primary_key=True, default=_uuid)
+    name: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    url: Mapped[str] = mapped_column(String(512), nullable=False)
+    url_fallback: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    url_tailscale: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_by: Mapped[str] = mapped_column(ForeignKey("admin_users.id"), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=lambda: datetime.now(timezone.utc))
+
+
 class AclRevision(Base):
     __tablename__ = "acl_revisions"
 

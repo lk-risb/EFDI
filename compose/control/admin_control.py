@@ -85,6 +85,22 @@ LOG_DIR = STATE_DIR / "logs"
 LAUNCHER_STATE_FILE = STATE_DIR / "launcher-state.env"
 _ENV_LOCK = threading.Lock()
 
+# Multiple independent SitaWare HQ ingress targets, added/removed live from
+# the admin UI (zenoh-admin/api/sitaware_targets.py) instead of the single
+# SITAWARE_URL/.env slot the static SERVICE_SPECS "sitaware" entry still
+# covers. Deliberately NOT routed through _action/SERVICE_NAMES/start.sh —
+# those assume one fixed process per catalog name; here the FastAPI side owns
+# an arbitrary-length DB table, so this agent instead reads the same two
+# files it writes (shared via the docker-compose ${POD_STATE_DIR}/zenoh
+# bind mount, at its host-side path here) and reconciles processes directly.
+SITAWARE_TARGETS_MANIFEST_PATH = Path(os.environ.get(
+    "EFDI_SITAWARE_TARGETS_MANIFEST_PATH", str(STATE_DIR / "zenoh" / "sitaware-targets.json")))
+SITAWARE_TARGET_SECRET_PATH = Path(os.environ.get(
+    "EFDI_SITAWARE_TARGET_SECRET_PATH", str(STATE_DIR / "zenoh" / "sitaware-target-secrets.json")))
+_SITAWARE_BRIDGE_SCRIPT = ROOT / "compose" / "bridges" / "sitaware_bridge.py"
+_SITAWARE_VENV_PYTHON = ROOT / "compose" / "venv" / "bin" / "python3"
+_SITAWARE_LOCK = threading.Lock()
+
 
 # This is deliberately duplicated as a small public catalog.  The process
 # launcher remains the source of truth for command details; the catalog gives
@@ -723,6 +739,163 @@ def _action(name: str, action: str) -> dict:
     return result
 
 
+def _sitaware_pid_file(target_id: str) -> Path:
+    return PID_DIR / f"sitaware-{target_id}.pid"
+
+
+def _sitaware_hash_file(target_id: str) -> Path:
+    return PID_DIR / f"sitaware-{target_id}.hash"
+
+
+def _sitaware_log_file(target_id: str) -> Path:
+    return LOG_DIR / f"sitaware-{target_id}.log"
+
+
+def _read_sitaware_manifest() -> list[dict]:
+    try:
+        value = json.loads(SITAWARE_TARGETS_MANIFEST_PATH.read_text(encoding="utf-8"))
+        return [item for item in value if isinstance(item, dict) and item.get("id")] if isinstance(value, list) else []
+    except (OSError, ValueError):
+        return []
+
+
+def _read_sitaware_secrets() -> dict:
+    try:
+        value = json.loads(SITAWARE_TARGET_SECRET_PATH.read_text(encoding="utf-8"))
+        return value if isinstance(value, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _sitaware_running_pid(target_id: str) -> int | None:
+    """Like _pid_is_service, but for a dynamic per-target process that has no
+    SERVICE_SOURCES entry: verify the recorded PID's own cmdline still points
+    at sitaware_bridge.py rather than trusting a possibly PID-reused file."""
+    try:
+        pid = int(_sitaware_pid_file(target_id).read_text(encoding="utf-8").strip())
+    except (OSError, ValueError):
+        return None
+    try:
+        raw = Path(f"/proc/{pid}/cmdline").read_bytes()
+    except OSError:
+        return None
+    cmdline = raw.replace(b"\x00", b" ").decode("utf-8", "replace")
+    return pid if str(_SITAWARE_BRIDGE_SCRIPT) in cmdline else None
+
+
+def _sitaware_config_hash(target: dict, secret: dict | None) -> str:
+    payload = json.dumps({
+        "url": target.get("url"), "url_fallback": target.get("url_fallback"),
+        "url_tailscale": target.get("url_tailscale"), "name": target.get("name"),
+        "username": (secret or {}).get("username"), "password": (secret or {}).get("password"),
+    }, sort_keys=True)
+    return hashlib.sha256(payload.encode()).hexdigest()
+
+
+def _sitaware_stop(target_id: str) -> None:
+    pid = _sitaware_running_pid(target_id)
+    if pid is not None:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except OSError:
+            pass
+    _sitaware_pid_file(target_id).unlink(missing_ok=True)
+    _sitaware_hash_file(target_id).unlink(missing_ok=True)
+
+
+def _sitaware_start(target: dict, secret: dict | None) -> dict:
+    """Same env-var contract bridges/sitaware_bridge.py already documents —
+    only URL/credentials/topic-source vary per target; API path, poll
+    interval, discover mode, and TLS verification stay whatever this
+    deployment's own .env already sets for every SitaWare target."""
+    if not target.get("url"):
+        return {"ok": False, "output": "no url configured"}
+    env = os.environ.copy()
+    env["SITAWARE_URL"] = target.get("url") or ""
+    env["SITAWARE_URL_FALLBACK"] = target.get("url_fallback") or ""
+    env["SITAWARE_URL_TAILSCALE"] = target.get("url_tailscale") or ""
+    env["SITAWARE_SOURCE"] = target["name"]
+    if secret:
+        env["SITAWARE_USER"] = secret.get("username", "")
+        env["SITAWARE_PASS"] = secret.get("password", "")
+    else:
+        env.pop("SITAWARE_USER", None)
+        env.pop("SITAWARE_PASS", None)
+    if not env.get("SITAWARE_API_PATH") and env.get("SITAWARE_DISCOVER", "") != "1":
+        return {"ok": False, "output": "SITAWARE_API_PATH is not set and SITAWARE_DISCOVER != 1"}
+    target_id = target["id"]
+    PID_DIR.mkdir(parents=True, exist_ok=True)
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    log_path = _sitaware_log_file(target_id)
+    args = ["--discover"] if env.get("SITAWARE_DISCOVER") == "1" else []
+    try:
+        with log_path.open("ab") as log_handle:
+            process = subprocess.Popen(
+                [str(_SITAWARE_VENV_PYTHON), str(_SITAWARE_BRIDGE_SCRIPT), *args],
+                cwd=str(ROOT / "compose"), env=env,
+                stdout=log_handle, stderr=subprocess.STDOUT,
+                start_new_session=True,
+            )
+    except OSError as exc:
+        return {"ok": False, "output": str(exc)}
+    _sitaware_pid_file(target_id).write_text(str(process.pid), encoding="utf-8")
+    _sitaware_hash_file(target_id).write_text(_sitaware_config_hash(target, secret), encoding="utf-8")
+    return {"ok": True, "output": f"started pid {process.pid}"}
+
+
+def _reconcile_sitaware_targets() -> dict:
+    with _SITAWARE_LOCK:
+        manifest = _read_sitaware_manifest()
+        secrets = _read_sitaware_secrets()
+        by_id = {t["id"]: t for t in manifest}
+        started, stopped, unchanged, blocked = [], [], [], []
+
+        known_ids = {p.name[len("sitaware-"):-len(".pid")] for p in PID_DIR.glob("sitaware-*.pid")} if PID_DIR.exists() else set()
+        for target_id in known_ids:
+            target = by_id.get(target_id)
+            if target is None or not target.get("enabled", True):
+                if _sitaware_running_pid(target_id) is not None:
+                    _sitaware_stop(target_id)
+                    stopped.append(target_id)
+                else:
+                    _sitaware_pid_file(target_id).unlink(missing_ok=True)
+                    _sitaware_hash_file(target_id).unlink(missing_ok=True)
+
+        for target in manifest:
+            target_id = target["id"]
+            if not target.get("enabled", True):
+                continue
+            secret = secrets.get(target_id)
+            desired_hash = _sitaware_config_hash(target, secret)
+            running_pid = _sitaware_running_pid(target_id)
+            try:
+                current_hash = _sitaware_hash_file(target_id).read_text(encoding="utf-8").strip()
+            except OSError:
+                current_hash = None
+            if running_pid is not None and current_hash == desired_hash:
+                unchanged.append(target_id)
+                continue
+            if running_pid is not None:
+                _sitaware_stop(target_id)
+            result = _sitaware_start(target, secret)
+            if result["ok"]:
+                started.append(target_id)
+            else:
+                blocked.append({"id": target_id, "reason": result["output"]})
+        return {"ok": True, "started": started, "stopped": stopped,
+                "unchanged": unchanged, "blocked": blocked}
+
+
+def _sitaware_target_statuses() -> dict:
+    manifest = _read_sitaware_manifest()
+    statuses = {}
+    for target in manifest:
+        target_id = target["id"]
+        pid = _sitaware_running_pid(target_id)
+        statuses[target_id] = {"running": pid is not None, "pid": pid}
+    return statuses
+
+
 def _tail_lines(path: Path, limit: int = 200) -> list[str]:
     try:
         with path.open("rb") as handle:
@@ -1117,6 +1290,9 @@ class Handler(BaseHTTPRequestHandler):
             self._text(200, _prometheus_metrics(),
                        "text/plain; version=0.0.4; charset=utf-8")
             return
+        if path == "/v1/sitaware-targets/status":
+            self._json(200, _sitaware_target_statuses())
+            return
         match = re.fullmatch(r"/v1/logs/([a-z0-9_-]+)", path)
         if match and match.group(1) in SERVICE_NAMES:
             lines = _tail_lines(LOG_DIR / f"{match.group(1)}.log")
@@ -1224,6 +1400,9 @@ class Handler(BaseHTTPRequestHandler):
             except (ValueError, json.JSONDecodeError) as exc:
                 self._json(400, {"detail": str(exc)})
             return
+        if path == "/v1/sitaware-targets/reconcile":
+            self._json(200, _reconcile_sitaware_targets())
+            return
         match = re.fullmatch(r"/v1/containers/([a-z0-9_-]+)/recreate", path)
         if match:
             result = _recreate_container(unquote(match.group(1)))
@@ -1330,6 +1509,12 @@ class ShellServer(socketserver.ThreadingTCPServer):
 def main() -> None:
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     LOG_DIR.mkdir(parents=True, exist_ok=True)
+    try:
+        reconciled = _reconcile_sitaware_targets()
+        if reconciled["started"] or reconciled["blocked"]:
+            print(f"[admin-control] sitaware targets reconciled at startup: {reconciled}", flush=True)
+    except Exception as exc:  # noqa: BLE001 — must not block the control agent from starting
+        print(f"[admin-control] sitaware target startup reconcile failed: {exc!r}", flush=True)
     server = ThreadingHTTPServer((CONTROL_HOST, CONTROL_PORT), Handler)
     shell_server = None
     shell_thread = None
