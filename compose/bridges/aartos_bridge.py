@@ -116,7 +116,11 @@ def run(args) -> None:
             print("AARTOS bridge Zenoh connect failed: {} — retry in {}s".format(exc, _RECONNECT_S), flush=True)
             time.sleep(_RECONNECT_S)
 
-    key = "{}/{}".format(RAW_ROOT, _key_segment(args.host))
+    # Keyed on host AND port: RTSA-Suite PRO can expose more than one HTTP
+    # Server block on the same laptop (e.g. drone detection on one port,
+    # a WiFi/operator-geolocation block on another) — host-only would make
+    # a second bridge instance silently overwrite the first one's samples.
+    key = "{}/{}-{}".format(RAW_ROOT, _key_segment(args.host), args.port)
 
     if args.mode == "poll":
         print("AARTOS ingress (poll): {}:{}/sample every {}s -> {}".format(
