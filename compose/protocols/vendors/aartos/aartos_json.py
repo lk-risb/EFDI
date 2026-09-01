@@ -146,6 +146,10 @@ def antenna_to_site(antenna: dict, ref_ts: float) -> dict | None:
         "sensor_name": antenna.get("antennaName") or "AARTOS",
         "lat_deg": round(lat, 7),
         "lon_deg": round(lon, 7),
+        # IsoLOG antennas are RF direction-finders — they listen, they never
+        # transmit — so tak_layer.py renders them with the Direction Finding
+        # icon rather than the emitting-radar one. Always true for AARTOS.
+        "passive": True,
     }
     elevation = antenna.get("elevation")
     if elevation is not None:
