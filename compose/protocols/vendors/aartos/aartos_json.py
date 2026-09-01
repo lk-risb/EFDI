@@ -109,6 +109,47 @@ def topic_for_track(track: dict) -> str:
     return "{}/air/aartos/{}/uav".format(TOPIC_ROOT, affiliation)
 
 
+def _site_key(antenna_id) -> str:
+    return "aartos-{}".format(_key_segment(str(antenna_id)))
+
+
+def _key_segment(value: str) -> str:
+    return "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in value) or "_"
+
+
+# Each antenna in a Sample carries its own surveyed position — publish it as a
+# radar/sensor-site marker the same way protocols/vendors/asterix/cat.py does
+# for CAT-34, on the exact topic shape tak_layer.py's dedicated radar-site
+# subscriber already listens on ("land/*/radar/neutral/radar/**"). Bare JSON,
+# no dual protobuf view: that subscriber explicitly only reads the plain view
+# (see make_radar_status_handler's _NON_JSON_VIEWS filter), and there is no
+# per-vendor schema for this — matching cat.py's own field names is what lets
+# it render with zero tak_layer.py changes.
+def antenna_to_site(antenna: dict, ref_ts: float) -> dict | None:
+    lat, lon = antenna.get("latitude"), antenna.get("longitude")
+    if lat is None or lon is None or not (-90 <= lat <= 90) or not (-180 <= lon <= 180):
+        return None
+    antenna_id = antenna.get("antennaID")
+    if antenna_id is None:
+        return None
+    site = {
+        "_ts": ref_ts,
+        "_src": "AARTOS",
+        "sensor_id": _site_key(antenna_id),
+        "sensor_name": antenna.get("antennaName") or "AARTOS",
+        "lat_deg": round(lat, 7),
+        "lon_deg": round(lon, 7),
+    }
+    elevation = antenna.get("elevation")
+    if elevation is not None:
+        site["geo_alt_m"] = round(elevation, 2)
+    return site
+
+
+def site_topic(site: dict) -> str:
+    return "{}/land/{}/radar/neutral/radar".format(TOPIC_ROOT, site["sensor_id"])
+
+
 def run() -> None:
     session = open_session()
 
@@ -122,8 +163,15 @@ def run() -> None:
         seen = _seen.setdefault(host, {})
 
         ref_ts = payload.get("startTime") or time.time()
-        trackings = ((payload.get("data") or {}).get("trackings")) or []
+        data = payload.get("data") or {}
+        trackings = data.get("trackings") or []
         now_ids: set[str] = set()
+
+        for antenna in data.get("antennas") or []:
+            site = antenna_to_site(antenna, ref_ts)
+            if site is None:
+                continue
+            session.put(site_topic(site), json.dumps(site).encode(), encoding="application/json")
 
         for tracking in trackings:
             track_id = tracking.get("trackID")

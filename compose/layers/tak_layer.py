@@ -121,6 +121,7 @@ def _unknown_air_type(track: dict) -> str:
         track.get("sapient_class")
         or track.get("remote_id_ua_type")
         or track.get("utm_vehicle_type")
+        or track.get("aartos_category")
         or ""
     ).lower()
     if any(token in object_class for token in ("drone", "uas", "uav", "quadcopter")):
