@@ -227,6 +227,15 @@ _TOPIC_COT = {
 # twice with competing affiliations, which makes TAK clients flicker, replace,
 # or omit the marker depending on update order.
 _RADAR_COT_TYPE = "a-n-G-E-S-R"
+# A radar site publishing "passive": true (VERA-NG's passive coherent
+# location, AARTOS's RF direction-finding antennas — neither transmits, both
+# listen) gets the standard CoT type for that, distinct from an emitting
+# radar. See CoTtypes.xml's G-U-U-M-S-E subtree (SIGINT/Electronic Warfare).
+_RADAR_COT_TYPE_PASSIVE = "a-n-G-U-U-M-S-E-D"
+
+
+def _radar_cot_type(track: dict) -> str:
+    return _RADAR_COT_TYPE_PASSIVE if track.get("passive") else _RADAR_COT_TYPE
 
 # ATC / ground-station callsigns that appear in ADS-B feeds.
 # Transponders belonging to ATC towers, ground vehicles, ATIS etc. show flight ID "TWR",
@@ -1811,15 +1820,15 @@ def make_radar_status_handler(sender, verbose: bool):
             beam_track = dict(track)
             beam_track["sensor_id"] = "BEAM-" + str(track.get("sensor_id", "RADAR"))
             beam_track["sensor_name"] = (track.get("sensor_name") or "RADAR") + " BEAM"
-            xml = track_to_cot(beam_track, _RADAR_COT_TYPE, stale_s=max(rot * 0.6, 1.0))
+            xml = track_to_cot(beam_track, _radar_cot_type(track), stale_s=max(rot * 0.6, 1.0))
         else:
             # Full status: site marker with permanent 360° coverage ring
-            xml = track_to_cot(track, _RADAR_COT_TYPE, stale_s=LAND_STALE_S * 2)
+            xml = track_to_cot(track, _radar_cot_type(track), stale_s=LAND_STALE_S * 2)
         if xml:
             sender.send(xml)
         if verbose:
             print("CoT {} {}  psr={} ssr={} mds={}".format(
-                _RADAR_COT_TYPE, track.get("sensor_name", "RADAR"),
+                _radar_cot_type(track), track.get("sensor_name", "RADAR"),
                 track.get("psr_status", "-"), track.get("ssr_status", "-"),
                 track.get("mds_status", "-")), flush=True)
     return handler
