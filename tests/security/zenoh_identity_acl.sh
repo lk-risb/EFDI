@@ -7,7 +7,12 @@ set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(cd "$SCRIPT_DIR/../.." && pwd)
-ZENOH_IMAGE=${ZENOH_IMAGE:-eclipse/zenoh:1.9.0}
+# Derive from docker-compose.yml rather than hardcoding a duplicate tag: that
+# file pins `image:` as `tag@digest`, and Compose/`docker pull` record the
+# local image under that exact combined reference, not a bare tag — checking
+# a hardcoded `eclipse/zenoh:1.9.0` here reported a false "not available
+# locally" even when the real, correctly-pinned image was already present.
+ZENOH_IMAGE=${ZENOH_IMAGE:-$(grep -m1 '^\s*image: eclipse/zenoh' "$REPO_ROOT/compose/docker-compose.yml" | awk '{print $2}')}
 TEST_DIR=$(mktemp -d)
 CONTAINER_NAME="efdi-zenoh-identity-acl-$$"
 TLS_PORT=
