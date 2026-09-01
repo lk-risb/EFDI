@@ -60,6 +60,16 @@ if [ -n "$admin_image" ]; then
     deployed_commit="$(docker inspect --format \
         '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$admin_image" 2>/dev/null || true)"
 fi
+# On any compose failure below, show the actual container logs before
+# bailing — `fail`'s message alone (e.g. "Infrastructure restart failed")
+# gives no clue why; the real cause (a bad TLS key path, a crashed
+# dependency, etc.) otherwise only surfaces by luck, if Docker happens to
+# stream it to the terminal during the failed `up`/`build`/`restart` itself.
+_dump_compose_logs() {
+    warn "Recent logs from: $*"
+    docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" logs --no-color --tail=50 "$@" 2>&1 || true
+}
+
 if [ "$deployed_commit" != "$git_commit" ]; then
     warn "Stale zenoh-admin image detected — rebuilding without cache"
     export GIT_COMMIT="$git_commit"
@@ -71,9 +81,9 @@ if [ "$deployed_commit" != "$git_commit" ]; then
     # and this check would fail every single time even on a perfectly good
     # rebuild. Recreate first, then verify what the container actually runs.
     docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d --remove-orphans \
-        || fail "Infrastructure restart failed"
+        || { _dump_compose_logs zenoh-router zenoh-admin; fail "Infrastructure restart failed"; }
     docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" restart zenoh-admin-proxy \
-        || fail "zenoh-admin-proxy restart failed"
+        || { _dump_compose_logs zenoh-admin-proxy; fail "zenoh-admin-proxy restart failed"; }
     admin_image="$(docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" images -q zenoh-admin)"
     deployed_commit="$(docker inspect --format \
         '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$admin_image" 2>/dev/null || true)"
