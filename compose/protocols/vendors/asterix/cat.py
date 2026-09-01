@@ -110,8 +110,6 @@ import threading
 import time
 
 from namespace_prefix import topic_root
-from protocols.track_views import (publish_dual, publish_native, native_topic,
-                                      semantic_topic, asterix_data_block)
 from protocols.data_stats import record_in
 
 _cat1_TOPIC_ROOT = topic_root()
@@ -2856,8 +2854,6 @@ import threading
 import time
 
 from namespace_prefix import topic_root
-from protocols.track_views import (publish_dual, publish_native, native_topic,
-                                      semantic_topic, asterix_data_block)
 from protocols.data_stats import record_in
 
 
@@ -6523,8 +6519,6 @@ import threading
 import time
 
 from namespace_prefix import topic_root
-from protocols.track_views import (publish_dual, publish_native, native_topic,
-                                      semantic_topic, asterix_data_block)
 from protocols.data_stats import record_in
 
 
@@ -7112,8 +7106,6 @@ import threading
 import time
 
 from namespace_prefix import topic_root
-from protocols.track_views import (publish_dual, publish_native, native_topic,
-                                      semantic_topic, asterix_data_block)
 from protocols.data_stats import record_in
 
 
@@ -9307,8 +9299,6 @@ import threading
 import time
 
 from namespace_prefix import topic_root
-from protocols.track_views import (publish_dual, publish_native, native_topic,
-                                      semantic_topic, asterix_data_block)
 from protocols.data_stats import record_in
 
 
@@ -10104,8 +10094,6 @@ import threading
 import time
 
 from namespace_prefix import topic_root
-from protocols.track_views import (publish_dual, publish_native, native_topic,
-                                      semantic_topic, asterix_data_block)
 from protocols.data_stats import record_in
 
 
