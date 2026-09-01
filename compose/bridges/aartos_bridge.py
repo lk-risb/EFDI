@@ -22,6 +22,17 @@ Config (compose/.env):
   AARTOS_LIMIT=                  # optional: cap samples per /stream call
   AARTOS_TIMEOUT_S=30            # socket read timeout before reconnecting
   AARTOS_RECONNECT_S=10
+  AARTOS_MODE=stream             # "stream" (default) or "poll"
+  AARTOS_POLL_INTERVAL_S=1.0     # poll mode only — seconds between GET /sample
+
+Some RTSA-Suite PRO deployments never actually push data through /stream
+(chunked body opens fine, HTTP 200, but no bytes ever follow, even for a
+block whose /sample and /healthstatus both report real, live data) — set
+AARTOS_MODE=poll to fall back to repeatedly GET /sample instead. /sample
+returns one Sample object per call (the same {"data": {"trackings": [...],
+...}} shape /stream would otherwise deliver framed by RS bytes), so the
+decoder in protocols/vendors/aartos/aartos_json.py needs no changes either
+way — this bridge just republishes each poll's raw response body verbatim.
 
 Run:
   venv/bin/python3 bridges/aartos_bridge.py
@@ -80,6 +91,19 @@ def stream_samples(conn: http.client.HTTPConnection, path: str):
             buf = b""
 
 
+def poll_sample(conn: http.client.HTTPConnection) -> bytes | None:
+    """Fetch a single Sample via GET /sample. Returns None on an empty/absent
+    sample (RTSA-Suite PRO reports "null" when nothing is available yet)."""
+    conn.request("GET", "/sample")
+    response = conn.getresponse()
+    body = response.read()
+    if response.status != 200:
+        raise ConnectionError("AARTOS /sample returned HTTP {}".format(response.status))
+    if body.strip() == b"null":
+        return None
+    return body
+
+
 def run(args) -> None:
     if not args.host:
         raise SystemExit("Set AARTOS_HOST in .env or pass --host")
@@ -93,6 +117,35 @@ def run(args) -> None:
             time.sleep(_RECONNECT_S)
 
     key = "{}/{}".format(RAW_ROOT, _key_segment(args.host))
+
+    if args.mode == "poll":
+        print("AARTOS ingress (poll): {}:{}/sample every {}s -> {}".format(
+            args.host, args.port, args.poll_interval, key), flush=True)
+        try:
+            while True:
+                conn = http.client.HTTPConnection(args.host, args.port, timeout=args.timeout)
+                try:
+                    sample = poll_sample(conn)
+                    if sample is not None:
+                        session.put(key, sample, encoding=zenoh.Encoding.APPLICATION_OCTET_STREAM)
+                        if args.verbose:
+                            print("AARTOS RAW {} bytes -> {}".format(len(sample), key), flush=True)
+                except KeyboardInterrupt:
+                    raise
+                except Exception as exc:
+                    print("AARTOS poll error: {} — retry in {}s".format(exc, _RECONNECT_S), flush=True)
+                    conn.close()
+                    time.sleep(_RECONNECT_S)
+                    continue
+                finally:
+                    conn.close()
+                time.sleep(args.poll_interval)
+        except KeyboardInterrupt:
+            pass
+        finally:
+            session.close()
+        return
+
     path = "/stream?limit={}".format(args.limit) if args.limit else "/stream"
     print("AARTOS ingress: {}:{}{} -> {}".format(args.host, args.port, path, key), flush=True)
 
@@ -128,6 +181,8 @@ def main() -> None:
     ap.add_argument("--port", type=int, default=int(os.environ.get("AARTOS_PORT", "54664")))
     ap.add_argument("--limit", type=int, default=int(os.environ.get("AARTOS_LIMIT", "0")) or None)
     ap.add_argument("--timeout", type=float, default=float(os.environ.get("AARTOS_TIMEOUT_S", "30")))
+    ap.add_argument("--mode", choices=("stream", "poll"), default=os.environ.get("AARTOS_MODE", "stream"))
+    ap.add_argument("--poll-interval", type=float, default=float(os.environ.get("AARTOS_POLL_INTERVAL_S", "1.0")))
     ap.add_argument("--verbose", "-v", action="store_true")
     run(ap.parse_args())
 
