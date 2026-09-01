@@ -9047,7 +9047,7 @@ def _cat34_decode_cat034(data: bytes) -> dict | None:
             break
     return msg if msg else None
 
-def _cat34__make_cat034_handler(pub_sensor, site, radar_name, configured_range_m=0.0):
+def _cat34__make_cat034_handler(pub_sensor, site, radar_name, configured_range_m=0.0, passive=False):
     # A configured site is a fallback for feeds that omit I034/120. Live
     # positions are stored per SAC/SIC: one process may receive several radar
     # heads, and a single mutable site would make them overwrite each other.
@@ -9189,6 +9189,11 @@ def _cat34__make_cat034_handler(pub_sensor, site, radar_name, configured_range_m
                 "lon_deg":     site_lon,
                 "online_since": _first_seen[key],
             }
+            if passive:
+                # A passive coherent location system (VERA-NG et al.) never
+                # transmits — tak_layer.py renders it with the Direction
+                # Finding icon instead of the emitting-radar one.
+                status["passive"] = True
             if key in _ranges:
                 status["radar_range_m"] = _ranges[key]
                 if _range_sources.get(key):
@@ -9260,13 +9265,17 @@ def _cat34_main():
         default=_cat34__env_float("CAT34_RADAR_RANGE_M"),
         help="operator-confirmed fallback range; CAT-034 I034/100 takes precedence",
     )
+    parser.add_argument(
+        "--passive", action="store_true", default=os.environ.get("CAT34_RADAR_PASSIVE") == "1",
+        help="this radar is a passive coherent location system (e.g. VERA-NG), not an emitting radar",
+    )
     parser.add_argument("--verbose", "-v", action="store_true")
     args = parser.parse_args()
     if not args.zenoh_raw and not args.port: parser.error("--port or CAT34_PORT is required unless --zenoh-raw is selected")
     site = [args.site_lat or None, args.site_lon or None]
     session = open_session()
     handler = _cat34__make_cat034_handler(
-        session, site, args.site_name or None, args.radar_range_m
+        session, site, args.site_name or None, args.radar_range_m, passive=args.passive
     )
     try:
         if args.zenoh_raw: run_zenoh_raw(session, args.input_topic, _cat34_CAT_034, handler, args.verbose)
