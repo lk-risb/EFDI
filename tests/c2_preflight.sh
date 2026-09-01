@@ -11,12 +11,20 @@
 set -u
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PID_DIR="$ROOT/compose/state/.pids"
 ENV_FILE="$ROOT/compose/.env"
 
 envval() { [ -f "$ENV_FILE" ] && sed -n "s/^$1=//p" "$ENV_FILE" | tail -n1; }
 TAK_PORT="$(envval TAK_PORT)"; TAK_PORT="${TAK_PORT:-8089}"
 NVG_PORT="$(envval SITAWARE_HQ_NVG_PORT)"; NVG_PORT="${NVG_PORT:-8088}"
+
+# POD_STATE_DIR defaults to compose/state (see start.sh), but a deployment
+# can point it anywhere via .env or an already-exported env var — hardcoding
+# compose/state here meant this script could never find a single pidfile on
+# a deployment using a non-default POD_STATE_DIR, reporting every C2 leg as
+# permanently DOWN regardless of whether it was actually running.
+POD_STATE_DIR="${POD_STATE_DIR:-$(envval POD_STATE_DIR)}"
+POD_STATE_DIR="${POD_STATE_DIR:-$ROOT/compose/state}"
+PID_DIR="$POD_STATE_DIR/.pids"
 
 GREEN=$'\033[32m'; RED=$'\033[31m'; YEL=$'\033[33m'; DIM=$'\033[2m'; RST=$'\033[0m'
 rc=0
