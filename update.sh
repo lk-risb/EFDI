@@ -102,6 +102,25 @@ upstream="$(git rev-parse --abbrev-ref "${branch}@{upstream}" 2>/dev/null)" \
     || fail "Branch '$branch' has no upstream configured"
 old_head="$(git rev-parse HEAD)"
 
+# This pod's checkout is a deployment target, not a place for hand-edited
+# tracked files — the only intended local state is .env / PID / state dirs
+# (all untracked). But live troubleshooting sometimes leaves a tracked file
+# hand-patched here (e.g. over SSH) ahead of the matching commit landing
+# upstream, and previously that made this fast-forward hard-fail with a
+# manual-intervention wall of text every single time, on every subsequent
+# ./update.sh run, until someone ran `git checkout -- <files>` by hand.
+# Stash any tracked modifications out of the way first so the pull always
+# goes through; the stash is discarded (not restored) afterward, since a
+# hand-patch on this pod is superseded, by definition, the moment the real
+# commit is pulled — this pod is never the place such a change should live.
+autostash=0
+if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
+    warn "Tracked files were locally modified on this pod — stashing them so the pull can proceed (they will be discarded, not restored, since this pod's checkout should always match the repo):"
+    git status --porcelain --untracked-files=no
+    git stash push -q -m "update.sh-autostash-$(date +%s)"
+    autostash=1
+fi
+
 pull_log="$(mktemp)"
 spin_start "Fetching latest changes ($upstream)"
 if ! git fetch --prune >"$pull_log" 2>&1; then
@@ -117,6 +136,10 @@ if ! git merge --ff-only "$upstream" >>"$pull_log" 2>&1; then
     fail "Fast-forward failed; preserve or move conflicting local changes and retry"
 fi
 rm -f "$pull_log"
+if [ "$autostash" = "1" ]; then
+    warn "Discarding the stashed local modifications (superseded by the pull above)"
+    git stash drop -q
+fi
 spin_stop "Up to date: $(git log -1 --format='%h %s')"
 
 if [ "$old_head" != "$(git rev-parse HEAD)" ]; then
