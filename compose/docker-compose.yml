@@ -187,6 +187,8 @@ services:
       - EFDI_POLICY_SIGNER_CERT_PATH=/certs/policy-signer-cert.pem
       - EFDI_POLICY_SIGNER_KEY_PATH=/certs/policy-signer-key.pem
       - EFDI_LINK_SECRET_PATH=/zenoh-config/link-credentials.json
+      - EFDI_SITAWARE_TARGETS_MANIFEST_PATH=/zenoh-config/sitaware-targets.json
+      - EFDI_SITAWARE_TARGET_SECRET_PATH=/zenoh-config/sitaware-target-secrets.json
       - EFDI_TRUST_BOOTSTRAP_PATH=/certs/efdi/trust/managed-bootstrap.json
       - ZENOH_ADMIN_DEV_CORS_ORIGIN=${ZENOH_ADMIN_DEV_CORS_ORIGIN:-}
       - ZENOH_ROUTER_CONTAINER=${ZENOH_ROUTER_CONTAINER:-efdi-pod-zenoh-router}
