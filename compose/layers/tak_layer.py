@@ -82,6 +82,20 @@ _DR_MIN_MS   = 5.15  # don't extrapolate below ~10 kt (5.15 m/s)
 # Emergency squawk codes (ICAO Annex 10)
 _EMERGENCY_SQUAWK = {"7500": "HIJACK", "7600": "COMMS FAILURE", "7700": "MAYDAY"}
 
+# CAT-48 I048/020 target report descriptor TYP subfield (cat.py's _TYP048) —
+# which sensor(s) actually produced this specific detection, not the track's
+# overall sensor mix (that's track_sensor below).
+_DETECTION_TYPE_LABEL = {
+    "no_detection": "NO DETECTION (coasted)",
+    "psr": "PSR ONLY",
+    "ssr": "SSR ONLY",
+    "ssr_psr": "SSR + PSR",
+    "mode_s_all_call": "MODE-S ALL-CALL",
+    "mode_s_roll_call": "MODE-S ROLL-CALL",
+    "mode_s_all_call_psr": "MODE-S ALL-CALL + PSR",
+    "mode_s_roll_call_psr": "MODE-S ROLL-CALL + PSR",
+}
+
 # NATO Mode 1 mission-type codes (5-bit, displayed as 2-digit octal 00–37)
 _MODE1_LABEL = {
     "00": "default",         "01": "air defense",     "02": "interceptor",
@@ -666,6 +680,8 @@ def _build_remarks(track: dict, cot_type: str) -> str:
                 m1_str, " ({})".format(label) if label else ""))
         _r("MODE 2 (military code)", track.get("mode2"), iff_l)
         _r("MODE 3 (squawk)", track.get("squawk"), iff_l)
+        if track.get("squawk_not_extracted"):
+            iff_l.append("[SQUAWK NOT EXTRACTED]")
         iff = track.get("iff", "")
         if iff == "friendly":
             iff_l.append("MODE 4 (IFF): FRIENDLY")
@@ -851,6 +867,13 @@ def _build_remarks(track: dict, cot_type: str) -> str:
         sac_t = track.get("sac"); sic_t = track.get("sic")
         if rng is not None and sac_t is not None:
             radar_l.append("SITE (SAC/SIC): {}/{}".format(sac_t, sic_t))
+        det_type = track.get("detection_type")
+        if det_type:
+            radar_l.append("DET (detection type): {}".format(
+                _DETECTION_TYPE_LABEL.get(det_type, det_type.upper())))
+        trk_sensor = track.get("track_sensor")
+        if trk_sensor and trk_sensor != "combined":
+            radar_l.append("SENSOR (tracker source): {}".format(trk_sensor.upper()))
         if track.get("radar_id"):
             radar_l.append("RDR (radar ID): {}".format(track["radar_id"]))
         pol = track.get("psr_polarization"); chan = track.get("ssr_channel")
@@ -903,6 +926,10 @@ def _build_remarks(track: dict, cot_type: str) -> str:
         if track.get("track_begin"):     status_l.append("[TRACK START]")
         if track.get("amalgamated"):     status_l.append("[AMALGAMATED]")
         if track.get("track_manoeuvre"): status_l.append("[MANOEUVRE]")
+        if track.get("track_doubtful"):  status_l.append("[TRACK DOUBTFUL]")
+        if track.get("field_monitor"):   status_l.append("[FIELD MONITOR]")
+        if track.get("supported_by_neighbour_node"): status_l.append("[SUPPORTED BY NEIGHBOUR NODE]")
+        if track.get("slant_range_correction"):       status_l.append("[SLANT RANGE CORRECTED]")
         if track.get("_extrap"):         status_l.append("[DEAD RECKONED]")
         xp_stat = track.get("transponder_status")
         if xp_stat:                    status_l.append("XPDR (transponder): {}".format(xp_stat.upper()))
