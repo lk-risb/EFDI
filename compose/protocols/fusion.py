@@ -76,8 +76,8 @@ from protocols.proto.normalized_track_pb2 import NormalizedTrack
 
 from google.protobuf.message import DecodeError
 from namespace_prefix import topic_root
-from protocols.gateway import open_session, subscribe
-from protocols.track_views import publish_collection, strip_version
+from protocols.gateway import open_session, publish_collection, subscribe
+from protocols.track_views import strip_version
 
 TOPIC_ROOT = topic_root()
 
