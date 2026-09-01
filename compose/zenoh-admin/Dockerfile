@@ -23,6 +23,13 @@ COPY --from=ui-builder /ui/dist ./static
 # Fixed UID:GID 10001:10001 — scripts/gen-certs.sh chgrp's each pod's leaf
 # private key to GID 10001 so this user can read it despite /certs being :ro.
 RUN groupadd -g 10001 zenohadmin && useradd -u 10001 -g 10001 -M -s /usr/sbin/nologin zenohadmin
+# `-M` never creates a home dir, and switching USER below does not reset $HOME —
+# it stays "/root" (inherited from this build stage's root context), a
+# directory uid 10001 cannot even traverse. asyncpg's connection setup stats a
+# default client-cert path under $HOME/.postgresql/ on every connect attempt,
+# so an unset HOME crashes the app with EACCES instead of a clean "no such
+# file". Point it at a path this uid actually owns.
+ENV HOME=/tmp
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 EXPOSE 8895
