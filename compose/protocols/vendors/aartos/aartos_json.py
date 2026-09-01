@@ -48,6 +48,13 @@ _AFFILIATION = {
 # independent RTSA-Suite instances never tombstone each other's tracks.
 _seen: dict[str, dict[str, float]] = {}
 
+# categoryName values that identify the drone OPERATOR/controller position
+# (RF/WiFi direction-finding of the control link) rather than the airframe
+# itself — seen in this deployment's own /dronesdb category list, alongside
+# airframe types like Drone/Fixedwing/Glider. These render as a ground unit,
+# not a UAV, using the same alertLevel-derived affiliation as the drone.
+_OPERATOR_CATEGORIES = {"wlan", "remote", "poa"}
+
 
 def _velocity(tracking: dict) -> tuple[float | None, float | None]:
     """(speed_ms, heading_deg) from AARTOS's ENU (xyz)velocity, or (None, None)."""
