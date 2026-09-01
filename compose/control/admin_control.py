@@ -101,6 +101,16 @@ _SITAWARE_BRIDGE_SCRIPT = ROOT / "compose" / "bridges" / "sitaware_bridge.py"
 _SITAWARE_VENV_PYTHON = ROOT / "compose" / "venv" / "bin" / "python3"
 _SITAWARE_LOCK = threading.Lock()
 
+# Symmetric egress side: one or more SitaWare HQ instances polling EFDI's own
+# NVG feed (layers/sitaware_layer.py), instead of the single SITAWARE_HQ_NVG_*
+# .env slot.
+SITAWARE_EGRESS_MANIFEST_PATH = Path(os.environ.get(
+    "EFDI_SITAWARE_EGRESS_MANIFEST_PATH", str(STATE_DIR / "zenoh" / "sitaware-egress-targets.json")))
+SITAWARE_EGRESS_SECRET_PATH = Path(os.environ.get(
+    "EFDI_SITAWARE_EGRESS_SECRET_PATH", str(STATE_DIR / "zenoh" / "sitaware-egress-secrets.json")))
+_SITAWARE_LAYER_SCRIPT = ROOT / "compose" / "layers" / "sitaware_layer.py"
+_SITAWARE_EGRESS_LOCK = threading.Lock()
+
 
 # This is deliberately duplicated as a small public catalog.  The process
 # launcher remains the source of truth for command details; the catalog gives
@@ -740,15 +750,15 @@ def _action(name: str, action: str) -> dict:
 
 
 def _sitaware_pid_file(target_id: str) -> Path:
-    return PID_DIR / f"sitaware-{target_id}.pid"
+    return PID_DIR / f"sitaware-ingress-{target_id}.pid"
 
 
 def _sitaware_hash_file(target_id: str) -> Path:
-    return PID_DIR / f"sitaware-{target_id}.hash"
+    return PID_DIR / f"sitaware-ingress-{target_id}.hash"
 
 
 def _sitaware_log_file(target_id: str) -> Path:
-    return LOG_DIR / f"sitaware-{target_id}.log"
+    return LOG_DIR / f"sitaware-ingress-{target_id}.log"
 
 
 def _read_sitaware_manifest() -> list[dict]:
@@ -850,7 +860,7 @@ def _reconcile_sitaware_targets() -> dict:
         by_id = {t["id"]: t for t in manifest}
         started, stopped, unchanged, blocked = [], [], [], []
 
-        known_ids = {p.name[len("sitaware-"):-len(".pid")] for p in PID_DIR.glob("sitaware-*.pid")} if PID_DIR.exists() else set()
+        known_ids = {p.name[len("sitaware-ingress-"):-len(".pid")] for p in PID_DIR.glob("sitaware-ingress-*.pid")} if PID_DIR.exists() else set()
         for target_id in known_ids:
             target = by_id.get(target_id)
             if target is None or not target.get("enabled", True):
@@ -892,6 +902,156 @@ def _sitaware_target_statuses() -> dict:
     for target in manifest:
         target_id = target["id"]
         pid = _sitaware_running_pid(target_id)
+        statuses[target_id] = {"running": pid is not None, "pid": pid}
+    return statuses
+
+
+def _sitaware_egress_pid_file(target_id: str) -> Path:
+    return PID_DIR / f"sitaware-egress-{target_id}.pid"
+
+
+def _sitaware_egress_hash_file(target_id: str) -> Path:
+    return PID_DIR / f"sitaware-egress-{target_id}.hash"
+
+
+def _sitaware_egress_log_file(target_id: str) -> Path:
+    return LOG_DIR / f"sitaware-egress-{target_id}.log"
+
+
+def _read_sitaware_egress_manifest() -> list[dict]:
+    try:
+        value = json.loads(SITAWARE_EGRESS_MANIFEST_PATH.read_text(encoding="utf-8"))
+        return [item for item in value if isinstance(item, dict) and item.get("id")] if isinstance(value, list) else []
+    except (OSError, ValueError):
+        return []
+
+
+def _read_sitaware_egress_secrets() -> dict:
+    try:
+        value = json.loads(SITAWARE_EGRESS_SECRET_PATH.read_text(encoding="utf-8"))
+        return value if isinstance(value, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _sitaware_egress_running_pid(target_id: str) -> int | None:
+    try:
+        pid = int(_sitaware_egress_pid_file(target_id).read_text(encoding="utf-8").strip())
+    except (OSError, ValueError):
+        return None
+    try:
+        raw = Path(f"/proc/{pid}/cmdline").read_bytes()
+    except OSError:
+        return None
+    cmdline = raw.replace(b"\x00", b" ").decode("utf-8", "replace")
+    return pid if str(_SITAWARE_LAYER_SCRIPT) in cmdline else None
+
+
+def _sitaware_egress_config_hash(target: dict, secret: dict | None) -> str:
+    payload = json.dumps({
+        "bind": target.get("bind"), "port": target.get("port"), "path": target.get("path"),
+        "name": target.get("name"),
+        "username": (secret or {}).get("username"), "password": (secret or {}).get("password"),
+    }, sort_keys=True)
+    return hashlib.sha256(payload.encode()).hexdigest()
+
+
+def _sitaware_egress_stop(target_id: str) -> None:
+    pid = _sitaware_egress_running_pid(target_id)
+    if pid is not None:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except OSError:
+            pass
+    _sitaware_egress_pid_file(target_id).unlink(missing_ok=True)
+    _sitaware_egress_hash_file(target_id).unlink(missing_ok=True)
+
+
+def _sitaware_egress_start(target: dict, secret: dict | None) -> dict:
+    """Same env-var contract layers/sitaware_layer.py already documents —
+    only bind/port/path/credentials vary per target; TLS cert/key, staleness
+    threshold, max tracks, and anonymous/insecure-http policy stay whatever
+    this deployment's own .env already sets for every SitaWare egress feed."""
+    if not target.get("port"):
+        return {"ok": False, "output": "no port configured"}
+    env = os.environ.copy()
+    env["SITAWARE_HQ_NVG_BIND"] = target.get("bind") or "0.0.0.0"
+    env["SITAWARE_HQ_NVG_PORT"] = str(target.get("port"))
+    env["SITAWARE_HQ_NVG_PATH"] = target.get("path") or "/nvg"
+    if secret:
+        env["SITAWARE_HQ_NVG_USER"] = secret.get("username", "")
+        env["SITAWARE_HQ_NVG_PASS"] = secret.get("password", "")
+    else:
+        env.pop("SITAWARE_HQ_NVG_USER", None)
+        env.pop("SITAWARE_HQ_NVG_PASS", None)
+    target_id = target["id"]
+    PID_DIR.mkdir(parents=True, exist_ok=True)
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    log_path = _sitaware_egress_log_file(target_id)
+    try:
+        with log_path.open("ab") as log_handle:
+            process = subprocess.Popen(
+                [str(_SITAWARE_VENV_PYTHON), str(_SITAWARE_LAYER_SCRIPT)],
+                cwd=str(ROOT / "compose"), env=env,
+                stdout=log_handle, stderr=subprocess.STDOUT,
+                start_new_session=True,
+            )
+    except OSError as exc:
+        return {"ok": False, "output": str(exc)}
+    _sitaware_egress_pid_file(target_id).write_text(str(process.pid), encoding="utf-8")
+    _sitaware_egress_hash_file(target_id).write_text(_sitaware_egress_config_hash(target, secret), encoding="utf-8")
+    return {"ok": True, "output": f"started pid {process.pid}"}
+
+
+def _reconcile_sitaware_egress_targets() -> dict:
+    with _SITAWARE_EGRESS_LOCK:
+        manifest = _read_sitaware_egress_manifest()
+        secrets = _read_sitaware_egress_secrets()
+        by_id = {t["id"]: t for t in manifest}
+        started, stopped, unchanged, blocked = [], [], [], []
+
+        known_ids = {p.name[len("sitaware-egress-"):-len(".pid")] for p in PID_DIR.glob("sitaware-egress-*.pid")} if PID_DIR.exists() else set()
+        for target_id in known_ids:
+            target = by_id.get(target_id)
+            if target is None or not target.get("enabled", True):
+                if _sitaware_egress_running_pid(target_id) is not None:
+                    _sitaware_egress_stop(target_id)
+                    stopped.append(target_id)
+                else:
+                    _sitaware_egress_pid_file(target_id).unlink(missing_ok=True)
+                    _sitaware_egress_hash_file(target_id).unlink(missing_ok=True)
+
+        for target in manifest:
+            target_id = target["id"]
+            if not target.get("enabled", True):
+                continue
+            secret = secrets.get(target_id)
+            desired_hash = _sitaware_egress_config_hash(target, secret)
+            running_pid = _sitaware_egress_running_pid(target_id)
+            try:
+                current_hash = _sitaware_egress_hash_file(target_id).read_text(encoding="utf-8").strip()
+            except OSError:
+                current_hash = None
+            if running_pid is not None and current_hash == desired_hash:
+                unchanged.append(target_id)
+                continue
+            if running_pid is not None:
+                _sitaware_egress_stop(target_id)
+            result = _sitaware_egress_start(target, secret)
+            if result["ok"]:
+                started.append(target_id)
+            else:
+                blocked.append({"id": target_id, "reason": result["output"]})
+        return {"ok": True, "started": started, "stopped": stopped,
+                "unchanged": unchanged, "blocked": blocked}
+
+
+def _sitaware_egress_target_statuses() -> dict:
+    manifest = _read_sitaware_egress_manifest()
+    statuses = {}
+    for target in manifest:
+        target_id = target["id"]
+        pid = _sitaware_egress_running_pid(target_id)
         statuses[target_id] = {"running": pid is not None, "pid": pid}
     return statuses
 
@@ -1293,6 +1453,9 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/v1/sitaware-targets/status":
             self._json(200, _sitaware_target_statuses())
             return
+        if path == "/v1/sitaware-egress-targets/status":
+            self._json(200, _sitaware_egress_target_statuses())
+            return
         match = re.fullmatch(r"/v1/logs/([a-z0-9_-]+)", path)
         if match and match.group(1) in SERVICE_NAMES:
             lines = _tail_lines(LOG_DIR / f"{match.group(1)}.log")
@@ -1403,6 +1566,9 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/v1/sitaware-targets/reconcile":
             self._json(200, _reconcile_sitaware_targets())
             return
+        if path == "/v1/sitaware-egress-targets/reconcile":
+            self._json(200, _reconcile_sitaware_egress_targets())
+            return
         match = re.fullmatch(r"/v1/containers/([a-z0-9_-]+)/recreate", path)
         if match:
             result = _recreate_container(unquote(match.group(1)))
@@ -1512,9 +1678,15 @@ def main() -> None:
     try:
         reconciled = _reconcile_sitaware_targets()
         if reconciled["started"] or reconciled["blocked"]:
-            print(f"[admin-control] sitaware targets reconciled at startup: {reconciled}", flush=True)
+            print(f"[admin-control] sitaware ingress targets reconciled at startup: {reconciled}", flush=True)
     except Exception as exc:  # noqa: BLE001 — must not block the control agent from starting
-        print(f"[admin-control] sitaware target startup reconcile failed: {exc!r}", flush=True)
+        print(f"[admin-control] sitaware ingress target startup reconcile failed: {exc!r}", flush=True)
+    try:
+        reconciled_egress = _reconcile_sitaware_egress_targets()
+        if reconciled_egress["started"] or reconciled_egress["blocked"]:
+            print(f"[admin-control] sitaware egress targets reconciled at startup: {reconciled_egress}", flush=True)
+    except Exception as exc:  # noqa: BLE001 — must not block the control agent from starting
+        print(f"[admin-control] sitaware egress target startup reconcile failed: {exc!r}", flush=True)
     server = ThreadingHTTPServer((CONTROL_HOST, CONTROL_PORT), Handler)
     shell_server = None
     shell_thread = None
