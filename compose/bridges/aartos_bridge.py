@@ -6,9 +6,9 @@ the laptop (wired to the Tracking/Drone Detection block's output) and exposes
 a documented REST API there — see the vendor's "RTSA-Suite PRO JSON Protocol
 Documentation" and "HTTP Stream Server Endpoints" PDFs. This bridge holds a
 single long-lived GET /stream connection open and republishes each JSON
-sample verbatim, same "decode nothing here" shape as mqtt_bridge.py — a
-normalizer downstream turns the AARTOS Sample/TrackState schema into
-canonical EFDI records.
+sample verbatim, same "decode nothing here" shape as mqtt_bridge.py —
+protocols/vendors/aartos/aartos.py turns the AARTOS Sample/TrackState schema
+into canonical EFDI track records.
 
 This does NOT talk to the radar hardware directly (fixed ports 54667-54669
 on the radar itself). That raw connection is RTSA-Suite PRO's own private
@@ -54,7 +54,7 @@ def stream_samples(conn: http.client.HTTPConnection, path: str):
     """Yield each RS-delimited JSON sample from a long-lived GET <path>.
 
     RTSA-Suite PRO's /stream sends HTTP chunks containing complete or partial
-    JSON lines separated by ASCII 30 (RS) — buffer across chunk boundaries
+    JSON samples separated by ASCII 30 (RS) — buffer across chunk boundaries
     the same way a newline-delimited reader would, just on a different byte.
     """
     conn.request("GET", path)
