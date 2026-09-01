@@ -19,8 +19,7 @@ import time
 from defusedxml import ElementTree as ET
 from namespace_prefix import prefix
 from protocols.proto.cap_pb2 import CapAlert
-from protocols.track_views import publish_dual
-from gateway import TOPIC_ROOT, open_session, subscribe, payload_bytes
+from gateway import TOPIC_ROOT, open_session, publish_dual, subscribe, payload_bytes
 
 
 INPUT_TOPIC = os.environ.get("CAP_INPUT_TOPIC") or TOPIC_ROOT + "/raw/cap/**"

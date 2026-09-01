@@ -7,9 +7,8 @@ import argparse
 import os
 import time
 
-from protocols.track_views import publish_dual
 from protocols.proto.sensor_health_pb2 import SensorHealth
-from gateway import TOPIC_ROOT, open_session, subscribe, payload_json
+from gateway import TOPIC_ROOT, open_session, publish_dual, subscribe, payload_json
 
 
 INPUT_TOPIC = os.environ.get("SENSOR_HEALTH_INPUT_TOPIC") or TOPIC_ROOT + "/raw/health/**"

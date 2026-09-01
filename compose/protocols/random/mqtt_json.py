@@ -23,10 +23,8 @@ import json
 import os
 import time
 from datetime import datetime, timezone
-from gateway import TOPIC_ROOT, open_session, subscribe, payload_bytes
+from gateway import TOPIC_ROOT, open_session, publish_dual, subscribe, payload_bytes
 from protocols.proto.mqtt_json_pb2 import MqttSensorRecord
-
-from protocols.track_views import publish_dual
 
 INPUT_TOPIC = os.environ.get("MQTT_INPUT_TOPIC") or TOPIC_ROOT + "/raw/mqtt/**"
 OUTPUT_TOPIC = TOPIC_ROOT + "/land/mqtt/iot/unknown/sensor"
