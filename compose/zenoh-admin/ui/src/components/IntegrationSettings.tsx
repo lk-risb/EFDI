@@ -4,8 +4,8 @@ import {notify} from '@/lib/notify'
 import {useAuth} from '@/store/auth'
 import {Card, CardHeader} from '@/components/ui/card'
 import {
-  ChevronDown, ChevronRight, Download, KeyRound, MapPinned, Radar, Router, Save,
-  Settings2, ShieldCheck, Terminal, Upload, UploadCloud, Video, Waypoints, Wifi, Wrench,
+  ChevronDown, ChevronRight, Download, KeyRound, MapPinned, Plus, Radar, Router, Save,
+  Settings2, ShieldCheck, Terminal, Trash2, Upload, UploadCloud, Video, Waypoints, Wifi, Wrench,
 } from 'lucide-react'
 
 // Service `.env` editor. Lives on the Config tab alongside the router config:
@@ -52,20 +52,11 @@ const FIELD_GROUPS: FieldGroup[] = [
     { key: 'TAK_TLS', label: 'TAK TLS enabled (1/0)', placeholder: '1' },
     { key: 'TAK_TLS_SERVER_NAME', label: 'TAK certificate DNS name', placeholder: 'takserver', help: 'The name on the TAK Server’s certificate (SAN), for hostname verification — not necessarily the same as TAK_HOST.' },
   ] },
-  { title: 'SitaWare HQ', icon: ShieldCheck, description: 'REST import (sitaware_bridge) and NVG 2.0.2 export feed (sitaware_layer). Passwords are write-only.', fields: [
-    { key: 'SITAWARE_URL', label: 'SitaWare HQ base URL', placeholder: 'https://swhq.efdi.ltu:10006', help: 'Inbound: EFDI polls this URL for friendly-force units over REST.' },
-    { key: 'SITAWARE_URL_FALLBACK', label: 'SitaWare HQ fallback URL', placeholder: 'https://swhq.efdi.ltu:10006' },
-    { key: 'SITAWARE_URL_TAILSCALE', label: 'SitaWare HQ Tailscale fallback URL', placeholder: 'https://100.x.x.x:10006' },
-    { key: 'SITAWARE_USER', label: 'SitaWare HQ username' }, { key: 'SITAWARE_PASS', label: 'SitaWare HQ password', secret: true },
+  { title: 'SitaWare HQ', icon: ShieldCheck, description: 'REST import (sitaware_bridge) and NVG 2.0.2 export feed (sitaware_layer). Per-endpoint URLs/bind ports and credentials are below as a list — add as many HQ instances as needed on each side. These fields are shared defaults every listed endpoint inherits.', fields: [
     { key: 'SITAWARE_TLS_VERIFY', label: 'Verify SitaWare HQ TLS certificate (1/0)', placeholder: '1' },
     { key: 'SITAWARE_DISCOVER', label: 'Auto-discover SitaWare HQ endpoint (1/0)', placeholder: '0' },
     { key: 'SITAWARE_API_PATH', label: 'REST friendly-force path (sitaware_bridge)', placeholder: '/deployment-specific/path', help: 'The exact resource path this HQ installation exposes — varies per deployment, confirm with the HQ administrator before guessing.' },
     { key: 'SITAWARE_POLL_S', label: 'REST poll seconds', placeholder: '10' },
-    { key: 'SITAWARE_HQ_NVG_ENABLE', label: 'NVG feed enabled — Zenoh → HQ polls (sitaware_layer) (1/0)', placeholder: '1', help: 'Outbound direction: turns on the read-only HTTP(S) feed that SitaWare HQ itself polls. There is no separate inbound NVG-XML path — inbound always goes through the REST fields above.' },
-    { key: 'SITAWARE_HQ_NVG_BIND', label: 'NVG feed bind address', placeholder: '0.0.0.0' },
-    { key: 'SITAWARE_HQ_NVG_PORT', label: 'NVG feed port', placeholder: '8088' },
-    { key: 'SITAWARE_HQ_NVG_PATH', label: 'NVG feed path', placeholder: '/nvg' },
-    { key: 'SITAWARE_HQ_NVG_USER', label: 'NVG feed username', help: 'A dedicated feed-only account — do not reuse a Keycloak login here.' }, { key: 'SITAWARE_HQ_NVG_PASS', label: 'NVG feed password', secret: true },
     { key: 'SITAWARE_HQ_NVG_TLS_CERT', label: 'NVG feed TLS certificate path', placeholder: '/path/to/server-cert.pem' },
     { key: 'SITAWARE_HQ_NVG_TLS_KEY', label: 'NVG feed TLS key path', placeholder: '/path/to/server-key.pem', secret: true },
     { key: 'SITAWARE_HQ_NVG_STALE_S', label: 'NVG feed staleness threshold (seconds)', placeholder: '120' },
@@ -98,6 +89,39 @@ const FIELD_GROUPS: FieldGroup[] = [
 
 const KNOWN_KEYS = new Set(FIELD_GROUPS.flatMap(group => group.fields.map(field => field.key)))
 
+// One row per independent SitaWare HQ endpoint — unlike the flat .env fields
+// above, these are individually create/update/delete REST resources (each
+// enabled row gets its own live host process via admin_control.py), so rows
+// are saved one at a time rather than batched into the page-level "Save
+// settings" button. Inputs stay always-editable (like the Zenoh Config page's
+// fabric-endpoint picker) so a row reads as "type it, then hit save," not a
+// separate edit mode.
+type IngressRow = {
+  id: string; isNew?: boolean; saving?: boolean
+  name: string; url: string; url_fallback: string; url_tailscale: string
+  username: string; password: string; enabled: boolean
+  has_credentials?: boolean; running?: boolean | null
+}
+type EgressRow = {
+  id: string; isNew?: boolean; saving?: boolean
+  name: string; bind: string; port: string; path: string
+  username: string; password: string; enabled: boolean
+  has_credentials?: boolean; running?: boolean | null
+}
+
+function newIngressRow(): IngressRow {
+  return {
+    id: `new-${Date.now()}-${Math.random().toString(36).slice(2)}`, isNew: true,
+    name: '', url: '', url_fallback: '', url_tailscale: '', username: '', password: '', enabled: true,
+  }
+}
+function newEgressRow(): EgressRow {
+  return {
+    id: `new-${Date.now()}-${Math.random().toString(36).slice(2)}`, isNew: true,
+    name: '', bind: '0.0.0.0', port: '', path: '/nvg', username: '', password: '', enabled: true,
+  }
+}
+
 function groupConfiguredCount(group: FieldGroup, values: Record<string, string>, secrets: Record<string, boolean>): number {
   return group.fields.filter(f => (values[f.key]?.trim() ? true : false) || secrets[f.key]).length
 }
@@ -117,6 +141,8 @@ export function IntegrationSettings() {
   const [takZipFile, setTakZipFile] = useState<File | null>(null)
   const [takUploading, setTakUploading] = useState(false)
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set())
+  const [ingressRows, setIngressRows] = useState<IngressRow[]>([])
+  const [egressRows, setEgressRows] = useState<EgressRow[]>([])
 
   function toggleGroup(title: string) {
     setOpenGroups(current => {
@@ -143,7 +169,130 @@ export function IntegrationSettings() {
     }
   }
 
-  useEffect(() => { void load() }, [])
+  async function loadSitawareTargets() {
+    try {
+      const [ingress, egress] = await Promise.all([
+        apiJson<Array<{ id: string; name: string; url: string; url_fallback: string | null; url_tailscale: string | null; enabled: boolean; has_credentials: boolean; running: boolean | null }>>('/api/sitaware-targets/ingress'),
+        apiJson<Array<{ id: string; name: string; bind: string; port: number; path: string; enabled: boolean; has_credentials: boolean; running: boolean | null }>>('/api/sitaware-targets/egress'),
+      ])
+      setIngressRows(ingress.map(t => ({
+        id: t.id, name: t.name, url: t.url, url_fallback: t.url_fallback ?? '', url_tailscale: t.url_tailscale ?? '',
+        username: '', password: '', enabled: t.enabled, has_credentials: t.has_credentials, running: t.running,
+      })))
+      setEgressRows(egress.map(t => ({
+        id: t.id, name: t.name, bind: t.bind, port: String(t.port), path: t.path,
+        username: '', password: '', enabled: t.enabled, has_credentials: t.has_credentials, running: t.running,
+      })))
+    } catch (e) {
+      notify.error(errorMessage(e))
+    }
+  }
+
+  useEffect(() => { void load(); void loadSitawareTargets() }, [])
+
+  function addIngressRow() { setIngressRows(rows => [...rows, newIngressRow()]) }
+  function addEgressRow() { setEgressRows(rows => [...rows, newEgressRow()]) }
+  function setIngressField<K extends keyof IngressRow>(id: string, key: K, value: IngressRow[K]) {
+    setIngressRows(rows => rows.map(r => r.id === id ? { ...r, [key]: value } : r))
+  }
+  function setEgressField<K extends keyof EgressRow>(id: string, key: K, value: EgressRow[K]) {
+    setEgressRows(rows => rows.map(r => r.id === id ? { ...r, [key]: value } : r))
+  }
+
+  async function saveIngressRow(row: IngressRow) {
+    if (!canWrite || !row.name || !row.url) return
+    setIngressRows(rows => rows.map(r => r.id === row.id ? { ...r, saving: true } : r))
+    try {
+      const creds = row.username && row.password ? { username: row.username, password: row.password } : {}
+      if (row.isNew) {
+        await apiJson('/api/sitaware-targets/ingress', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: row.name, url: row.url, url_fallback: row.url_fallback || null, url_tailscale: row.url_tailscale || null, enabled: row.enabled, ...creds }),
+        })
+        notify.success(`Ingress target "${row.name}" created`)
+      } else {
+        await apiJson(`/api/sitaware-targets/ingress/${row.id}`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: row.url, url_fallback: row.url_fallback || null, url_tailscale: row.url_tailscale || null, enabled: row.enabled, ...creds }),
+        })
+        notify.success(`Ingress target "${row.name}" saved`)
+      }
+      await loadSitawareTargets()
+    } catch (e) {
+      notify.error(errorMessage(e))
+      setIngressRows(rows => rows.map(r => r.id === row.id ? { ...r, saving: false } : r))
+    }
+  }
+
+  async function removeIngressRow(row: IngressRow) {
+    if (row.isNew) { setIngressRows(rows => rows.filter(r => r.id !== row.id)); return }
+    if (!canWrite) return
+    if (!window.confirm(`Delete ingress target "${row.name}"? Its process will be stopped and credentials removed.`)) return
+    try {
+      await apiJson(`/api/sitaware-targets/ingress/${row.id}`, { method: 'DELETE' })
+      notify.success(`${row.name} deleted`)
+      await loadSitawareTargets()
+    } catch (e) { notify.error(errorMessage(e)) }
+  }
+
+  async function toggleIngressEnabled(row: IngressRow) {
+    if (row.isNew) { setIngressField(row.id, 'enabled', !row.enabled); return }
+    if (!canWrite) return
+    try {
+      await apiJson(`/api/sitaware-targets/ingress/${row.id}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: !row.enabled }),
+      })
+      await loadSitawareTargets()
+    } catch (e) { notify.error(errorMessage(e)) }
+  }
+
+  async function saveEgressRow(row: EgressRow) {
+    const port = Number(row.port)
+    if (!canWrite || !row.name || !port) return
+    setEgressRows(rows => rows.map(r => r.id === row.id ? { ...r, saving: true } : r))
+    try {
+      const creds = row.username && row.password ? { username: row.username, password: row.password } : {}
+      if (row.isNew) {
+        await apiJson('/api/sitaware-targets/egress', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: row.name, bind: row.bind, port, path: row.path, enabled: row.enabled, ...creds }),
+        })
+        notify.success(`Egress target "${row.name}" created`)
+      } else {
+        await apiJson(`/api/sitaware-targets/egress/${row.id}`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ bind: row.bind, port, path: row.path, enabled: row.enabled, ...creds }),
+        })
+        notify.success(`Egress target "${row.name}" saved`)
+      }
+      await loadSitawareTargets()
+    } catch (e) {
+      notify.error(errorMessage(e))
+      setEgressRows(rows => rows.map(r => r.id === row.id ? { ...r, saving: false } : r))
+    }
+  }
+
+  async function removeEgressRow(row: EgressRow) {
+    if (row.isNew) { setEgressRows(rows => rows.filter(r => r.id !== row.id)); return }
+    if (!canWrite) return
+    if (!window.confirm(`Delete egress target "${row.name}"? Its feed process will be stopped and credentials removed.`)) return
+    try {
+      await apiJson(`/api/sitaware-targets/egress/${row.id}`, { method: 'DELETE' })
+      notify.success(`${row.name} deleted`)
+      await loadSitawareTargets()
+    } catch (e) { notify.error(errorMessage(e)) }
+  }
+
+  async function toggleEgressEnabled(row: EgressRow) {
+    if (row.isNew) { setEgressField(row.id, 'enabled', !row.enabled); return }
+    if (!canWrite) return
+    try {
+      await apiJson(`/api/sitaware-targets/egress/${row.id}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: !row.enabled }),
+      })
+      await loadSitawareTargets()
+    } catch (e) { notify.error(errorMessage(e)) }
+  }
 
   function setValue(key: string, value: string) { setValues(current => ({ ...current, [key]: value })) }
 
@@ -388,6 +537,83 @@ export function IntegrationSettings() {
                       >
                         <UploadCloud size={13} /> {takUploading ? 'Uploading…' : 'Upload TAK package'}
                       </button>
+                    </div>
+                  )}
+                  {groupDef.title === 'SitaWare HQ' && (
+                    <div className="mt-3 space-y-4">
+                      <div className="rounded-md border border-zinc-200 p-3 dark:border-white/10">
+                        <p className="mb-2 text-[11px] font-medium text-zinc-600 dark:text-zinc-300">
+                          Ingress — EFDI polls these HQ instances (sitaware_bridge)
+                        </p>
+                        <div className="space-y-1.5">
+                          {ingressRows.map(row => (
+                            <div key={row.id} className="rounded-md border border-zinc-200 p-2 dark:border-white/10">
+                              <div className="flex items-center gap-1.5">
+                                <span className={`h-2 w-2 shrink-0 rounded-full ${row.isNew ? 'bg-zinc-400' : row.running ? 'bg-emerald-400 hud-live-dot' : row.enabled ? 'bg-amber-400' : 'bg-zinc-400 dark:bg-zinc-700'}`} title={row.isNew ? 'not yet saved' : row.running ? 'running' : row.enabled ? 'not running' : 'disabled'} />
+                                <input value={row.name} disabled={!row.isNew || !canWrite} onChange={e => setIngressField(row.id, 'name', e.target.value)}
+                                  placeholder="name" className="w-24 rounded-md border border-zinc-300 bg-zinc-100 px-2 py-1.5 font-mono text-xs disabled:opacity-60 dark:border-white/10 dark:bg-[#141416]" />
+                                <input value={row.url} disabled={!canWrite} onChange={e => setIngressField(row.id, 'url', e.target.value)}
+                                  placeholder="https://swhq.efdi.ltu:10006" className="min-w-0 flex-1 rounded-md border border-zinc-300 bg-zinc-100 px-2 py-1.5 font-mono text-xs dark:border-white/10 dark:bg-[#141416]" />
+                                <label className="flex shrink-0 items-center gap-1 text-[10px] text-zinc-500">
+                                  <input type="checkbox" checked={row.enabled} disabled={!canWrite} onChange={() => toggleIngressEnabled(row)} className="h-3.5 w-3.5 accent-accent-fill" /> on
+                                </label>
+                                <button title="Save" disabled={!canWrite || row.saving || !row.name || !row.url} onClick={() => saveIngressRow(row)} className="shrink-0 rounded-none p-1 text-zinc-500 hover:bg-emerald-500/10 hover:text-emerald-500 disabled:opacity-30"><Save size={12} /></button>
+                                <button title="Delete" disabled={!canWrite} onClick={() => removeIngressRow(row)} className="shrink-0 rounded-none p-1 text-zinc-500 hover:bg-red-500/10 hover:text-red-500 disabled:opacity-30"><Trash2 size={12} /></button>
+                              </div>
+                              <div className="mt-1.5 flex flex-wrap items-center gap-1.5 pl-3.5">
+                                <input value={row.url_fallback} disabled={!canWrite} onChange={e => setIngressField(row.id, 'url_fallback', e.target.value)}
+                                  placeholder="fallback URL (optional)" className="w-36 rounded-md border border-zinc-300 bg-zinc-100 px-1.5 py-1 font-mono text-[10.5px] dark:border-white/10 dark:bg-[#141416]" />
+                                <input value={row.url_tailscale} disabled={!canWrite} onChange={e => setIngressField(row.id, 'url_tailscale', e.target.value)}
+                                  placeholder="tailscale URL (optional)" className="w-36 rounded-md border border-zinc-300 bg-zinc-100 px-1.5 py-1 font-mono text-[10.5px] dark:border-white/10 dark:bg-[#141416]" />
+                                <input value={row.username} disabled={!canWrite} onChange={e => setIngressField(row.id, 'username', e.target.value)}
+                                  placeholder="username" className="w-24 rounded-md border border-zinc-300 bg-zinc-100 px-1.5 py-1 text-[10.5px] dark:border-white/10 dark:bg-[#141416]" />
+                                <input type="password" value={row.password} disabled={!canWrite} onChange={e => setIngressField(row.id, 'password', e.target.value)}
+                                  placeholder={row.has_credentials ? 'unchanged' : 'password'} className="w-24 rounded-md border border-zinc-300 bg-zinc-100 px-1.5 py-1 text-[10.5px] dark:border-white/10 dark:bg-[#141416]" />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        <button type="button" disabled={!canWrite} onClick={addIngressRow} className="mt-2 flex items-center gap-1.5 text-xs text-accent-ring hover:underline disabled:opacity-50">
+                          <Plus size={13} /> Add ingress target
+                        </button>
+                      </div>
+
+                      <div className="rounded-md border border-zinc-200 p-3 dark:border-white/10">
+                        <p className="mb-2 text-[11px] font-medium text-zinc-600 dark:text-zinc-300">
+                          Egress — these HQ instances poll EFDI's NVG feed (sitaware_layer)
+                        </p>
+                        <div className="space-y-1.5">
+                          {egressRows.map(row => (
+                            <div key={row.id} className="rounded-md border border-zinc-200 p-2 dark:border-white/10">
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <span className={`h-2 w-2 shrink-0 rounded-full ${row.isNew ? 'bg-zinc-400' : row.running ? 'bg-emerald-400 hud-live-dot' : row.enabled ? 'bg-amber-400' : 'bg-zinc-400 dark:bg-zinc-700'}`} title={row.isNew ? 'not yet saved' : row.running ? 'running' : row.enabled ? 'not running' : 'disabled'} />
+                                <input value={row.name} disabled={!row.isNew || !canWrite} onChange={e => setEgressField(row.id, 'name', e.target.value)}
+                                  placeholder="name" className="w-24 rounded-md border border-zinc-300 bg-zinc-100 px-2 py-1.5 font-mono text-xs disabled:opacity-60 dark:border-white/10 dark:bg-[#141416]" />
+                                <input value={row.bind} disabled={!canWrite} onChange={e => setEgressField(row.id, 'bind', e.target.value)}
+                                  placeholder="0.0.0.0" className="w-24 rounded-md border border-zinc-300 bg-zinc-100 px-2 py-1.5 font-mono text-xs dark:border-white/10 dark:bg-[#141416]" />
+                                <input value={row.port} disabled={!canWrite} onChange={e => setEgressField(row.id, 'port', e.target.value)}
+                                  placeholder="8088" className="w-16 rounded-md border border-zinc-300 bg-zinc-100 px-2 py-1.5 font-mono text-xs dark:border-white/10 dark:bg-[#141416]" />
+                                <input value={row.path} disabled={!canWrite} onChange={e => setEgressField(row.id, 'path', e.target.value)}
+                                  placeholder="/nvg" className="w-20 rounded-md border border-zinc-300 bg-zinc-100 px-2 py-1.5 font-mono text-xs dark:border-white/10 dark:bg-[#141416]" />
+                                <label className="flex shrink-0 items-center gap-1 text-[10px] text-zinc-500">
+                                  <input type="checkbox" checked={row.enabled} disabled={!canWrite} onChange={() => toggleEgressEnabled(row)} className="h-3.5 w-3.5 accent-accent-fill" /> on
+                                </label>
+                                <button title="Save" disabled={!canWrite || row.saving || !row.name || !row.port} onClick={() => saveEgressRow(row)} className="shrink-0 rounded-none p-1 text-zinc-500 hover:bg-emerald-500/10 hover:text-emerald-500 disabled:opacity-30"><Save size={12} /></button>
+                                <button title="Delete" disabled={!canWrite} onClick={() => removeEgressRow(row)} className="shrink-0 rounded-none p-1 text-zinc-500 hover:bg-red-500/10 hover:text-red-500 disabled:opacity-30"><Trash2 size={12} /></button>
+                              </div>
+                              <div className="mt-1.5 flex flex-wrap items-center gap-1.5 pl-3.5">
+                                <input value={row.username} disabled={!canWrite} onChange={e => setEgressField(row.id, 'username', e.target.value)}
+                                  placeholder="username" className="w-24 rounded-md border border-zinc-300 bg-zinc-100 px-1.5 py-1 text-[10.5px] dark:border-white/10 dark:bg-[#141416]" />
+                                <input type="password" value={row.password} disabled={!canWrite} onChange={e => setEgressField(row.id, 'password', e.target.value)}
+                                  placeholder={row.has_credentials ? 'unchanged' : 'password'} className="w-24 rounded-md border border-zinc-300 bg-zinc-100 px-1.5 py-1 text-[10.5px] dark:border-white/10 dark:bg-[#141416]" />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        <button type="button" disabled={!canWrite} onClick={addEgressRow} className="mt-2 flex items-center gap-1.5 text-xs text-accent-ring hover:underline disabled:opacity-50">
+                          <Plus size={13} /> Add egress target
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>

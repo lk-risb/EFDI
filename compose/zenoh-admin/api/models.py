@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import String, Boolean, DateTime, ForeignKey, Text, BigInteger, UniqueConstraint
+from sqlalchemy import String, Boolean, DateTime, ForeignKey, Text, BigInteger, Integer, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import TypeDecorator
 from .db import Base
@@ -257,20 +257,42 @@ class LinkCredential(Base):
     rotated_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
 
 
-class SitawareTarget(Base):
-    """One independent SitaWare HQ ingress source. Each enabled row gets its
-    own bridges/sitaware_bridge.py process, reconciled by admin_control.py —
-    see control/admin_control.py's _reconcile_sitaware_targets() and
-    api/sitaware_targets.py for the manifest/secrets hand-off. Live
-    running/pid status is reported by admin_control.py at request time
-    (not cached here) — this table is desired-state only."""
-    __tablename__ = "sitaware_targets"
+class SitawareIngressTarget(Base):
+    """One independent SitaWare HQ ingress source (EFDI polls HQ over REST via
+    bridges/sitaware_bridge.py). Each enabled row gets its own bridge process,
+    reconciled by admin_control.py — see control/admin_control.py's
+    _reconcile_sitaware_targets() and api/sitaware_targets.py for the
+    manifest/secrets hand-off. Live running/pid status is reported by
+    admin_control.py at request time (not cached here) — this table is
+    desired-state only. Shared settings that don't vary per target (API path,
+    poll interval, discover mode, TLS verify) stay in the deployment .env,
+    edited via IntegrationSettings' "SitaWare HQ" group."""
+    __tablename__ = "sitaware_ingress_targets"
 
     id: Mapped[str] = mapped_column(UUID_STRING, primary_key=True, default=_uuid)
     name: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     url: Mapped[str] = mapped_column(String(512), nullable=False)
     url_fallback: Mapped[str | None] = mapped_column(String(512), nullable=True)
     url_tailscale: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_by: Mapped[str] = mapped_column(ForeignKey("admin_users.id"), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=lambda: datetime.now(timezone.utc))
+
+
+class SitawareEgressTarget(Base):
+    """One independent SitaWare HQ egress feed (HQ polls EFDI's NVG 2.0.2 feed
+    via layers/sitaware_layer.py). Symmetric to SitawareIngressTarget above —
+    each enabled row gets its own feed-server process on its own bind/port,
+    reconciled by admin_control.py. Shared settings that don't vary per target
+    (TLS cert/key, staleness threshold, max tracks, anonymous/insecure-http
+    policy) stay in the deployment .env."""
+    __tablename__ = "sitaware_egress_targets"
+
+    id: Mapped[str] = mapped_column(UUID_STRING, primary_key=True, default=_uuid)
+    name: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    bind: Mapped[str] = mapped_column(String(128), default="0.0.0.0", nullable=False)
+    port: Mapped[int] = mapped_column(Integer, nullable=False)
+    path: Mapped[str] = mapped_column(String(256), default="/nvg", nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_by: Mapped[str] = mapped_column(ForeignKey("admin_users.id"), nullable=False, index=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=lambda: datetime.now(timezone.utc))
