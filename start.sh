@@ -649,16 +649,20 @@ launch() {
             _start mqtt-raw bridges/mqtt_bridge.py
             ;;
 
-        aartos)
+        aartos-raw)
             if [[ -z "${AARTOS_HOST:-}" ]]; then
                 _prompt_address "AARTOS HTTP Server (RTSA-Suite PRO laptop)" AARTOS_HOST
                 if [[ -z "${AARTOS_HOST:-}" ]]; then
-                    printf "  ${YELLOW}[skip]${R}  aartos           no address entered\n"
+                    printf "  ${YELLOW}[skip]${R}  aartos-raw       no address entered\n"
                     return
                 fi
                 export AARTOS_HOST
             fi
-            _start aartos bridges/aartos_bridge.py
+            _start aartos-raw bridges/aartos_bridge.py
+            ;;
+
+        aartos)
+            _start aartos protocols/vendors/aartos/aartos_json.py
             ;;
 
         sapient-raw)
