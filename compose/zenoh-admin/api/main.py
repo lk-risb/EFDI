@@ -33,6 +33,7 @@ from .pki import router as pki_router
 from .managed_acl import router as managed_acl_router
 from .trust_api import router as trust_router
 from .topics import router as topics_router, start_topic_observer
+from .sitaware_targets import router as sitaware_targets_router
 from .deps import SECRET_KEY
 
 
@@ -118,6 +119,7 @@ app.include_router(pki_router)
 app.include_router(managed_acl_router)
 app.include_router(trust_router)
 app.include_router(topics_router)
+app.include_router(sitaware_targets_router)
 
 
 class SPAStaticFiles(StaticFiles):

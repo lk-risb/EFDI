@@ -119,10 +119,15 @@ _DIM_CONFIG = {
 
 
 def sidc_to_topic(sidc: str) -> str:
-    """Map a 15-char SIDC to the appropriate Zenoh topic."""
+    """Map a 15-char SIDC to the appropriate Zenoh topic.
+
+    The "sitaware" segment is _SOURCE (SITAWARE_SOURCE), not a literal —
+    multiple simultaneously-running instances (one per configured target,
+    see admin_control.py's SitaWare target reconciler) are each given a
+    distinct SITAWARE_SOURCE so their topics don't collide."""
     sidc = (sidc or "").upper().replace("*", "-").replace("-", "")
     if len(sidc) < 3:
-        return "{}/land/sitaware/c2/unknown/unit".format(TOPIC_ROOT)
+        return "{}/land/{}/c2/unknown/unit".format(TOPIC_ROOT, _SOURCE)
 
     aff_char = sidc[1] if len(sidc) > 1 else "U"
     dim_char = sidc[2] if len(sidc) > 2 else "G"
@@ -135,9 +140,9 @@ def sidc_to_topic(sidc: str) -> str:
     # "mil" slot loses friendly/hostile state because those topics infer it from
     # ICAO addresses, which friendly-force records normally do not carry.
     if domain == "air":
-        return "{}/air/sitaware/c2/{}/aircraft".format(TOPIC_ROOT, aff)
+        return "{}/air/{}/c2/{}/aircraft".format(TOPIC_ROOT, _SOURCE, aff)
 
-    return "{}/{}/sitaware/rest/{}/{}".format(TOPIC_ROOT, domain, aff, entity)
+    return "{}/{}/{}/rest/{}/{}".format(TOPIC_ROOT, domain, _SOURCE, aff, entity)
 
 
 # ---------------------------------------------------------------------------

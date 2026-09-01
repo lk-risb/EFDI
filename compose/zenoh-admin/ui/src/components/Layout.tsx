@@ -20,6 +20,7 @@ import {
     Moon,
     Network,
     Radio,
+    Satellite,
     ScrollText,
     Settings2,
     ShieldCheck,
@@ -60,6 +61,7 @@ const navItems = [
 const adminItems = [
   { to: '/config', label: 'Config', icon: FileCog },
   { to: '/runtime', label: 'Runtime Control', icon: SlidersHorizontal },
+  { to: '/sitaware-targets', label: 'SitaWare Targets', icon: Satellite },
   { to: '/changes', label: 'Changes', icon: GitPullRequestDraft },
 ]
 
