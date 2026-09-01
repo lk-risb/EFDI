@@ -83,8 +83,8 @@ SERVICES=(
     sitaware dronuradaras asterix track-fusion
     nffi sapient stanag4586 stanag4609 stanag5516
     sapient-raw stanag4586-raw stanag4609-raw stanag5516-raw
-    mqtt-raw
-    cap mqtt sparkplug sensor-health mission-route
+    mqtt-raw aartos-raw
+    cap mqtt sparkplug sensor-health mission-route aartos
     tak_layer tak-bridge sitaware_layer
 )
 
@@ -162,6 +162,7 @@ declare -A SVC_CAT=(
     [sapient]="Protocols" [stanag4586]="Protocols" [stanag4609]="Protocols" [stanag5516]="Protocols"
     [tak-bridge]="C2 inputs"
     [mqtt-raw]="Sensor bridges"
+    [aartos-raw]="Sensor bridges" [aartos]="Protocols"
     [sapient-raw]="Sensor bridges"
     [stanag4586-raw]="Sensor bridges" [stanag4609-raw]="Sensor bridges" [stanag5516-raw]="Sensor bridges"
     [cap]="Protocols"
@@ -188,6 +189,8 @@ declare -A SVC_DESC=(
     [stanag4609]="STANAG 4609 KLV decoder (raw → tracks)"
     [stanag5516]="STANAG 5516 / Link 16 JREAP-C decoder (raw → tracks)"
     [mqtt-raw]="MQTT broker → Zenoh raw"
+    [aartos-raw]="Aaronia AARTOS HTTP stream ingress"
+    [aartos]="Aaronia AARTOS drone tracking JSON"
     [sapient-raw]="SAPIENT/FLEX 335 TCP → Zenoh raw"
     [stanag4586-raw]="STANAG 4586 TCP → Zenoh raw"
     [stanag4609-raw]="STANAG 4609 SRT/KLV → Zenoh raw"
@@ -220,6 +223,8 @@ svc_ready() {
         mqtt)         return 0 ;;
         sparkplug)    return 0 ;;
         mqtt-raw)     [[ "${MQTT_HOST:-}" ]] ;;
+        aartos-raw)   [[ "${AARTOS_HOST:-}" ]] ;;
+        aartos)       return 0 ;;
         sapient-raw)  [[ "${SAPIENT_RAW_PORT:-}" ]] ;;
         stanag4586-raw) [[ "${STANAG4586_RAW_PORT:-}" ]] ;;
         stanag4609-raw) [[ "${STANAG4609_SRT_URL:-}" ]] ;;
@@ -243,6 +248,7 @@ svc_hint() {
     case "$1" in
         asterix) echo "ASTERIX family bundle" ;;
         mqtt-raw) echo "MQTT_HOST not set" ;;
+        aartos-raw) echo "AARTOS_HOST not set" ;;
         sapient-raw)
             if [[ "${SAPIENT_RAW_PORT:-}" ]]; then
                 echo "TCP port ${SAPIENT_RAW_PORT}"
