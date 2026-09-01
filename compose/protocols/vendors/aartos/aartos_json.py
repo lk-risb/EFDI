@@ -26,7 +26,8 @@ import math
 import os
 import time
 
-from protocols.gateway import TOPIC_ROOT, open_session, payload_bytes, subscribe
+from protocols.gateway import TOPIC_ROOT, open_session, payload_bytes, publish_dual, subscribe
+from protocols.proto.aartos_json_pb2 import AartosTrack
 
 INPUT_TOPIC = os.environ.get("AARTOS_INPUT_TOPIC") or TOPIC_ROOT + "/raw/aartos/**"
 RAW_PREFIX = TOPIC_ROOT + "/raw/aartos/"
@@ -83,6 +84,7 @@ def tracking_to_track(tracking: dict, ref_ts: float) -> dict | None:
         "lat_deg": round(lat, 7),
         "lon_deg": round(lon, 7),
         "callsign": tracking.get("droneName") or tracking.get("categoryName") or "AARTOS-{}".format(track_id),
+        "object_class": "uav",
         "aartos_category": tracking.get("categoryName"),
         "aartos_alert_level": alert,
         "aartos_probability": tracking.get("probability"),
@@ -134,7 +136,7 @@ def run() -> None:
             if track is None:
                 continue
             track["uid"] = "aartos-{}-{}".format(host, track_id)
-            session.put(topic_for_track(track), json.dumps(track).encode(), encoding="application/json")
+            publish_dual(session, topic_for_track(track), track, AartosTrack)
 
         # Tombstone any previously-seen track (for this host) that dropped
         # out of this sample, so it does not linger as a ghost marker.
