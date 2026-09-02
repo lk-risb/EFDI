@@ -1376,6 +1376,29 @@ def _course(track: dict) -> float:
     return 0.0
 
 
+def _delete_point_cot(uid: str, ts: float | None = None) -> str:
+    """Standard CoT "delete point" event (type t-x-d-d) — tells a TAK client
+    to remove the marker for this uid immediately, whatever its real type
+    was. Deliberately position-independent (dummy 0,0 point, already-stale
+    timestamp): ATAK/WinTAK act on uid+type for this specific message, which
+    is why it works for a bare {"uid", "_delete": true} tombstone that never
+    carries a real lat/lon at all — unlike track_to_cot(), which requires one."""
+    now = ts if ts is not None and math.isfinite(ts) else time.time()
+    event = ET.Element("event", {
+        "version": "2.0",
+        "uid":     uid,
+        "type":    "t-x-d-d",
+        "how":     "m-g",
+        "time":    _ts(now),
+        "start":   _ts(now),
+        "stale":   _ts(now),
+    })
+    ET.SubElement(event, "point", {"lat": "0.0", "lon": "0.0", "hae": "0.0", "ce": "9999999.0", "le": "9999999.0"})
+    detail = ET.SubElement(event, "detail")
+    ET.SubElement(detail, "link", {"relation": "p-p", "uid": uid, "type": "a-u-G"})
+    return '<?xml version="1.0" encoding="UTF-8"?>' + ET.tostring(event, encoding="unicode")
+
+
 def track_to_cot(track: dict, cot_type: str, stale_s: float = COT_STALE_S) -> str | None:
     lat = track.get("lat_deg")
     lon = track.get("lon_deg")
@@ -1738,6 +1761,17 @@ def make_handler(cot_type_or_fn, sender, verbose: bool, stale_s: float = COT_STA
                 _dr_store.pop(uid, None)
             if verbose:
                 print("CoT expired offline sensor {}".format(uid), flush=True)
+            return
+        # Generic tombstone: any OTHER vendor's plain {"uid", "_delete": true}
+        # (e.g. aartos_json.py's per-track tombstones) — this was previously
+        # silently dropped since only the dronuradaras.lt case above was
+        # handled, leaving expired markers to linger for a full stale_s
+        # instead of disappearing immediately.
+        if track.get("_delete"):
+            uid = _uid(track)
+            sender.send(_delete_point_cot(uid, track.get("_ts")))
+            if verbose:
+                print("CoT deleted {}".format(uid), flush=True)
             return
         if _is_unfused_sensor_track(track, key):
             return
