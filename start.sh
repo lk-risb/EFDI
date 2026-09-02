@@ -83,7 +83,7 @@ SERVICES=(
     sitaware dronuradaras asterix track-fusion
     nffi sapient stanag4586 stanag4609 stanag5516
     sapient-raw stanag4586-raw stanag4609-raw stanag5516-raw
-    mqtt-raw aartos-raw
+    mqtt-raw aartos-raw aartos-wifi-raw
     cap mqtt sparkplug sensor-health mission-route aartos
     tak_layer tak-bridge sitaware_layer
 )
@@ -162,7 +162,7 @@ declare -A SVC_CAT=(
     [sapient]="Protocols" [stanag4586]="Protocols" [stanag4609]="Protocols" [stanag5516]="Protocols"
     [tak-bridge]="C2 inputs"
     [mqtt-raw]="Sensor bridges"
-    [aartos-raw]="Sensor bridges" [aartos]="Protocols"
+    [aartos-raw]="Sensor bridges" [aartos-wifi-raw]="Sensor bridges" [aartos]="Protocols"
     [sapient-raw]="Sensor bridges"
     [stanag4586-raw]="Sensor bridges" [stanag4609-raw]="Sensor bridges" [stanag5516-raw]="Sensor bridges"
     [cap]="Protocols"
@@ -189,7 +189,8 @@ declare -A SVC_DESC=(
     [stanag4609]="STANAG 4609 KLV decoder (raw → tracks)"
     [stanag5516]="STANAG 5516 / Link 16 JREAP-C decoder (raw → tracks)"
     [mqtt-raw]="MQTT broker → Zenoh raw"
-    [aartos-raw]="Aaronia AARTOS HTTP stream ingress"
+    [aartos-raw]="Aaronia AARTOS HTTP stream ingress (drone/airframe block)"
+    [aartos-wifi-raw]="Aaronia AARTOS HTTP stream ingress (WiFi operator-position block)"
     [aartos]="Aaronia AARTOS drone tracking JSON"
     [sapient-raw]="SAPIENT/FLEX 335 TCP → Zenoh raw"
     [stanag4586-raw]="STANAG 4586 TCP → Zenoh raw"
@@ -224,6 +225,7 @@ svc_ready() {
         sparkplug)    return 0 ;;
         mqtt-raw)     [[ "${MQTT_HOST:-}" ]] ;;
         aartos-raw)   [[ "${AARTOS_HOST:-}" ]] ;;
+        aartos-wifi-raw) [[ "${AARTOS_HOST:-}" && "${AARTOS_WIFI_PORT:-}" ]] ;;
         aartos)       return 0 ;;
         sapient-raw)  [[ "${SAPIENT_RAW_PORT:-}" ]] ;;
         stanag4586-raw) [[ "${STANAG4586_RAW_PORT:-}" ]] ;;
@@ -249,6 +251,13 @@ svc_hint() {
         asterix) echo "ASTERIX family bundle" ;;
         mqtt-raw) echo "MQTT_HOST not set" ;;
         aartos-raw) echo "AARTOS_HOST not set" ;;
+        aartos-wifi-raw)
+            if [[ -z "${AARTOS_HOST:-}" ]]; then
+                echo "AARTOS_HOST not set"
+            else
+                echo "AARTOS_WIFI_PORT not set"
+            fi
+            ;;
         sapient-raw)
             if [[ "${SAPIENT_RAW_PORT:-}" ]]; then
                 echo "TCP port ${SAPIENT_RAW_PORT}"
@@ -665,6 +674,23 @@ launch() {
                 export AARTOS_HOST
             fi
             _start aartos-raw bridges/aartos_bridge.py
+            ;;
+
+        aartos-wifi-raw)
+            # Same laptop, a second RTSA-Suite PRO HTTP Server block on its own
+            # port (WiFi-based operator/controller position finding rather than
+            # the drone/airframe track) — reuses AARTOS_HOST/MODE/POLL_INTERVAL,
+            # only the port differs, so pass it as an explicit override rather
+            # than duplicating every AARTOS_* variable for a second instance.
+            if [[ -z "${AARTOS_HOST:-}" ]]; then
+                printf "  ${YELLOW}[skip]${R}  aartos-wifi-raw  set AARTOS_HOST (shared with aartos-raw)\n"
+                return
+            fi
+            if [[ -z "${AARTOS_WIFI_PORT:-}" ]]; then
+                printf "  ${YELLOW}[skip]${R}  aartos-wifi-raw  set AARTOS_WIFI_PORT\n"
+                return
+            fi
+            _start aartos-wifi-raw bridges/aartos_bridge.py --port "$AARTOS_WIFI_PORT"
             ;;
 
         aartos)

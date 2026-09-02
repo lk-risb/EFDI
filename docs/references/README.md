@@ -20,6 +20,9 @@ text used, so a reviewer can check our work without re-deriving it.
   work was decoded from, pulled directly from the upstream repository (not
   paraphrased), one per implemented category, plus that repository's
   `LICENSE`.
+- [`aartos/AARTOS.md`](aartos/AARTOS.md) — source and trust assessment for
+  `vendors/aartos/aartos_json.py`, including what has been verified against
+  a real Aaronia RTSA-Suite PRO deployment and what hasn't.
 - [`sapient/SAPIENT.md`](sapient/SAPIENT.md) — source and trust assessment for
   `vendors/sapient/flex335.py` and the vendored `compose/protocols/vendors/sapient/sapient_msg`
   protobuf schema.
@@ -153,6 +156,39 @@ code actually rests on.
   and deliberately not ported — it's an extended-squitter message (TC=28),
   not a ground-initiated Comm-B register, so it doesn't fit any of these
   categories' GICB dispatch sites.
+
+### Aaronia AARTOS (`vendors/aartos/aartos_json.py`)
+
+Built primarily from real-traffic observation against a live deployment
+(zenoh-gateway pod), plus one vendor document actually fetched and read:
+
+- [`RTSA-http-Stream-Server-Endpoints-9.pdf`](https://v6-forum.aaronia.de/wp-content/uploads/asgarosforum/358/RTSA-http-Stream-Server-Endpoints-9.pdf)
+  — Aaronia's own "HTTP Stream Server Endpoints" protocol document,
+  attached to a thread on Aaronia's SPECTRAN V6 support forum
+  ([`v6-forum.aaronia.de/forum/topic/rtsa-suite-pro-http-streaming/`](https://v6-forum.aaronia.de/forum/topic/rtsa-suite-pro-http-streaming/)).
+  Fetched 2026-09-02 to answer a specific question (is there a distinct
+  "WiFi detection" HTTP endpoint?) — confirmed there isn't: every HTTP
+  Server block exposes the identical endpoint set
+  (`/sample`/`/samples`/`/stream`/`/inputs`/`/control`/`/remoteconfig`/
+  `/info`/`/healthstatus`/`/user`) regardless of what's wired to it, and
+  `/healthstatus`'s own documented shape (one child item per *health-aware
+  block*) is what makes an unwired block's health tree come back empty.
+  Not vendored into this repo — support-forum material of unclear
+  copyright status, unlike `asterix-specs` (BSD-3-Clause) or SAPIENT's
+  Dstl schema (Apache-2.0).
+- Aaronia's companion "RTSA-Suite PRO JSON Protocol Documentation" (the
+  actual `trackings[]`/`antennas[]` data-shape reference, as opposed to
+  the endpoint-list PDF above) remains unlocated at a stable public URL —
+  that part of this decoder is still built from real-traffic observation,
+  not a cited document.
+
+See `aartos/AARTOS.md` for exactly what was confirmed against the real
+deployment (antenna positions, `/sample` vs `/stream` behavior, multiple
+HTTP Server blocks on one system — including a second block added
+2026-09-02 for WiFi/operator-position finding, confirmed still unwired via
+its empty `/healthstatus` tree, cross-checked against the endpoint doc
+above) versus what remains provisional (the `trackings[]` field mapping,
+the operator/WiFi categorization).
 
 ### SAPIENT / BSI Flex 335 (`vendors/sapient/flex335.py`)
 
