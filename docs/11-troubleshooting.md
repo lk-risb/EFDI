@@ -142,6 +142,86 @@ The `asterix` bridge publishes a keepalive every 60 s regardless of track activi
 tail -20 $POD_STATE_DIR/logs/asterix.log | grep -E "keepalive|startup|error"
 ```
 
+### A drone marker duplicates instead of disappearing when it should
+
+**Symptom:** A vendor feed that reassigns a fresh track ID to the same
+physical object (AARTOS/RTSA-Suite does this almost every poll cycle) leaves
+its old marker on the map instead of clearing it — two, three, or more
+markers for one real aircraft, each with the same callsign.
+
+**Cause:** `tak_layer.py`'s `_delete` handling only covered
+`dronuradaras.lt`'s own tombstone shape. Any other vendor's bare
+`{"uid", "_ts", "_delete": true}` tombstone (no position at all) fell through
+unhandled, so the old marker just sat until its full stale timer expired.
+
+**Fix:** already applied — a generic fallback in `make_handler` now builds a
+`t-x-d-d` CoT delete event from just the uid for *any* track carrying
+`_delete`, regardless of source. If you still see this, confirm the
+tombstone's uid actually matches the live track's own `_uid()` output, and
+confirm the tombstone was published to the *same* topic the live track used
+(see the gotcha below) — a delete sent to the wrong affiliation/domain
+subscription clears nothing.
+
+### AARTOS HTTP block stops responding mid-flight
+
+**Symptom:** `curl` (or the bridge's own poll) to the RTSA-Suite laptop's
+port (54663/54664) starts timing out — `AARTOS poll error: timed out — retry
+in 10.0s` repeating in the bridge log — even though the laptop was working
+minutes earlier and the NetBird tunnel to it still shows `Connected`.
+
+**Cause:** RTSA-Suite PRO's own HTTP Server block(s) can stop serving
+independently of the underlying network path — the tunnel stays up, the
+laptop is on, but the block itself has stalled.
+
+**Fix:** On the laptop, hit **Play** (top-left triangle, starts the
+blockgraph engine) **and** the **Start System** button inside the "DD
+Command center LIVE" block — both need to be engaged; either one alone can
+leave the HTTP block wired but not actually listening. After it recovers on
+the laptop side, the bridge (`aartos-raw`/`aartos-wifi-raw`) may still be
+stuck retrying a dead connection — restart it too rather than assuming it'll
+reconnect on its own:
+
+```bash
+kill $(pgrep -f aartos_bridge.py)
+rm -f $POD_STATE_DIR/.pids/aartos-raw.pid $POD_STATE_DIR/.pids/aartos-wifi-raw.pid
+./start.sh --service aartos-raw
+./start.sh --service aartos-wifi-raw
+```
+
+(Note: `stop.sh` has no case for `aartos`/`aartos-raw`/`aartos-wifi-raw` —
+the manual kill+pidfile-removal above is required; it can't be stopped the
+normal way.)
+
+### A drone marker jumps wildly / "hops around" even though the target is stationary
+
+**Symptom:** A single, continuously-tracked drone marker (same uid, no ID
+churn) swings 100-300+ meters between consecutive position updates, and/or
+the altitude swings by tens of meters — even confirmed, via a controlled
+stationary test, that the real target never moved.
+
+**Cause:** Two independent, compounding sources, both upstream of EFDI:
+
+1. AARTOS/RTSA-Suite's own triangulation is noisy on a tightly-clustered
+   antenna array (poor GDOP) — sometimes degrading to a single-antenna
+   bearing-only fix, which RTSA-Suite appears to resolve by defaulting to
+   *that reporting antenna's own surveyed coordinates* rather than
+   suppressing the point. EFDI relays AARTOS's `latitude`/`longitude`
+   verbatim; this is not a decode bug.
+2. `tak_layer.py`'s dead-reckoning thread (`_start_dr_thread`) extrapolates
+   a track's position every 2 s using that track's own reported
+   `speed_ms`/`heading_deg` for up to 85% of its stale window. If the
+   upstream sensor's own velocity estimate is itself unreliable (the same
+   root cause as #1), DR confidently projects the marker along a fabricated
+   straight-line vector until the next real (also noisy) fix arrives and
+   snaps it elsewhere — amplifying, not smoothing, a low-quality position
+   source.
+
+**Fix:** Not fixable from the EFDI side for cause #1 (report to the
+vendor/antenna-array operator with a stationary-target test as evidence). For
+cause #2, if this is unacceptable for a known-noisy source, skip DR
+extrapolation for that source's tracks entirely (e.g. `track.get("_src") ==
+"AARTOS"`) rather than trusting its self-reported velocity.
+
 ## 11.2 Gotchas
 
 This is the *operational/infrastructure* companion to
@@ -418,5 +498,82 @@ process is stale.
 **Fix:** After any fix to a long-running service's code, restart that
 specific process (not just recompile/test it) before concluding the fix
 didn't work, and before reporting a symptom as still-unresolved.
+
+### A `TypeError` names a parameter that doesn't exist anywhere in the current source
+
+**Symptom:** A long-running decoder throws `TypeError: publish_dual()
+missing 1 required positional argument: 'zenoh'` (or similarly names some
+other parameter) on every real message it processes — but `grep`-ing the
+entire repo for that parameter name finds nothing; the function's actual,
+on-disk signature has never had a parameter by that name.
+
+**Cause:** A stale `__pycache__/*.pyc` compiled from a much older version of
+the module (from before a parameter was renamed) is shadowing the current
+source. This is a different failure mode than the "code fix isn't live
+until restart" gotcha above — restarting the *crashing* process alone isn't
+enough if the process it's importing from was compiled against, and Python
+still trusts, out-of-date bytecode. Confirm the mismatch directly rather
+than guessing:
+
+```bash
+python3 -c "import inspect; from protocols.gateway import publish_dual; \
+  print(inspect.signature(publish_dual))"
+```
+
+If that prints the parameter name you expect, but the running process still
+errors on the old one, the running process's own long-lived `sys.modules`
+cache (not `.pyc` staleness) is the culprit — see the restart gotcha above
+instead.
+
+**Fix:**
+
+```bash
+find compose -name '__pycache__' -exec rm -rf {} +
+# then restart every process that imports the affected module
+```
+
+### A per-vendor tombstone must reach the same subscription its live track used
+
+**Symptom:** A generic `_delete` handler is confirmed working (verified via
+a synthetic replay, or by direct code review) for one affiliation, but a
+track in a *different* affiliation (hostile/friendly/unknown) never clears
+from the map.
+
+**Cause:** A layer like `tak_layer.py` holds one separate Zenoh subscription
+per affiliation/domain combination (e.g. `air/**/hostile/uav/**` vs.
+`air/**/unknown/uav/**`). If the decoder publishes every tombstone to one
+fixed topic regardless of the track's real affiliation (a common shortcut
+when a tombstone carries no position and therefore no obvious "where does
+this go" answer), a hostile- or friendly-flagged track's delete only ever
+reaches the *unknown* subscriber — never the one that actually rendered the
+marker.
+
+**Fix:** Remember each live track's last-published topic (keyed by its
+track ID, alongside whatever "seen" bookkeeping already drives tombstone
+computation) and send that track's eventual tombstone to that same
+remembered topic, not a fixed fallback.
+
+### RTMP over a Relayed (non-direct) NetBird connection corrupts the stream
+
+**Symptom:** A live RTMP push (e.g. a drone controller broadcasting video)
+repeatedly disconnects and reconnects every few seconds, with errors like
+`received type 3 chunk without previous chunk` or `unable to decode AVCC:
+invalid length` on the receiving end — even though the video briefly comes
+through and is correctly recognized (right codec, right resolution) each
+time before it drops.
+
+**Cause:** `netbird status --detail` shows `Connection type: Relayed`
+(routed through a TURN-like relay, e.g. `nbio.fairytail.eu`) rather than a
+direct peer-to-peer path. The added latency/jitter of a relayed hop is
+usually fine for small polled JSON payloads, but a continuous RTMP chunk
+stream is far less tolerant of it — the connection resets and RTMP's
+stateful chunk-stream protocol gets confused by the resulting reconnects.
+
+**Fix:** No fix from the receiving end; this is a peer-to-peer NetBird
+routing outcome, typically caused by NAT/firewall on the sending peer
+preventing a direct (non-relayed) path. Check
+`netbird status --detail` for that peer repeatedly over several minutes — if
+it never upgrades from Relayed, that's an environment/network constraint on
+the sending side, not something to keep retrying from here.
 
 ---
