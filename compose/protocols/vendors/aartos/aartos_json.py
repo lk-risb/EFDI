@@ -119,10 +119,13 @@ def tracking_to_track(tracking: dict, ref_ts: float) -> dict | None:
     if speed is not None:
         track["speed_ms"] = speed
         track["heading_deg"] = heading
-    pred_lat, pred_lon = tracking.get("predxpos"), tracking.get("predypos")
-    if pred_lat is not None and pred_lon is not None:
-        track["aartos_predicted_lat_deg"] = pred_lat
-        track["aartos_predicted_lon_deg"] = pred_lon
+    # predxpos/predypos are local ENU offsets in meters (same family as
+    # xpos/ypos/zpos, all 0 for a stationary reference), NOT degrees — a
+    # prior version of this decoder mislabeled them as
+    # aartos_predicted_lat_deg/lon_deg and published them as if they were
+    # real coordinates. Left out entirely rather than mistranslated:
+    # projecting them into real lat/lon would need the antenna's own
+    # azimuth/heading, which this decoder does not currently derive.
     return track
 
 
