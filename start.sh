@@ -86,6 +86,7 @@ SERVICES=(
     mqtt-raw aartos-raw aartos-wifi-raw
     cap mqtt sparkplug sensor-health mission-route aartos
     tak_layer tak-bridge sitaware_layer
+    mediamtx
 )
 
 # Restore only non-secret launcher choices. Explicit compose/.env values win;
@@ -169,6 +170,7 @@ declare -A SVC_CAT=(
     [sensor-health]="Protocols" [mission-route]="Protocols"
     [tak_layer]="Output layers"   [sitaware_layer]="Output layers"
     [track-fusion]="Sensor bridges"
+    [mediamtx]="Sensor bridges"
 )
 
 declare -A SVC_DESC=(
@@ -203,6 +205,7 @@ declare -A SVC_DESC=(
     [tak-bridge]="TAK Server CoT ingress"
     [sitaware_layer]="EFDI tracks → SitaWare (NVG feed, SitaWare polls)"
     [track-fusion]="Radar/ADS-B track correlation"
+    [mediamtx]="RTMP video ingress (drone remote) → RTSP restream for TAK video feeds"
 )
 
 # ── Ready check — 0=can start, 1=missing config ───────────────────────────
@@ -240,6 +243,7 @@ svc_ready() {
         stanag5516) return 0 ;;  # UDP listener, default port 3010
         # sitaware_layer serves a feed, so it needs a port to listen on.
         sitaware_layer) [[ -n "${SITAWARE_HQ_NVG_PORT:-}" ]] ;;
+        mediamtx) return 0 ;;  # binds default RTMP :1935 / RTSP :8554, no config required
         *)        return 0 ;;
     esac
 }
@@ -473,6 +477,24 @@ _start() {   # _start <name> <rel-script-path> [args…]
     printf "  ${GREEN}[start]${R} %-16s pid %s\n" "$name" "$!"
 }
 
+# Same as _start but execs a native binary directly — no Python interpreter.
+# is_bridge_pid() only checks that "$COMPOSE_DIR/$script" appears literally in
+# the process's argv, so this is a drop-in for any registered service whose
+# implementation isn't a Python script.
+_start_bin() {   # _start_bin <name> <rel-binary-path> [args…]
+    local name="$1"; shift
+    local script="$1"; shift
+    local pid_file="$PID_DIR/$name.pid"
+    if is_running "$name" "$script" "$@"; then
+        printf "  ${DIM}[skip]${R}  %-16s already running (pid %s)\n" "$name" "$(cat "$pid_file")"
+        return
+    fi
+    rm -f "$pid_file"
+    ( cd "$(dirname "$COMPOSE_DIR/$script")" && exec setsid "$COMPOSE_DIR/$script" "$@" >> "$LOG_DIR/$name.log" 2>&1 ) &
+    echo $! > "$pid_file"
+    printf "  ${GREEN}[start]${R} %-16s pid %s\n" "$name" "$!"
+}
+
 asterix_category_uses_raw() {
     local wanted="$1" item
     [[ -n "${UDP_INGRESS_PORT:-${ASTERIX_PORT:-}}" ||
@@ -695,6 +717,12 @@ launch() {
 
         aartos)
             _start aartos protocols/vendors/aartos/aartos_json.py
+            ;;
+
+        mediamtx)
+            # _start_bin cd's into the binary's own directory first, so mediamtx
+            # picks up ./mediamtx.yml there with no explicit config-path arg.
+            _start_bin mediamtx bridges/mediamtx/mediamtx
             ;;
 
         sapient-raw)
