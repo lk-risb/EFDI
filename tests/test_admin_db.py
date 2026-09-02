@@ -33,7 +33,7 @@ def test_every_admin_table_compiles_for_postgres():
         for table in Base.metadata.sorted_tables
     ]
 
-    assert len(statements) == 14
+    assert len(statements) == 16
     assert "TEXT" in "\n".join(statements)
     assert 'COLLATE "C"' in "\n".join(statements)
 
