@@ -53,7 +53,13 @@ _seen: dict[str, dict[str, float]] = {}
 # itself — seen in this deployment's own /dronesdb category list, alongside
 # airframe types like Drone/Fixedwing/Glider. These render as a ground unit,
 # not a UAV, using the same alertLevel-derived affiliation as the drone.
+# Matched case-insensitively — /dronesdb lists them capitalized ("WLAN",
+# "Remote", "POA") but this set stays lowercase.
 _OPERATOR_CATEGORIES = {"wlan", "remote", "poa"}
+
+
+def _is_operator_track(tracking: dict) -> bool:
+    return str(tracking.get("categoryName") or "").strip().lower() in _OPERATOR_CATEGORIES
 
 
 def _velocity(tracking: dict) -> tuple[float | None, float | None]:
@@ -91,7 +97,7 @@ def tracking_to_track(tracking: dict, ref_ts: float) -> dict | None:
         "lat_deg": round(lat, 7),
         "lon_deg": round(lon, 7),
         "callsign": tracking.get("droneName") or tracking.get("categoryName") or "AARTOS-{}".format(track_id),
-        "object_class": "uav",
+        "object_class": "unit" if _is_operator_track(tracking) else "uav",
         "aartos_category": tracking.get("categoryName"),
         "aartos_alert_level": alert,
         "aartos_probability": tracking.get("probability"),
@@ -113,6 +119,11 @@ def tracking_to_track(tracking: dict, ref_ts: float) -> dict | None:
 
 def topic_for_track(track: dict) -> str:
     affiliation = _AFFILIATION.get(track.get("aartos_alert_level", "unknown"), "unknown")
+    # An operator/controller position is a person standing on the ground, not
+    # an airframe — route it onto tak_layer.py's land/**/{aff}/unit/** wildcard
+    # instead of the air/**/{aff}/uav/** one every other AARTOS track uses.
+    if track.get("object_class") == "unit":
+        return "{}/land/aartos/{}/unit".format(TOPIC_ROOT, affiliation)
     return "{}/air/aartos/{}/uav".format(TOPIC_ROOT, affiliation)
 
 
