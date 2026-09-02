@@ -17,6 +17,7 @@ jobs:
         env:
           POD_STATE_DIR: /tmp/efdi-state
           BUNDLE_DIR: /tmp/efdi-certs
+          EFDI_DB_DATA_DIR: /tmp/efdi-db-data
           PARTNER_NAMESPACE: ci-root
           ZENOH_ADMIN_DB_USER: admin
           ZENOH_ADMIN_DB_PASSWORD: admin-password
