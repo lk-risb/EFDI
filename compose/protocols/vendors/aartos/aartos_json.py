@@ -48,6 +48,15 @@ _AFFILIATION = {
 # independent RTSA-Suite instances never tombstone each other's tracks.
 _seen: dict[str, dict[str, float]] = {}
 
+# trackID -> the exact topic its last live publish went to, kept alongside
+# _seen. A tombstone must reach the same tak_layer.py subscription the live
+# track did (each affiliation/domain combination is its own separate Zenoh
+# subscription there) — publishing every tombstone to one fixed topic meant
+# a hostile or friendly track's delete never reached its own subscriber
+# and only ever cleared an "unknown" one, leaving expired hostile/friendly
+# markers stuck on the map until their stale timer ran out.
+_last_topic: dict[str, dict[str, str]] = {}
+
 # categoryName values that identify the drone OPERATOR/controller position
 # (RF/WiFi direction-finding of the control link) rather than the airframe
 # itself — seen in this deployment's own /dronesdb category list, alongside
@@ -195,6 +204,8 @@ def run() -> None:
                 continue
             session.put(site_topic(site), json.dumps(site).encode(), encoding="application/json")
 
+        last_topic = _last_topic.setdefault(host, {})
+
         for tracking in trackings:
             track_id = tracking.get("trackID")
             if track_id is None:
@@ -206,18 +217,25 @@ def run() -> None:
             if track is None:
                 continue
             track["uid"] = "aartos-{}-{}".format(host, track_id)
-            publish_dual(session, topic_for_track(track), track, AartosTrack)
+            topic = topic_for_track(track)
+            publish_dual(session, topic, track, AartosTrack)
+            last_topic[str(track_id)] = topic
 
         # Tombstone any previously-seen track (for this host) that dropped
-        # out of this sample, so it does not linger as a ghost marker.
+        # out of this sample, so it does not linger as a ghost marker. Must
+        # go to the SAME topic the track's live publishes used — tak_layer.py
+        # holds one separate subscription per affiliation/domain, so a
+        # tombstone sent anywhere else (e.g. a fixed "unknown/uav" regardless
+        # of the track's real affiliation) never reaches the subscriber that
+        # actually rendered the marker, and it never gets cleared.
         for gone_id in set(seen) - now_ids:
             tombstone = {
                 "uid": "aartos-{}-{}".format(host, gone_id),
                 "_ts": time.time(),
                 "_delete": True,
             }
-            session.put("{}/air/aartos/unknown/uav".format(TOPIC_ROOT),
-                        json.dumps(tombstone).encode(), encoding="application/json")
+            topic = last_topic.pop(gone_id, "{}/air/aartos/unknown/uav".format(TOPIC_ROOT))
+            session.put(topic, json.dumps(tombstone).encode(), encoding="application/json")
 
         seen.clear()
         seen.update({tid: time.time() for tid in now_ids})
