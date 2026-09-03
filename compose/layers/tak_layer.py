@@ -1831,12 +1831,18 @@ def make_handler(cot_type_or_fn, sender, verbose: bool, stale_s: float = COT_STA
             return
         sender.send(xml)
 
-        # Update dead-reckoning state (skip extrapolated updates to prevent feedback)
+        # Update dead-reckoning state (skip extrapolated updates to prevent feedback).
+        # Also skip AARTOS entirely: its own reported speed/heading come from
+        # the same weak-GDOP triangulation already known to jitter position by
+        # hundreds of meters between samples, so DR's straight-line projection
+        # just confidently amplifies that noise into a fabricated trajectory
+        # between real (also noisy) fixes instead of smoothing anything.
         uid = _uid(track)
         lat = track.get("lat_deg")
         lon = track.get("lon_deg")
         now = float(track.get("_ts", time.time()))
-        if lat is not None and lon is not None and not track.get("_extrap"):
+        if lat is not None and lon is not None and not track.get("_extrap") \
+                and track.get("_src") != "AARTOS":
             with _dr_lock:
                 _dr_store[uid] = {
                     "track":    track,
