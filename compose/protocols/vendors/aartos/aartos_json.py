@@ -44,17 +44,34 @@ _AFFILIATION = {
     "ignore": "unknown",
 }
 
-# trackID -> last-seen epoch, kept separately per source host so two
-# independent RTSA-Suite instances never tombstone each other's tracks.
-_seen: dict[str, dict[str, float]] = {}
+# Stable per-(host, object_class) identity, so a churned AARTOS trackID
+# keeps the SAME CoT uid instead of minting a fresh one. RTSA-Suite PRO
+# reassigns a new trackID to the same physical drone almost every poll
+# cycle; diffing raw trackIDs meant every reassignment forced a
+# delete-then-recreate cycle in TAK, which raced against WinTAK's own CoT
+# processing and could leave two or three markers visible for one real
+# aircraft. Keying identity by object_class ("uav" vs "unit") instead means
+# the SAME marker just keeps updating in place across a trackID churn — no
+# delete, no recreate, nothing for the client to race.
+# host -> object_class -> {"track_id": str, "uid": str, "last_seen": float}
+_class_identity: dict[str, dict[str, dict]] = {}
 
-# trackID -> the exact topic its last live publish went to, kept alongside
-# _seen. A tombstone must reach the same tak_layer.py subscription the live
-# track did (each affiliation/domain combination is its own separate Zenoh
-# subscription there) — publishing every tombstone to one fixed topic meant
-# a hostile or friendly track's delete never reached its own subscriber
-# and only ever cleared an "unknown" one, leaving expired hostile/friendly
-# markers stuck on the map until their stale timer ran out.
+# Seconds a class must be absent (using AARTOS's own sample timestamp, not
+# wall-clock) before its identity is actually tombstoned. AARTOS's own
+# detection is noisy enough to skip a class for one poll and pick it back up
+# a second later even while the physical object never left; without this
+# grace window that single-sample gap alone re-triggers the same
+# delete/recreate churn the class-based identity exists to prevent.
+_CLASS_GONE_GRACE_S = 5.0
+
+# object_class -> the exact topic its last live publish went to, kept
+# alongside _class_identity. A tombstone must reach the same tak_layer.py
+# subscription the live track did (each affiliation/domain combination is
+# its own separate Zenoh subscription there) — publishing every tombstone
+# to one fixed topic meant a hostile or friendly track's delete never
+# reached its own subscriber and only ever cleared an "unknown" one,
+# leaving expired hostile/friendly markers stuck on the map until their
+# stale timer ran out.
 _last_topic: dict[str, dict[str, str]] = {}
 
 # categoryName values that identify the drone OPERATOR/controller position
@@ -194,12 +211,12 @@ def run() -> None:
             return
         key = str(sample.key_expr)
         host = key[len(RAW_PREFIX):] if key.startswith(RAW_PREFIX) else "unknown"
-        seen = _seen.setdefault(host, {})
+        class_identity = _class_identity.setdefault(host, {})
 
         ref_ts = payload.get("startTime") or time.time()
         data = payload.get("data") or {}
         trackings = data.get("trackings") or []
-        now_ids: set[str] = set()
+        now_classes: set[str] = set()
 
         for antenna in data.get("antennas") or []:
             site = antenna_to_site(antenna, ref_ts)
@@ -213,35 +230,59 @@ def run() -> None:
             track_id = tracking.get("trackID")
             if track_id is None:
                 continue
-            now_ids.add(str(track_id))
             if not tracking.get("trackValid", True):
                 continue
             track = tracking_to_track(tracking, ref_ts)
             if track is None:
                 continue
-            track["uid"] = "aartos-{}-{}".format(host, track_id)
+            cls = track.get("object_class") or "uav"
+            tid_str = str(track_id)
+            ident = class_identity.get(cls)
+            if ident is not None:
+                # Same class already has a stable identity — reuse its uid
+                # even if the raw trackID just churned to a new value, so
+                # the marker keeps updating in place instead of being
+                # deleted and recreated.
+                uid = ident["uid"]
+                ident["track_id"] = tid_str
+            else:
+                uid = "aartos-{}-{}".format(host, tid_str)
+                ident = {"track_id": tid_str, "uid": uid}
+                class_identity[cls] = ident
+            ident["last_seen"] = ref_ts
+            track["uid"] = uid
             topic = topic_for_track(track)
             publish_dual(session, topic, track, AartosTrack)
-            last_topic[str(track_id)] = topic
+            last_topic[cls] = topic
+            now_classes.add(cls)
 
-        # Tombstone any previously-seen track (for this host) that dropped
-        # out of this sample, so it does not linger as a ghost marker. Must
-        # go to the SAME topic the track's live publishes used — tak_layer.py
-        # holds one separate subscription per affiliation/domain, so a
-        # tombstone sent anywhere else (e.g. a fixed "unknown/uav" regardless
-        # of the track's real affiliation) never reaches the subscriber that
-        # actually rendered the marker, and it never gets cleared.
-        for gone_id in set(seen) - now_ids:
+        # Tombstone a class's stable identity only after it has been absent
+        # for a full grace window, not the instant one sample is missing it.
+        # AARTOS's own detection is noisy enough that a single poll can
+        # briefly report zero trackings for a class that is still genuinely
+        # present — tombstoning on that first miss just recreated the exact
+        # delete/recreate churn this identity scheme exists to avoid, only
+        # now triggered by a one-sample detection gap instead of a trackID
+        # change. Must go to the SAME topic the identity's live publishes
+        # used — tak_layer.py holds one separate subscription per
+        # affiliation/domain, so a tombstone sent anywhere else (e.g. a
+        # fixed "unknown/uav" regardless of the track's real affiliation)
+        # never reaches the subscriber that actually rendered the marker,
+        # and it never gets cleared.
+        for cls in list(class_identity):
+            if cls in now_classes:
+                continue
+            ident = class_identity[cls]
+            if ref_ts - ident.get("last_seen", 0) < _CLASS_GONE_GRACE_S:
+                continue
+            class_identity.pop(cls)
             tombstone = {
-                "uid": "aartos-{}-{}".format(host, gone_id),
+                "uid": ident["uid"],
                 "_ts": time.time(),
                 "_delete": True,
             }
-            topic = last_topic.pop(gone_id, "{}/air/aartos/unknown/uav".format(TOPIC_ROOT))
+            topic = last_topic.pop(cls, "{}/air/aartos/unknown/uav".format(TOPIC_ROOT))
             session.put(topic, json.dumps(tombstone).encode(), encoding="application/json")
-
-        seen.clear()
-        seen.update({tid: time.time() for tid in now_ids})
 
     subscriber = subscribe(session, INPUT_TOPIC, on_sample)
     print("AARTOS translator: {} -> {}/air/aartos/*/uav".format(INPUT_TOPIC, TOPIC_ROOT), flush=True)
