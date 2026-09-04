@@ -424,8 +424,14 @@ def run(args) -> None:
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description="TAK CoT → Zenoh bridge")
     parser.add_argument("--host", action="append", default=[], help="TAK host / IP (repeatable; fallback path supported)")
-    parser.add_argument("--port", type=int, default=int(os.environ.get("TAK_PORT", "8089")))
-    parser.add_argument("--tls", action="store_true", default=os.environ.get("TAK_TLS", "0") == "1")
+    # Deliberately its own env vars, not TAK_PORT/TAK_TLS (tak_layer's egress
+    # connection, mTLS on 8089/stdssl). TAK Server's CoreConfig provisions a
+    # separate plaintext input on 8087 (stdtcp), pre-assigned to the same
+    # routing group as authenticated TAK clients — reusing TAK_TLS here
+    # would silently re-enable TLS against that plaintext port the moment
+    # someone sets TAK_TLS=1 for the (unrelated) egress connection.
+    parser.add_argument("--port", type=int, default=int(os.environ.get("TAK_INGEST_PORT", "8087")))
+    parser.add_argument("--tls", action="store_true", default=os.environ.get("TAK_INGEST_TLS", "0") == "1")
     parser.add_argument("--cert", default=os.environ.get("TAK_CERT"))
     parser.add_argument("--key", default=os.environ.get("TAK_KEY"))
     parser.add_argument("--ca", default=os.environ.get("TAK_CA"))

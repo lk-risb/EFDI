@@ -895,9 +895,17 @@ launch() {
             [[ -n "$tak_ingest_host"  ]] && tak_ingest_args+=(--host "$tak_ingest_host")
             [[ -n "$tak_ingest_host2" ]] && tak_ingest_args+=(--host "$tak_ingest_host2")
             [[ -n "$tak_ingest_host3" ]] && tak_ingest_args+=(--host "$tak_ingest_host3")
-            if [[ "${TAK_TLS:-}" == "1" ]]; then
-                tak_ingest_args+=(--tls --cert "${TAK_CERT:-}" --key "${TAK_KEY:-}" --ca "${TAK_CA:-}")
-            fi
+            # Deliberately its OWN port, separate from TAK_PORT/TAK_TLS (which
+            # tak_layer's egress connection uses for 8089/stdssl/mTLS). TAK
+            # Server's CoreConfig provisions a SEPARATE plaintext input on
+            # 8087 (stdtcp) specifically for this bridge, pre-assigned to the
+            # same routing group as authenticated TAK clients — the mTLS 8089
+            # connection this used before only ever saw its own CoT echoed
+            # back, never another client's, because it had no group
+            # membership on that input. 8087 is plaintext by design; that is
+            # safe here because it is only reachable over the already-
+            # encrypted NetBird overlay, never the open internet.
+            tak_ingest_args+=(--port "${TAK_INGEST_PORT:-8087}")
             _start tak-bridge bridges/tak_bridge.py "${tak_ingest_args[@]}"
             ;;
 

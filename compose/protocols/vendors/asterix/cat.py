@@ -2994,7 +2994,10 @@ def _cat10__decode_bds50(mb: bytes) -> dict:
         return r - (1 << w) if r >= (1 << (w - 1)) else r
     out = {}
     if _bit(1):  out["roll_deg"]         = round(_sgn(2, 11) * 45.0 / 256.0, 1)
-    if _bit(12): out["true_track_deg"]   = round(_uns(13, 22) * 360.0 / 1024.0, 1)
+    # bits 13-23 (11 bits: sign + 10-bit magnitude), not 13-22 — see
+    # _cat48__decode_bds50's identical fix for the derivation (verified
+    # against pyModeS's bds50.py).
+    if _bit(12): out["true_track_deg"]   = round(_uns(13, 23) * 360.0 / 2048.0, 2)
     if _bit(24): out["bds_gs_kt"]        = round(_uns(25, 34) * 2.0, 0)
     if _bit(35): out["track_rate_degs"]  = round(_sgn(36, 45) * 8.0 / 256.0, 2)
     if _bit(46): out["tas_kt"]           = round(_uns(47, 56) * 2.0, 0)
@@ -3009,7 +3012,9 @@ def _cat10__decode_bds60(mb: bytes) -> dict:
         w = b - a + 1; r = _uns(a, b)
         return r - (1 << w) if r >= (1 << (w - 1)) else r
     out = {}
-    if _bit(1):  out["mag_hdg_deg"]  = round(_uns(2, 11) * 360.0 / 1024.0, 1)
+    # See _cat48__decode_bds50's true_track_deg fix: same off-by-one-bit
+    # truncation, same fix (11 bits, 360/2048 scale).
+    if _bit(1):  out["mag_hdg_deg"]  = round(_uns(2, 12) * 360.0 / 2048.0, 2)
     if _bit(13): out["ias_kt"]       = _uns(14, 23)
     if _bit(24): out["mach"]         = round(_uns(25, 34) * 2.048 / 512.0, 3)
     if _bit(35): out["baro_vr_fpm"]  = _sgn(36, 45) * 32
@@ -3025,9 +3030,16 @@ def _cat10__decode_bds40(mb: bytes) -> dict:
     if _bit(1):  out["sel_alt_mcp_ft"]  = _uns(2, 13) * 16
     if _bit(14): out["sel_alt_fms_ft"]  = _uns(15, 26) * 16
     if _bit(27): out["baro_setting_mb"] = round(_uns(28, 39) * 0.1 + 800.0, 1)
-    if _bit(40): out["vnav_active"]     = True
-    if _bit(41): out["alt_hold"]        = True
-    if _bit(42): out["approach_mode"]   = True
+    # MCP mode bits share ONE status gate (bit 48), not three independent
+    # self-gating bits — bits 40-42 (the old positions here) are the
+    # ASTERIX/ICAO Doc 9871 reserved range (39-46, "must be zero"), so this
+    # previously read always-zero spare bits instead of the real vnav/alt-
+    # hold/approach flags at bits 49-51 (verified against pyModeS's
+    # bds40.py).
+    if _bit(48):
+        if _bit(49): out["vnav_active"]     = True
+        if _bit(50): out["alt_hold"]        = True
+        if _bit(51): out["approach_mode"]   = True
     return out
 
 def _cat10__decode_bds30(mb: bytes) -> dict:
@@ -3036,18 +3048,22 @@ def _cat10__decode_bds30(mb: bytes) -> dict:
         return {}
     v = int.from_bytes(mb[:7], "big")
     def _bit(n): return (v >> (56 - n)) & 1
-    def _uns(a, b): return (v >> (56 - b)) & ((1 << (b - a + 1)) - 1)
-    ara = _uns(5, 14)
-    if not ara:
+    # Bit positions verified against pyModeS's bds30.py: ARA[0] (any RA
+    # active) at bit 9, ARA[1] (corrective) at bit 10, ARA[2] (downward
+    # sense) at bit 11, RA-terminated at bit 27, multiple-threat at bit 28
+    # (1-indexed from the payload MSB). The previous bits 5/6/15/16 line up
+    # with none of these — a genuine active TCAS Resolution Advisory
+    # (CLIMB/DESCEND) could be missed or misreported entirely.
+    if not _bit(9):
         return {}
     out: dict = {"acas_ra_active": True, "acas_ra_hex": format(v, "014x")}
-    corrective = bool(_bit(5))
-    downward   = bool(_bit(6))
+    corrective = bool(_bit(10))
+    downward   = bool(_bit(11))
     if corrective:
         out["acas_ra_sense"]     = "DESCEND" if downward else "CLIMB"
         out["acas_ra_corrective"] = True
-    out["acas_ra_terminated"]  = bool(_bit(15))
-    out["acas_multi_threat"]   = bool(_bit(16))
+    out["acas_ra_terminated"]  = bool(_bit(27))
+    out["acas_multi_threat"]   = bool(_bit(28))
     return out
 
 # BDS 1,0/1,7 bit layouts: pyModeS src/pyModeS/decoder/bds/bds10.py and
@@ -3620,7 +3636,10 @@ def _cat11__decode_bds50(mb: bytes) -> dict:
         return r - (1 << w) if r >= (1 << (w - 1)) else r
     out = {}
     if _bit(1):  out["roll_deg"]         = round(_sgn(2, 11) * 45.0 / 256.0, 1)
-    if _bit(12): out["true_track_deg"]   = round(_uns(13, 22) * 360.0 / 1024.0, 1)
+    # bits 13-23 (11 bits: sign + 10-bit magnitude), not 13-22 — see
+    # _cat48__decode_bds50's identical fix for the derivation (verified
+    # against pyModeS's bds50.py).
+    if _bit(12): out["true_track_deg"]   = round(_uns(13, 23) * 360.0 / 2048.0, 2)
     if _bit(24): out["bds_gs_kt"]        = round(_uns(25, 34) * 2.0, 0)
     if _bit(35): out["track_rate_degs"]  = round(_sgn(36, 45) * 8.0 / 256.0, 2)
     if _bit(46): out["tas_kt"]           = round(_uns(47, 56) * 2.0, 0)
@@ -3636,7 +3655,9 @@ def _cat11__decode_bds60(mb: bytes) -> dict:
         w = b - a + 1; r = _uns(a, b)
         return r - (1 << w) if r >= (1 << (w - 1)) else r
     out = {}
-    if _bit(1):  out["mag_hdg_deg"]  = round(_uns(2, 11) * 360.0 / 1024.0, 1)
+    # See _cat48__decode_bds50's true_track_deg fix: same off-by-one-bit
+    # truncation, same fix (11 bits, 360/2048 scale).
+    if _bit(1):  out["mag_hdg_deg"]  = round(_uns(2, 12) * 360.0 / 2048.0, 2)
     if _bit(13): out["ias_kt"]       = _uns(14, 23)
     if _bit(24): out["mach"]         = round(_uns(25, 34) * 2.048 / 512.0, 3)
     if _bit(35): out["baro_vr_fpm"]  = _sgn(36, 45) * 32
@@ -3653,9 +3674,16 @@ def _cat11__decode_bds40(mb: bytes) -> dict:
     if _bit(1):  out["sel_alt_mcp_ft"]  = _uns(2, 13) * 16
     if _bit(14): out["sel_alt_fms_ft"]  = _uns(15, 26) * 16
     if _bit(27): out["baro_setting_mb"] = round(_uns(28, 39) * 0.1 + 800.0, 1)
-    if _bit(40): out["vnav_active"]     = True
-    if _bit(41): out["alt_hold"]        = True
-    if _bit(42): out["approach_mode"]   = True
+    # MCP mode bits share ONE status gate (bit 48), not three independent
+    # self-gating bits — bits 40-42 (the old positions here) are the
+    # ASTERIX/ICAO Doc 9871 reserved range (39-46, "must be zero"), so this
+    # previously read always-zero spare bits instead of the real vnav/alt-
+    # hold/approach flags at bits 49-51 (verified against pyModeS's
+    # bds40.py).
+    if _bit(48):
+        if _bit(49): out["vnav_active"]     = True
+        if _bit(50): out["alt_hold"]        = True
+        if _bit(51): out["approach_mode"]   = True
     return out
 
 
@@ -3665,18 +3693,22 @@ def _cat11__decode_bds30(mb: bytes) -> dict:
         return {}
     v = int.from_bytes(mb[:7], "big")
     def _bit(n): return (v >> (56 - n)) & 1
-    def _uns(a, b): return (v >> (56 - b)) & ((1 << (b - a + 1)) - 1)
-    ara = _uns(5, 14)
-    if not ara:
+    # Bit positions verified against pyModeS's bds30.py: ARA[0] (any RA
+    # active) at bit 9, ARA[1] (corrective) at bit 10, ARA[2] (downward
+    # sense) at bit 11, RA-terminated at bit 27, multiple-threat at bit 28
+    # (1-indexed from the payload MSB). The previous bits 5/6/15/16 line up
+    # with none of these — a genuine active TCAS Resolution Advisory
+    # (CLIMB/DESCEND) could be missed or misreported entirely.
+    if not _bit(9):
         return {}
     out: dict = {"acas_ra_active": True, "acas_ra_hex": format(v, "014x")}
-    corrective = bool(_bit(5))
-    downward   = bool(_bit(6))
+    corrective = bool(_bit(10))
+    downward   = bool(_bit(11))
     if corrective:
         out["acas_ra_sense"]     = "DESCEND" if downward else "CLIMB"
         out["acas_ra_corrective"] = True
-    out["acas_ra_terminated"]  = bool(_bit(15))
-    out["acas_multi_threat"]   = bool(_bit(16))
+    out["acas_ra_terminated"]  = bool(_bit(27))
+    out["acas_multi_threat"]   = bool(_bit(28))
     return out
 
 
@@ -5763,7 +5795,10 @@ def _cat18__decode_bds50(mb: bytes) -> dict:
         return r - (1 << w) if r >= (1 << (w - 1)) else r
     out = {}
     if _bit(1):  out["roll_deg"]         = round(_sgn(2, 11) * 45.0 / 256.0, 1)
-    if _bit(12): out["true_track_deg"]   = round(_uns(13, 22) * 360.0 / 1024.0, 1)
+    # bits 13-23 (11 bits: sign + 10-bit magnitude), not 13-22 — see
+    # _cat48__decode_bds50's identical fix for the derivation (verified
+    # against pyModeS's bds50.py).
+    if _bit(12): out["true_track_deg"]   = round(_uns(13, 23) * 360.0 / 2048.0, 2)
     if _bit(24): out["bds_gs_kt"]        = round(_uns(25, 34) * 2.0, 0)
     if _bit(35): out["track_rate_degs"]  = round(_sgn(36, 45) * 8.0 / 256.0, 2)
     if _bit(46): out["tas_kt"]           = round(_uns(47, 56) * 2.0, 0)
@@ -5779,7 +5814,9 @@ def _cat18__decode_bds60(mb: bytes) -> dict:
         w = b - a + 1; r = _uns(a, b)
         return r - (1 << w) if r >= (1 << (w - 1)) else r
     out = {}
-    if _bit(1):  out["mag_hdg_deg"]  = round(_uns(2, 11) * 360.0 / 1024.0, 1)
+    # See _cat48__decode_bds50's true_track_deg fix: same off-by-one-bit
+    # truncation, same fix (11 bits, 360/2048 scale).
+    if _bit(1):  out["mag_hdg_deg"]  = round(_uns(2, 12) * 360.0 / 2048.0, 2)
     if _bit(13): out["ias_kt"]       = _uns(14, 23)
     if _bit(24): out["mach"]         = round(_uns(25, 34) * 2.048 / 512.0, 3)
     if _bit(35): out["baro_vr_fpm"]  = _sgn(36, 45) * 32
@@ -5796,9 +5833,16 @@ def _cat18__decode_bds40(mb: bytes) -> dict:
     if _bit(1):  out["sel_alt_mcp_ft"]  = _uns(2, 13) * 16
     if _bit(14): out["sel_alt_fms_ft"]  = _uns(15, 26) * 16
     if _bit(27): out["baro_setting_mb"] = round(_uns(28, 39) * 0.1 + 800.0, 1)
-    if _bit(40): out["vnav_active"]     = True
-    if _bit(41): out["alt_hold"]        = True
-    if _bit(42): out["approach_mode"]   = True
+    # MCP mode bits share ONE status gate (bit 48), not three independent
+    # self-gating bits — bits 40-42 (the old positions here) are the
+    # ASTERIX/ICAO Doc 9871 reserved range (39-46, "must be zero"), so this
+    # previously read always-zero spare bits instead of the real vnav/alt-
+    # hold/approach flags at bits 49-51 (verified against pyModeS's
+    # bds40.py).
+    if _bit(48):
+        if _bit(49): out["vnav_active"]     = True
+        if _bit(50): out["alt_hold"]        = True
+        if _bit(51): out["approach_mode"]   = True
     return out
 
 
@@ -5847,18 +5891,22 @@ def _cat18__decode_bds30(mb: bytes) -> dict:
         return {}
     v = int.from_bytes(mb[:7], "big")
     def _bit(n): return (v >> (56 - n)) & 1
-    def _uns(a, b): return (v >> (56 - b)) & ((1 << (b - a + 1)) - 1)
-    ara = _uns(5, 14)
-    if not ara:
+    # Bit positions verified against pyModeS's bds30.py: ARA[0] (any RA
+    # active) at bit 9, ARA[1] (corrective) at bit 10, ARA[2] (downward
+    # sense) at bit 11, RA-terminated at bit 27, multiple-threat at bit 28
+    # (1-indexed from the payload MSB). The previous bits 5/6/15/16 line up
+    # with none of these — a genuine active TCAS Resolution Advisory
+    # (CLIMB/DESCEND) could be missed or misreported entirely.
+    if not _bit(9):
         return {}
     out: dict = {"acas_ra_active": True, "acas_ra_hex": format(v, "014x")}
-    corrective = bool(_bit(5))
-    downward   = bool(_bit(6))
+    corrective = bool(_bit(10))
+    downward   = bool(_bit(11))
     if corrective:
         out["acas_ra_sense"]     = "DESCEND" if downward else "CLIMB"
         out["acas_ra_corrective"] = True
-    out["acas_ra_terminated"]  = bool(_bit(15))
-    out["acas_multi_threat"]   = bool(_bit(16))
+    out["acas_ra_terminated"]  = bool(_bit(27))
+    out["acas_multi_threat"]   = bool(_bit(28))
     return out
 
 
@@ -6633,7 +6681,10 @@ def _cat20__decode_bds50(mb: bytes) -> dict:
         return r - (1 << w) if r >= (1 << (w - 1)) else r
     out = {}
     if _bit(1):  out["roll_deg"]         = round(_sgn(2, 11) * 45.0 / 256.0, 1)
-    if _bit(12): out["true_track_deg"]   = round(_uns(13, 22) * 360.0 / 1024.0, 1)
+    # bits 13-23 (11 bits: sign + 10-bit magnitude), not 13-22 — see
+    # _cat48__decode_bds50's identical fix for the derivation (verified
+    # against pyModeS's bds50.py).
+    if _bit(12): out["true_track_deg"]   = round(_uns(13, 23) * 360.0 / 2048.0, 2)
     if _bit(24): out["bds_gs_kt"]        = round(_uns(25, 34) * 2.0, 0)
     if _bit(35): out["track_rate_degs"]  = round(_sgn(36, 45) * 8.0 / 256.0, 2)
     if _bit(46): out["tas_kt"]           = round(_uns(47, 56) * 2.0, 0)
@@ -6648,7 +6699,9 @@ def _cat20__decode_bds60(mb: bytes) -> dict:
         w = b - a + 1; r = _uns(a, b)
         return r - (1 << w) if r >= (1 << (w - 1)) else r
     out = {}
-    if _bit(1):  out["mag_hdg_deg"]  = round(_uns(2, 11) * 360.0 / 1024.0, 1)
+    # See _cat48__decode_bds50's true_track_deg fix: same off-by-one-bit
+    # truncation, same fix (11 bits, 360/2048 scale).
+    if _bit(1):  out["mag_hdg_deg"]  = round(_uns(2, 12) * 360.0 / 2048.0, 2)
     if _bit(13): out["ias_kt"]       = _uns(14, 23)
     if _bit(24): out["mach"]         = round(_uns(25, 34) * 2.048 / 512.0, 3)
     if _bit(35): out["baro_vr_fpm"]  = _sgn(36, 45) * 32
@@ -6690,9 +6743,16 @@ def _cat20__decode_bds40(mb: bytes) -> dict:
     if _bit(1):  out["sel_alt_mcp_ft"]  = _uns(2, 13) * 16
     if _bit(14): out["sel_alt_fms_ft"]  = _uns(15, 26) * 16
     if _bit(27): out["baro_setting_mb"] = round(_uns(28, 39) * 0.1 + 800.0, 1)
-    if _bit(40): out["vnav_active"]     = True
-    if _bit(41): out["alt_hold"]        = True
-    if _bit(42): out["approach_mode"]   = True
+    # MCP mode bits share ONE status gate (bit 48), not three independent
+    # self-gating bits — bits 40-42 (the old positions here) are the
+    # ASTERIX/ICAO Doc 9871 reserved range (39-46, "must be zero"), so this
+    # previously read always-zero spare bits instead of the real vnav/alt-
+    # hold/approach flags at bits 49-51 (verified against pyModeS's
+    # bds40.py).
+    if _bit(48):
+        if _bit(49): out["vnav_active"]     = True
+        if _bit(50): out["alt_hold"]        = True
+        if _bit(51): out["approach_mode"]   = True
     return out
 
 # BDS 1,0/1,7 bit layouts: pyModeS src/pyModeS/decoder/bds/bds10.py and
@@ -6740,18 +6800,22 @@ def _cat20__decode_bds30(mb: bytes) -> dict:
         return {}
     v = int.from_bytes(mb[:7], "big")
     def _bit(n): return (v >> (56 - n)) & 1
-    def _uns(a, b): return (v >> (56 - b)) & ((1 << (b - a + 1)) - 1)
-    ara = _uns(5, 14)
-    if not ara:
+    # Bit positions verified against pyModeS's bds30.py: ARA[0] (any RA
+    # active) at bit 9, ARA[1] (corrective) at bit 10, ARA[2] (downward
+    # sense) at bit 11, RA-terminated at bit 27, multiple-threat at bit 28
+    # (1-indexed from the payload MSB). The previous bits 5/6/15/16 line up
+    # with none of these — a genuine active TCAS Resolution Advisory
+    # (CLIMB/DESCEND) could be missed or misreported entirely.
+    if not _bit(9):
         return {}
     out: dict = {"acas_ra_active": True, "acas_ra_hex": format(v, "014x")}
-    corrective = bool(_bit(5))
-    downward   = bool(_bit(6))
+    corrective = bool(_bit(10))
+    downward   = bool(_bit(11))
     if corrective:
         out["acas_ra_sense"]     = "DESCEND" if downward else "CLIMB"
         out["acas_ra_corrective"] = True
-    out["acas_ra_terminated"]  = bool(_bit(15))
-    out["acas_multi_threat"]   = bool(_bit(16))
+    out["acas_ra_terminated"]  = bool(_bit(27))
+    out["acas_multi_threat"]   = bool(_bit(28))
     return out
 
 def _cat20_decode_cat020_record(data: bytes, pos: int):
@@ -7231,7 +7295,10 @@ def _cat21__decode_bds50(mb: bytes) -> dict:
         return r - (1 << w) if r >= (1 << (w - 1)) else r
     out = {}
     if _bit(1):  out["roll_deg"]         = round(_sgn(2, 11) * 45.0 / 256.0, 1)
-    if _bit(12): out["true_track_deg"]   = round(_uns(13, 22) * 360.0 / 1024.0, 1)
+    # bits 13-23 (11 bits: sign + 10-bit magnitude), not 13-22 — see
+    # _cat48__decode_bds50's identical fix for the derivation (verified
+    # against pyModeS's bds50.py).
+    if _bit(12): out["true_track_deg"]   = round(_uns(13, 23) * 360.0 / 2048.0, 2)
     if _bit(24): out["bds_gs_kt"]        = round(_uns(25, 34) * 2.0, 0)
     if _bit(35): out["track_rate_degs"]  = round(_sgn(36, 45) * 8.0 / 256.0, 2)
     if _bit(46): out["tas_kt"]           = round(_uns(47, 56) * 2.0, 0)
@@ -7246,7 +7313,9 @@ def _cat21__decode_bds60(mb: bytes) -> dict:
         w = b - a + 1; r = _uns(a, b)
         return r - (1 << w) if r >= (1 << (w - 1)) else r
     out = {}
-    if _bit(1):  out["mag_hdg_deg"]  = round(_uns(2, 11) * 360.0 / 1024.0, 1)
+    # See _cat48__decode_bds50's true_track_deg fix: same off-by-one-bit
+    # truncation, same fix (11 bits, 360/2048 scale).
+    if _bit(1):  out["mag_hdg_deg"]  = round(_uns(2, 12) * 360.0 / 2048.0, 2)
     if _bit(13): out["ias_kt"]       = _uns(14, 23)
     if _bit(24): out["mach"]         = round(_uns(25, 34) * 2.048 / 512.0, 3)
     if _bit(35): out["baro_vr_fpm"]  = _sgn(36, 45) * 32
@@ -7262,9 +7331,16 @@ def _cat21__decode_bds40(mb: bytes) -> dict:
     if _bit(1):  out["sel_alt_mcp_ft"]  = _uns(2, 13) * 16
     if _bit(14): out["sel_alt_fms_ft"]  = _uns(15, 26) * 16
     if _bit(27): out["baro_setting_mb"] = round(_uns(28, 39) * 0.1 + 800.0, 1)
-    if _bit(40): out["vnav_active"]     = True
-    if _bit(41): out["alt_hold"]        = True
-    if _bit(42): out["approach_mode"]   = True
+    # MCP mode bits share ONE status gate (bit 48), not three independent
+    # self-gating bits — bits 40-42 (the old positions here) are the
+    # ASTERIX/ICAO Doc 9871 reserved range (39-46, "must be zero"), so this
+    # previously read always-zero spare bits instead of the real vnav/alt-
+    # hold/approach flags at bits 49-51 (verified against pyModeS's
+    # bds40.py).
+    if _bit(48):
+        if _bit(49): out["vnav_active"]     = True
+        if _bit(50): out["alt_hold"]        = True
+        if _bit(51): out["approach_mode"]   = True
     return out
 
 # BDS 1,0/1,7 bit layouts: pyModeS src/pyModeS/decoder/bds/bds10.py and
@@ -7312,18 +7388,22 @@ def _cat21__decode_bds30(mb: bytes) -> dict:
         return {}
     v = int.from_bytes(mb[:7], "big")
     def _bit(n): return (v >> (56 - n)) & 1
-    def _uns(a, b): return (v >> (56 - b)) & ((1 << (b - a + 1)) - 1)
-    ara = _uns(5, 14)
-    if not ara:
+    # Bit positions verified against pyModeS's bds30.py: ARA[0] (any RA
+    # active) at bit 9, ARA[1] (corrective) at bit 10, ARA[2] (downward
+    # sense) at bit 11, RA-terminated at bit 27, multiple-threat at bit 28
+    # (1-indexed from the payload MSB). The previous bits 5/6/15/16 line up
+    # with none of these — a genuine active TCAS Resolution Advisory
+    # (CLIMB/DESCEND) could be missed or misreported entirely.
+    if not _bit(9):
         return {}
     out: dict = {"acas_ra_active": True, "acas_ra_hex": format(v, "014x")}
-    corrective = bool(_bit(5))
-    downward   = bool(_bit(6))
+    corrective = bool(_bit(10))
+    downward   = bool(_bit(11))
     if corrective:
         out["acas_ra_sense"]     = "DESCEND" if downward else "CLIMB"
         out["acas_ra_corrective"] = True
-    out["acas_ra_terminated"]  = bool(_bit(15))
-    out["acas_multi_threat"]   = bool(_bit(16))
+    out["acas_ra_terminated"]  = bool(_bit(27))
+    out["acas_multi_threat"]   = bool(_bit(28))
     return out
 
 def _cat21__pub(pub, track: dict, label: str, verbose: bool):
@@ -9414,7 +9494,15 @@ def _cat48__decode_bds50(mb: bytes) -> dict:
         return r - (1 << w) if r >= (1 << (w - 1)) else r
     out = {}
     if _bit(1):  out["roll_deg"]         = round(_sgn(2, 11) * 45.0 / 256.0, 1)
-    if _bit(12): out["true_track_deg"]   = round(_uns(13, 22) * 360.0 / 1024.0, 1)
+    # bits 13-23 (11 bits: sign + 10-bit magnitude), not 13-22 — reading one
+    # bit short truncated the field's true LSB, losing a factor of 2 of
+    # resolution (verified against pyModeS's bds50.py: its 90/512-scaled
+    # sign+10-bit encoding is numerically identical to this field's full 11
+    # bits reinterpreted as unsigned and scaled by 360/2048 — two's-
+    # complement wraparound of a circular quantity IS its own correctly-
+    # wrapped positive angle, mod 2**11 — so this is a precision fix, not a
+    # direction/sign bug).
+    if _bit(12): out["true_track_deg"]   = round(_uns(13, 23) * 360.0 / 2048.0, 2)
     if _bit(24): out["bds_gs_kt"]        = round(_uns(25, 34) * 2.0, 0)
     if _bit(35): out["track_rate_degs"]  = round(_sgn(36, 45) * 8.0 / 256.0, 2)
     if _bit(46): out["tas_kt"]           = round(_uns(47, 56) * 2.0, 0)
@@ -9429,7 +9517,9 @@ def _cat48__decode_bds60(mb: bytes) -> dict:
         w = b - a + 1; r = _uns(a, b)
         return r - (1 << w) if r >= (1 << (w - 1)) else r
     out = {}
-    if _bit(1):  out["mag_hdg_deg"]  = round(_uns(2, 11) * 360.0 / 1024.0, 1)
+    # See _cat48__decode_bds50's true_track_deg comment: same off-by-one-bit
+    # truncation, same fix (11 bits, 360/2048 scale).
+    if _bit(1):  out["mag_hdg_deg"]  = round(_uns(2, 12) * 360.0 / 2048.0, 2)
     if _bit(13): out["ias_kt"]       = _uns(14, 23)
     if _bit(24): out["mach"]         = round(_uns(25, 34) * 2.048 / 512.0, 3)
     if _bit(35): out["baro_vr_fpm"]  = _sgn(36, 45) * 32
@@ -9437,30 +9527,79 @@ def _cat48__decode_bds60(mb: bytes) -> dict:
     return out
 
 def _cat48__gillham_to_ft(code: int) -> int | None:
-    """Decode ASTERIX Mode-C Gillham code (u16 from I048/100 or I020/100 bytes 0-1).
+    """Decode ASTERIX I048/100's 16-bit V/G/ModeC word (the item's first 2 of
+    4 octets; the trailing 2 octets are per-pulse confidence bits QC1..QD4,
+    not needed for altitude and not read here) into a Gillham-coded Mode-C
+    altitude in feet.
 
-    Byte layout: V G C1 A1 C2 B1 D1 B2 | D2 B4 A4 x x C4 x x
+    Bit layout confirmed against CroatiaControlLtd/asterix's reference
+    asterix_cat048_1_21.xml (bit32=V, bit31=G, bits30-29=spare, bits28-17=
+    ModeC — NOT V G [pulses immediately], there are 2 spare bits between G
+    and the first pulse bit that a prior version of this function omitted,
+    shifting every extracted pulse bit by 2 positions). Within ModeC, the
+    12 pulse bits run C1 A1 C2 A2 C4 A4 B1 D1 B2 D2 B4 D4 — inferred from
+    the same XML's QC1 QA1 QC2 QA2 QC4 QA4 QB1 QD1 QB2 QD2 QB4 QD4 quality-
+    bit order (quality bits parallel their data bits 1:1 in ASTERIX) and
+    independently confirmed against pyModeS's _altcode.py Mode-S AC13 field
+    order (C1 A1 C2 A2 C4 A4 M B1 Q B2 D2 B4 D4 — the same sequence minus
+    the Mode-S-only M/Q framing bits). D1 is always spare/zero for a
+    genuine altitude reply (readsb, pyModeS, and this XML's own bit-32
+    validity check all agree) but still occupies a bit position that must
+    be consumed to keep B2/D2/B4/D4 aligned.
+
+    The Gray-to-binary fold, 500ft/100ft combination, the 500ft-group-
+    parity mirror of the 100ft count, and the raw-7-maps-to-5 remap are
+    verified against two independent, widely-deployed open-source
+    references that agree exactly: readsb's mode_ac.c
+    (internalModeAToModeC) and pyModeS's _altcode.py
+    (altcode_to_altitude). A prior version of this function had neither
+    the parity mirror nor the 7->5 remap, which (a) silently dropped every
+    otherwise-valid Gillham code whose 100ft group Gray-decoded to 7
+    instead of accepting it as 5, and (b) reported a systematically wrong
+    100ft offset (compounding into some real-world altitude errors of
+    several hundred feet) for every track whose 500ft group is odd —
+    roughly half of all Mode-C-derived altitudes.
+
     Returns altitude in feet, or None if invalid/garbled.
     """
-    v  = (code >> 15) & 1
-    g  = (code >> 14) & 1
+    v = (code >> 15) & 1
+    g = (code >> 14) & 1
     if v or g:
         return None
-    C1 = (code >> 13) & 1; A1 = (code >> 12) & 1; C2 = (code >> 11) & 1
-    B1 = (code >> 10) & 1; D1 = (code >>  9) & 1; B2 = (code >>  8) & 1
-    D2 = (code >>  7) & 1; B4 = (code >>  6) & 1; A4 = (code >>  5) & 1
-    C4 = (code >>  2) & 1
-    if D1 and D2:
+    # bits 13-12 are the 2 spare bits between G and ModeC; skip them.
+    c1 = (code >> 11) & 1
+    a1 = (code >> 10) & 1
+    c2 = (code >> 9) & 1
+    a2 = (code >> 8) & 1
+    c4 = (code >> 7) & 1
+    a4 = (code >> 6) & 1
+    b1 = (code >> 5) & 1
+    d1 = (code >> 4) & 1
+    b2 = (code >> 3) & 1
+    d2 = (code >> 2) & 1
+    b4 = (code >> 1) & 1
+    d4 = code & 1
+    if d1:
         return None
-    def _gc3(a, b, c):
-        x = a; y = x ^ b; z = y ^ c; return x * 4 + y * 2 + z
-    n_b = _gc3(B1, B2, B4)          # 500ft group (0-7)
-    n_a = A1 * 2 + A4               # A bits are binary-coded (0-3)
-    n_c = _gc3(C1, C2, C4)          # 100ft offset (1-5 valid)
-    if n_c == 0 or n_c > 5:
+
+    def _gray_fold(bits: list[int]) -> int:
+        """Reflected-Gray-code -> binary, MSB-first bit list."""
+        out = 0
+        acc = 0
+        for bit in bits:
+            acc ^= bit
+            out = (out << 1) | acc
+        return out
+
+    n_c = _gray_fold([c1, c2, c4])          # 100ft group, pre-remap
+    if n_c in (0, 5, 6):
         return None
-    n500 = n_b * 4 + (n_a if n_b % 2 else 3 - n_a)
-    return n500 * 500 + (n_c - 1) * 100 - 1200
+    if n_c == 7:
+        n_c = 5
+    n500 = _gray_fold([d2, d4, a1, a2, a4, b1, b2, b4])   # 500ft group
+    if n500 % 2:
+        n_c = 6 - n_c
+    return n500 * 500 + n_c * 100 - 1300
 
 def _cat48__decode_bds40(mb: bytes) -> dict:
     """BDS 4,0 Selected Vertical Intention."""
@@ -9471,9 +9610,16 @@ def _cat48__decode_bds40(mb: bytes) -> dict:
     if _bit(1):  out["sel_alt_mcp_ft"]  = _uns(2, 13) * 16
     if _bit(14): out["sel_alt_fms_ft"]  = _uns(15, 26) * 16
     if _bit(27): out["baro_setting_mb"] = round(_uns(28, 39) * 0.1 + 800.0, 1)
-    if _bit(40): out["vnav_active"]     = True
-    if _bit(41): out["alt_hold"]        = True
-    if _bit(42): out["approach_mode"]   = True
+    # MCP mode bits share ONE status gate (bit 48), not three independent
+    # self-gating bits — bits 40-42 (the old positions here) are the
+    # ASTERIX/ICAO Doc 9871 reserved range (39-46, "must be zero"), so this
+    # previously read always-zero spare bits instead of the real vnav/alt-
+    # hold/approach flags at bits 49-51 (verified against pyModeS's
+    # bds40.py).
+    if _bit(48):
+        if _bit(49): out["vnav_active"]     = True
+        if _bit(50): out["alt_hold"]        = True
+        if _bit(51): out["approach_mode"]   = True
     return out
 
 # BDS 1,0/1,7 bit layouts: pyModeS src/pyModeS/decoder/bds/bds10.py and
@@ -9521,18 +9667,22 @@ def _cat48__decode_bds30(mb: bytes) -> dict:
         return {}
     v = int.from_bytes(mb[:7], "big")
     def _bit(n): return (v >> (56 - n)) & 1
-    def _uns(a, b): return (v >> (56 - b)) & ((1 << (b - a + 1)) - 1)
-    ara = _uns(5, 14)
-    if not ara:
+    # Bit positions verified against pyModeS's bds30.py: ARA[0] (any RA
+    # active) at bit 9, ARA[1] (corrective) at bit 10, ARA[2] (downward
+    # sense) at bit 11, RA-terminated at bit 27, multiple-threat at bit 28
+    # (1-indexed from the payload MSB). The previous bits 5/6/15/16 line up
+    # with none of these — a genuine active TCAS Resolution Advisory
+    # (CLIMB/DESCEND) could be missed or misreported entirely.
+    if not _bit(9):
         return {}
     out: dict = {"acas_ra_active": True, "acas_ra_hex": format(v, "014x")}
-    corrective = bool(_bit(5))
-    downward   = bool(_bit(6))
+    corrective = bool(_bit(10))
+    downward   = bool(_bit(11))
     if corrective:
         out["acas_ra_sense"]     = "DESCEND" if downward else "CLIMB"
         out["acas_ra_corrective"] = True
-    out["acas_ra_terminated"]  = bool(_bit(15))
-    out["acas_multi_threat"]   = bool(_bit(16))
+    out["acas_ra_terminated"]  = bool(_bit(27))
+    out["acas_multi_threat"]   = bool(_bit(28))
     return out
 
 def _cat48__polar_to_wgs84(radar_lat: float, radar_lon: float,
@@ -10202,7 +10352,10 @@ def _cat62__decode_bds50(mb: bytes) -> dict:
         return r - (1 << w) if r >= (1 << (w - 1)) else r
     out = {}
     if _bit(1):  out["roll_deg"]         = round(_sgn(2, 11) * 45.0 / 256.0, 1)
-    if _bit(12): out["true_track_deg"]   = round(_uns(13, 22) * 360.0 / 1024.0, 1)
+    # bits 13-23 (11 bits: sign + 10-bit magnitude), not 13-22 — see
+    # _cat48__decode_bds50's identical fix for the derivation (verified
+    # against pyModeS's bds50.py).
+    if _bit(12): out["true_track_deg"]   = round(_uns(13, 23) * 360.0 / 2048.0, 2)
     if _bit(24): out["bds_gs_kt"]        = round(_uns(25, 34) * 2.0, 0)
     if _bit(35): out["track_rate_degs"]  = round(_sgn(36, 45) * 8.0 / 256.0, 2)
     if _bit(46): out["tas_kt"]           = round(_uns(47, 56) * 2.0, 0)
@@ -10217,7 +10370,9 @@ def _cat62__decode_bds60(mb: bytes) -> dict:
         w = b - a + 1; r = _uns(a, b)
         return r - (1 << w) if r >= (1 << (w - 1)) else r
     out = {}
-    if _bit(1):  out["mag_hdg_deg"]  = round(_uns(2, 11) * 360.0 / 1024.0, 1)
+    # See _cat48__decode_bds50's true_track_deg fix: same off-by-one-bit
+    # truncation, same fix (11 bits, 360/2048 scale).
+    if _bit(1):  out["mag_hdg_deg"]  = round(_uns(2, 12) * 360.0 / 2048.0, 2)
     if _bit(13): out["ias_kt"]       = _uns(14, 23)
     if _bit(24): out["mach"]         = round(_uns(25, 34) * 2.048 / 512.0, 3)
     if _bit(35): out["baro_vr_fpm"]  = _sgn(36, 45) * 32
@@ -10259,9 +10414,16 @@ def _cat62__decode_bds40(mb: bytes) -> dict:
     if _bit(1):  out["sel_alt_mcp_ft"]  = _uns(2, 13) * 16
     if _bit(14): out["sel_alt_fms_ft"]  = _uns(15, 26) * 16
     if _bit(27): out["baro_setting_mb"] = round(_uns(28, 39) * 0.1 + 800.0, 1)
-    if _bit(40): out["vnav_active"]     = True
-    if _bit(41): out["alt_hold"]        = True
-    if _bit(42): out["approach_mode"]   = True
+    # MCP mode bits share ONE status gate (bit 48), not three independent
+    # self-gating bits — bits 40-42 (the old positions here) are the
+    # ASTERIX/ICAO Doc 9871 reserved range (39-46, "must be zero"), so this
+    # previously read always-zero spare bits instead of the real vnav/alt-
+    # hold/approach flags at bits 49-51 (verified against pyModeS's
+    # bds40.py).
+    if _bit(48):
+        if _bit(49): out["vnav_active"]     = True
+        if _bit(50): out["alt_hold"]        = True
+        if _bit(51): out["approach_mode"]   = True
     return out
 
 # BDS 1,0/1,7 bit layouts: pyModeS src/pyModeS/decoder/bds/bds10.py and
@@ -10309,18 +10471,22 @@ def _cat62__decode_bds30(mb: bytes) -> dict:
         return {}
     v = int.from_bytes(mb[:7], "big")
     def _bit(n): return (v >> (56 - n)) & 1
-    def _uns(a, b): return (v >> (56 - b)) & ((1 << (b - a + 1)) - 1)
-    ara = _uns(5, 14)
-    if not ara:
+    # Bit positions verified against pyModeS's bds30.py: ARA[0] (any RA
+    # active) at bit 9, ARA[1] (corrective) at bit 10, ARA[2] (downward
+    # sense) at bit 11, RA-terminated at bit 27, multiple-threat at bit 28
+    # (1-indexed from the payload MSB). The previous bits 5/6/15/16 line up
+    # with none of these — a genuine active TCAS Resolution Advisory
+    # (CLIMB/DESCEND) could be missed or misreported entirely.
+    if not _bit(9):
         return {}
     out: dict = {"acas_ra_active": True, "acas_ra_hex": format(v, "014x")}
-    corrective = bool(_bit(5))
-    downward   = bool(_bit(6))
+    corrective = bool(_bit(10))
+    downward   = bool(_bit(11))
     if corrective:
         out["acas_ra_sense"]     = "DESCEND" if downward else "CLIMB"
         out["acas_ra_corrective"] = True
-    out["acas_ra_terminated"]  = bool(_bit(15))
-    out["acas_multi_threat"]   = bool(_bit(16))
+    out["acas_ra_terminated"]  = bool(_bit(27))
+    out["acas_multi_threat"]   = bool(_bit(28))
     return out
 
 def _cat62__decode_i062_380(data: bytes, pos: int) -> tuple[dict, int]:
