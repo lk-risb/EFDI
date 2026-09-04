@@ -56,7 +56,7 @@ _offline_announced: set[str]        = set()
 _device_lock  = threading.Lock()
 
 DEVICE_POLL_S     = 60    # radar nodes move rarely
-DETECT_POLL_S     = 10    # drone detections — low latency; also the recolor-decay tick
+DETECT_POLL_S     = 3     # drone detections — low latency; also the recolor-decay tick
 DETECT_WINDOW_S   = 300   # ignore detections older than 5 minutes
 ALERT_HOT_S       = 60    # marker shows hostile (red) while a detection is this fresh
 ALERT_WARM_S      = DETECT_WINDOW_S  # marker shows unknown (yellow) until this old, then reverts to neutral

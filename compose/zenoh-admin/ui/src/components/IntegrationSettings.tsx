@@ -36,12 +36,12 @@ const FIELD_GROUPS: FieldGroup[] = [
     { key: 'PARTNER_NAMESPACE', label: 'Partner namespace', placeholder: 'partner-a', help: 'This pod’s slot name under the shared namespace prefix. Set once during bootstrap; changing it live requires a router restart.' },
     { key: 'ZENOH_LOG', label: 'Router log level (restart required)', placeholder: 'info', help: 'One of: error, warn, info, debug, trace. Takes effect on the router’s next restart.' },
   ] },
-  { title: 'Fabric presets', icon: Waypoints, description: 'One-click "Switch fabric" options shown on the Zenoh Config page. Changing these changes what appears as a pill there, not the currently active connection.', fields: [
-    { key: 'EFDI_LOCAL_FABRIC_LABEL', label: 'Local fabric — preset label', placeholder: 'Local fabric', help: 'Display name for the pill button on the Zenoh Config page.' },
-    { key: 'EFDI_LOCAL_FABRIC_ENDPOINTS', label: 'Local fabric — endpoints (JSON array)', placeholder: '["tls/zenoh1.efdi.ltu:7447"]', help: 'A JSON array of strings, even for one endpoint — e.g. ["tls/zenoh1.efdi.ltu:7447"]. Not a bare hostname.' },
-    { key: 'EFDI_LOCAL_FABRIC_PROFILE', label: 'Local fabric — TLS profile', placeholder: 'ltu-local', help: 'Must match one of the named TLS profiles on the Zenoh Config page (e.g. efdi, backbone, ltu-local) — not a file path.' },
-    { key: 'EFDI_BACKBONE_FABRIC_LABEL', label: 'Backbone fabric — preset label', placeholder: 'Backbone' },
-    { key: 'EFDI_BACKBONE_FABRIC_ENDPOINTS', label: 'Backbone fabric — endpoints (JSON array)', placeholder: '["tls/backbone.efdi.ltu:7447"]', help: 'Same JSON-array format as the local fabric endpoints above.' },
+  { title: 'Fabric presets', icon: Waypoints, description: 'One-click "Switch fabric" options shown on the Zenoh Config page. Changing these changes what appears as a pill there, not the currently active connection. EFDI LTU is on by default; the Backbone preset stays hidden until you give it endpoints below — use it if you later add a connection to the backbone or another partner.', fields: [
+    { key: 'EFDI_LOCAL_FABRIC_LABEL', label: 'EFDI LTU — preset label', placeholder: 'EFDI LTU', help: 'Display name for the pill button on the Zenoh Config page.' },
+    { key: 'EFDI_LOCAL_FABRIC_ENDPOINTS', label: 'EFDI LTU — endpoints (JSON array)', placeholder: '["tls/zenoh1.efdi.ltu:7447"]', help: 'A JSON array of strings, even for one endpoint — e.g. ["tls/zenoh1.efdi.ltu:7447"]. Not a bare hostname.' },
+    { key: 'EFDI_LOCAL_FABRIC_PROFILE', label: 'EFDI LTU — TLS profile', placeholder: 'ltu-local', help: 'Must match one of the named TLS profiles on the Zenoh Config page (e.g. efdi, ltu-local) — not a file path.' },
+    { key: 'EFDI_BACKBONE_FABRIC_LABEL', label: 'Backbone fabric — preset label', placeholder: 'Backbone', help: 'Leave every backbone field blank to keep this preset hidden.' },
+    { key: 'EFDI_BACKBONE_FABRIC_ENDPOINTS', label: 'Backbone fabric — endpoints (JSON array)', placeholder: '["tls/backbone.efdi.ltu:7447"]', help: 'Same JSON-array format as the EFDI LTU endpoints above. Empty = preset hidden.' },
     { key: 'EFDI_BACKBONE_FABRIC_PROFILE', label: 'Backbone fabric — TLS profile', placeholder: 'backbone' },
   ] },
   { title: 'TAK and CoT', icon: MapPinned, description: 'Authenticated CoT feed to the TAK Server over mTLS.', fields: [

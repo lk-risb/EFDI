@@ -228,8 +228,17 @@ class RenderedConfigRequest(BaseModel):
     rendered: str = Field(min_length=1, max_length=512_000)
 
 
+_FABRIC_PRESET_DEFAULT_LABELS = {
+    "EFDI_LOCAL_FABRIC": "EFDI LTU",
+    "EFDI_BACKBONE_FABRIC": "Backbone",
+}
+
+
 def _fabric_presets() -> list[dict[str, object]]:
     presets: list[dict[str, object]] = []
+    # EFDI LTU is the only preset on by default. The Backbone preset only
+    # appears once its endpoints are actually configured — add it later
+    # via Integration Settings, no code change needed.
     for env_prefix in ("EFDI_LOCAL_FABRIC", "EFDI_BACKBONE_FABRIC"):
         raw = os.environ.get(f"{env_prefix}_ENDPOINTS", "[]")
         try:
@@ -255,7 +264,9 @@ def _fabric_presets() -> list[dict[str, object]]:
         ConfigFields._check_safe_endpoints(endpoints)
         presets.append(
             {
-                "label": os.environ.get(f"{env_prefix}_LABEL", env_prefix),
+                "label": os.environ.get(
+                    f"{env_prefix}_LABEL", _FABRIC_PRESET_DEFAULT_LABELS[env_prefix]
+                ),
                 "endpoints": endpoints,
                 "profile": profile,
             }
