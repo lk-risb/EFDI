@@ -790,13 +790,25 @@ def _build_remarks(track: dict, cot_type: str) -> str:
         dop = track.get("doppler_kt")
         if dop is not None:
             kinem_l.append("DOPPLER (radial speed): {:+.0f} kt".format(dop))
-        # Selected altitude
+        # Selected altitude — CAT-021 I021/146 (own native ADS-B item: one
+        # value + a source label).
         sel_alt = track.get("selected_alt_ft")
         if sel_alt is not None:
             src_lbl = track.get("selected_alt_source", "")
             fl_lbl  = "FL{:03d}".format(abs(sel_alt) // 100) if abs(sel_alt) > 1000 else "{} ft".format(sel_alt)
             kinem_l.append("SEL ALT (selected altitude): {}{}".format(
                 fl_lbl, "  ({})".format(src_lbl) if src_lbl else ""))
+        # CAT-048 I048/250 BDS 4,0 keeps MCP/FCU and FMS as two independent
+        # fields instead (_cat48__decode_bds40) — a different item, so shown
+        # as its own row(s) rather than folded into the one above.
+        sel_mcp = track.get("sel_alt_mcp_ft")
+        if sel_mcp is not None:
+            fl_lbl = "FL{:03d}".format(abs(sel_mcp) // 100) if abs(sel_mcp) > 1000 else "{} ft".format(sel_mcp)
+            kinem_l.append("SEL ALT MCP/FCU (selected altitude): {}".format(fl_lbl))
+        sel_fms = track.get("sel_alt_fms_ft")
+        if sel_fms is not None:
+            fl_lbl = "FL{:03d}".format(abs(sel_fms) // 100) if abs(sel_fms) > 1000 else "{} ft".format(sel_fms)
+            kinem_l.append("SEL ALT FMS (selected altitude): {}".format(fl_lbl))
         fin_alt = track.get("final_alt_ft")
         if fin_alt is not None:
             fl_lbl = "FL{:03d}".format(abs(fin_alt) // 100) if abs(fin_alt) > 1000 else "{} ft".format(fin_alt)
@@ -837,12 +849,14 @@ def _build_remarks(track: dict, cot_type: str) -> str:
             radar_l.append("AMPLITUDE (signal): {} dBm".format(sig_amp))
         # Track quality / accuracy
         sx = track.get("track_sigma_x_nm"); sh = track.get("track_sigma_h_ft")
-        if sx is not None or sh is not None:
+        shdg = track.get("track_sigma_heading_deg")  # CAT-048 I048/210 SIGH
+        if sx is not None or sh is not None or shdg is not None:
             acc_parts = []
             if sx is not None:
                 sy = track.get("track_sigma_y_nm")
                 acc_parts.append("±{:.3f} nm".format(max(sx, sy) if sy is not None else sx))
             if sh is not None: acc_parts.append("±{} ft".format(sh))
+            if shdg is not None: acc_parts.append("±{}° hdg".format(shdg))
             radar_l.append("ACC (position accuracy): {}".format("  ".join(acc_parts)))
         nac_p = track.get("nac_p"); nic = track.get("nic"); nac_v = track.get("nac_v")
         if nac_p is not None or nic is not None or nac_v is not None:
@@ -922,7 +936,15 @@ def _build_remarks(track: dict, cot_type: str) -> str:
         if track.get("track_ghost"):     status_l.append("[GHOST TARGET]")
         if track.get("track_tentative"): status_l.append("[TENTATIVE]")
         if track.get("track_end"):       status_l.append("[TRACK END]")
-        if track.get("track_coasting"):  status_l.append("[COASTING]")
+        # Different categories that decode a coasting flag at all name it
+        # differently (CAT-010 "coasting", CAT-011 "coasting", CAT-015
+        # "coasted_position"/"coasted_height", CAT-017 "coasted") — none of
+        # them literally "track_coasting", so this never fired. None of
+        # those categories are enabled on this deployment (only 34/48/62
+        # are), so currently dormant either way — fixed for whenever one is.
+        if track.get("coasting") or track.get("coasted") \
+                or track.get("coasted_position"):
+            status_l.append("[COASTING]")
         if track.get("track_begin"):     status_l.append("[TRACK START]")
         if track.get("amalgamated"):     status_l.append("[AMALGAMATED]")
         if track.get("track_manoeuvre"): status_l.append("[MANOEUVRE]")
@@ -1286,6 +1308,14 @@ def _hae(track: dict) -> float:
         ("baro_alt_m",  1.0),
         ("alt_baro_ft", 0.3048),
         ("alt_3d_ft",   0.3048),   # CAT-048 I048/110 3D radar height
+        # CAT-048 I048/100 Gillham/Mode-C fallback: only reaches the map when
+        # nothing above is present. A plain PSR/SSR return with no Mode-S
+        # binary Flight Level (I048/090) — e.g. an older Mode-A/C-only
+        # transponder, or a passive system like VERA-NG that relays the raw
+        # Gillham code without also computing I048/090 itself — would
+        # otherwise show no altitude at all despite decode_cat048_record()
+        # already having it.
+        ("mode_c_alt_ft", 0.3048),
         ("alt_ft",      0.3048),   # generic feet-based source fallback
         ("alt_m",       1.0),
         ("alt_km",      1000.0),   # satellites

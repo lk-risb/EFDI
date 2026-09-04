@@ -422,8 +422,8 @@ def _nvg_extended_data(track: dict, uid: str, sidc: str) -> list[tuple[str, str]
         ("measured_alt_ft", "Measured", 0.3048),
         ("meas_alt_ft", "Measured", 0.3048),
         ("calc_alt_ft", "Calculated", 0.3048),
-        ("selected_alt_ft", "Selected MCP/FCU", 0.3048),
-        ("fms_selected_alt_ft", "Selected FMS", 0.3048),
+        ("sel_alt_mcp_ft", "Selected MCP/FCU", 0.3048),  # CAT-048 I048/250 BDS 4,0
+        ("sel_alt_fms_ft", "Selected FMS", 0.3048),      # CAT-048 I048/250 BDS 4,0
         ("final_alt_ft", "Target / final", 0.3048),
     ):
         value = _finite_number(track.get(key))
@@ -449,8 +449,17 @@ def _nvg_extended_data(track: dict, uid: str, sidc: str) -> list[tuple[str, str]
         for label, value in altitude_rows:
             add(label, value)
 
+    # No source ever sets "nav_modes" as one string — CAT-048 I048/250 BDS 4,0
+    # (_cat48__decode_bds40) sets vnav_active/alt_hold/approach_mode as three
+    # separate booleans instead.
+    _nav_mode_names = (
+        ("vnav_active", "VNAV"),
+        ("alt_hold", "ALT HOLD"),
+        ("approach_mode", "APPR"),
+    )
+    nav_modes = ", ".join(name for key, name in _nav_mode_names if track.get(key))
     guidance_rows = (
-        ("Autopilot modes", track.get("nav_modes")),
+        ("Autopilot modes", nav_modes or None),
         ("Selected heading", (
             "{}°".format(track["selected_heading_deg"])
             if track.get("selected_heading_deg") is not None else None
