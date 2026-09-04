@@ -28,6 +28,7 @@ import time
 
 from protocols.gateway import TOPIC_ROOT, open_session, payload_bytes, publish_dual, subscribe
 from protocols.proto.aartos_json_pb2 import AartosTrack
+from protocols.track_views import add_version, semantic_topic
 
 INPUT_TOPIC = os.environ.get("AARTOS_INPUT_TOPIC") or TOPIC_ROOT + "/raw/aartos/**"
 RAW_PREFIX = TOPIC_ROOT + "/raw/aartos/"
@@ -44,16 +45,16 @@ _AFFILIATION = {
     "ignore": "unknown",
 }
 
-# Stable per-(host, object_class) identity, so a churned AARTOS trackID
+# Stable per-(host, _entity_kind) identity, so a churned AARTOS trackID
 # keeps the SAME CoT uid instead of minting a fresh one. RTSA-Suite PRO
 # reassigns a new trackID to the same physical drone almost every poll
 # cycle; diffing raw trackIDs meant every reassignment forced a
 # delete-then-recreate cycle in TAK, which raced against WinTAK's own CoT
 # processing and could leave two or three markers visible for one real
-# aircraft. Keying identity by object_class ("uav" vs "unit") instead means
+# aircraft. Keying identity by _entity_kind ("uav" vs "unit") instead means
 # the SAME marker just keeps updating in place across a trackID churn — no
 # delete, no recreate, nothing for the client to race.
-# host -> object_class -> {"track_id": str, "uid": str, "last_seen": float}
+# host -> _entity_kind -> {"track_id": str, "uid": str, "last_seen": float}
 _class_identity: dict[str, dict[str, dict]] = {}
 
 # Seconds a class must be absent (using AARTOS's own sample timestamp, not
@@ -64,7 +65,30 @@ _class_identity: dict[str, dict[str, dict]] = {}
 # delete/recreate churn the class-based identity exists to prevent.
 _CLASS_GONE_GRACE_S = 5.0
 
-# object_class -> the exact topic its last live publish went to, kept
+
+def _distance_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Great-circle distance in meters (haversine)."""
+    r = 6371000.0
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlambda = math.radians(lon2 - lon1)
+    a = math.sin(dphi / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dlambda / 2) ** 2
+    return 2 * r * math.asin(math.sqrt(a))
+
+
+# A single-antenna bearing-only fix (no real cross-fix from a second
+# antenna) appears to default to reporting that antenna's own surveyed
+# coordinates rather than a real triangulated point — confirmed live: a
+# stationary drone's reported position repeatedly landed within a few
+# meters of whichever IsoLOG site last reported a usable bearing. A
+# reported drone position this close to any antenna site in the SAME
+# sample is almost certainly this degenerate fallback, not a real fix —
+# publishing it would visibly snap the marker onto a radar site. Skipped
+# instead of relayed, so the marker holds its last real position rather
+# than jumping to wherever a single antenna happens to be.
+_ANTENNA_FALLBACK_RADIUS_M = 40.0
+
+# _entity_kind -> the exact topic its last live publish went to, kept
 # alongside _class_identity. A tombstone must reach the same tak_layer.py
 # subscription the live track did (each affiliation/domain combination is
 # its own separate Zenoh subscription there) — publishing every tombstone
@@ -123,7 +147,11 @@ def tracking_to_track(tracking: dict, ref_ts: float) -> dict | None:
         "lat_deg": round(lat, 7),
         "lon_deg": round(lon, 7),
         "callsign": tracking.get("droneName") or tracking.get("categoryName") or "AARTOS-{}".format(track_id),
-        "object_class": "unit" if _is_operator_track(tracking) else "uav",
+        # Leading underscore keeps this out of track_views.object_type()'s
+        # candidate-key scan — it already picks the topic's {entity} segment
+        # below, and letting it double as {type} too produced .../uav/uav/
+        # and .../unit/unit/ instead of a real type or the honest "unknown".
+        "_entity_kind": "unit" if _is_operator_track(tracking) else "uav",
         "aartos_category": tracking.get("categoryName"),
         "aartos_alert_level": alert,
         "aartos_probability": tracking.get("probability"),
@@ -147,13 +175,20 @@ def tracking_to_track(tracking: dict, ref_ts: float) -> dict | None:
 
 
 def topic_for_track(track: dict) -> str:
+    """Semantic prefix (domain/source/modality/affiliation/entity) — see
+    docs/13-topic-taxonomy.md. publish_dual() appends {type}/{id}/tracks/v1
+    itself, so this only needs to reach up to {entity}.
+
+    modality is `passive_rf`: AARTOS/IsoLOG antennas are RF direction-finders,
+    never active radar — see docs/13-topic-taxonomy.md's modality vocabulary.
+    """
     affiliation = _AFFILIATION.get(track.get("aartos_alert_level", "unknown"), "unknown")
     # An operator/controller position is a person standing on the ground, not
     # an airframe — route it onto tak_layer.py's land/**/{aff}/unit/** wildcard
     # instead of the air/**/{aff}/uav/** one every other AARTOS track uses.
-    if track.get("object_class") == "unit":
-        return "{}/land/aartos/{}/unit".format(TOPIC_ROOT, affiliation)
-    return "{}/air/aartos/{}/uav".format(TOPIC_ROOT, affiliation)
+    if track.get("_entity_kind") == "unit":
+        return "{}/land/aartos/passive_rf/{}/unit".format(TOPIC_ROOT, affiliation)
+    return "{}/air/aartos/passive_rf/{}/uav".format(TOPIC_ROOT, affiliation)
 
 
 def _site_key(antenna_id) -> str:
@@ -183,6 +218,10 @@ def antenna_to_site(antenna: dict, ref_ts: float) -> dict | None:
         "_ts": ref_ts,
         "_src": "AARTOS",
         "sensor_id": _site_key(antenna_id),
+        # Also the site's {id} segment in site_topic() below (track_views'
+        # object_id() checks "uid" first) — without it every site's {id}
+        # fell back to "unknown", noise the source segment already disambiguates.
+        "uid": _site_key(antenna_id),
         "sensor_name": antenna.get("antennaName") or "AARTOS",
         "lat_deg": round(lat, 7),
         "lon_deg": round(lon, 7),
@@ -198,7 +237,19 @@ def antenna_to_site(antenna: dict, ref_ts: float) -> dict | None:
 
 
 def site_topic(site: dict) -> str:
-    return "{}/land/{}/radar/neutral/radar".format(TOPIC_ROOT, site["sensor_id"])
+    """Full taxonomy key, .../tracks/v1 (see docs/13-topic-taxonomy.md).
+
+    modality stays the literal "radar" (not passive_rf) — that is the exact
+    shape tak_layer.py's dedicated radar-site subscriber already listens on
+    ("land/*/radar/neutral/radar/**"), matching every other sensor-site
+    marker (e.g. protocols/vendors/asterix/cat.py's CAT-34 sensor status)
+    regardless of the sensor's true modality. type resolves to "unknown"
+    (a site has no vendor type); id resolves to the antenna's own sensor_id
+    (carried as "uid" on the site dict), giving each antenna a distinct key
+    instead of every site collapsing onto the same "unknown" id segment.
+    """
+    prefix = "{}/land/{}/radar/neutral/radar".format(TOPIC_ROOT, site["sensor_id"])
+    return add_version(semantic_topic(prefix, site))
 
 
 def run() -> None:
@@ -218,10 +269,12 @@ def run() -> None:
         trackings = data.get("trackings") or []
         now_classes: set[str] = set()
 
+        antenna_positions: list[tuple[float, float]] = []
         for antenna in data.get("antennas") or []:
             site = antenna_to_site(antenna, ref_ts)
             if site is None:
                 continue
+            antenna_positions.append((site["lat_deg"], site["lon_deg"]))
             session.put(site_topic(site), json.dumps(site).encode(), encoding="application/json")
 
         last_topic = _last_topic.setdefault(host, {})
@@ -235,8 +288,24 @@ def run() -> None:
             track = tracking_to_track(tracking, ref_ts)
             if track is None:
                 continue
-            cls = track.get("object_class") or "uav"
+            cls = track.get("_entity_kind") or "uav"
             tid_str = str(track_id)
+            lat, lon = track.get("lat_deg"), track.get("lon_deg")
+            if lat is not None and lon is not None and any(
+                    _distance_m(lat, lon, alat, alon) < _ANTENNA_FALLBACK_RADIUS_M
+                    for alat, alon in antenna_positions):
+                # Degenerate single-antenna fallback fix — keep the
+                # identity alive (same bookkeeping a normal update would
+                # do) so a filtered sample never tombstones it, but don't
+                # publish this position.
+                ident = class_identity.get(cls)
+                if ident is None:
+                    ident = {"track_id": tid_str, "uid": "aartos-{}-{}".format(host, tid_str)}
+                    class_identity[cls] = ident
+                ident["last_seen"] = ref_ts
+                ident["track_id"] = tid_str
+                now_classes.add(cls)
+                continue
             ident = class_identity.get(cls)
             if ident is not None:
                 # Same class already has a stable identity — reuse its uid
@@ -281,11 +350,17 @@ def run() -> None:
                 "_ts": time.time(),
                 "_delete": True,
             }
-            topic = last_topic.pop(cls, "{}/air/aartos/unknown/uav".format(TOPIC_ROOT))
+            # An identity that only ever matched the antenna-fallback filter
+            # (never published a real position) has no last_topic entry —
+            # the fallback below must still route by domain (unit -> land,
+            # everything else -> air), not always assume "air/uav".
+            default_topic = "{}/land/aartos/unknown/unit".format(TOPIC_ROOT) if cls == "unit" \
+                else "{}/air/aartos/unknown/uav".format(TOPIC_ROOT)
+            topic = last_topic.pop(cls, default_topic)
             session.put(topic, json.dumps(tombstone).encode(), encoding="application/json")
 
     subscriber = subscribe(session, INPUT_TOPIC, on_sample)
-    print("AARTOS translator: {} -> {}/air/aartos/*/uav".format(INPUT_TOPIC, TOPIC_ROOT), flush=True)
+    print("AARTOS translator: {} -> {}/air/aartos/passive_rf/*/uav".format(INPUT_TOPIC, TOPIC_ROOT), flush=True)
     try:
         while True:
             time.sleep(60)

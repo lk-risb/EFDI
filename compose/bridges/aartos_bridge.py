@@ -23,7 +23,7 @@ Config (compose/.env):
   AARTOS_TIMEOUT_S=30            # socket read timeout before reconnecting
   AARTOS_RECONNECT_S=10
   AARTOS_MODE=stream             # "stream" (default) or "poll"
-  AARTOS_POLL_INTERVAL_S=1.0     # poll mode only — seconds between GET /sample
+  AARTOS_POLL_INTERVAL_S=0.3     # poll mode only — seconds between GET /sample
 
 Some RTSA-Suite PRO deployments never actually push data through /stream
 (chunked body opens fine, HTTP 200, but no bytes ever follow, even for a
@@ -186,7 +186,7 @@ def main() -> None:
     ap.add_argument("--limit", type=int, default=int(os.environ.get("AARTOS_LIMIT", "0")) or None)
     ap.add_argument("--timeout", type=float, default=float(os.environ.get("AARTOS_TIMEOUT_S", "30")))
     ap.add_argument("--mode", choices=("stream", "poll"), default=os.environ.get("AARTOS_MODE", "stream"))
-    ap.add_argument("--poll-interval", type=float, default=float(os.environ.get("AARTOS_POLL_INTERVAL_S", "1.0")))
+    ap.add_argument("--poll-interval", type=float, default=float(os.environ.get("AARTOS_POLL_INTERVAL_S", "0.3")))
     ap.add_argument("--verbose", "-v", action="store_true")
     run(ap.parse_args())
 

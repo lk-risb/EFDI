@@ -30,7 +30,7 @@ Configuration (compose/.env):
     SITAWARE_PASS=secret                   # basic-auth password
     SITAWARE_SOURCE=efdi-live              # source tag written into _src field
     SITAWARE_API_PATH=/deployment/path     # required deployment-specific resource path
-    SITAWARE_POLL_S=10                     # poll interval in seconds (default 10)
+    SITAWARE_POLL_S=2                       # poll interval in seconds (default 2)
     SITAWARE_TLS_VERIFY=1                  # set 0 to skip certificate check (self-signed)
 
 All configured base URLs are tried every poll, preferring whichever one last
@@ -81,7 +81,7 @@ _USER        = os.environ.get("SITAWARE_USER",     "")
 _PASS        = os.environ.get("SITAWARE_PASS",     "")
 _SOURCE      = os.environ.get("SITAWARE_SOURCE",   "sitaware")
 _API_PATH    = os.environ.get("SITAWARE_API_PATH", "").strip()
-_POLL_S      = float(os.environ.get("SITAWARE_POLL_S", "10"))
+_POLL_S      = float(os.environ.get("SITAWARE_POLL_S", "2"))
 _TLS_VERIFY  = os.environ.get("SITAWARE_TLS_VERIFY", "1") not in ("0", "false", "no")
 ZENOH_RETRY_S = 5
 
