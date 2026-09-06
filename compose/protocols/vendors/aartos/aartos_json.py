@@ -360,8 +360,8 @@ def run() -> None:
             # (never published a real position) has no last_topic entry —
             # the fallback below must still route by domain (unit -> land,
             # everything else -> air), not always assume "air/uav".
-            default_topic = "{}/land/aartos/unknown/unit".format(TOPIC_ROOT) if cls == "unit" \
-                else "{}/air/aartos/unknown/uav".format(TOPIC_ROOT)
+            default_topic = "{}/land/aartos/passive_rf/unknown/unit".format(TOPIC_ROOT) if cls == "unit" \
+                else "{}/air/aartos/passive_rf/unknown/uav".format(TOPIC_ROOT)
             topic = last_topic.pop(cls, default_topic)
             session.put(topic, json.dumps(tombstone).encode(), encoding="application/json")
 

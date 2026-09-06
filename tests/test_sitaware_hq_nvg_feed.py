@@ -30,7 +30,7 @@ from sitaware_layer import NVG_NS  # noqa: E402
 from sitaware_layer import _TOPIC_SIDC  # noqa: E402
 from sitaware_layer import _resolve_sidc  # noqa: E402
 from sitaware_layer import track_to_nvg_item  # noqa: E402
-from tak_layer import _is_unfused_sensor_track, track_to_cot  # noqa: E402
+from tak_layer import _is_unfused_sensor_track, _TOPIC_COT, track_to_cot  # noqa: E402
 
 
 class FakeClock:
@@ -165,6 +165,27 @@ class NVGFeedCacheTests(unittest.TestCase):
             _TOPIC_SIDC["env/weather/station/**"],
             _TOPIC_SIDC["land/**/neutral/sensor/**"],
         )
+
+    def test_nffi_friendly_unit_wired_for_every_domain(self):
+        # nffi.py routes a track's topic domain off its unitSymbol SIDC's
+        # Battle Dimension (space/air/land/sea) — each must have a matching
+        # entry here or that track's NVG symbol silently falls through to
+        # _unknown_air_sidc / KeyError-avoidance defaults instead of a real
+        # friendly marker. No Unit/Equipment/Installation split exists for
+        # Air/Sea/Space in the standard (unlike Ground's "U"), so these use
+        # an unspecified (dash) function ID rather than a fabricated one.
+        self.assertEqual(_TOPIC_SIDC["land/**/friendly/unit/**"], "SFGPU-----*****")
+        self.assertEqual(_TOPIC_SIDC["air/**/friendly/unit/**"], "SFAP------*****")
+        self.assertEqual(_TOPIC_SIDC["sea/**/friendly/unit/**"], "SFSP------*****")
+        self.assertEqual(_TOPIC_SIDC["space/**/friendly/unit/**"], "SFPP------*****")
+
+        # Same domain-routing gap, TAK side: tak_layer._TOPIC_COT needs a
+        # matching entry per domain or the track is dropped silently (no
+        # subscription matches, not even a wrong-icon fallback).
+        self.assertEqual(_TOPIC_COT["land/**/friendly/unit/**"][0], "a-f-G-U-C")
+        self.assertEqual(_TOPIC_COT["air/**/friendly/unit/**"][0], "a-f-A")
+        self.assertEqual(_TOPIC_COT["sea/**/friendly/unit/**"][0], "a-f-S")
+        self.assertEqual(_TOPIC_COT["space/**/friendly/unit/**"][0], "a-f-P")
 
     def test_civ_mil_affiliation_is_nationality_independent(self):
         # `civ`/`mil` affiliation means "civilian traffic"/"military traffic"

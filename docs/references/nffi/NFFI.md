@@ -2,13 +2,22 @@
 
 `../../../compose/protocols/random/nffi.py` decodes NATO Friendly Force
 Information (NFFI) XML — the Friendly Force Tracking exchange defined by
-ADatP-36 / STANAG 5527 — into normalized friendly-force tracks. It does not
-feed SitaWare directly: SitaWare's own C2 integration uses NVG, not NFFI
-(see `../sitaware/SITAWARE.md`). NFFI is a separate inbound partner-format
-translator, output onto the generic
-`<PREFIX>/<ORG>/land/nato/c2/friendly/unit` track topic that any C2 layer
-can consume — SitaWare included, via `sitaware_layer.py`'s generic
-friendly-unit path, but nothing SitaWare-specific.
+ADatP-36 / STANAG 5527 — into normalized friendly-force tracks. `nffi.py`
+itself is protocol-agnostic about who publishes the raw XML: output goes
+onto the generic `<PREFIX>/<ORG>/{domain}/nato/c2/friendly/unit` track
+topic (see the domain-routing fix below) that any C2 layer can consume —
+SitaWare included, via `sitaware_layer.py`'s generic friendly-unit path,
+but nothing SitaWare-specific.
+
+**Correction (2026-09-06):** this file previously claimed "SitaWare's own
+C2 integration uses NVG, not NFFI" — true only for this project's own
+egress path (EFDI → SitaWare, via `sitaware_layer.py`'s NVG feed). It's
+false as a claim about SitaWare itself: a real SitaWare Headquarters
+instance has a dedicated "NFFI and FFI Manager" (Coalition Gateway
+section) that can run as either an NFFI/FFI Client or Server, across
+several transport variants (IP1, IP1 Classic, IP2, SIP3) — confirmed by
+direct screenshot of a live instance, not documentation. See "Added
+2026-09-06: bridges/nffi_bridge.py" below.
 
 ## Corrected 2026-09-06: a real primary source exists, and the old code didn't match it
 
@@ -80,9 +89,109 @@ dict regardless of which keys protobuf recognizes). Test fixture in
 pass against it.
 
 `unitSymbol`'s APP-6(A) SIDC is currently carried through as the raw
-15-character code (`unit_type`) rather than decoded into affiliation/domain/
+15-character code (`unit_type`) rather than fully decoded into affiliation/
 echelon — a real opportunity for a richer C2 mapping, deliberately left for
-a separate pass rather than folded into this correctness fix.
+a separate pass rather than folded into this correctness fix. The battle
+dimension character IS now decoded, for topic routing — see below.
+
+## Fixed 2026-09-06: output topic hardcoded the `land` domain
+
+`OUTPUT_TOPIC` was a single constant with `land` baked into the domain
+segment (`{root}/land/nato/c2/friendly/unit`), for every track regardless of
+what it actually was. Nothing in NFFI restricts it to land: STANAG 5527 is a
+general Friendly Force Tracking exchange, and `identificationData/unitSymbol`
+is documented as a plain APP-6(A) SIDC, not a land-only code. A real feed
+carrying a naval or air friendly unit would have been forced onto the land
+topic regardless.
+
+Fixed by decoding the SIDC's Battle Dimension character — position 3
+(0-based index 2) of the 15-character code, per APP-6(A) Annex B / 2525B —
+and picking the topic's domain segment from it at publish time, per track:
+
+| SIDC battle dimension | Domain topic |
+|---|---|
+| `P` (Space) | `space` |
+| `A` (Air) | `air` |
+| `G` (Ground) | `land` |
+| `S` (Sea Surface) | `sea` |
+| `U` (Subsurface) | `sea` (no distinct subsurface topic domain exists) |
+| `F` (Special Operations Forces) | `land` (ground-based by convention) |
+| anything else, or `unitSymbol` absent | `land` (previous behavior, kept as the default) |
+
+`OUTPUT_TOPIC` (one constant) became `OUTPUT_TOPICS` (a dict keyed by domain)
+plus `_output_topic(unit_symbol)` to pick the right one. `tests/test_nffi.py`
+covers all six mapped dimensions plus the unrecognized/absent-symbol default.
+
+## Added 2026-09-06: `unitSymbol` echelon (Symbol Modifier, SIDC positions 11-12)
+
+Partial follow-up to the "left for a separate pass" note above — decodes one
+more SIDC field, not the full affiliation/domain/echelon set. Positions 11-12
+(0-based index 10:12) are the Echelon/Size Symbol Modifier; when the code is
+one of the 13 recognized values it is set on `track["nffi_echelon"]` as a
+readable label (`"Battalion/Squadron"`, `"Division"`, etc.) — the same
+`nffi_`-prefixed, non-generic-key convention as `nffi_strength`/`nffi_status`.
+Placeholder codes (`"--"`, or the `"**"` seen in wildcard SIDCs like the test
+fixture's) and any other unrecognized code are left undecoded, no key set.
+
+**Confidence caveat:** the code table (`-A`=Team/Crew … `-M`=Region) is
+sourced from Carmenta Engine's own MIL-STD-2525B Appendix B documentation
+(a GIS vendor implementing this exact standard), not independently
+cross-checked against the DoD's own MIL-STD-2525B/APP-6A PDF text — that
+document is too large to search directly and no second corroborating source
+was found. Same single-vendor-source caution as the daveb1034/NVGTools note
+in `../sitaware/SITAWARE.md`. The values are at least internally consistent:
+alphabetical order matches ascending unit size with no gaps, which is weak
+but real evidence against a hallucinated table. Revisit if a primary-source
+copy of MIL-STD-2525B/APP-6A ever gets checked directly.
+
+Affiliation (SIDC position 2) is deliberately NOT decoded from `unitSymbol`:
+NFFI's own schema already forces `affiliation: "friendly"` for every track
+(see the code comment above), so decoding a redundant field from the SIDC
+would add no information and risks contradicting that schema-level guarantee
+if a real feed ever sent something else in that position.
+
+## Fixed 2026-09-06: TAK/SitaWare had no route for non-`land` NFFI units
+
+Direct consequence of the domain-routing fix above: once a naval/air/space
+NFFI unit could publish on its own domain topic, neither consumer had a
+subscription entry for it. `tak_layer.py`'s `_TOPIC_COT` and
+`sitaware_layer.py`'s `_TOPIC_SIDC` only had `land/**/friendly/unit/**`
+wired — so the fix, alone, would have turned "wrongly shown as a ground
+unit" into "invisible in both C2 systems" for that case.
+
+Checked whether a real Air/Sea/Space equivalent of Ground's `a-f-G-U-C`
+("-U-C" = Unit, Combat) exists before adding anything: it does not.
+Confirmed against dB-SPL/cot-types' `CoTtypes.xml` (a comprehensive,
+community-maintained CoT type catalog) — Ground has a real `a-.-G-U`
+("Gnd/Unit") category that Air/Sea/Subsurface do not; grepping the full
+file for any `A-U`/`S-U` "unit" entry returns nothing. MIL-STD-2525's
+Unit/Equipment/Installation split is Ground-only; Air/Sea/Space function
+IDs go straight to platform-type codes (aircraft type, vessel type), with
+no organizational-unit concept to borrow. Inventing one would repeat the
+exact mistake already made and fixed once this session (the fabricated
+NFFI namespace).
+
+Used the dimension-only "track, no further classification" CoT types the
+catalog does define — `a-.-A` (Air Track), `a-.-S` (Sea Surface Track),
+`a-.-P` — which this codebase already relies on elsewhere (`a-u-A` for
+unclassified radar returns, `a-f-P` for satellites). On the SitaWare side,
+the equivalent is an unspecified (dash-filled) SIDC function ID rather than
+Ground's `U` — `SFAP------*****` / `SFSP------*****` / `SFPP------*****` —
+which matches the existing `space/**/*/satellite/**` entries' own style
+exactly (same "no function ID" pattern, already in the file).
+
+Sea Surface (`S`) and Subsurface (`U`) SIDC dimensions both still collapse
+onto the single `sea` topic domain (per the earlier fix) and now the single
+`a-f-S` / `SFSP------*****` marker — a submarine reporting over NFFI would
+render with the surface-track icon. Accepted: NFFI/BFT traffic from a
+subsurface platform is not a realistic scenario, and the codebase's own
+topic taxonomy has no separate subsurface domain to route it through even
+if it were.
+
+`tak_layer.py`'s `_TOPIC_COT` and `sitaware_layer.py`'s `_TOPIC_SIDC` each
+gained three entries (`air`/`sea`/`space` × `friendly/unit`).
+`tests/test_sitaware_hq_nvg_feed.py` covers all four domains (including the
+pre-existing `land` one) for both dicts.
 
 ## Added 2026-09-06: classification metadata (`secPolicyName`/`secClassification`/`secCategory`)
 
@@ -115,8 +224,44 @@ only — that repo has no NFFI decoder). Test fixture updated with a
 `tests/test_sitaware_hq_nvg_feed.py` covering the CoT and NVG egress paths
 directly. All tests pass.
 
+## Added 2026-09-06: `bridges/nffi_bridge.py` — the missing ingest side
+
+`nffi.py` owns no source socket by design (see its own docstring) — it has
+always expected something else to land raw NFFI XML onto
+`.../raw/nffi/{source-id}`. Nothing in this repo ever did that. Added
+`nffi_bridge.py`: dials out to a partner's NFFI/FFI server, extracts
+complete `NFFIMessage`/`track` XML frames from the TCP stream, republishes
+the raw bytes for `nffi.py` to decode unchanged.
+
+**Scoped against, but not yet tested on, a real endpoint.** The intended
+target is a SitaWare Headquarters "NFFI and FFI Manager" server instance
+(IP1/IP1 Classic/IP2/SIP3 — see the correction above), but that instance
+is being reinstalled and its real connection details (host, port, which
+profile, TLS) aren't available yet. The bridge's TCP-dial-and-frame
+pattern is copied from `bridges/tak_bridge.py`'s own proven ingress path
+(same codebase, already working for CoT), not from any confirmed NFFI wire
+documentation — the file's own docstring lists exactly what's reused-and-
+proven versus guessed-and-unverified (transport, framing, direction of
+dial, no known default port). Update it once real details land, and treat
+anything it does before then as untested.
+
+Registered in `start.sh` (a `nffi-bridge` case, prompting for
+`NFFI_HOST`/`NFFI_PORT` the same way `tak-bridge` prompts for `TAK_HOST`)
+and `compose/.env.example` — this project has a documented prior instance
+of a translator existing but never being wired into the launcher (`nffi`
+itself, per `docs/14-continuous-integration.md`'s 2026-07-10 entry), so
+registered this one immediately instead of letting the same gap recur.
+
+Verified: `tests/test_nffi_bridge.py` (6 tests) covers frame extraction
+(single document, two documents split across chunks, a bare `<track>` with
+no `NFFIMessage` wrapper, leading noise before the first recognized tag —
+the last two using a real TCP socket, not just the pure function) and the
+required-host/required-port refusal. All pass. Full test suite unaffected.
+
 ## What still hasn't been verified
 
 No real NFFI traffic from a partner system has been received by EFDI to
-date. The above is a spec-conformance fix verified against the actual
-primary XSD and a synthetic message built from it, not a live-traffic test.
+date. The `nffi.py` decode logic above is a spec-conformance fix verified
+against the actual primary XSD and a synthetic message built from it, not
+a live-traffic test. `nffi_bridge.py` (above) is closer to closing that
+gap but isn't there yet — it has never connected to a real NFFI/FFI server.

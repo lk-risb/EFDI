@@ -90,6 +90,21 @@ established, widely-cited symbol-code conventions every TAK/ATAK CoT
 producer uses, not from a fresh fetch of either standard's own text during
 this project.
 
+### `_TOPIC_COT`'s Air/Sea/Space `friendly/unit` entries (no `-U-C` there)
+
+`land/**/friendly/unit/**` maps to `a-f-G-U-C`, but Air/Sea/Space have no
+equivalent of Ground's "-U-C" (Unit, Combat) function ID — confirmed by
+grepping a real CoT type catalog
+([dB-SPL/cot-types](https://github.com/dB-SPL/cot-types)'s `CoTtypes.xml`)
+for any `A-U`/`S-U` "unit" entry: none exist. MIL-STD-2525's
+Unit/Equipment/Installation split is Ground-only. `air/**/friendly/unit/**`
+and `sea/**/friendly/unit/**` use the dimension-only types the catalog does
+define instead (`a-f-A`, `a-f-S`), the same style already used elsewhere in
+this file for `a-u-A`/`a-f-P`, rather than inventing a finer-grained code
+that isn't real. Full rationale, including why this needed fixing at all
+(`nffi.py` routes tracks off decoded domain now, not a hardcoded `land`),
+in `../nffi/NFFI.md`.
+
 ## Why this file looks different from `../asterix-specs/ASTERIX.md`
 
 ASTERIX and SAPIENT both have an authoritative structured source this

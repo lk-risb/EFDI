@@ -15,7 +15,9 @@ urn:nato:fft:protocols:nffi14, root NFFIMessage/track*) — see
 docs/references/nffi/NFFI.md for the source and how it was confirmed.
 
 Raw input:  <PREFIX>/<ORG>/raw/nffi/<source-id>
-Output:     <PREFIX>/<ORG>/land/nato/c2/friendly/unit/json/tracks
+Output:     <PREFIX>/<ORG>/{domain}/nato/c2/friendly/unit/json/tracks
+            {domain} is one of space/air/land/sea, picked per track from the
+            decoded unitSymbol SIDC's Battle Dimension (land when absent).
 """
 
 import argparse
@@ -31,8 +33,71 @@ TOPIC_ROOT = topic_root()
 
 MAX_NFFI_XML = 10_000_000
 DEFAULT_INPUT_TOPIC = "{}/raw/nffi/*".format(TOPIC_ROOT)
-OUTPUT_TOPIC = "{}/land/nato/c2/friendly/unit".format(TOPIC_ROOT)
 ZENOH_RETRY_S = 5
+
+# APP-6(A)/2525B SIDC position 3 (0-based index 2) is the Battle Dimension.
+# NFFI itself is domain-agnostic — identificationData/unitSymbol is documented
+# as a general APP-6(A) SIDC, not a land-only code — so the output topic's
+# domain segment is derived from that character instead of being assumed.
+# See docs/references/nffi/NFFI.md for the SIDC structure sourcing.
+_SIDC_BATTLE_DIMENSION_INDEX = 2
+_DOMAIN_BY_BATTLE_DIMENSION = {
+    "P": "space",
+    "A": "air",
+    "G": "land",
+    "S": "sea",
+    "U": "sea",   # subsurface: no distinct topic domain, sea covers it
+    "F": "land",  # special operations forces: ground-based by convention
+}
+_DEFAULT_DOMAIN = "land"  # unitSymbol absent or an unrecognized/unknown ('X') dimension
+
+OUTPUT_TOPICS = {
+    domain: "{}/{}/nato/c2/friendly/unit".format(TOPIC_ROOT, domain)
+    for domain in ("space", "air", "land", "sea")
+}
+
+
+def _output_topic(unit_symbol) -> str:
+    domain = _DEFAULT_DOMAIN
+    if unit_symbol and len(unit_symbol) > _SIDC_BATTLE_DIMENSION_INDEX:
+        domain = _DOMAIN_BY_BATTLE_DIMENSION.get(
+            unit_symbol[_SIDC_BATTLE_DIMENSION_INDEX].upper(), _DEFAULT_DOMAIN
+        )
+    return OUTPUT_TOPICS[domain]
+
+
+# Symbol Modifier: Echelon/Size, SIDC positions 11-12 (0-based index 10:12).
+# Source: MIL-STD-2525B Appendix B SIDC field breakdown, as implemented by
+# Carmenta Engine (a GIS vendor whose product decodes this exact standard) —
+# https://docs.carmenta.com/pages/milstd2525b_sidc_appendix_b.html. Not
+# independently cross-checked against the DoD's own MIL-STD-2525B/APP-6A PDF
+# text (too large to search directly; no second corroborating source found),
+# so carries the same single-vendor-source caution as the daveb1034/NVGTools
+# note in docs/references/sitaware/SITAWARE.md. The two placeholder forms
+# ("--" = not displayed, "**" seen in wildcard/unspecified SIDCs) and any
+# other unrecognized code are left undecoded.
+_SIDC_ECHELON_INDEX = slice(10, 12)
+_ECHELON_BY_SIDC_CODE = {
+    "-A": "Team/Crew",
+    "-B": "Squad",
+    "-C": "Section",
+    "-D": "Platoon/Detachment",
+    "-E": "Company/Battery/Troop",
+    "-F": "Battalion/Squadron",
+    "-G": "Regiment/Group",
+    "-H": "Brigade",
+    "-I": "Division",
+    "-J": "Corps/MEF",
+    "-K": "Army",
+    "-L": "Army Group/Front",
+    "-M": "Region",
+}
+
+
+def _echelon(unit_symbol) -> str | None:
+    if not unit_symbol:
+        return None
+    return _ECHELON_BY_SIDC_CODE.get(unit_symbol[_SIDC_ECHELON_INDEX])
 
 # The real STANAG 5527 / NFFI 1.4 namespace, per the primary NC3A-authored
 # XSD (fetched and read in full 2026-09-06 from a public NATO-DDS-vendor
@@ -173,6 +238,9 @@ def _parse_track(track_elem) -> dict | None:
 
     if unit_symbol:
         track["unit_type"] = unit_symbol  # raw 15-char APP-6(A) SIDC
+        echelon = _echelon(unit_symbol)
+        if echelon:
+            track["nffi_echelon"] = echelon
 
     oper_status = _child(track_elem, "operStatusData")
     if oper_status is not None:
@@ -240,7 +308,8 @@ def make_handler(session, verbose: bool = False):
                 print("NFFI ignored invalid payload size from", sample.key_expr, flush=True)
             return
         for track in parse_nffi(xml_bytes):
-            publish_dual(session, OUTPUT_TOPIC, track, NffiTrack)
+            topic = _output_topic(track.get("unit_type"))
+            publish_dual(session, topic, track, NffiTrack)
             if verbose:
                 print(
                     "NFFI {} lat={} lon={}".format(
@@ -271,7 +340,11 @@ def run(args):
         make_handler(session, args.verbose),
     )
     print("NFFI raw Zenoh input:", args.input_topic, flush=True)
-    print("NFFI normalized output:", OUTPUT_TOPIC, flush=True)
+    print(
+        "NFFI normalized output (domain-routed by unitSymbol battle dimension):",
+        ", ".join(OUTPUT_TOPICS.values()),
+        flush=True,
+    )
     try:
         while True:
             time.sleep(1)

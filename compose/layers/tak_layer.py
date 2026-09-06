@@ -204,6 +204,16 @@ _TOPIC_COT = {
     "land/**/hostile/unit/**":   ("a-h-G-U-C",   LAND_STALE_S),
     "land/**/neutral/unit/**":   ("a-n-G-U-C",   LAND_STALE_S),
     "land/**/unknown/unit/**":   ("a-u-G-U-C",   LAND_STALE_S),
+    # NFFI's friendly/unit entity, routed off "land" by its unitSymbol SIDC's
+    # Battle Dimension (see nffi.py's OUTPUT_TOPICS). CoT has no Air/Sea/Space
+    # equivalent of Ground's "-U-C" (Unit, Combat) — confirmed against a real
+    # CoT type catalog (dB-SPL/cot-types' CoTtypes.xml): no "A-U"/"S-U"/"P-U"
+    # entries exist at all, only the bare dimension-only tracks below, which
+    # this codebase already uses elsewhere (a-u-A, a-f-P). Using those here
+    # rather than inventing a finer-grained code.
+    "air/**/friendly/unit/**":   ("a-f-A",       AIR_STALE_S),
+    "sea/**/friendly/unit/**":   ("a-f-S",       SEA_STALE_S),  # covers subsurface too — see nffi.py's S/U -> "sea" note
+    "space/**/friendly/unit/**":("a-f-P",        SAT_STALE_S),
     "land/**/unknown/vehicle/**":("a-u-G-E-V",   LAND_STALE_S),
     "land/**/unknown/person/**": ("a-u-G-U-C-I", LAND_STALE_S),
     "land/**/unknown/sensor/**": ("a-u-G-E-S",   LAND_STALE_S),

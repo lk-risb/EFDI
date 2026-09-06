@@ -130,6 +130,16 @@ _TOPIC_SIDC = {
     "land/**/hostile/unit/**":       "SHGPU-----*****",
     "land/**/neutral/unit/**":       "SNGPU-----*****",
     "land/**/unknown/unit/**":       "SUGPU-----*****",
+    # NFFI's friendly/unit entity, routed off "land" by its unitSymbol SIDC's
+    # Battle Dimension (see nffi.py's OUTPUT_TOPICS). Air/Sea/Space have no
+    # Unit/Equipment/Installation split in the standard the way Ground does
+    # (confirmed against a real CoT type catalog — no "A-U"/"S-U"/"P-U" entries
+    # exist), so the function ID (positions 5-10) stays unspecified dashes
+    # instead of a fabricated "unit" letter, same convention already used for
+    # the dimension-only space/satellite entries below.
+    "air/**/friendly/unit/**":       "SFAP------*****",
+    "sea/**/friendly/unit/**":       "SFSP------*****",  # covers subsurface too — see nffi.py's S/U -> "sea" note
+    "space/**/friendly/unit/**":     "SFPP------*****",
     "land/**/unknown/vehicle/**":    "SUGPEV----*****",
     "land/**/unknown/person/**":     "SUGPUCI---*****",
     "land/**/unknown/sensor/**":     "SUGPES----*****",
