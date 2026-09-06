@@ -134,8 +134,20 @@ def run() -> None:
     if not UPSTREAM_ROOT or not LOCAL_ROOT:
         raise SystemExit("ASTERIX upstream and local topic roots must not be empty")
 
-    local_session = open_session()
-    upstream_session = open_session(UPSTREAM_ENDPOINT, local=False)
+    while True:
+        try:
+            local_session = open_session()
+            break
+        except Exception as exc:
+            print("ASTERIX bridge local Zenoh connect failed: {} — retry in 10s".format(exc), flush=True)
+            time.sleep(10)
+    while True:
+        try:
+            upstream_session = open_session(UPSTREAM_ENDPOINT, local=False)
+            break
+        except Exception as exc:
+            print("ASTERIX bridge upstream Zenoh connect failed: {} — retry in 10s".format(exc), flush=True)
+            time.sleep(10)
     recent = RecentFrames()
     selector = UPSTREAM_ROOT + "/raw/asterix/*"
     relayed = 0

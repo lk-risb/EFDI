@@ -195,7 +195,13 @@ def normalize(payload, topic: dict, aliases: AliasTable, now: float | None = Non
 
 
 def run() -> None:
-    session = open_session()
+    while True:
+        try:
+            session = open_session()
+            break
+        except Exception as exc:
+            print("Sparkplug Zenoh connect failed: {} — retry in 10s".format(exc), flush=True)
+            time.sleep(10)
     aliases = AliasTable()
 
     def on_sample(sample) -> None:

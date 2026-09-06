@@ -175,5 +175,9 @@ def start_relay_subscriber(
     if not _OWN_NAMESPACE or not os.path.isfile(_TRUSTED_PARENT_CERT_PATH):
         print("[federation-relay] no managed parent configured — relay receiver disabled", flush=True)
         return None, None
-    _relay_session = _subscribe(loop)
+    try:
+        _relay_session = _subscribe(loop)
+    except Exception as exc:
+        print(f"[federation-relay] Zenoh connect failed, relay receiver not started: {exc}", flush=True)
+        return None, None
     return _relay_session, loop.create_task(_watch_relay_session(loop))

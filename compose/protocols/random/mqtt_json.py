@@ -117,7 +117,13 @@ def normalize(payload: dict, mqtt_topic: str = "", now: float | None = None) -> 
 
 
 def run() -> None:
-    session = open_session()
+    while True:
+        try:
+            session = open_session()
+            break
+        except Exception as exc:
+            print("mqtt_json Zenoh connect failed: {} — retry in 10s".format(exc), flush=True)
+            time.sleep(10)
     prefix = TOPIC_ROOT + "/raw/mqtt/"
 
     def on_sample(sample) -> None:

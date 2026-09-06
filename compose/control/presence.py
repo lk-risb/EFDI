@@ -58,7 +58,13 @@ def main() -> None:
     if not SLOT:
         print("presence: PARTNER_NAMESPACE unset — no slot to announce, exiting", flush=True)
         return
-    session = open_session()
+    while True:
+        try:
+            session = open_session()
+            break
+        except Exception as exc:
+            print("presence Zenoh connect failed: {} — retry in 10s".format(exc), flush=True)
+            time.sleep(10)
     tokens: dict[str, object] = {}
     print("presence: announcing live feeds under {}/_meta/alive/*".format(SLOT), flush=True)
     try:
