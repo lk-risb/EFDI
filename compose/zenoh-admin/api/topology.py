@@ -447,11 +447,18 @@ async def _publish_loop(session: "zenoh.Session"):
 def start_topology(loop: asyncio.AbstractEventLoop) -> "tuple[zenoh.Session, asyncio.Task] | tuple[None, None]":
     """Open the shared session, subscribe to the mesh-wide topology wildcard,
     and start the periodic self-publish. Returns (session, task) for shutdown,
-    or (None, None) if this pod has no namespace configured."""
+    or (None, None) if this pod has no namespace configured or Zenoh is not
+    reachable yet — this runs unguarded inside FastAPI's lifespan startup,
+    so a transient connect failure here must degrade gracefully rather than
+    take the whole admin API process down with it."""
     if not _OWN_NAMESPACE:
         print("[topology] PARTNER_NAMESPACE unset — topology publisher/subscriber not started", flush=True)
         return None, None
-    session = _open_session()
+    try:
+        session = _open_session()
+    except Exception as exc:
+        print(f"[topology] Zenoh connect failed, topology publisher/subscriber not started: {exc}", flush=True)
+        return None, None
     session.declare_subscriber(_wildcard(), lambda sample: _handle_topology_sample(loop, sample))
     task = loop.create_task(_publish_loop(session))
     print(f"[topology] publishing on {_own_topic()}, subscribed on {_wildcard()}", flush=True)

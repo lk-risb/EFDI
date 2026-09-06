@@ -573,7 +573,13 @@ def _cat1_main():
     args = parser.parse_args()
     if not args.zenoh_raw and not args.port:
         parser.error("--port or CAT1_PORT is required unless --zenoh-raw is selected")
-    session = open_session()
+    while True:
+        try:
+            session = open_session()
+            break
+        except Exception as exc:
+            print("ASTERIX category Zenoh connect failed: {} — retry in 10s".format(exc), flush=True)
+            time.sleep(10)
     handler = _cat1__make_handler(session, args.verbose,
                                    site_lat=args.site_lat or None, site_lon=args.site_lon or None)
     try:
@@ -858,7 +864,13 @@ def _cat2_main():
     args = parser.parse_args()
     if not args.zenoh_raw and not args.port:
         parser.error("--port or CAT2_PORT is required unless --zenoh-raw is selected")
-    session = open_session()
+    while True:
+        try:
+            session = open_session()
+            break
+        except Exception as exc:
+            print("ASTERIX category Zenoh connect failed: {} — retry in 10s".format(exc), flush=True)
+            time.sleep(10)
     handler = _cat2__make_handler(session, args.verbose)
     try:
         if args.zenoh_raw: _cat2__run_zenoh_raw(session, args.input_topic, handler, args.verbose)
@@ -1413,7 +1425,13 @@ def _cat4_main():
     args = parser.parse_args()
     if not args.zenoh_raw and not args.port:
         parser.error("--port or CAT4_PORT is required unless --zenoh-raw is selected")
-    session = open_session()
+    while True:
+        try:
+            session = open_session()
+            break
+        except Exception as exc:
+            print("ASTERIX category Zenoh connect failed: {} — retry in 10s".format(exc), flush=True)
+            time.sleep(10)
     handler = _cat4__make_handler(session, args.verbose)
     try:
         if args.zenoh_raw: _cat4__run_zenoh_raw(session, args.input_topic, handler, args.verbose)
@@ -2196,7 +2214,13 @@ def _cat7_main():
     args = parser.parse_args()
     if not args.zenoh_raw and not args.port:
         parser.error("--port or CAT7_PORT is required unless --zenoh-raw is selected")
-    session = open_session()
+    while True:
+        try:
+            session = open_session()
+            break
+        except Exception as exc:
+            print("ASTERIX category Zenoh connect failed: {} — retry in 10s".format(exc), flush=True)
+            time.sleep(10)
     handler = _cat7__make_handler(session, args.verbose,
                                    site_lat=args.site_lat or None, site_lon=args.site_lon or None)
     try:
@@ -2534,7 +2558,13 @@ def _cat8_main():
     args = parser.parse_args()
     if not args.zenoh_raw and not args.port:
         parser.error("--port or CAT8_PORT is required unless --zenoh-raw is selected")
-    session = open_session()
+    while True:
+        try:
+            session = open_session()
+            break
+        except Exception as exc:
+            print("ASTERIX category Zenoh connect failed: {} — retry in 10s".format(exc), flush=True)
+            time.sleep(10)
     handler = _cat8__make_handler(session, args.verbose)
     try:
         if args.zenoh_raw: _cat8__run_zenoh_raw(session, args.input_topic, handler, args.verbose)
@@ -2824,7 +2854,13 @@ def _cat9_main():
     args = parser.parse_args()
     if not args.zenoh_raw and not args.port:
         parser.error("--port or CAT9_PORT is required unless --zenoh-raw is selected")
-    session = open_session()
+    while True:
+        try:
+            session = open_session()
+            break
+        except Exception as exc:
+            print("ASTERIX category Zenoh connect failed: {} — retry in 10s".format(exc), flush=True)
+            time.sleep(10)
     handler = _cat9__make_handler(session, args.verbose)
     try:
         if args.zenoh_raw: _cat9__run_zenoh_raw(session, args.input_topic, handler, args.verbose)
@@ -3437,7 +3473,13 @@ def _cat10_main():
     args = parser.parse_args()
     if not args.zenoh_raw and not args.port: parser.error("--port or CAT10_PORT is required unless --zenoh-raw is selected")
     site = [args.site_lat or None, args.site_lon or None]
-    session = open_session()
+    while True:
+        try:
+            session = open_session()
+            break
+        except Exception as exc:
+            print("ASTERIX category Zenoh connect failed: {} — retry in 10s".format(exc), flush=True)
+            time.sleep(10)
     try:
         print("Zenoh CAT-10 topics:", _cat10_TOPIC_010_AIR, _cat10_TOPIC_010_GROUND, _cat10_TOPIC_010_SENSOR, flush=True)
         handler = _cat10__make_cat010_handler(session, site, args.site_name)
@@ -4244,7 +4286,13 @@ def _cat11_main():
     if not args.zenoh_raw and not args.port:
         parser.error("--port or CAT11_PORT is required unless --zenoh-raw is selected")
     site = [args.site_lat or None, args.site_lon or None]
-    session = open_session()
+    while True:
+        try:
+            session = open_session()
+            break
+        except Exception as exc:
+            print("ASTERIX category Zenoh connect failed: {} — retry in 10s".format(exc), flush=True)
+            time.sleep(10)
     handler = _cat11__make_handler(session, site, args.verbose)
     try:
         print("Zenoh CAT-11 topics:", _cat11_TOPIC_AIR, _cat11_TOPIC_GROUND, flush=True)
@@ -4994,7 +5042,13 @@ def _cat15_main():
     if not args.zenoh_raw and not args.port:
         parser.error("--port or CAT15_PORT is required unless --zenoh-raw is selected")
     site = [args.site_lat or None, args.site_lon or None]
-    session = open_session()
+    while True:
+        try:
+            session = open_session()
+            break
+        except Exception as exc:
+            print("ASTERIX category Zenoh connect failed: {} — retry in 10s".format(exc), flush=True)
+            time.sleep(10)
     handler = _cat15__make_handler(session, site, args.verbose)
     try:
         print("Zenoh CAT-15 topics:", _cat15_TOPIC_AIR, flush=True)
@@ -5297,7 +5351,13 @@ def _cat16_main():
     args = parser.parse_args()
     if not args.zenoh_raw and not args.port:
         parser.error("--port or CAT16_PORT is required unless --zenoh-raw is selected")
-    session = open_session()
+    while True:
+        try:
+            session = open_session()
+            break
+        except Exception as exc:
+            print("ASTERIX category Zenoh connect failed: {} — retry in 10s".format(exc), flush=True)
+            time.sleep(10)
     handler = _cat16__make_handler(session, args.verbose)
     try:
         if args.zenoh_raw: _cat16__run_zenoh_raw(session, args.input_topic, handler, args.verbose)
@@ -5622,7 +5682,13 @@ def _cat17_main():
     args = parser.parse_args()
     if not args.zenoh_raw and not args.port:
         parser.error("--port or CAT17_PORT is required unless --zenoh-raw is selected")
-    session = open_session()
+    while True:
+        try:
+            session = open_session()
+            break
+        except Exception as exc:
+            print("ASTERIX category Zenoh connect failed: {} — retry in 10s".format(exc), flush=True)
+            time.sleep(10)
     handler = _cat17__make_handler(session, args.verbose)
     try:
         print("Zenoh CAT-17 topics:", _cat17_TOPIC_AIR, _cat17_TOPIC_SENSOR, flush=True)
@@ -6242,7 +6308,13 @@ def _cat18_main():
     if not args.zenoh_raw and not args.port:
         parser.error("--port or CAT18_PORT is required unless --zenoh-raw is selected")
     site = [args.site_lat or None, args.site_lon or None]
-    session = open_session()
+    while True:
+        try:
+            session = open_session()
+            break
+        except Exception as exc:
+            print("ASTERIX category Zenoh connect failed: {} — retry in 10s".format(exc), flush=True)
+            time.sleep(10)
     handler = _cat18__make_handler(session, site, args.verbose)
     try:
         print("Zenoh CAT-18 topics:", _cat18_TOPIC_AIR, _cat18_TOPIC_SENSOR, flush=True)
@@ -6537,7 +6609,13 @@ def _cat19_main():
     args = parser.parse_args()
     if not args.zenoh_raw and not args.port:
         parser.error("--port or CAT19_PORT is required unless --zenoh-raw is selected")
-    session = open_session()
+    while True:
+        try:
+            session = open_session()
+            break
+        except Exception as exc:
+            print("ASTERIX category Zenoh connect failed: {} — retry in 10s".format(exc), flush=True)
+            time.sleep(10)
     handler = _cat19__make_handler(session, args.verbose)
     try:
         if args.zenoh_raw: _cat19__run_zenoh_raw(session, args.input_topic, handler, args.verbose)
@@ -7138,7 +7216,13 @@ def _cat20_main():
     parser.add_argument("--verbose", "-v", action="store_true")
     args = parser.parse_args()
     if not args.zenoh_raw and not args.port: parser.error("--port or CAT20_PORT is required unless --zenoh-raw is selected")
-    session = open_session()
+    while True:
+        try:
+            session = open_session()
+            break
+        except Exception as exc:
+            print("ASTERIX category Zenoh connect failed: {} — retry in 10s".format(exc), flush=True)
+            time.sleep(10)
     handler = _cat20__make_cat020_handler(session)
     try:
         if args.zenoh_raw: _cat20__run_zenoh_raw(session, args.input_topic, _cat20_CAT_020, handler, args.verbose)
@@ -7836,7 +7920,13 @@ def _cat21_main():
     parser.add_argument("--verbose", "-v", action="store_true")
     args = parser.parse_args()
     if not args.zenoh_raw and not args.port: parser.error("--port or CAT21_PORT is required unless --zenoh-raw is selected")
-    session = open_session()
+    while True:
+        try:
+            session = open_session()
+            break
+        except Exception as exc:
+            print("ASTERIX category Zenoh connect failed: {} — retry in 10s".format(exc), flush=True)
+            time.sleep(10)
     handler = _cat21__make_cat021_handler(session)
     try:
         if args.zenoh_raw: _cat21__run_zenoh_raw(session, args.input_topic, _cat21_CAT_021, handler, args.verbose)
@@ -8132,7 +8222,13 @@ def _cat23_main():
     args = parser.parse_args()
     if not args.zenoh_raw and not args.port:
         parser.error("--port or CAT23_PORT is required unless --zenoh-raw is selected")
-    session = open_session()
+    while True:
+        try:
+            session = open_session()
+            break
+        except Exception as exc:
+            print("ASTERIX category Zenoh connect failed: {} — retry in 10s".format(exc), flush=True)
+            time.sleep(10)
     handler = _cat23__make_handler(session, args.verbose)
     try:
         if args.zenoh_raw: _cat23__run_zenoh_raw(session, args.input_topic, handler, args.verbose)
@@ -8464,7 +8560,13 @@ def _cat25_main():
     args = parser.parse_args()
     if not args.zenoh_raw and not args.port:
         parser.error("--port or CAT25_PORT is required unless --zenoh-raw is selected")
-    session = open_session()
+    while True:
+        try:
+            session = open_session()
+            break
+        except Exception as exc:
+            print("ASTERIX category Zenoh connect failed: {} — retry in 10s".format(exc), flush=True)
+            time.sleep(10)
     handler = _cat25__make_handler(session, args.verbose)
     try:
         if args.zenoh_raw: _cat25__run_zenoh_raw(session, args.input_topic, handler, args.verbose)
@@ -8877,7 +8979,13 @@ def _cat32_main():
     args = parser.parse_args()
     if not args.zenoh_raw and not args.port:
         parser.error("--port or CAT32_PORT is required unless --zenoh-raw is selected")
-    session = open_session()
+    while True:
+        try:
+            session = open_session()
+            break
+        except Exception as exc:
+            print("ASTERIX category Zenoh connect failed: {} — retry in 10s".format(exc), flush=True)
+            time.sleep(10)
     handler = _cat32__make_handler(session, args.verbose)
     try:
         if args.zenoh_raw: _cat32__run_zenoh_raw(session, args.input_topic, handler, args.verbose)
@@ -11394,7 +11502,13 @@ def _cat63_main():
     args = parser.parse_args()
     if not args.zenoh_raw and not args.port:
         parser.error("--port or CAT63_PORT is required unless --zenoh-raw is selected")
-    session = open_session()
+    while True:
+        try:
+            session = open_session()
+            break
+        except Exception as exc:
+            print("ASTERIX category Zenoh connect failed: {} — retry in 10s".format(exc), flush=True)
+            time.sleep(10)
     handler = _cat63__make_handler(session, args.verbose)
     try:
         if args.zenoh_raw: _cat63__run_zenoh_raw(session, args.input_topic, handler, args.verbose)
@@ -11656,7 +11770,13 @@ def _cat65_main():
     args = parser.parse_args()
     if not args.zenoh_raw and not args.port:
         parser.error("--port or CAT65_PORT is required unless --zenoh-raw is selected")
-    session = open_session()
+    while True:
+        try:
+            session = open_session()
+            break
+        except Exception as exc:
+            print("ASTERIX category Zenoh connect failed: {} — retry in 10s".format(exc), flush=True)
+            time.sleep(10)
     handler = _cat65__make_handler(session, args.verbose)
     try:
         if args.zenoh_raw: _cat65__run_zenoh_raw(session, args.input_topic, handler, args.verbose)
@@ -12056,7 +12176,13 @@ def _cat150_main():
     args = parser.parse_args()
     if not args.zenoh_raw and not args.port:
         parser.error("--port or CAT150_PORT is required unless --zenoh-raw is selected")
-    session = open_session()
+    while True:
+        try:
+            session = open_session()
+            break
+        except Exception as exc:
+            print("ASTERIX category Zenoh connect failed: {} — retry in 10s".format(exc), flush=True)
+            time.sleep(10)
     handler = _cat150__make_handler(session, args.verbose)
     try:
         if args.zenoh_raw: _cat150__run_zenoh_raw(session, args.input_topic, handler, args.verbose)
@@ -12393,7 +12519,13 @@ def _cat205_main():
     if not args.zenoh_raw and not args.port:
         parser.error("--port or CAT205_PORT is required unless --zenoh-raw is selected")
     site = [args.site_lat or None, args.site_lon or None]
-    session = open_session()
+    while True:
+        try:
+            session = open_session()
+            break
+        except Exception as exc:
+            print("ASTERIX category Zenoh connect failed: {} — retry in 10s".format(exc), flush=True)
+            time.sleep(10)
     handler = _cat205__make_handler(session, site, args.verbose)
     try:
         print("Zenoh CAT-205 topics:", _cat205_TOPIC_AIR, flush=True)
@@ -12689,7 +12821,13 @@ def _cat240_main():
     args = parser.parse_args()
     if not args.zenoh_raw and not args.port:
         parser.error("--port or CAT240_PORT is required unless --zenoh-raw is selected")
-    session = open_session()
+    while True:
+        try:
+            session = open_session()
+            break
+        except Exception as exc:
+            print("ASTERIX category Zenoh connect failed: {} — retry in 10s".format(exc), flush=True)
+            time.sleep(10)
     handler = _cat240__make_handler(session, args.verbose)
     try:
         if args.zenoh_raw: _cat240__run_zenoh_raw(session, args.input_topic, handler, args.verbose)
@@ -12931,7 +13069,13 @@ def _cat247_main():
     args = parser.parse_args()
     if not args.zenoh_raw and not args.port:
         parser.error("--port or CAT247_PORT is required unless --zenoh-raw is selected")
-    session = open_session()
+    while True:
+        try:
+            session = open_session()
+            break
+        except Exception as exc:
+            print("ASTERIX category Zenoh connect failed: {} — retry in 10s".format(exc), flush=True)
+            time.sleep(10)
     handler = _cat247__make_handler(session, args.verbose)
     try:
         if args.zenoh_raw: _cat247__run_zenoh_raw(session, args.input_topic, handler, args.verbose)

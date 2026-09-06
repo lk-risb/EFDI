@@ -1592,7 +1592,13 @@ def _5516_run_udp(port: int, session: "zenoh.Session", verbose: bool):
 
 
 def _5516_run_zenoh_raw(raw_topic: str, verbose: bool):
-    session = open_session()
+    while True:
+        try:
+            session = open_session()
+            break
+        except Exception as exc:
+            print("STANAG 5516 Zenoh connect failed: {} — retry in 10s".format(exc), flush=True)
+            time.sleep(10)
 
     def on_sample(sample):
         try:
@@ -1635,7 +1641,13 @@ def _5516_main():
         _5516_run_zenoh_raw(args.raw_topic or _5516_TOPIC_ROOT + "/raw/stanag_5516/**", args.verbose)
         return
 
-    session = open_session()
+    while True:
+        try:
+            session = open_session()
+            break
+        except Exception as exc:
+            print("STANAG 5516 Zenoh connect failed: {} — retry in 10s".format(exc), flush=True)
+            time.sleep(10)
     print("Link 16 bridge started", flush=True)
     print("  Topics:", flush=True)
     for (dom, aff), topic in _5516_TOPIC_MAP.items():

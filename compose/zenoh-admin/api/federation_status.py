@@ -241,5 +241,9 @@ def start_federation_status_subscriber(loop: asyncio.AbstractEventLoop) -> "tupl
     if not _OWN_NAMESPACE:
         print("[federation-status] PARTNER_NAMESPACE unset — status subscriber not started", flush=True)
         return None, None
-    _status_session = _subscribe(loop)
+    try:
+        _status_session = _subscribe(loop)
+    except Exception as exc:
+        print(f"[federation-status] Zenoh connect failed, status subscriber not started: {exc}", flush=True)
+        return None, None
     return _status_session, loop.create_task(_watch_status_session(loop))
