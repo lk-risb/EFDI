@@ -17,9 +17,9 @@ serveryje su vien `sudo` teisėmis ir išeinančiu interneto ryšiu prieš tai
 nereikia nieko rankiniu būdu. Jei po OS atnaujinimo reikia perkrauti
 (branduolio ar bazinės bibliotekos atnaujinimas), diegyklė sustoja ir apie
 tai praneša — tiesiog perkraukite ir vėl paleiskite tą pačią komandą. Jis
-taip pat pasiūlo įdiegti ir prijungti NetBird arba Tailscale, jei nei
-vienas dar neprijungtas, klausdamas tik setup/auth rakto — vienintelio
-dalyko, kurio diegyklė pati sugalvoti negali.
+taip pat pasiūlo įdiegti ir prijungti NetBird — vienintelį šio projekto
+naudojamą tinklo VPN — jei jis dar neprijungtas, klausdamas tik setup
+rakto, vienintelio dalyko, kurio diegyklė pati sugalvoti negali.
 
 <details>
 <summary>Rankinis/offline žingsnis po žingsnio (tik jei nepaleidžiate
@@ -153,23 +153,20 @@ docker compose version
 ```
 Abi komandos turi pavykti **be `sudo`**, prieš tęsiant toliau.
 
-#### Įdiekite NetBird arba Tailscale
+#### Įdiekite NetBird
 
-EFDI podai pasiekia fabriką ir vienas kitą per mesh VPN — NetBird arba
-Tailscale, abu tinka. Įdiekite tą, kurį naudoja jūsų organizacija (abu
-skriptai patys atsineša savo saugyklą, todėl atskiro apt/dnf nustatymo
-nereikia):
+EFDI podai pasiekia fabriką ir vienas kitą per NetBird — vienintelį šio
+projekto naudojamą mesh VPN. Skriptas pats atsineša savo saugyklą, todėl
+atskiro apt/dnf nustatymo nereikia:
 ```bash
-curl -fsSL https://pkgs.netbird.io/install.sh | sh      # NetBird
-curl -fsSL https://tailscale.com/install.sh | sh        # Tailscale
+curl -fsSL https://pkgs.netbird.io/install.sh | sh
 ```
-Dar **neprisijunkite** prie tinklo — setup/auth raktą duoda jūsų organizacijos
+Dar **neprisijunkite** prie tinklo — setup raktą duoda jūsų organizacijos
 paskyros administratorius, o `./install.sh` pats to paklaus ir prisijungs
 [Diegimas](#diegimas) žemiau (būtent tai daro jo automatinis Tinklo žingsnis).
 Patikrinkite tik, ar dvejetainis failas įdiegtas:
 ```bash
 netbird version
-tailscale version
 ```
 
 #### Atidarykite ugniasienės prievadus
@@ -212,7 +209,7 @@ git --version
 python3 --version      # 3.10+
 docker run hello-world
 docker compose version
-netbird version         # arba: tailscale version
+netbird version
 ```
 
 Jei kiekviena komanda aukščiau pavyko, tęskite prie [Diegimas](#diegimas) žemiau

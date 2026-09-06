@@ -85,7 +85,7 @@ SERVICES=(
     sapient-raw stanag4586-raw stanag4609-raw stanag5516-raw
     mqtt-raw aartos-raw aartos-wifi-raw
     cap mqtt sparkplug sensor-health mission-route aartos
-    tak_layer tak-bridge sitaware_layer
+    tak_layer tak-bridge nffi-bridge sitaware_layer
     mediamtx
 )
 
@@ -108,7 +108,7 @@ load_launcher_state() {
                 ;;
             TAK_HOST|TAK_HOST_FALLBACK|TAK_HOST_TAILSCALE|TAK_TLS_SERVER_NAME|\
             SITAWARE_URL|SITAWARE_URL_FALLBACK|SITAWARE_URL_TAILSCALE|STANAG4609_SRT_URL|STANAG4609_SOURCE|\
-            SAPIENT_HOST|STANAG4586_HOST|STANAG4586_PROFILE)
+            SAPIENT_HOST|STANAG4586_HOST|STANAG4586_PROFILE|NFFI_HOST|NFFI_PORT)
                 if [[ -z "${!key:-}" ]]; then
                     printf -v "$key" '%s' "$val"
                     # shellcheck disable=SC2163  # $key names the variable to export.
@@ -132,7 +132,7 @@ save_launcher_state() {
         printf 'SELECTED_SERVICES=%s\n' "$selected"
         for key in TAK_HOST TAK_HOST_FALLBACK TAK_HOST_TAILSCALE TAK_TLS_SERVER_NAME \
                    SITAWARE_URL SITAWARE_URL_FALLBACK SITAWARE_URL_TAILSCALE STANAG4609_SRT_URL STANAG4609_SOURCE \
-                   SAPIENT_HOST STANAG4586_HOST STANAG4586_PROFILE; do
+                   SAPIENT_HOST STANAG4586_HOST STANAG4586_PROFILE NFFI_HOST NFFI_PORT; do
             # A URL with user-info may contain credentials. Use it for this run,
             # but never copy it into persistent launcher memory.
             [[ -n "${!key:-}" && "${!key}" != *://*@* ]] && \
@@ -161,7 +161,7 @@ declare -A SVC_CAT=(
     [nffi]="Protocols"
     [sitaware]="Sensor bridges" [dronuradaras]="Sensor bridges"
     [sapient]="Protocols" [stanag4586]="Protocols" [stanag4609]="Protocols" [stanag5516]="Protocols"
-    [tak-bridge]="C2 inputs"
+    [tak-bridge]="C2 inputs" [nffi-bridge]="C2 inputs"
     [mqtt-raw]="Sensor bridges"
     [aartos-raw]="Sensor bridges" [aartos-wifi-raw]="Sensor bridges" [aartos]="Protocols"
     [sapient-raw]="Sensor bridges"
@@ -203,6 +203,7 @@ declare -A SVC_DESC=(
     [mission-route]="UAV routes and corridors on Zenoh"
     [tak_layer]="CoT → TAK Server (mTLS)"
     [tak-bridge]="TAK Server CoT ingress"
+    [nffi-bridge]="NFFI (STANAG 5527) TCP ingress → Zenoh raw"
     [sitaware_layer]="EFDI tracks → SitaWare (NVG feed, SitaWare polls)"
     [track-fusion]="Radar/ADS-B track correlation"
     [mediamtx]="RTMP video ingress (drone remote) → RTSP restream for TAK video feeds"
@@ -907,6 +908,35 @@ launch() {
             # encrypted NetBird overlay, never the open internet.
             tak_ingest_args+=(--port "${TAK_INGEST_PORT:-8087}")
             _start tak-bridge bridges/tak_bridge.py "${tak_ingest_args[@]}"
+            ;;
+
+        nffi-bridge)
+            # No default host or port exists for this one — unlike TAK
+            # Server's documented CoreConfig 8087, no equivalent default is
+            # known for a partner's NFFI/FFI server (see nffi_bridge.py's
+            # own module docstring: this bridge is an untested shell until
+            # a real endpoint's connection details are confirmed).
+            local nffi_host="${NFFI_HOST:-}"
+            if [[ -z "$nffi_host" ]]; then
+                _prompt_address "NFFI/FFI server" nffi_host
+                if [[ -z "$nffi_host" ]]; then
+                    printf "  ${YELLOW}[skip]${R}  nffi-bridge      no address entered\n"
+                    return
+                fi
+                export NFFI_HOST="$nffi_host"
+            fi
+            local nffi_port="${NFFI_PORT:-}"
+            if [[ -z "$nffi_port" && "${EFDI_NONINTERACTIVE:-}" != "1" ]]; then
+                read -rp "$(printf "  ${BOLD}NFFI/FFI server port${R}: ")" nffi_port
+            fi
+            if [[ -z "$nffi_port" ]]; then
+                printf "  ${YELLOW}[skip]${R}  nffi-bridge      no port entered\n"
+                return
+            fi
+            export NFFI_PORT="$nffi_port"
+            local nffi_args=(--host "$nffi_host" --port "$nffi_port")
+            [[ "${NFFI_TLS:-}" == "1" ]] && nffi_args+=(--tls --cert "${NFFI_CERT:-}" --key "${NFFI_KEY:-}" --ca "${NFFI_CA:-}")
+            _start nffi-bridge bridges/nffi_bridge.py "${nffi_args[@]}"
             ;;
 
         sitaware_layer)

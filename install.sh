@@ -278,34 +278,32 @@ if (( DOCKER_JUST_INSTALLED )); then
     exit 0
 fi
 
-# ── Networking (NetBird / Tailscale mesh) ─────────────────────────────────────
+# ── Networking (NetBird mesh) ──────────────────────────────────────────────────
 # Production mode only — testing mode is explicitly local-only, no fabric.
 if [ "$INSTALL_MODE" = "production" ]; then
     section "Networking"
     _NB_IP=$(ip addr show wt0 2>/dev/null | awk '/inet / {print $2}' | cut -d/ -f1 | head -1) || true
-    _TS_IP=$(ip addr show tailscale0 2>/dev/null | awk '/inet / {print $2}' | cut -d/ -f1 | head -1) || true
 
-    if [ -n "$_NB_IP" ] || [ -n "$_TS_IP" ]; then
-        [ -n "$_NB_IP" ] && ok "NetBird connected ($_NB_IP)"
-        [ -n "$_TS_IP" ] && ok "Tailscale connected ($_TS_IP)"
+    if [ -n "$_NB_IP" ]; then
+        ok "NetBird connected ($_NB_IP)"
     else
-        echo "  EFDI pods reach the fabric and each other over a mesh VPN."
-        echo "  Neither NetBird nor Tailscale is connected on this host yet."
+        echo "  EFDI pods reach the fabric and each other over NetBird — the only"
+        echo "  mesh VPN this project uses. NetBird is not connected on this host yet."
         echo ""
         while true; do
-            read -rp "$(echo -e "  ${BOLD}Connect now?${NC} [N]etBird / [T]ailscale / [S]kip (manual/offline): ")" _VPN_ACTION
-            case "${_VPN_ACTION:-}" in
-                [Nn]*)
+            read -rp "$(echo -e "  ${BOLD}Connect now?${NC} [Y]es / [N]o (manual/offline): ")" _VPN_ACTION
+            case "${_VPN_ACTION:-Y}" in
+                [Yy]*)
                     ask_key NETBIRD_SETUP_KEY "NetBird setup key (app.netbird.io → Keys)"
                     # Blank = NetBird's own default (NetBird Cloud, api.netbird.io).
                     # Only self-hosted management servers need this set.
                     ask_key NETBIRD_MGMT_URL "Self-hosted management URL (leave blank for NetBird Cloud)"
-                    # Reaching this branch means neither wt0 nor tailscale0 had an
-                    # IP (checked above), so any NetBird package already on the
-                    # box is a stale/broken leftover, not a live tunnel — safe to
-                    # purge before the vendor installer runs, which otherwise
-                    # refuses with "NetBird seems to be installed already"
-                    # (same reasoning TAK's install.sh uses for this step).
+                    # Reaching this branch means wt0 had no IP (checked above), so
+                    # any NetBird package already on the box is a stale/broken
+                    # leftover, not a live tunnel — safe to purge before the vendor
+                    # installer runs, which otherwise refuses with "NetBird seems
+                    # to be installed already" (same reasoning TAK's install.sh
+                    # uses for this step).
                     if command -v netbird >/dev/null 2>&1 || dpkg -l netbird 2>/dev/null | grep -q '^ii' || rpm -q netbird >/dev/null 2>&1; then
                         info "Removing stale NetBird install…"
                         sudo netbird down 2>/dev/null
@@ -331,25 +329,11 @@ if [ "$INSTALL_MODE" = "production" ]; then
                         || warn "Could not read wt0's IP after connecting — check 'netbird status'."
                     break
                     ;;
-                [Tt]*)
-                    ask_secret TAILSCALE_AUTH_KEY "Tailscale auth key (login.tailscale.com → Settings → Keys)"
-                    info "Installing Tailscale…"
-                    # Official vendor installer — same accepted trust model as above.
-                    curl -fsSL https://tailscale.com/install.sh | sh
-                    info "Connecting to Tailscale…"
-                    sudo tailscale up --authkey="$TAILSCALE_AUTH_KEY" \
-                        || err "Tailscale connection failed — check your auth key and re-run."
-                    sleep 3
-                    _TS_IP=$(ip addr show tailscale0 2>/dev/null | awk '/inet / {print $2}' | cut -d/ -f1 | head -1) || true
-                    [ -n "$_TS_IP" ] && ok "Tailscale connected ($_TS_IP)" \
-                        || warn "Could not read tailscale0's IP after connecting — check 'tailscale status'."
-                    break
-                    ;;
-                [Ss]*)
+                [Nn]*)
                     warn "Skipping — this pod will only reach a local Zenoh router until connected manually."
                     break
                     ;;
-                *) echo "    Enter N, T, or S" ;;
+                *) echo "    Enter Y or N" ;;
             esac
         done
     fi

@@ -176,6 +176,37 @@ correctly has no single classification to apply at that level. Mirrored
 to EFDI-Allies' `sitaware_layer.py`. Covered by
 `tests/test_sitaware_hq_nvg_feed.py::ClassificationMarkingTests`.
 
+### `_TOPIC_SIDC`'s Air/Sea/Space `friendly/unit` entries (2026-09-06)
+
+`land/**/friendly/unit/**` maps to `SFGPU-----*****` — function ID `U`
+(Unit) + 5 dashes. Air/Sea/Space have no Unit/Equipment/Installation split
+in MIL-STD-2525 the way Ground does (confirmed against a real CoT type
+catalog while fixing the TAK-side equivalent — see `../tak/TAK.md`), so
+there's no `U`-equivalent letter to use for them. Used a fully unspecified
+(all-dash) function ID instead — `SFAP------*****` (air), `SFSP------*****`
+(sea, also covers subsurface), `SFPP------*****` (space) — which matches
+this file's own existing `space/**/*/satellite/**` entries exactly (same
+"no function ID" pattern already in the dict, not a new convention).
+Full rationale in `../nffi/NFFI.md`.
+
+### SitaWare has its own real NFFI/FFI capability, separate from this file's NVG path (2026-09-06)
+
+A real SitaWare Headquarters instance has a dedicated "NFFI and FFI
+Manager" (Coalition Gateway section) supporting both NFFI/FFI Client and
+Server roles, across several transport variants (IP1, IP1 Classic, IP2,
+SIP3) — confirmed by direct screenshot of a live instance. This is
+completely separate from `sitaware_layer.py`'s NVG feed documented in this
+file: NVG is EFDI's own picture pushed OUT to SitaWare; a SitaWare NFFI/FFI
+Server would be SitaWare's OWN friendly-unit picture, pulled IN to EFDI via
+the new `bridges/nffi_bridge.py` (see `../nffi/NFFI.md`) and `nffi.py`.
+Not yet configured or tested against a real SitaWare NFFI/FFI server as of
+this writing — the exact wire behavior of IP1/IP1 Classic/IP2/SIP3 is
+unconfirmed. Worth checking, once that ingest path is live, that SitaWare's
+NFFI/FFI Server doesn't end up re-serving objects that originated from
+EFDI's own NVG push in the first place (a single-pass echo, not a runaway
+loop, but still a duplicate worth avoiding if EFDI ever exports units of
+its own to the same SitaWare instance that would come back through NFFI).
+
 ## Why this file looks different from `../asterix-specs/ASTERIX.md`
 
 ASTERIX and SAPIENT both have an authoritative structured source this

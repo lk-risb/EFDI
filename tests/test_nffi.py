@@ -14,7 +14,9 @@ sys.path.insert(0, str(ROOT / "compose" / "protocols"))
 
 from protocols.random.nffi import (  # noqa: E402
     MAX_NFFI_XML,
-    OUTPUT_TOPIC,
+    OUTPUT_TOPICS,
+    _echelon,
+    _output_topic,
     make_handler,
     parse_nffi,
 )
@@ -88,6 +90,7 @@ class NffiProtocolTests(unittest.TestCase):
         self.assertEqual(track["affiliation"], "friendly")
         self.assertEqual(track["nffi_affiliation"], "FRIEND")
         self.assertEqual(track["unit_type"], "SFGPUCI---*****")
+        self.assertNotIn("nffi_echelon", track)  # "**" is an unspecified placeholder, not a real echelon code
         self.assertFalse(track["emergency"])
         self.assertEqual(track["nffi_sec_classification"], "NATO RESTRICTED")
         self.assertEqual(track["nffi_sec_policy"], "NATO")
@@ -105,10 +108,32 @@ class NffiProtocolTests(unittest.TestCase):
             if x[0].endswith("/tracks/v1") and not x[0].endswith(_views)
         )
         track = json.loads(payload)
-        self.assertTrue(topic.startswith(OUTPUT_TOPIC))
+        # unitSymbol "SFGPUCI---*****": battle dimension 'G' -> land
+        self.assertTrue(topic.startswith(OUTPUT_TOPICS["land"]))
         self.assertEqual(track["_src"], "nffi")
         self.assertEqual(track["callsign"], "ALPHA 17")
         self.assertIn("encoding", kwargs)
+
+    def test_output_topic_routes_by_sidc_battle_dimension(self):
+        self.assertEqual(_output_topic("SFGPUCI---*****"), OUTPUT_TOPICS["land"])
+        self.assertEqual(_output_topic("SFAPMFFA--*****"), OUTPUT_TOPICS["air"])
+        self.assertEqual(_output_topic("SFSPCL----*****"), OUTPUT_TOPICS["sea"])
+        self.assertEqual(_output_topic("SFUPS-----*****"), OUTPUT_TOPICS["sea"])
+        self.assertEqual(_output_topic("SFPPS-----*****"), OUTPUT_TOPICS["space"])
+        self.assertEqual(_output_topic("SFXPS-----*****"), OUTPUT_TOPICS["land"])  # unrecognized -> default
+        self.assertEqual(_output_topic(None), OUTPUT_TOPICS["land"])  # unitSymbol absent -> default
+
+    def test_echelon_decoded_from_sidc_symbol_modifier(self):
+        # Positions 11-12 (0-based index 10:12) hold the echelon code, e.g.
+        # "-A" for Team/Crew — the leading '-' is part of the code itself,
+        # distinct from the dashes filling out an unused function ID.
+        self.assertEqual(_echelon("SFGPUCI----A***"), "Team/Crew")
+        self.assertEqual(_echelon("SFGPUCI----F***"), "Battalion/Squadron")
+        self.assertEqual(_echelon("SFGPUCI----M***"), "Region")
+        self.assertIsNone(_echelon("SFGPUCI---*****"))  # "**" placeholder -> undecoded
+        self.assertIsNone(_echelon("SFGPUCI-----***"))  # "--" placeholder -> undecoded
+        self.assertIsNone(_echelon(None))
+        self.assertIsNone(_echelon(""))
 
     def test_rejects_empty_oversized_and_malformed_documents(self):
         session = Session()

@@ -16,9 +16,10 @@ both Debian (apt) and RHEL/Rocky/Alma (dnf) hosts if any are missing — a
 completely bare server with just `sudo` and outbound internet access needs
 nothing manual before this. If the OS update needs a reboot (kernel or core
 library update), the installer stops and says so — just reboot and re-run
-the same command. It also offers to install and connect NetBird or
-Tailscale if neither is already up, prompting only for the setup/auth
-key — the one thing an installer can't reasonably fabricate on its own.
+the same command. It also offers to install and connect NetBird — the only
+mesh VPN this project uses — if it isn't already up, prompting only for
+the setup key, the one thing an installer can't reasonably fabricate on
+its own.
 
 <details>
 <summary>Manual/offline step-by-step (only if you're not running
@@ -150,22 +151,20 @@ docker compose version
 ```
 Both must succeed **without `sudo`** before continuing.
 
-#### Install NetBird or Tailscale
+#### Install NetBird
 
-EFDI pods reach the fabric and each other over a mesh VPN — NetBird or
-Tailscale, either works. Install whichever your organization uses (both ship
-their own repository via these scripts, so there's no separate apt/dnf setup):
+EFDI pods reach the fabric and each other over NetBird — the only mesh VPN
+this project uses. It ships its own repository via this script, so there's
+no separate apt/dnf setup:
 ```bash
-curl -fsSL https://pkgs.netbird.io/install.sh | sh      # NetBird
-curl -fsSL https://tailscale.com/install.sh | sh        # Tailscale
+curl -fsSL https://pkgs.netbird.io/install.sh | sh
 ```
-Do **not** join a network yet — the setup/auth key comes from whoever
+Do **not** join a network yet — the setup key comes from whoever
 administers your organization's account, and `./install.sh` itself prompts
 for it and joins during the [Installation](#installation) section below (this is exactly what its
 automated Networking step does). Verify only that the binary installed:
 ```bash
 netbird version
-tailscale version
 ```
 
 #### Open firewall ports
@@ -207,7 +206,7 @@ git --version
 python3 --version      # 3.10+
 docker run hello-world
 docker compose version
-netbird version         # or: tailscale version
+netbird version
 ```
 
 If every command above succeeds, continue to the [Installation](#installation) section below (the repository
