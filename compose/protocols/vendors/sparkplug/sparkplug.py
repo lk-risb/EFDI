@@ -106,11 +106,17 @@ class AliasTable:
         return (topic["group_id"], topic["edge_node_id"], topic["device_id"])
 
     def learn(self, topic: dict, payload) -> None:
+        # Spec (Sparkplug_5_Operational_Behavior): "NBIRTH messages MUST
+        # include all metrics ... that will ever be published ... within the
+        # established Sparkplug session." A fresh BIRTH starts a new session,
+        # so it replaces the alias table rather than merging into it — a
+        # reconnecting node can legally reuse an old alias number for a
+        # different metric.
         scope = self._scope(topic)
         if scope not in self._tables and len(self._tables) >= self._limit:
             # Drop the oldest tracked node rather than grow without bound.
             self._tables.pop(next(iter(self._tables)))
-        table = self._tables.setdefault(scope, {})
+        table = self._tables[scope] = {}
         for metric in payload.metrics:
             if metric.name and metric.alias:
                 table[metric.alias] = metric.name

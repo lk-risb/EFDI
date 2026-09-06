@@ -125,7 +125,13 @@ def run(args) -> None:
         args.multicast_group,
         args.multicast_interface,
     )
-    session = open_session()
+    while True:
+        try:
+            session = open_session()
+            break
+        except Exception as exc:
+            print("UDP ingress Zenoh connect failed: {} — retry in 10s".format(exc), flush=True)
+            time.sleep(10)
     raw_publisher = session.declare_publisher("{}/raw/udp/ingress".format(TOPIC_ROOT))
     publishers = {
         category: session.declare_publisher(

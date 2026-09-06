@@ -20,19 +20,40 @@ from protocols.random.nffi import (  # noqa: E402
 )
 
 
+# Shape matches the real STANAG 5527 / NFFI 1.4 schema (NC3A's own XSD,
+# namespace urn:nato:fft:protocols:nffi14) — see docs/references/nffi/NFFI.md
+# for where this was fetched from and how it was confirmed. The previous
+# version of this fixture used a "urn:nato:nffi:2.0" namespace and PascalCase
+# tags (UnitInfo/Latitude/Heading/...) that were never checked against any
+# real schema and do not exist in any confirmed NFFI edition.
 NFFI_DOCUMENT = b"""\
-<NFFI xmlns="urn:nato:nffi:2.0">
-  <UnitInfo>
-    <UnitID>blue-17</UnitID>
-    <Name>ALPHA 17</Name>
-    <Affiliation>FRIEND</Affiliation>
-    <Latitude>54.6872</Latitude>
-    <Longitude>25.2797</Longitude>
-    <Altitude>123.4</Altitude>
-    <Speed>8.5</Speed>
-    <Heading>271.2</Heading>
-  </UnitInfo>
-</NFFI>
+<NFFIMessage xmlns="urn:nato:fft:protocols:nffi14">
+  <track>
+    <positionalData secClassification="NATO RESTRICTED" secPolicyName="NATO">
+      <trackSource>
+        <sourceSystem>
+          <system>ALPHA-C2</system>
+        </sourceSystem>
+        <transponderId>blue-17</transponderId>
+      </trackSource>
+      <dateTime>20260906081500</dateTime>
+      <coordinates>
+        <latitude>54.6872</latitude>
+        <longitude>25.2797</longitude>
+        <altitude>123.4</altitude>
+      </coordinates>
+      <bearing>271.2</bearing>
+      <speed>30.6</speed>
+    </positionalData>
+    <identificationData>
+      <unitSymbol>SFGPUCI---*****</unitSymbol>
+      <unitShortName>ALPHA 17</unitShortName>
+    </identificationData>
+    <operStatusData>
+      <alert>false</alert>
+    </operStatusData>
+  </track>
+</NFFIMessage>
 """
 
 
@@ -56,14 +77,21 @@ class NffiProtocolTests(unittest.TestCase):
         tracks = parse_nffi(NFFI_DOCUMENT)
 
         self.assertEqual(len(tracks), 1)
-        self.assertEqual(tracks[0]["sensor_id"], "blue-17")
-        self.assertEqual(tracks[0]["callsign"], "ALPHA 17")
-        self.assertEqual(tracks[0]["lat_deg"], 54.6872)
-        self.assertEqual(tracks[0]["lon_deg"], 25.2797)
-        self.assertEqual(tracks[0]["geo_alt_m"], 123.4)
-        self.assertEqual(tracks[0]["speed_ms"], 8.5)
-        self.assertEqual(tracks[0]["heading_deg"], 271.2)
-        self.assertEqual(tracks[0]["nffi_affil"], "FRIEND")
+        track = tracks[0]
+        self.assertEqual(track["sensor_id"], "ALPHA-C2-blue-17")
+        self.assertEqual(track["callsign"], "ALPHA 17")
+        self.assertEqual(track["lat_deg"], 54.6872)
+        self.assertEqual(track["lon_deg"], 25.2797)
+        self.assertEqual(track["geo_alt_m"], 123.4)
+        self.assertAlmostEqual(track["speed_ms"], 30.6 / 3.6, places=2)  # schema unit: km/h
+        self.assertEqual(track["heading_deg"], 271.2)
+        self.assertEqual(track["affiliation"], "friendly")
+        self.assertEqual(track["nffi_affiliation"], "FRIEND")
+        self.assertEqual(track["unit_type"], "SFGPUCI---*****")
+        self.assertFalse(track["emergency"])
+        self.assertEqual(track["nffi_sec_classification"], "NATO RESTRICTED")
+        self.assertEqual(track["nffi_sec_policy"], "NATO")
+        self.assertEqual(track["classification"], "NATO RESTRICTED")
 
     def test_raw_zenoh_xml_is_published_as_normalized_json(self):
         session = Session()

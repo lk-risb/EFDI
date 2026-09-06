@@ -40,3 +40,11 @@ No real SAPIENT-conformant sensor traffic has been received by EFDI to
 date. As with the unverified ASTERIX categories, treat `flex335.py` as
 structurally correct against the vendored schema, not yet proven against a
 live SAPIENT feed.
+
+## Vendoring integrity check (2026-09-06)
+
+Byte-diffed all 16 vendored `bsi_flex_335_v2_0/*.proto` files directly
+against `github.com/dstl/SAPIENT-Proto-Files` (DASA/DSTL's own GitHub org —
+the primary publisher, not a mirror). 8 of 16 differed only in trailing
+whitespace (our copy has it stripped); the other 8 are byte-identical.
+Zero substantive drift — field numbers, types, and message shapes are exact.

@@ -31,10 +31,28 @@ text used, so a reviewer can check our work without re-deriving it.
   lower and why.
 - [`tak/TAK.md`](tak/TAK.md) — source and trust assessment for
   `layers/tak_layer.py` (CoT, MIL-STD-2525C/APP-6), including what has and
-  hasn't been checked against a real TAK client.
+  hasn't been checked against a real TAK client, and the CoT
+  `access`/`caveat` classification-marking attributes.
 - [`sitaware/SITAWARE.md`](sitaware/SITAWARE.md) — source and trust
   assessment for `layers/sitaware_layer.py` (NVG 2.0.2), including what has
-  and hasn't been checked against a real SitaWare instance.
+  and hasn't been checked against a real SitaWare instance, an
+  external-corroboration pass weighing sources by actual recency/authority,
+  and the NVG root `classification` attribute.
+- [`nffi/NFFI.md`](nffi/NFFI.md) — source and trust assessment for
+  `protocols/random/nffi.py` (ADatP-36/STANAG 5527): a real primary XSD
+  (NC3A's own STANAG 5527/NFFI 1.4 schema) was found and the decoder's
+  namespace/tags/units were wrong against it — fixed, with a full diff
+  table of what changed and why. Also covers the classification-metadata
+  decode (`secPolicyName`/`secClassification`/`secCategory`).
+- [`mip/MIP.md`](mip/MIP.md) — not a decoder source (nothing here decodes
+  MIP or STANAG 4778 directly); documents where NFFI's classification
+  attributes and both C2 egress paths' classification markings actually
+  come from — STANAG 4778's NATO Core Metadata confidentiality-label
+  vocabulary.
+- [`sparkplug/SPARKPLUG.md`](sparkplug/SPARKPLUG.md) — source and trust
+  assessment for `vendors/sparkplug/sparkplug.py` and the vendored
+  `sparkplug_b.proto`, including a real bug found and fixed (alias table
+  not reset on rebirth) via the Eclipse Sparkplug specification text.
 
 ## How to read the trust levels
 

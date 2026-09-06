@@ -1463,6 +1463,15 @@ def track_to_cot(track: dict, cot_type: str, stale_s: float = COT_STALE_S) -> st
         "start":   _ts(now),
         "stale":   _ts(stale),
     })
+    # CoT event attributes for classification/handling markings — real,
+    # standard CoT event attributes (used by ATAK/WinTAK/TAK Server, not an
+    # invention here; confirmed against snstac/pytak's cot_event()). Any
+    # source protocol that decodes classification data sets these two
+    # generic keys; this is the one place they reach the wire.
+    if track.get("classification"):
+        event.set("access", str(track["classification"]))
+    if track.get("classification_caveat"):
+        event.set("caveat", str(track["classification_caveat"]))
     ET.SubElement(event, "point", {
         "lat": str(round(lat, 6)),
         "lon": str(round(lon, 6)),
