@@ -72,7 +72,15 @@ presenting uniform confidence.
   part of the KLV schema itself — this is called out in
   `../../08-integrations.md` to avoid implying SRT is a STANAG 4609
   requirement.
-- **Not verified against real traffic** at time of writing.
+- **Trust upgraded 2026-09-06:** every decoded tag (2/5/13/14/15/18/19/23/24/25)
+  cross-checked field-by-field — tag number, byte length, mapped-range
+  min/max, and the reserved most-negative-codeword error sentinel — against
+  `paretech/klvdata`'s `klvdata/misb0601.py` (github.com/paretech/klvdata,
+  112★, actively maintained, the de facto reference Python MISB ST 0601
+  parser). All 9 fields matched exactly; zero discrepancies found.
+- **Not verified against real captured traffic** at time of writing — the
+  above is a spec/reference-implementation cross-check, not a live-traffic
+  test.
 
 ## STANAG 5516 / Link 16 (`--proto 5516`)
 
@@ -89,6 +97,9 @@ presenting uniform confidence.
   been previously removed) and merged into the unified `stanag.py` +
   `stanag.proto` alongside 4586/4609 during this project.
 - **Not verified against real traffic** at time of writing.
+- Re-searched GitHub 2026-09-06 for a public JREAP-C/Link-16 reference
+  implementation to cross-check against — none found, as expected (Link-16
+  message content is export-controlled). Trust level stands unchanged.
 
 ## Why this file looks different from `../asterix-specs/ASTERIX.md`
 

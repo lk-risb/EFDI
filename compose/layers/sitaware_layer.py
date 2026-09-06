@@ -623,6 +623,13 @@ def track_to_nvg_item(
 
     ET.register_namespace("", NVG_NS)
     root = ET.Element("{%s}nvg" % NVG_NS, {"version": NVG_VERSION})
+    # NVG's own root-level "classification" attribute (nvg.data.xsd nvgType;
+    # verified against the vendored 1.5 schema) — "recommended... at least
+    # one of the words unclassified, restricted, confidential or secret".
+    # Any source protocol that decodes classification data sets this
+    # generic key; this is the one place it reaches the wire for NVG.
+    if track.get("classification"):
+        root.set("classification", str(track["classification"]))
 
     point_attrs = {
         "uri":    "urn:efdi:" + urllib.parse.quote(uid, safe="-._~"),
@@ -636,7 +643,10 @@ def track_to_nvg_item(
     if primary_altitude:
         point_attrs["z"] = str(primary_altitude[0])
     if any(track.get(key) is not None for key in ("speed_ms", "ground_speed_kts", "speed_kts", "sog_ms")):
-        point_attrs["speed"] = str(round(_speed_ms(track) * 3.6, 2))
+        # NVG's speed attribute is defined in knots (nvg.data.xsd speedType:
+        # "the speed the object is moving with, expressed in knots"),
+        # not km/h — verified against the vendored 1.5 schema.
+        point_attrs["speed"] = str(round(_speed_ms(track) * 1.943844, 2))
     if any(track.get(key) is not None for key in ("heading_deg", "track_deg", "cog_deg")):
         point_attrs["course"] = str(_course(track))
 

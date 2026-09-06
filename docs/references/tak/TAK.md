@@ -45,6 +45,37 @@ path specifically. It is not evidence that every CoT type this file emits
 markers) has been visually confirmed in a TAK client — only the radar path
 has.
 
+### Cross-check against `snstac/pytak` (2026-09-06)
+
+Fetched `github.com/snstac/pytak` (252★, actively maintained, the standard
+Python TAK client library, published by Sensors & Signals LLC) and diffed
+its `src/pytak/functions.py` `cot_event()`/`cot_point()` builders against
+`track_to_cot()` here. Event attribute set (`version="2.0"`, `type`, `uid`,
+`how="m-g"`, `time`/`start`/`stale`) and point attribute set
+(`lat`/`lon`/`hae`/`ce`/`le`) match exactly. Our lat/lon precision (6
+decimal places) is finer than pytak's own default helper (4 decimal
+places) — no correction needed, ours is the more precise choice. This
+upgrades the CoT event/point structure specifically (not the SIDC/MIL-STD
+symbology below) from "best-effort" to "cross-checked against an
+independent, actively-maintained reference implementation."
+
+### Classification markings: `access`/`caveat` event attributes (2026-09-06)
+
+`track_to_cot()` sets the CoT `<event>`'s `access` and `caveat` attributes
+from a track's generic `classification`/`classification_caveat` keys, when
+present. These are real, standard CoT event attributes — confirmed as part
+of the same `pytak` cross-check above: `cot_event()` accepts `access`,
+`qos`, `opex`, `caveat`, and `relto` as named optional parameters, each
+mapped straight onto the identically-named (`relto`→`rel_to`) XML
+attribute. Only `access`/`caveat` are wired here, since those are the two
+that map onto data this project currently decodes (classification level,
+handling/dissemination marking); `qos`/`opex`/`relto` are left unset rather
+than guessed at. `protocols/random/nffi.py` is the first, and currently
+only, producer of these two keys — see `../nffi/NFFI.md` and
+`../mip/MIP.md` for where the underlying values come from. Mirrored to
+EFDI-Allies' `tak_layer.py`. Covered by
+`tests/test_sitaware_hq_nvg_feed.py::ClassificationMarkingTests`.
+
 ### MIL-STD-2525C / NATO APP-6
 
 Affiliation coloring (`_BLUE`/`_GREEN`/`_YELLOW`/`_RED`), the CoT

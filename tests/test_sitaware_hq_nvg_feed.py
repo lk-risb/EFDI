@@ -30,7 +30,7 @@ from sitaware_layer import NVG_NS  # noqa: E402
 from sitaware_layer import _TOPIC_SIDC  # noqa: E402
 from sitaware_layer import _resolve_sidc  # noqa: E402
 from sitaware_layer import track_to_nvg_item  # noqa: E402
-from tak_layer import _is_unfused_sensor_track  # noqa: E402
+from tak_layer import _is_unfused_sensor_track, track_to_cot  # noqa: E402
 
 
 class FakeClock:
@@ -91,7 +91,7 @@ class NVGFeedCacheTests(unittest.TestCase):
         )
         self.assertEqual(points[0].attrib["x"], "25.2797")
         self.assertEqual(points[0].attrib["z"], "1000.0")
-        self.assertEqual(points[0].attrib["speed"], "43.2")
+        self.assertEqual(points[0].attrib["speed"], "23.33")  # knots, per NVG's speedType
         self.assertEqual(points[0].attrib["course"], "90.0")
         self.assertIsNotNone(points[0].find("{%s}textInfo" % NVG_NS))
         self.assertEqual(
@@ -312,10 +312,11 @@ class AircraftEnrichmentTests(unittest.TestCase):
             "emergency": "none",
             "emitter_category": "A3",
             "nav_qnh_hpa": 1013.2,
-            "selected_alt_ft": 30_000,
-            "fms_selected_alt_ft": 29_000,
+            "sel_alt_mcp_ft": 30_000,
+            "sel_alt_fms_ft": 29_000,
             "selected_heading_deg": 90.0,
-            "nav_modes": "autopilot, vnav",
+            "vnav_active": True,
+            "alt_hold": True,
             "nic": 8,
             "rc_m": 185,
             "nac_p": 9,
@@ -327,9 +328,10 @@ class AircraftEnrichmentTests(unittest.TestCase):
         self.assertEqual(track["alt_geom_ft"], 35_100)
         self.assertEqual(track["baro_vr_fpm"], -640)
         self.assertEqual(track["geo_vr_fpm"], -576)
-        self.assertEqual(track["selected_alt_ft"], 30_000)
-        self.assertEqual(track["fms_selected_alt_ft"], 29_000)
-        self.assertEqual(track["nav_modes"], "autopilot, vnav")
+        self.assertEqual(track["sel_alt_mcp_ft"], 30_000)
+        self.assertEqual(track["sel_alt_fms_ft"], 29_000)
+        self.assertTrue(track["vnav_active"])
+        self.assertTrue(track["alt_hold"])
 
         _, xml = track_to_nvg_item(track, "SNAPCF----*****", "2525b")
         point = ET.fromstring(xml).find("{%s}point" % NVG_NS)
@@ -356,7 +358,7 @@ class AircraftEnrichmentTests(unittest.TestCase):
             "-640 ft/min / -3.3 m/s",
         )
         self.assertEqual(values["Selected MCP/FCU"], "30000 ft / 9144 m")
-        self.assertEqual(values["Autopilot modes"], "autopilot, vnav")
+        self.assertEqual(values["Autopilot modes"], "VNAV, ALT HOLD")
         self.assertEqual(values["Position source"], "adsb_icao")
         self.assertIn("ADS-B QUALITY", values)
 
@@ -449,6 +451,44 @@ class HTTPFeedTests(unittest.TestCase):
         self.assertEqual(caught.exception.code, 405)
         self.assertEqual(caught.exception.headers["Allow"], "GET, HEAD")
         caught.exception.close()
+
+
+class ClassificationMarkingTests(unittest.TestCase):
+    """A generic "classification"/"classification_caveat" key — set by any
+    source protocol that decodes classification metadata (e.g. nffi.py from
+    NFFI's secClassification/secCategory) — must reach both C2 egress
+    formats' own real classification attributes: CoT's "access"/"caveat"
+    and NVG's root "classification" (see docs/references/nffi/NFFI.md)."""
+
+    def track(self):
+        return {
+            "_ts": 100.0,
+            "uid": "cls-test",
+            "lat_deg": 54.0,
+            "lon_deg": 25.0,
+            "classification": "NATO RESTRICTED",
+            "classification_caveat": "RELEASABLE TO ISAF",
+        }
+
+    def test_cot_event_carries_access_and_caveat(self):
+        xml = track_to_cot(self.track(), "a-f-G-U-C")
+        event = ET.fromstring(xml)
+        self.assertEqual(event.attrib["access"], "NATO RESTRICTED")
+        self.assertEqual(event.attrib["caveat"], "RELEASABLE TO ISAF")
+
+    def test_cot_event_omits_attrs_when_unclassified_data_has_none(self):
+        track = self.track()
+        del track["classification"]
+        del track["classification_caveat"]
+        xml = track_to_cot(track, "a-f-G-U-C")
+        event = ET.fromstring(xml)
+        self.assertNotIn("access", event.attrib)
+        self.assertNotIn("caveat", event.attrib)
+
+    def test_nvg_root_carries_classification(self):
+        _uid, xml = track_to_nvg_item(self.track(), "SFGPU-----*****")
+        root = ET.fromstring(xml)
+        self.assertEqual(root.attrib["classification"], "NATO RESTRICTED")
 
 
 if __name__ == "__main__":

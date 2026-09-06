@@ -42,6 +42,140 @@ transport/auth/polling contract works end to end; it is weaker evidence for
 whether every NVG element this file emits renders exactly as SitaWare's
 symbology engine intends for every SIDC/domain combination.
 
+## External corroboration attempt (2026-09-06)
+
+TIDE's own schema registry (`tide.act.nato.int/tidepedia`, `.../git/nvg/nvg_2.0`)
+requires NATO-affiliated login — not fetchable here. Searched more broadly
+(web search, not just GitHub) for independent NVG implementations to
+corroborate against instead, with mixed results — deliberately weighting
+each by how current and how authoritative it actually is, not just whether
+it turned up:
+
+- **`github.com/spatialillusions/nvg`** (JS NVG library, real commit
+  2025-02-12 — not a stale repo with a recently-touched timestamp) has a
+  genuine sample document. It confirms, independently: the namespace URI
+  `https://tide.act.nato.int/schemas/2012/10/nvg`, the root element
+  `<nvg:nvg version="...">` pattern, and — significant — the `symbol`
+  attribute convention `symbol="{scheme}:{SIDC}"` (its sample uses
+  `app6a:G*C*MALC--*****`), which matches this file's
+  `symbol_scheme + ":" + sidc` exactly. This upgrades those specific pieces
+  from "established knowledge" to "cross-checked against an independent,
+  currently-maintained implementation."
+- **`github.com/daveb1034/NVGTools`** was also found, but its actual commits
+  are all from 2015 (the repo's `pushed_at` metadata is misleadingly
+  recent) and its namespace table only goes up to version `2.0.0` — it
+  predates 2.0.2 and does not corroborate that specific version string.
+  Treated as weak/superseded evidence, not used to upgrade trust.
+- **NISP Nation** (`nisp.nw3.dk/standard/act-nvg-2.0.2.html`), a defense
+  standards catalog, confirms "NVG 2.0.2" is a real, NATO-published
+  standard ID dated 2015-05-23 — but the page itself carries no schema
+  detail (namespace, elements), so this only corroborates that the version
+  string is legitimate, not the structure below.
+- **Luciad's public NVG 2.0 SDK reference** (`dev.luciad.com`, a real
+  commercial geospatial vendor — Hexagon/Luciad — used across the defense
+  GIS industry) documents `TLcdNVG20Content`'s property fields verbatim,
+  including exact capitalization: `TIME_STAMP_PROPERTY` → `"TimeStamp"`
+  element, `TIME_SPAN_PROPERTY` → `"TimeSpan"` element, `SYMBOL_PROPERTY`
+  → `"symbol"` attribute, `URI_PROPERTY` → `"uri"` attribute,
+  `LABEL_PROPERTY` → `"label"` attribute. Separately, `TLcdNVG20SimpleData`
+  documents `KEY_PROPERTY` → the `"key"` attribute (lowercase) with the
+  element's text content as the value. Every one of these matches
+  `sitaware_layer.py` exactly, including the `key` attribute name on
+  `SimpleData`. This is the strongest single source in this file — a
+  commercial SDK vendor's own class reference, not a community project —
+  and resolves what the previous pass here called unconfirmed.
+
+## Vendor-shipped NVG XSD found (2026-09-06, via `~/Downloads/INTCORE`)
+
+The user's own INT-CORE (a NATO C2 interoperability integration platform)
+installation media — version 5.0's `6-INTCORE-DOCS.iso`,
+`06_TestArtefacts/FAT/FAT_TestData_5.0.0/Canonical Schemas/NVG 1.5
+Canonical Schema.zip` — ships a **complete, genuine NVG XSD set**:
+`nvg.1.5.xsd`, `nvg.data.1.5.xsd`, `nvg.types.1.5.xsd`,
+`nvg.capabilities.1.5.xsd`, `nvg.filter.1.4.xsd`, plus the KML/xAL/Dublin
+Core schemas NVG imports. This is edition 1.5 (namespace
+`http://tide.act.nato.int/schemas/2009/10/nvg`), not our target 2.0.2
+(`.../2012/10/nvg`) — editions, not diffable line-for-line — but as a real,
+complete, vendor-shipped primary source it independently confirms the
+element/attribute shape that carried forward into 2.0.2:
+
+- `nvgBaseAttributesGrp` defines `uri` (`xsd:anyURI`) and `label`
+  (`xsd:string`) exactly as used here, with a documented purpose ("uri
+  schema that uniquely identifies the object", "a textual representation
+  of this element") matching this file's usage.
+- `nvgSymbologyAttributesGrp` defines `symbol` (`SymbolCodeType`) with
+  documentation reading almost verbatim as our own convention: *"Its
+  format is the name of a standard followed by a colon and the text
+  representation of the element in that standard"* — i.e. exactly
+  `{scheme}:{SIDC}`, confirming `symbol_scheme + ":" + sidc` independent
+  of both Luciad and spatialillusions.
+- `SimpleDataType` (in `nvg.types.1.5.xsd`) declares `key` (`xsd:QName`,
+  **required**) as its identifying attribute, with the value as element
+  text content — byte-for-byte the same shape as `sitaware_layer.py`'s
+  `ExtendedData`/`SimpleData` construction and Luciad's 2.0 SDK docs above.
+  Three independent sources now agree on this one exactly.
+- `TimeStamp`/`TimeSpan` are genuinely absent from 1.5's schema — they are
+  a real 2.0-era addition, not a gap in this search. Consistent with, not
+  contradicting, the Luciad finding above.
+
+### Bug found and fixed: `point`'s `speed` attribute was in the wrong unit
+
+`nvg.data.1.5.xsd`'s `pointType` defines `x`=longitude, `y`=latitude
+(WGS-84 decimal degrees, both required), and two optional kinematic
+attributes: `course` (`directionType`, 0–360° clockwise from North) and
+`speed` (`speedType`) — whose documentation states, twice, independently
+(once on the type, once on the attribute use site): *"the speed the object
+is moving with, expressed in **knots**."* `track_to_nvg_point()` was
+converting to km/h (`_speed_ms(track) * 3.6`) instead — every speed value
+sent to SitaWare was off by a factor of ~1.85x (km/h > knots for the same
+physical speed). Fixed to `* 1.943844` (m/s → knots, the reciprocal of the
+`0.514444` knots→m/s constant already used elsewhere in `tak_layer.py`).
+Found by reading the vendored XSD's own attribute documentation, not by
+guessing — this is exactly the kind of unit-only bug a structural
+schema-shape check (element names, attribute presence) doesn't catch,
+since `speed="12.3"` is valid either way; only reading what the schema
+*says the number means* catches it.
+
+**Also checked, resolved as correct (not a bug):** `point`'s `z` attribute
+isn't defined in the vendored 1.5 XSD's `pointType`/`NvgMapObjectType`/
+`NvgDataObjectType`/`NvgBaseType` chain — initially flagged here as an
+uncertainty, since it only validated via 1.5's permissive `##any`
+attribute wildcard. Resolved by checking Luciad's `TLcdNVG20Point` class
+reference for the 2.0 edition directly: it declares `Z_PROPERTY` → the
+`z` XML attribute, documented as *"altitude distances... expressed in
+meters relative (positive or negative) to the datum surface of WGS-84"* —
+a real, formally-defined 2.0-era addition, the same pattern as
+`TimeStamp`/`TimeSpan`. `_primary_altitude()` already scales every input
+(ft ×0.3048, km ×1000) to metres before this file uses it, so no fix
+was needed.
+
+Also found (not yet used, potentially useful for future work):
+`INTCORE_SDS_AnnexO_NVGIntegration.docx` documents INT-CORE's own NVG ADS
+as a **pull-based SOAP/WSDL web service** (`GetCapabilities`/`GetNvg`
+operations, NVG 1.4 WS), a different transport model than
+`sitaware_layer.py`'s push/POST Import Subscription — worth knowing if a
+future partner's "NVG feed" turns out to be this WS-pull style instead.
+
+### Classification marking: root `classification` attribute (2026-09-06)
+
+`track_to_nvg_item()` sets the NVG document's root `classification`
+attribute from a track's generic `classification` key, when present — the
+same key `nffi.py` populates from NFFI's `secClassification` (see
+`../nffi/NFFI.md` and `../mip/MIP.md`). Confirmed against the vendored 1.5
+XSD's `nvgType` (same schema used for the speed-unit fix above):
+`classification` is a real, first-class attribute on the `<nvg>` root
+element itself, sibling to `version`, documented as *"recommended... at
+least one of the words unclassified, restricted, confidential or
+secret."* NVG has no equivalent to CoT's `caveat` — a track's
+`classification_caveat` key (also set by `nffi.py`, from `secCategory`)
+has nothing to map onto here and is correctly left unused for this format.
+Only applies to the per-track document builder (`track_to_nvg_item()`);
+the aggregate multi-item document builder (`NVGFeedCache.document()`)
+merges many tracks' already-serialized XML into one document and
+correctly has no single classification to apply at that level. Mirrored
+to EFDI-Allies' `sitaware_layer.py`. Covered by
+`tests/test_sitaware_hq_nvg_feed.py::ClassificationMarkingTests`.
+
 ## Why this file looks different from `../asterix-specs/ASTERIX.md`
 
 ASTERIX and SAPIENT both have an authoritative structured source this
