@@ -317,7 +317,13 @@ def main():
     ap.add_argument("--verbose", "-v", action="store_true")
     args = ap.parse_args()
 
-    session = open_session()
+    while True:
+        try:
+            session = open_session()
+            break
+        except Exception as exc:
+            print("dronuradaras Zenoh connect failed: {} — retry in 10s".format(exc), flush=True)
+            time.sleep(10)
 
     topic_dev = "{}/land/dronuradaras/acoustic/neutral/sensor/tracks/v1".format(TOPIC_ROOT)
     pub_dev = session.declare_publisher(topic_dev)

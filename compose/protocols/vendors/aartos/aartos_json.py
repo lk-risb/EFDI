@@ -253,7 +253,13 @@ def site_topic(site: dict) -> str:
 
 
 def run() -> None:
-    session = open_session()
+    while True:
+        try:
+            session = open_session()
+            break
+        except Exception as exc:
+            print("AARTOS translator Zenoh connect failed: {} — retry in 10s".format(exc), flush=True)
+            time.sleep(10)
 
     def on_sample(sample) -> None:
         try:

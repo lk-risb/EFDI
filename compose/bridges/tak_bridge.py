@@ -358,7 +358,20 @@ def run(args) -> None:
     if args.tls and not args.ca:
         raise SystemExit("--ca / TAK_CA is required when --tls is specified")
 
-    session = open_session()
+    # Unlike aartos_bridge.py's own open_session() call, this had no retry —
+    # any transient Zenoh hiccup (router restart, brief network blip) raised
+    # an uncaught exception here and killed the whole process, with nothing
+    # to bring it back except the next external health-check sweep. Real
+    # outage observed: a brief zenoh-admin container bounce left this bridge
+    # dead for several minutes while every other bridge's own retry loop
+    # rode it out and kept running.
+    while True:
+        try:
+            session = open_session()
+            break
+        except Exception as exc:
+            print("TAK bridge Zenoh connect failed: {} — retry in {}s".format(exc, _RECONNECT_S), flush=True)
+            time.sleep(_RECONNECT_S)
     raw_pub = session.declare_publisher(_RAW_TOPIC)
 
     print("TAK CoT ingress bridge started", flush=True)

@@ -86,7 +86,13 @@ def normalize(place_meta: dict, ts: dict) -> dict:
 
 
 def run(args):
-    session = open_session()
+    while True:
+        try:
+            session = open_session()
+            break
+        except Exception as exc:
+            print("meteolt Zenoh connect failed: {} — retry in 10s".format(exc), flush=True)
+            time.sleep(10)
     publishers = {
         place: session.declare_publisher(
             "{}/env/weather/station/meteolt/forecast/{}/tracks/v1".format(TOPIC_ROOT, place)

@@ -524,7 +524,13 @@ class TrackFuser:
 
 
 def run(args):
-    session = open_session()
+    while True:
+        try:
+            session = open_session()
+            break
+        except Exception as exc:
+            print("fusion Zenoh connect failed: {} — retry in 10s".format(exc), flush=True)
+            time.sleep(10)
     fuser   = TrackFuser(session, args.verbose)
     subs    = []
 

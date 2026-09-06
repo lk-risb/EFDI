@@ -22,7 +22,13 @@ from protocols.gateway import open_session
 def run_raw(protocol: str, default_port: int, args, frame_mode: str = "chunk") -> None:
     root = topic_root()
     topic = args.topic or "{}/raw/{}/{}".format(root, protocol, args.source)
-    session = open_session()
+    while True:
+        try:
+            session = open_session()
+            break
+        except Exception as exc:
+            print("{} Zenoh connect failed: {} — retry in 10s".format(protocol, exc), flush=True)
+            time.sleep(10)
     publisher = session.declare_publisher(topic)
     sock = socket.socket(socket.AF_INET6 if ":" in args.bind else socket.AF_INET,
                          socket.SOCK_STREAM if args.tcp else socket.SOCK_DGRAM)
