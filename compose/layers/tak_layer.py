@@ -36,11 +36,8 @@ import base64
 import json
 import math
 import os
-import queue
 import re
 import signal
-import socket
-import ssl
 import struct
 import threading
 import time
@@ -51,6 +48,7 @@ from zoneinfo import ZoneInfo
 
 from namespace_prefix import topic_root
 from protocols.gateway import open_session, subscribe
+from protocols.tak_transport import TcpSender, RECONNECT_S
 
 try:
     import mgrs as _mgrs_lib
@@ -71,15 +69,14 @@ LAND_STALE_S   = 120     # ground vehicles
 COT_STALE_S    = AIR_STALE_S  # default (air)
 SAT_STALE_S    = 300     # satellites: polled every 60s, 5 min gives 5× margin
 ENV_STALE_S    = 3600    # weather stations: polled every 15–30 min, 1 h gives plenty of margin
-RECONNECT_S    = 5
-SEND_TIMEOUT_S = 10
-TAK_QUEUE_MAX  = 10000   # bounded CoT backlog; drops oldest when a link stalls
 
 # Dead-reckoning — extrapolate position forward when sensor updates stop
 _DR_TICK_S   = 2.0   # extrapolation interval (seconds)
 _DR_MIN_MS   = 5.15  # don't extrapolate below ~10 kt (5.15 m/s)
 
-# Emergency squawk codes (ICAO Annex 10)
+# Emergency squawk codes (ICAO Annex 10) — labels the track's own CoT remarks
+# text (_build_remarks below). Broadcasting a GeoChat alert to every TAK
+# client on these conditions is a separate concern; see layers/tak_alert_layer.py.
 _EMERGENCY_SQUAWK = {"7500": "HIJACK", "7600": "COMMS FAILURE", "7700": "MAYDAY"}
 
 # CAT-48 I048/020 target report descriptor TYP subfield (cat.py's _TYP048) —
@@ -111,13 +108,13 @@ _MODE1_LABEL = {
     "33": "medevac",         "34": "special ops",     "35": "mine countermeasures",
     "36": "test/evaluation", "37": "reserved",
 }
-# AIS nav status values that indicate vessel distress
+# AIS nav status values that indicate vessel distress — labels the track's own
+# CoT remarks text (_build_remarks below); see the module docstring note above
+# _EMERGENCY_SQUAWK for where the actual GeoChat broadcast now lives.
 _DISTRESS_NAV = frozenset({"aground", "not_under_command", "not under command"})
 # Module-level stores — initialised once, shared across all handler threads
 _dr_lock     = threading.Lock()
 _dr_store:   dict[str, dict] = {}
-_alert_lock  = threading.Lock()
-_alerted:    set = set()   # uids currently in a known emergency state (no re-alert)
 _radar_status_lock = threading.Lock()
 _radar_status: dict[str, dict] = {}   # "sac-sic" → latest CAT-34 status dict
 
@@ -550,38 +547,6 @@ def _start_dr_thread(sender):
                 if xml:
                     sender.send(xml)
     threading.Thread(target=_loop, daemon=True).start()
-
-
-def _send_geochat_alert(sender, uid: str, lat: float, lon: float, message: str):
-    """Send a GeoChat broadcast to All Chat Rooms — shows as a popup on every ATAK device."""
-    now    = time.time()
-    msg_id = "{}-ALERT-{:.0f}".format(uid, now)
-    event  = ET.Element("event", {
-        "version": "2.0",
-        "uid":     "GeoChat.EFDI.ALL.{}".format(msg_id),
-        "type":    "b-t-f",
-        "how":     "m-g",
-        "time":    _ts(now), "start": _ts(now), "stale": _ts(now + 300),
-    })
-    ET.SubElement(event, "point", {
-        "lat": str(round(lat, 6)), "lon": str(round(lon, 6)),
-        "hae": "9999999.0", "ce": "9999999.0", "le": "9999999.0",
-    })
-    detail = ET.SubElement(event, "detail")
-    chat = ET.SubElement(detail, "__chat", {
-        "parent": "TeamTalk", "groupOwner": "false",
-        "messageId": msg_id, "chatroom": "All Chat Rooms",
-        "id": "All Chat Rooms", "senderCallsign": "EFDI-ALERT",
-    })
-    ET.SubElement(chat, "chatgrp", {
-        "uid0": "EFDI-ALERT", "uid1": "All Chat Rooms", "id": "All Chat Rooms",
-    })
-    ET.SubElement(detail, "link", {"uid": "EFDI-ALERT", "type": "a-n-G-I", "relation": "p-p"})
-    ET.SubElement(detail, "remarks", {
-        "source": "EFDI-ALERT", "to": "All Chat Rooms", "time": _ts(now),
-    }).text = message
-    ET.SubElement(detail, "__serverdestination", {"destinations": "All Chat Rooms"})
-    sender.send('<?xml version="1.0" encoding="UTF-8"?>' + ET.tostring(event, encoding="unicode"))
 
 
 def _ts(ts: float) -> str:
@@ -1609,143 +1574,6 @@ def track_to_cot(track: dict, cot_type: str, stale_s: float = COT_STALE_S) -> st
     return '<?xml version="1.0" encoding="UTF-8"?>' + ET.tostring(event, encoding="unicode")
 
 
-# ---------------------------------------------------------------------------
-# TCP sender — persistent connection with auto-reconnect
-# ---------------------------------------------------------------------------
-
-def _enable_keepalive(sock: socket.socket) -> None:
-    """Make the OS notice a silently-dropped peer instead of leaving a half-open
-    socket.
-
-    Over a flaky mesh (e.g. a NetBird tunnel that dies mid-stream) TCP does not
-    fail a write immediately: sendall() keeps succeeding into an unacknowledged
-    send buffer and every CoT is lost with no error to trigger a reconnect. This
-    arms two Linux guards so a dead peer surfaces as an error within ~20s:
-      * SO_KEEPALIVE probes an *idle* connection (10s idle, 5s interval, 3 fails)
-      * TCP_USER_TIMEOUT bounds *in-flight unACKed* data — the case that bit us,
-        where the link drops while we are actively sending.
-    Best-effort: options absent on non-Linux platforms are skipped.
-    """
-    try:
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
-        for name, value in (("TCP_KEEPIDLE", 10), ("TCP_KEEPINTVL", 5), ("TCP_KEEPCNT", 3)):
-            if hasattr(socket, name):
-                sock.setsockopt(socket.IPPROTO_TCP, getattr(socket, name), value)
-        if hasattr(socket, "TCP_USER_TIMEOUT"):
-            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_USER_TIMEOUT, 20000)
-    except OSError:
-        pass
-
-
-class TcpSender:
-    """CoT writer with a single-writer reconnect loop. Plaintext or mutual TLS.
-
-    Accepts multiple (host, port) candidates — e.g. a LAN IP, a NetBird mesh
-    IP, and a Tailscale mesh IP for one TAK Server — and rotates through them
-    when a *connect* fails, converging on whichever path is reachable.
-
-    All socket I/O runs on ONE background thread that owns the socket. Callers
-    only enqueue; send() never touches the socket. That is deliberate: it closes
-    the native use-after-free that core-dumped the process whenever the TAK link
-    flapped — a zenoh callback thread doing an OpenSSL write on a socket another
-    thread had just replaced mid-reconnect. An unreachable host now degrades to
-    "drop CoT until reconnected" instead of crashing. The queue is bounded and
-    drops the oldest on overflow: CoT is state, so a newer update supersedes a
-    dropped one, and a stalled link never blocks the callbacks or grows memory.
-    """
-
-    def __init__(self, hosts: list[tuple[str, int]], tls: bool = False,
-                 certfile: str | None = None, keyfile: str | None = None,
-                 cafile: str | None = None, server_name: str | None = None):
-        self.hosts     = hosts
-        self._tls      = tls
-        self._certfile = certfile
-        self._keyfile  = keyfile
-        self._cafile   = cafile
-        self._server_name = server_name
-        self.drop_tak_ingress = True
-        self._q: "queue.Queue[str]" = queue.Queue(maxsize=TAK_QUEUE_MAX)
-        self._stop = threading.Event()
-        self._thread = threading.Thread(target=self._run, name="tak-writer", daemon=True)
-        self._thread.start()
-
-    def send(self, xml: str) -> None:
-        # Hand off to the writer thread; never blocks the caller. On overflow,
-        # drop the oldest queued CoT so the freshest still gets through.
-        while not self._stop.is_set():
-            try:
-                self._q.put_nowait(xml)
-                return
-            except queue.Full:
-                try:
-                    self._q.get_nowait()
-                except queue.Empty:
-                    pass
-
-    def _open(self, host: str, port: int) -> socket.socket:
-        raw = socket.create_connection((host, port), timeout=SEND_TIMEOUT_S)
-        _enable_keepalive(raw)
-        if not self._tls:
-            raw.settimeout(SEND_TIMEOUT_S)
-            return raw
-        # Dial and identity names are deliberately separate: redundant IP/DNS
-        # paths may all reach one TAK server certificate. The configured TLS
-        # server name must still match that certificate's SAN.
-        ctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH, cafile=self._cafile)
-        ctx.check_hostname = True
-        if self._certfile and self._keyfile:
-            ctx.load_cert_chain(self._certfile, self._keyfile)
-        s = ctx.wrap_socket(raw, server_hostname=self._server_name or host)
-        s.settimeout(SEND_TIMEOUT_S)
-        return s
-
-    def _run(self) -> None:
-        sock: socket.socket | None = None
-        idx = 0
-        while not self._stop.is_set():
-            if sock is None:
-                host, port = self.hosts[idx % len(self.hosts)]
-                try:
-                    sock = self._open(host, port)
-                    print("TAK {} connected → {}:{}".format(
-                        "TLS" if self._tls else "TCP", host, port), flush=True)
-                except OSError as exc:
-                    # Connect failed → this path is down; rotate to the next
-                    # candidate and back off. One thread, so no reconnect storm.
-                    print("TAK connect failed ({}:{}) — {}, next candidate in {}s".format(
-                        host, port, exc, RECONNECT_S), flush=True)
-                    idx += 1
-                    self._stop.wait(RECONNECT_S)
-                    continue
-            try:
-                xml = self._q.get(timeout=1.0)
-            except queue.Empty:
-                continue  # idle: loop back to re-check the stop flag
-            try:
-                sock.sendall((xml + "\n").encode("utf-8"))
-            except OSError:
-                # A failed write means the server closed an established stream,
-                # not that the path is down — reconnect to the SAME candidate.
-                # The candidates are alternate addresses of one TAK Server, which
-                # identifies clients by certificate, so returning on a different
-                # address would drop the prior session and churn. If the path is
-                # genuinely down, the next connect fails and rotation happens there.
-                try:
-                    sock.close()
-                except OSError:
-                    pass
-                sock = None
-                self._stop.wait(RECONNECT_S)
-        if sock is not None:
-            try:
-                sock.close()
-            except OSError:
-                pass
-
-    def close(self) -> None:
-        self._stop.set()
-
-
 # Views that carry the same object as the flat JSON and must not be processed
 # twice. Anything else — including a bare topic with no view suffix — is treated
 # as the JSON payload.
@@ -1835,46 +1663,11 @@ def make_handler(cot_type_or_fn, sender, verbose: bool, stale_s: float = COT_STA
         else:
             cot_type     = cot_type_or_fn(track) if callable(cot_type_or_fn) else cot_type_or_fn
             stale_s_used = stale_s
-            # Emergency squawk → force red hostile + one-shot GeoChat alert
-            sq = str(track.get("squawk") or "")
-            if sq in _EMERGENCY_SQUAWK and "-A-" in cot_type:
-                cot_type = "a-h-A-C-F"
-                uid_now = _uid(track)
-                with _alert_lock:
-                    fire = uid_now not in _alerted
-                    _alerted.add(uid_now)
-                if fire:
-                    lat_a = track.get("lat_deg", 0)
-                    lon_a = track.get("lon_deg", 0)
-                    cs_a  = (track.get("callsign") or track.get("registration") or
-                             track.get("icao24") or "UNKNOWN").upper()
-                    alt_a = int(_hae(track) / 0.3048)
-                    msg   = "[{}] {} {} - squawk {} - FL{} - {:.3f}/{:.3f}".format(
-                        _EMERGENCY_SQUAWK[sq], sq, cs_a, sq,
-                        alt_a // 100, lat_a, lon_a)
-                    _send_geochat_alert(sender, uid_now, lat_a, lon_a, msg)
-            else:
-                # Clear alert state when squawk returns to normal
-                uid_now = _uid(track)
-                with _alert_lock:
-                    _alerted.discard(uid_now)
 
-        # Ship distress alert (nav_status)
-        nav_key = str(track.get("nav_status") or "").lower().replace(" ", "_")
-        if nav_key in _DISTRESS_NAV and "-S-" in cot_type:
-            uid_now = _uid(track)
-            with _alert_lock:
-                fire = uid_now not in _alerted
-                _alerted.add(uid_now)
-            if fire:
-                lat_s  = track.get("lat_deg", 0)
-                lon_s  = track.get("lon_deg", 0)
-                name_s = (track.get("ship_name") or str(track.get("mmsi") or "VESSEL")).upper()
-                msg    = "[SOS] {} - {} - MMSI {} - {:.3f}/{:.3f}".format(
-                    nav_key.upper().replace("_", " "), name_s,
-                    track.get("mmsi", "?"), lat_s, lon_s)
-                _send_geochat_alert(sender, uid_now, lat_s, lon_s, msg)
-
+        # Broadcasting an emergency/status GeoChat alert to every connected
+        # TAK client is a separate concern from translating this track to
+        # CoT — see layers/tak_alert_layer.py, which subscribes to the same
+        # tracks independently and owns that entirely.
         xml = track_to_cot(track, cot_type, stale_s=stale_s_used)
         if xml is None:
             return
