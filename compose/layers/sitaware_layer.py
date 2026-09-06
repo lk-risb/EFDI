@@ -1070,7 +1070,19 @@ def run(args) -> None:
         server.socket = context.wrap_socket(server.socket, server_side=True)
         scheme = "https"
 
-    session = open_session()
+    # No retry here previously — a transient Zenoh hiccup (router restart,
+    # brief network blip) raised uncaught and killed the whole process, with
+    # nothing to bring it back except the next external health-check sweep.
+    # Real outage observed: tak_bridge.py died from exactly this gap during
+    # a brief zenoh-admin container bounce while other bridges' own retry
+    # loops rode it out.
+    while True:
+        try:
+            session = open_session()
+            break
+        except Exception as exc:
+            print("sitaware_layer Zenoh connect failed: {} — retry in 10s".format(exc), flush=True)
+            time.sleep(10)
     subscribers = []
     try:
         for suffix, sidc in _TOPIC_SIDC.items():

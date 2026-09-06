@@ -1950,7 +1950,20 @@ def run(args):
     print("CoT → {} candidates: {} (TAK Server, first reachable wins)".format(
         mode, ", ".join("{}:{}".format(h, p) for h, p in hosts)), flush=True)
 
-    session = open_session()
+    # No retry here previously — a transient Zenoh hiccup (router restart,
+    # brief network blip) raised uncaught and killed the whole process, with
+    # nothing to bring it back except the next external health-check sweep.
+    # Real outage observed: a brief zenoh-admin container bounce left
+    # tak_bridge.py (this file's ingress counterpart) dead for several
+    # minutes from exactly this gap while other bridges' own retry loops
+    # rode it out.
+    while True:
+        try:
+            session = open_session()
+            break
+        except Exception as exc:
+            print("tak_layer Zenoh connect failed: {} — retry in {}s".format(exc, RECONNECT_S), flush=True)
+            time.sleep(RECONNECT_S)
     _start_dr_thread(sender)
     subs = []
     for suffix, (cot_type, stale_s) in _TOPIC_COT.items():

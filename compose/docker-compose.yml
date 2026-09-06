@@ -33,6 +33,18 @@ services:
     container_name: efdi-pod-zenoh-router
     network_mode: host
     restart: unless-stopped
+    # Docker's own default (1024 soft) is silently reached after enough
+    # connect/reconnect churn from every bridge/layer sharing this one
+    # router — confirmed live: zenohd hit exactly 1024 open FDs (of only
+    # ~60 genuine established sessions) after a bout of crash-looping
+    # clients, after which it refused every new connection ("Unable to
+    # connect to any of [tcp/127.0.0.1:7448]") while still answering a bare
+    # TCP handshake, making it look up from the outside. Not a Zenoh or
+    # EFDI-code limit — the ambient container default nothing had raised.
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
     environment:
       - RUST_LOG=${ZENOH_LOG:-info}
     volumes:

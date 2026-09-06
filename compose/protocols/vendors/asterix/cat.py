@@ -9345,7 +9345,13 @@ def _cat34_main():
     args = parser.parse_args()
     if not args.zenoh_raw and not args.port: parser.error("--port or CAT34_PORT is required unless --zenoh-raw is selected")
     site = [args.site_lat or None, args.site_lon or None]
-    session = open_session()
+    while True:
+        try:
+            session = open_session()
+            break
+        except Exception as exc:
+            print("CAT-34 Zenoh connect failed: {} — retry in 10s".format(exc), flush=True)
+            time.sleep(10)
     handler = _cat34__make_cat034_handler(
         session, site, args.site_name or None, args.radar_range_m, passive=args.passive
     )
@@ -10187,7 +10193,13 @@ def _cat48_main():
     if not args.zenoh_raw and not args.port: parser.error("--port or CAT48_PORT is required unless --zenoh-raw is selected")
     site = [args.site_lat or None, args.site_lon or None]
     if None in site: print("INFO: set CAT48_RADAR_LAT/LON for local polar positions", flush=True)
-    session = open_session()
+    while True:
+        try:
+            session = open_session()
+            break
+        except Exception as exc:
+            print("CAT-48 Zenoh connect failed: {} — retry in 10s".format(exc), flush=True)
+            time.sleep(10)
     sites: dict[tuple[int, int], tuple[float, float]] = {}
     site_lock = threading.Lock()
 
@@ -10862,7 +10874,10 @@ def _cat62_decode_cat62_record(data: bytes, pos: int):
         elif frn == 11:
             if pos + 2 > len(data): return track, len(data)
             track["track_num"] = _cat62__u16(data[pos:pos + 2]) & 0x0FFF; pos += 2
-        elif frn == 12:                 # track status, FX
+        elif frn == 12:                 # I062/080 Track Status, full multi-octet decode
+            # Bit layout verified against CroatiaControlLtd's asterix_cat062_1_18.xml
+            # and zoranbosnjak/asterix-specs cat-1.20.ast (both list the same
+            # octet-by-octet FX-chained fields).
             if pos >= len(data): return track, len(data)
             b = data[pos]; pos += 1
             track["track_monosensor"] = bool(b & 0x80); track["confirmed"] = not bool(b & 0x02)
@@ -10870,9 +10885,22 @@ def _cat62_decode_cat62_record(data: bytes, pos: int):
             while b & 1:
                 if pos >= len(data): return track, len(data)
                 b = data[pos]; pos += 1; extent += 1
-                if extent == 1:
+                if extent == 1:                 # SIM/TSE/TSB/FPC/AFF/STP/KOS
+                    if b & 0x80: track["simulated"] = True
                     if b & 0x40: track["_delete"] = True
                     if b & 0x20: track["track_begin"] = True
+                    if b & 0x10: track["flight_plan_correlated"] = True
+                elif extent == 2:               # AMA/MD4/ME/MI/MD5
+                    if b & 0x20: track["mil_emergency"] = True; track["is_military"] = True
+                    if b & 0x10: track["mil_id_present"] = True; track["is_military"] = True
+                elif extent == 3:               # CST/PSR/SSR/MDS/ADS/SUC/AAC
+                    if b & 0x80: track["coasting"] = True
+                elif extent == 4:               # SDS/EMS/PFT/FPLT
+                    ec = (b >> 4) & 0x07
+                    if ec:
+                        track.setdefault("emergency_code", ec)
+                        s = _cat62__EMERGENCY_CODES.get(ec)
+                        if s: track.setdefault("emergency_str", s)
         elif frn == 13:                 # I062/290
             try: flags, pos = _cat62__presence(data, pos, 2)
             except ValueError: return track, len(data)
