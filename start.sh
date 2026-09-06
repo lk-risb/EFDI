@@ -85,7 +85,7 @@ SERVICES=(
     sapient-raw stanag4586-raw stanag4609-raw stanag5516-raw
     mqtt-raw aartos-raw aartos-wifi-raw
     cap mqtt sparkplug sensor-health mission-route aartos
-    tak_layer tak-bridge nffi-bridge sitaware_layer
+    tak_layer tak-bridge nffi-bridge sitaware_layer tak_alert_layer
     mediamtx
 )
 
@@ -169,6 +169,7 @@ declare -A SVC_CAT=(
     [cap]="Protocols"
     [sensor-health]="Protocols" [mission-route]="Protocols"
     [tak_layer]="Output layers"   [sitaware_layer]="Output layers"
+    [tak_alert_layer]="Output layers"
     [track-fusion]="Sensor bridges"
     [mediamtx]="Sensor bridges"
 )
@@ -202,6 +203,7 @@ declare -A SVC_DESC=(
     [sensor-health]="Sensor health on Zenoh"
     [mission-route]="UAV routes and corridors on Zenoh"
     [tak_layer]="CoT → TAK Server (mTLS)"
+    [tak_alert_layer]="Emergency squawk / ship distress → TAK GeoChat (opt-in, off unless selected)"
     [tak-bridge]="TAK Server CoT ingress"
     [nffi-bridge]="NFFI (STANAG 5527) TCP ingress → Zenoh raw"
     [sitaware_layer]="EFDI tracks → SitaWare (NVG feed, SitaWare polls)"
@@ -213,7 +215,7 @@ declare -A SVC_DESC=(
 svc_ready() {
     case "$1" in
         zenoh|meteolt|\
-        dronuradaras|nffi|tak_layer|track-fusion|\
+        dronuradaras|nffi|tak_layer|tak_alert_layer|track-fusion|\
         cap|sensor-health|mission-route)
             return 0 ;;
         admin-control) [[ -n "${ZENOH_ADMIN_SECRET_KEY:-}" || -n "${EFDI_CONTROL_TOKEN:-}" ]] ;;
@@ -315,7 +317,7 @@ svc_hint() {
             else
                 echo "will prompt for address"
             fi ;;
-        tak_layer)
+        tak_layer|tak_alert_layer)
             if [[ "${TAK_HOST:-}" ]]; then
                 _n=0; [[ "${TAK_HOST_FALLBACK:-}" ]] && ((_n++)); [[ "${TAK_HOST_TAILSCALE:-}" ]] && ((_n++))
                 ((_n)) && echo "${TAK_HOST}:${TAK_PORT:-8087} (+${_n} fallback)" || echo "${TAK_HOST}:${TAK_PORT:-8087}"
@@ -878,6 +880,32 @@ launch() {
                 tcp_args+=(--tls --cert "${TAK_CERT:-}" --key "${TAK_KEY:-}" --ca "${TAK_CA:-}")
             fi
             _start tak_layer layers/tak_layer.py "${tcp_args[@]}"
+            ;;
+
+        tak_alert_layer)
+            # Same TAK egress connection as tak_layer (TAK_HOST/PORT/TLS) — a
+            # separate process/subscriber, opt-in (not in the default
+            # selection below), broadcasting emergency squawk / ship
+            # distress GeoChat alerts independently of CoT translation.
+            local alert_host="${TAK_HOST:-}"
+            local alert_host2="${TAK_HOST_FALLBACK:-}"
+            local alert_host3="${TAK_HOST_TAILSCALE:-}"
+            if [[ -z "$alert_host" && -z "$alert_host2" && -z "$alert_host3" ]]; then
+                _prompt_address "TAK Server" alert_host
+                if [[ -z "$alert_host" ]]; then
+                    printf "  ${YELLOW}[skip]${R}  tak_alert_layer    no address entered\n"
+                    return
+                fi
+                export TAK_HOST="$alert_host"
+            fi
+            local alert_hosts=(); [[ -n "$alert_host"  ]] && alert_hosts+=(--host "$alert_host")
+            [[ -n "$alert_host2" ]] && alert_hosts+=(--host "$alert_host2")
+            [[ -n "$alert_host3" ]] && alert_hosts+=(--host "$alert_host3")
+            local alert_args=("${alert_hosts[@]}" --port "${TAK_PORT:-8089}")
+            if [[ "${TAK_TLS:-}" == "1" ]]; then
+                alert_args+=(--tls --cert "${TAK_CERT:-}" --key "${TAK_KEY:-}" --ca "${TAK_CA:-}")
+            fi
+            _start tak_alert_layer layers/tak_alert_layer.py "${alert_args[@]}"
             ;;
 
         tak-bridge)
