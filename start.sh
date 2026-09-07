@@ -52,6 +52,11 @@ LOG_DIR="$POD_STATE_DIR/logs"
 PID_DIR="$POD_STATE_DIR/.pids"
 LAUNCHER_STATE_FILE="$POD_STATE_DIR/launcher-state.env"
 mkdir -p "$LOG_DIR" "$PID_DIR"
+# mediamtx (native process, run as this user) writes recordings here; the
+# zenoh-admin container bind-mounts the same path read-only for the Streams
+# tab. Created up front so Docker never auto-creates it as root first —
+# that would leave mediamtx unable to write into its own recording dir.
+mkdir -p "$COMPOSE_DIR/bridges/mediamtx/recordings"
 
 # ── Ensure venv ────────────────────────────────────────────────────────────
 if [[ ! -x "$VENV/bin/python3" ]]; then

@@ -5,8 +5,31 @@ Reads an SRT transport carrying MPEG-TS with KLV metadata, extracts the KLV
 packet stream with ffmpeg, and publishes each raw MISB KLV packet onto the EFDI
 fabric's raw namespace. Decoding into canonical tracks is the protocol's job:
 protocols/vendors/stanag/4609.py subscribes to this raw topic and emits the
-SAPIENT / JSON / protobuf views. This bridge only brings the bytes onto the
-fabric — it never decodes ST 0601 or transcodes the video essence.
+SAPIENT / JSON / protobuf views. This bridge never decodes ST 0601 and never
+transcodes the video essence — the video, when relayed at all (see below), is
+a remux (-c copy) of exactly the same bytes ffmpeg already demuxed.
+
+This bridge owns the SRT connection as the *listener* (mode=listener — the
+sensor/GCS connects IN), so mediamtx cannot also bind that port to get the
+video into the WebUI Streams tab, and routing the feed through mediamtx
+*first* isn't an option either: MediaMTX has no support for passing through
+an MPEG-TS KLV/data track today (open upstream feature request, not
+implemented), so the metadata would be silently dropped before this bridge
+ever saw it. The only place both concerns can share one connection is here.
+
+Optional video relay (compose/.env):
+  STANAG4609_VIDEO_RELAY_ENABLE=1        # off by default
+  STANAG4609_VIDEO_PATH=stanag4609       # path name mediamtx (and the WebUI
+                                          # Streams tab) will show it under
+
+When enabled, ffmpeg's own `tee` muxer splits ONE demux of the SRT input into
+two independent outputs: the KLV data track (unchanged, to this process'
+stdout) and a best-effort remux of the video/audio tracks into mediamtx's
+RTMP ingest (127.0.0.1:1935). The video slave is tagged onfail=ignore, so if
+mediamtx is down, slow to start, or restarted mid-stream, ffmpeg silently
+carries on writing KLV to stdout regardless — the metadata pipeline this
+bridge exists for never depends on the video relay's success. Two outputs
+from one already-open connection, not two listeners on one port.
 
 Config (compose/.env):
   STANAG4609_SRT_URL=srt://host:port?mode=listener  # required
@@ -46,6 +69,10 @@ _FFMPEG_BIN = os.environ.get("STANAG4609_FFMPEG_BIN", "ffmpeg")
 _RECONNECT_S = float(os.environ.get("STANAG4609_RECONNECT_S", "10"))
 RAW_TOPIC = "{}/raw/stanag_4609/{}".format(TOPIC_ROOT, SOURCE)
 
+_VIDEO_RELAY_ENABLE = os.environ.get("STANAG4609_VIDEO_RELAY_ENABLE", "") == "1"
+_VIDEO_PATH = os.environ.get("STANAG4609_VIDEO_PATH", "stanag4609").strip() or "stanag4609"
+_VIDEO_RELAY_URL = "rtmp://127.0.0.1:1935/{}".format(_VIDEO_PATH)
+
 
 def _safe_stream_label(url: str) -> str:
     """Return a useful endpoint label without credentials or SRT options."""
@@ -61,16 +88,34 @@ def _safe_stream_label(url: str) -> str:
 def _ffmpeg_proc() -> "subprocess.Popen[bytes]":
     if not _SRT_URL:
         raise SystemExit("Set STANAG4609_SRT_URL in .env")
+    if not _VIDEO_RELAY_ENABLE:
+        cmd = [
+            _FFMPEG_BIN,
+            "-hide_banner",
+            "-loglevel", "error",
+            "-nostdin",
+            "-i", _SRT_URL,
+            "-map", "0:d:0?",
+            "-c", "copy",
+            "-f", "data",
+            "pipe:1",
+        ]
+        return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    # tee splits ONE demux into two independent outputs instead of opening a
+    # second connection (this bridge already owns the only listener on
+    # STANAG4609_SRT_URL — see module docstring). onfail=ignore on the video
+    # slave means a down/restarting mediamtx never affects the KLV slave.
+    tee_spec = "[select=d:f=data]pipe:1|[select=v,a:onfail=ignore:f=flv]{}".format(_VIDEO_RELAY_URL)
     cmd = [
         _FFMPEG_BIN,
         "-hide_banner",
         "-loglevel", "error",
         "-nostdin",
         "-i", _SRT_URL,
-        "-map", "0:d:0?",
+        "-map", "0",
         "-c", "copy",
-        "-f", "data",
-        "pipe:1",
+        "-f", "tee",
+        tee_spec,
     ]
     return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 

@@ -14,6 +14,7 @@ python-multipart==0.0.32
 aiofiles==23.2.1
 docker==7.1.0
 json5==0.9.25
+ruamel.yaml==0.18.10   # round-trip mediamtx.yml edits without dropping its own comments
 eclipse-zenoh==1.9.0
 authlib==1.7.2
 itsdangerous==2.2.0
