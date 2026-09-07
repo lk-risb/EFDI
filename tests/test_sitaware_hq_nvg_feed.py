@@ -33,6 +33,31 @@ from sitaware_layer import track_to_nvg_item  # noqa: E402
 from tak_layer import _is_unfused_sensor_track, _TOPIC_COT, track_to_cot  # noqa: E402
 
 
+def _all_simple_data(point) -> dict:
+    """Every SimpleData under this NVG <point>'s ExtendedData, whether a
+    direct child or nested inside a <Section> — matches ExtendedDataType's
+    real content model (nvg.types.2.0.xsd: SimpleData*, Section*), not the
+    old flat-dash-divider layout."""
+    extended = point.find("{%s}ExtendedData" % NVG_NS)
+    if extended is None:
+        return {}
+    values = {
+        item.attrib["key"]: item.text
+        for item in extended.findall("{%s}SimpleData" % NVG_NS)
+    }
+    for section in extended.findall("{%s}Section" % NVG_NS):
+        for item in section.findall("{%s}SimpleData" % NVG_NS):
+            values[item.attrib["key"]] = item.text
+    return values
+
+
+def _section_labels(point) -> set:
+    extended = point.find("{%s}ExtendedData" % NVG_NS)
+    if extended is None:
+        return set()
+    return {section.attrib["label"] for section in extended.findall("{%s}Section" % NVG_NS)}
+
+
 class FakeClock:
     def __init__(self):
         self.now = 100.0
@@ -102,21 +127,19 @@ class NVGFeedCacheTests(unittest.TestCase):
             points[0].find("{%s}TimeSpan/{%s}end" % (NVG_NS, NVG_NS)).text,
             "1970-01-01T00:02:10.000Z",
         )
-        extended = points[0].find("{%s}ExtendedData" % NVG_NS)
-        values = {
-            item.attrib["key"]: item.text
-            for item in extended.findall("{%s}SimpleData" % NVG_NS)
-        }
-        self.assertEqual(values["Data source"], "test")
+        self.assertIsNotNone(points[0].find("{%s}ExtendedData" % NVG_NS))
+        values = _all_simple_data(points[0])
+        self.assertEqual(values["Data_source"], "test")
         self.assertEqual(values["Registration"], "TEST-REG")
-        self.assertEqual(values["ICAO address"], "ABCDEF")
-        self.assertEqual(values["Squawk / Mode 3"], "7000")
+        self.assertEqual(values["ICAO_address"], "ABCDEF")
+        self.assertEqual(values["Squawk_Mode_3"], "7000")
         self.assertEqual(values["Primary"], "3281 ft / 1000 m (reported)")
-        self.assertEqual(values["EFDI track ID"], "EFDI-ICAO-ABCDEF")
-        self.assertIn("IDENTITY", values)
-        self.assertIn("KINEMATICS", values)
-        self.assertIn("ALTITUDE DETAIL", values)
-        self.assertIn("SYSTEM", values)
+        self.assertEqual(values["EFDI_track_ID"], "EFDI-ICAO-ABCDEF")
+        sections = _section_labels(points[0])
+        self.assertIn("IDENTITY", sections)
+        self.assertIn("KINEMATICS", sections)
+        self.assertIn("ALTITUDE DETAIL", sections)
+        self.assertIn("SYSTEM", sections)
         self.assertNotIn("efdi_uid", values)
 
     def test_stale_items_are_removed(self):
@@ -227,13 +250,7 @@ class NVGFeedCacheTests(unittest.TestCase):
         point = ET.fromstring(body).find("{%s}point" % NVG_NS)
         self.assertEqual(count, 1)
         self.assertEqual(point.attrib["label"], "controllabel")
-        fields = point.findall(
-            "{%s}ExtendedData/{%s}SimpleData" % (NVG_NS, NVG_NS)
-        )
-        rows = [(item.attrib["key"], item.text) for item in fields]
-        self.assertEqual(len(rows), len(set(rows)))
-        self.assertFalse(any("_" in key for key, _ in rows))
-        values = dict(rows)
+        values = _all_simple_data(point)
         self.assertEqual(values["Comment"], "validcomment")
 
     def test_asterix_radar_attributes_reuse_the_tak_stat_card_sections(self):
@@ -251,18 +268,13 @@ class NVGFeedCacheTests(unittest.TestCase):
         })
         _, xml = track_to_nvg_item(track, "SNAPMF----*****", "2525b")
         point = ET.fromstring(xml).find("{%s}point" % NVG_NS)
-        values = {
-            item.attrib["key"]: item.text
-            for item in point.findall(
-                "{%s}ExtendedData/{%s}SimpleData" % (NVG_NS, NVG_NS)
-            )
-        }
-        self.assertIn("RADAR", values)
-        self.assertEqual(values["Radar ID"], "RAD-12-34")
-        self.assertEqual(values["SAC / SIC"], "12/34")
-        self.assertIn("25.5 nm", values["Range / azimuth"])
-        self.assertEqual(values["Signal strength"], "-8.5 dBFS")
-        self.assertIn("±0.080 nm", values["Position accuracy"])
+        values = _all_simple_data(point)
+        self.assertIn("RADAR", _section_labels(point))
+        self.assertEqual(values["Radar_ID"], "RAD-12-34")
+        self.assertEqual(values["SAC_SIC"], "12/34")
+        self.assertIn("25.5 nm", values["Range_azimuth"])
+        self.assertEqual(values["Signal_strength"], "-8.5 dBFS")
+        self.assertIn("±0.080 nm", values["Position_accuracy"])
 
     def test_weather_has_distinct_symbol_label_and_condition_card(self):
         track = {
@@ -289,14 +301,10 @@ class NVGFeedCacheTests(unittest.TestCase):
         point = ET.fromstring(xml).find("{%s}point" % NVG_NS)
         self.assertEqual(point.attrib["label"], "Vilnius")
         self.assertEqual(point.attrib["symbol"], "2525b:SNGPESE---*****")
-        values = {
-            item.attrib["key"]: item.text
-            for item in point.findall(
-                "{%s}ExtendedData/{%s}SimpleData" % (NVG_NS, NVG_NS)
-            )
-        }
-        self.assertIn("WEATHER", values)
-        self.assertIn("CONDITIONS", values)
+        values = _all_simple_data(point)
+        sections = _section_labels(point)
+        self.assertIn("WEATHER", sections)
+        self.assertIn("CONDITIONS", sections)
         self.assertEqual(values["Station"], "VILNIUS")
         self.assertEqual(values["Temperature"], "23.8 °C (feels 24.1 °C)")
         self.assertEqual(values["Humidity"], "54%")
@@ -361,27 +369,18 @@ class AircraftEnrichmentTests(unittest.TestCase):
             "X:GEO 35100 ft | 10698 m | BARO FL350 | 35000 ft",
             point.attrib["modifiers"],
         )
-        fields = point.findall(
-            "{%s}ExtendedData/{%s}SimpleData" % (NVG_NS, NVG_NS)
-        )
-        rows = [(item.attrib["key"], item.text) for item in fields]
-        self.assertEqual(len(rows), len(set(rows)))
-        self.assertFalse(any("_" in key for key, _ in rows))
-        values = dict(rows)
-        self.assertEqual(
-            [(key, value) for key, value in rows if key == "Signal strength"],
-            [("Signal strength", "-7.7 dBFS")],
-        )
+        values = _all_simple_data(point)
+        self.assertEqual(values["Signal_strength"], "-7.7 dBFS")
         self.assertEqual(values["Barometric"], "FL350 / 35000 ft / 10668 m")
-        self.assertEqual(values["Geometric WGS84"], "35100 ft / 10698 m")
+        self.assertEqual(values["Geometric_WGS84"], "35100 ft / 10698 m")
         self.assertEqual(
-            values["Barometric vertical rate"],
+            values["Barometric_vertical_rate"],
             "-640 ft/min / -3.3 m/s",
         )
-        self.assertEqual(values["Selected MCP/FCU"], "30000 ft / 9144 m")
-        self.assertEqual(values["Autopilot modes"], "VNAV, ALT HOLD")
-        self.assertEqual(values["Position source"], "adsb_icao")
-        self.assertIn("ADS-B QUALITY", values)
+        self.assertEqual(values["Selected_MCP_FCU"], "30000 ft / 9144 m")
+        self.assertEqual(values["Autopilot_modes"], "VNAV, ALT HOLD")
+        self.assertEqual(values["Position_source"], "adsb_icao")
+        self.assertIn("ADS-B QUALITY", _section_labels(point))
 
     def test_missing_partner_adsb_measurements_remain_absent(self):
         track = {

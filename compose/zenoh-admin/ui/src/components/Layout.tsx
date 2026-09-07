@@ -27,7 +27,8 @@ import {
     SlidersHorizontal,
     Sun,
     Terminal,
-    Users
+    Users,
+    Video
 } from 'lucide-react'
 
 // Three-bar icon that morphs into an X on open — plain CSS transitions on
@@ -55,6 +56,7 @@ const navItems = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/network', label: 'Network', icon: Network },
   { to: '/topics', label: 'Topics', icon: ListTree },
+  { to: '/streams', label: 'Streams', icon: Video },
 ]
 
 const adminItems = [

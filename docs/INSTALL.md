@@ -799,6 +799,45 @@ over the documented TCP/TLS session, extracts complete `<event>...</event>`
 frames, and republishes normalized JSON into Zenoh. It does not replace the
 CoT output layer and it does not use Zenoh as the TAK wire transport.
 
+### Video streaming (mediamtx)
+
+`mediamtx` (`bridges/mediamtx/mediamtx`, config at
+`compose/bridges/mediamtx/mediamtx.yml`) is a separate video pipeline —
+it never touches Zenoh or a topic. It ingests one drone's video, then fans
+that same path out to TAK, SitaWare, and the WebUI's Streams tab. Currently
+enabled in `mediamtx.yml`:
+
+| Direction | Protocol | Port | Used for |
+| --- | --- | --- | --- |
+| Ingest (push in) | RTMP | `1935` | FreeFlight's stream URL |
+| Egress (pull out) | RTSP (TCP only — see 11 — Troubleshooting) | `8554` | TAK, SitaWare |
+| Egress (pull out) | WebRTC (WHEP) | `8889` | WebUI Streams tab, live tiles |
+| Recording | fMP4 segments, 1-minute, rolling 10-minute retention | — | WebUI Streams tab, scrub-back bar |
+
+mediamtx itself also supports HLS and SRT (both ingest and egress) — neither
+is enabled here yet. SRT in particular is worth enabling as an alternate
+ingest path if a drone/GCS ever offers it instead of RTMP: unlike RTMP's
+plain TCP, SRT has built-in packet-loss retransmission (ARQ), designed for
+exactly the lossy-link case that already causes the relayed-NetBird RTMP
+issue in the troubleshooting doc. Not needed until a real source actually
+asks for it.
+
+**STANAG 4609 video, not just drone RTMP.** `bridges/4609_bridge.py` owns
+the SRT connection carrying STANAG 4609 MPEG-TS+KLV as its *listener* (the
+sensor/GCS connects in) purely to extract KLV metadata — mediamtx cannot
+also bind that port, and routing the feed through mediamtx first isn't an
+option either: MediaMTX has no support for passing an MPEG-TS KLV/data
+track through today (open upstream feature request, unimplemented), so
+metadata would be silently dropped before this bridge ever saw it. Set
+`STANAG4609_VIDEO_RELAY_ENABLE=1` (off by default) to also relay the
+video/audio essence into mediamtx from that same already-open connection —
+ffmpeg's own `tee` muxer splits the one demux into the KLV output
+(unchanged) and a best-effort remux (`-c copy`, no transcode) into
+mediamtx's RTMP ingest, tagged `onfail=ignore` so a down or restarting
+mediamtx never affects KLV extraction. Once relayed, the feed shows up in
+the WebUI Streams tab and reaches TAK/SitaWare exactly like a drone feed —
+see `STANAG4609_VIDEO_PATH` in `.env.example` for the path name it uses.
+
 ## 7. Integrations
 
 > **Want to connect a new sensor?** This page is the reference for what's

@@ -1,0 +1,56 @@
+# MediaMTX config for the drone RTMP ingest -> TAK/SitaWare/WebUI fan-out.
+#
+# start.sh's `_start_bin` cd's into this directory before exec'ing the
+# mediamtx binary, so this file is picked up with no explicit -confpath arg,
+# and every relative path below (recordPath) resolves from here.
+#
+# One drone push (RTMP, arbitrary operator-typed path e.g. RISB/SAK/drone4)
+# fans out to three independent consumers of that same path name:
+#   - TAK / SitaWare: rtsp://<host>:8554/<path>          (pull, TCP only)
+#   - WebUI live tile: http://<host>:8889/<path>/whep    (WebRTC, browser)
+#   - WebUI scrub-back: served by zenoh-admin's /api/streams/<path>/recordings
+#     from the last-10-minutes segment files this config records below.
+#
+# All booleans below are literal true/false, not YAML 1.1's yes/no — under
+# YAML 1.2 (this file's own default, and modern YAML libraries generally)
+# yes/no parse as the STRINGS "yes"/"no", not real booleans, which silently
+# breaks any code (including the WebUI's own config editor,
+# compose/zenoh-admin/api/streams.py) reading this file expecting a bool.
+
+logLevel: info
+
+api: true
+apiAddress: 127.0.0.1:9997   # zenoh-admin (network_mode: host) reads this; never expose off-box
+
+rtmp: true
+rtmpAddress: :1935
+
+rtsp: true
+rtspAddress: :8554
+# TCP only. RTSP-over-UDP needs the RTP/RTCP ports themselves reachable
+# end-to-end on top of the control connection — that's what silently failed
+# before (see docs/11-troubleshooting.md's RTMP/NetBird entry for the same
+# class of issue). TCP tunnels everything through the one connection that
+# already works.
+rtspTransports: [tcp]
+
+webrtc: true
+webrtcAddress: :8889
+webrtcEncryption: false        # plaintext HTTP is fine: only reachable over the NetBird overlay
+webrtcLocalUDPAddress: :8189   # ICE candidate gathering for the browser tiles
+
+hls: false   # not needed — WebRTC covers live tiles, recorded segments cover scrub-back
+
+srt: false           # alternate ingest with built-in packet-loss ARQ; off until a source asks for it
+srtAddress: :8890
+
+paths:
+  # Drone paths are operator-typed and arbitrary (no fixed registry — see
+  # docs on the /RISB/SAK/drone4-style convention), so this applies to every
+  # path rather than naming each drone individually.
+  all_others:
+    record: true
+    recordPath: ./recordings/%path/%Y-%m-%d_%H-%M-%S-%f
+    recordFormat: fmp4                # -> .mp4, each segment independently playable/seekable
+    recordSegmentDuration: 1m
+    recordDeleteAfter: 10m            # rolling last-10-minutes window for the scrub bar

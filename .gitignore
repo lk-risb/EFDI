@@ -30,6 +30,9 @@ compose/certs/**
 compose/state/
 logs/
 .pids/
+# MediaMTX itself (downloaded binary, not source) and its recorded segments
+compose/bridges/mediamtx/mediamtx
+compose/bridges/mediamtx/recordings/
 # Throwaway AI-agent / developer verification scripts. Never part of the
 # product — see scratch/README.md.
 scratch/*

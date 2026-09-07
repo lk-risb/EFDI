@@ -33,6 +33,7 @@ import hmac
 import json
 import math
 import os
+import re
 import ssl
 import threading
 import time
@@ -60,6 +61,10 @@ TOPIC_ROOT = topic_root()
 
 NVG_NS      = "https://tide.act.nato.int/schemas/2012/10/nvg"
 NVG_VERSION = "2.0.2"
+# ExtendedDataType/SimpleDataSectionType both require this (nvg.types.2.0.xsd)
+# — an opaque identifier for EFDI's own ad-hoc field vocabulary, not a
+# fetchable resource (the attribute is xs:string, not xs:anyURI).
+NVG_SCHEMA_REF = "urn:efdi:nvg-fields"
 REFRESH_S   = 10    # re-PUT all live tracks at this interval
 STALE_S     = 120   # delete tracks older than this
 ZENOH_RETRY_S = 5
@@ -222,6 +227,24 @@ def _nvg_text(value: object, limit: int = 256) -> str | None:
     return " ".join(text.split()) if text else None
 
 
+_QNAME_INVALID_RE = re.compile(r"[^A-Za-z0-9_.\-]+")
+
+
+def _qname_key(label: str) -> str:
+    """Convert a human-readable field label into a schema-valid NCName
+    (NVG's SimpleData@key is typed xs:QName, per nvg.types.2.0.xsd — no
+    spaces or punctuation like "/" or "()" are allowed). Keeps the wording
+    recognizable (underscores in place of spaces) rather than inventing an
+    opaque code, since SimpleData has no separate human-readable label
+    attribute for a viewer to fall back on."""
+    slug = _QNAME_INVALID_RE.sub("_", label).strip("_")
+    if not slug:
+        slug = "Field"
+    if not (slug[0].isalpha() or slug[0] == "_"):
+        slug = "_" + slug
+    return slug
+
+
 def _finite_number(value: object) -> float | None:
     if value is None or isinstance(value, bool):
         return None
@@ -364,31 +387,42 @@ def _format_vertical_rate_fpm(value: object) -> str | None:
     return "{:+.0f} ft/min / {:+.1f} m/s".format(rate_fpm, rate_fpm / 196.85)
 
 
-def _nvg_extended_data(track: dict, uid: str, sidc: str) -> list[tuple[str, str]]:
-    """Build an operator-facing NVG attribute card, aligned with TAK remarks."""
-    result: list[tuple[str, str]] = []
+def _nvg_extended_data(track: dict, uid: str, sidc: str) -> list[tuple[str | None, str, str]]:
+    """Build an operator-facing NVG attribute card, aligned with TAK remarks.
+
+    Returns (section_title_or_None, qname_key, value) rows in emission
+    order. section_title groups consecutive rows under one real NVG
+    <Section> element (SimpleDataSectionType, nvg.types.2.0.xsd) — not a
+    fake dash-divider SimpleData row, which the schema has no room for
+    inside ExtendedDataType's actual sequence (SimpleData*, Section*).
+    qname_key is schema-valid: SimpleData@key is xs:QName.
+    """
+    result: list[tuple[str | None, str, str]] = []
     used_keys: dict[str, int] = {}
     seen_rows: set[tuple[str, str]] = set()
+    current_section: str | None = None
 
     def add(key: str, value: object, limit: int = 512) -> None:
         if len(result) >= 96:
             return
-        clean_key = _nvg_text(key, 96)
+        clean_label = _nvg_text(key, 96)
         clean_value = _metadata_text(value, limit)
-        if not clean_key or clean_value is None:
+        if not clean_label or clean_value is None:
             return
-        row = (clean_key, clean_value)
-        if row in seen_rows:
+        dedup_row = (clean_label, clean_value)
+        if dedup_row in seen_rows:
             return
-        seen_rows.add(row)
-        count = used_keys.get(clean_key, 0) + 1
-        used_keys[clean_key] = count
+        seen_rows.add(dedup_row)
+        qname = _qname_key(clean_label)
+        count = used_keys.get(qname, 0) + 1
+        used_keys[qname] = count
         if count > 1:
-            clean_key = "{} ({})".format(clean_key, count)
-        result.append((clean_key, clean_value))
+            qname = "{}_{}".format(qname, count)
+        result.append((current_section, qname, clean_value))
 
     def section(title: str) -> None:
-        add(title, "────────────")
+        nonlocal current_section
+        current_section = title
 
     # Reuse the domain-aware stat-card formatter used by TAK. This preserves
     # the detailed CAT-34/48/62 radar, IFF, flight-plan, maritime, sensor and
@@ -536,6 +570,7 @@ def _nvg_extended_data(track: dict, uid: str, sidc: str) -> list[tuple[str, str]
 
     section("SYSTEM")
     add("EFDI track ID", uid)
+    add("EFDI provenance", "fabric-export")
     return result
 
 
@@ -698,6 +733,40 @@ def track_to_nvg_item(
             ET.SubElement(root, "{%s}circle" % NVG_NS, dict(
                 shape_attrs, x=str(round(lon, 6)), y=str(round(lat, 6)),
                 radius_km=str(round(float(geometry["radius_km"]), 3))))
+    # ContentType's sequence (nvg.data.2.0.xsd) is fixed order: metadata?,
+    # ExtendedData?, textInfo?, TimeStamp?, TimeSpan? — ExtendedData MUST
+    # come before textInfo/TimeStamp/TimeSpan, not after.
+    extended_fields = _nvg_extended_data(track, uid, sidc)
+    if extended_fields:
+        extended_data = ET.SubElement(
+            point, "{%s}ExtendedData" % NVG_NS, {"schemaRef": NVG_SCHEMA_REF}
+        )
+        sections: dict[str | None, list[tuple[str, str]]] = {}
+        section_order: list[str | None] = []
+        for section_title, key, value in extended_fields:
+            if section_title not in sections:
+                sections[section_title] = []
+                section_order.append(section_title)
+            sections[section_title].append((key, value))
+        # ExtendedDataType's own sequence is also fixed order: SimpleData*
+        # THEN Section* — ungrouped (section_title is None) rows must all
+        # come before any <Section>, never interleaved with them.
+        for section_title in sorted(section_order, key=lambda title: title is not None):
+            rows = sections[section_title]
+            if section_title is None:
+                for key, value in rows:
+                    ET.SubElement(
+                        extended_data, "{%s}SimpleData" % NVG_NS, {"key": key}
+                    ).text = value
+            else:
+                section_el = ET.SubElement(extended_data, "{%s}Section" % NVG_NS, {
+                    "label": section_title, "schemaRef": NVG_SCHEMA_REF,
+                })
+                for key, value in rows:
+                    ET.SubElement(
+                        section_el, "{%s}SimpleData" % NVG_NS, {"key": key}
+                    ).text = value
+
     text_info = _xml_safe_text(
         _build_remarks(track, _cot_type_for_sidc(sidc)),
         20_000,
@@ -711,16 +780,6 @@ def track_to_nvg_item(
     if expiry:
         time_span = ET.SubElement(point, "{%s}TimeSpan" % NVG_NS)
         ET.SubElement(time_span, "{%s}end" % NVG_NS).text = expiry
-    extended_fields = _nvg_extended_data(track, uid, sidc)
-    extended_fields.append(("EFDI provenance", "fabric-export"))
-    if extended_fields:
-        extended_data = ET.SubElement(point, "{%s}ExtendedData" % NVG_NS)
-        for key, value in extended_fields:
-            ET.SubElement(
-                extended_data,
-                "{%s}SimpleData" % NVG_NS,
-                {"key": key},
-            ).text = value
 
     xml_str = '<?xml version="1.0" encoding="UTF-8"?>' + ET.tostring(root, encoding="unicode")
     return uid, xml_str

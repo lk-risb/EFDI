@@ -63,3 +63,44 @@ Vien šalies pavadinimas nepakeičia trūkstamo arba negaliojančio atsakiklio I
 srauto per dokumentuotą TCP/TLS sesiją, išskiria pilnus `<event>...</event>`
 kadrus ir persiskelbia normalizuotą JSON į Zenoh. Jis nepakeičia CoT išvesties
 sluoksnio ir nenaudoja Zenoh kaip TAK ryšio transporto.
+
+### Vaizdo srautas (mediamtx)
+
+`mediamtx` (`bridges/mediamtx/mediamtx`, konfigūracija
+`compose/bridges/mediamtx/mediamtx.yml`) yra atskiras vaizdo kelias — jis
+visiškai nesiliečia su Zenoh ar temomis. Jis priima vieno drono vaizdo srautą
+ir tą patį srautą paskirsto TAK, SitaWare bei WebUI "Streams" skirtukui.
+Šiuo metu `mediamtx.yml` įjungta:
+
+| Kryptis | Protokolas | Prievadas | Naudojimas |
+| --- | --- | --- | --- |
+| Įėjimas (siunčiama į) | RTMP | `1935` | FreeFlight srauto adresas |
+| Išėjimas (traukiama iš) | RTSP (tik TCP — žr. [11 — Trikčių šalinimas](11-dazniausios-problemos.md)) | `8554` | TAK, SitaWare |
+| Išėjimas (traukiama iš) | WebRTC (WHEP) | `8889` | WebUI "Streams" skirtukas, gyvi langeliai |
+| Įrašymas | fMP4 segmentai, po 1 min., paskutinių 10 min. langas | — | WebUI "Streams" skirtukas, peržiūros slankiklis |
+
+mediamtx taip pat palaiko HLS ir SRT (abiem kryptimis) — nei vienas dar
+neįjungtas. SRT verta įjungti kaip alternatyvų įėjimo kelią, jei dronas ar
+antžeminė stotis kada nors siūlys jį vietoje RTMP: skirtingai nuo RTMP
+(paprastas TCP), SRT turi įmontuotą prarastų paketų persiuntimą (ARQ),
+sukurtą būtent tokiam nutrūkinėjančiam ryšiui, koks jau sukelia RTMP per
+persiunčiamą (relayed) NetBird jungtį problemą, aprašytą trikčių šalinimo
+dokumente. Nereikalinga, kol koks nors realus šaltinis to tikrai paprašys.
+
+**STANAG 4609 vaizdo srautas, ne tik drono RTMP.** `bridges/4609_bridge.py`
+valdo SRT ryšį, nešantį STANAG 4609 MPEG-TS+KLV, kaip jo *klausytojas*
+(sensorius/antžeminė stotis prisijungia į jį) tik tam, kad išgautų KLV
+metaduomenis — mediamtx negali prisirišti prie to paties prievado, o
+srauto nukreipimas per mediamtx pirmiau taip pat netinka: MediaMTX šiuo
+metu visiškai nepalaiko MPEG-TS KLV/duomenų srauto perdavimo (atviras,
+dar neįgyvendintas prašymas jų projekte), todėl metaduomenys būtų tyliai
+prarasti dar prieš pasiekiant šį vertėją. Nustatę
+`STANAG4609_VIDEO_RELAY_ENABLE=1` (numatytai išjungta) taip pat
+persiunčiate vaizdo/garso srautą į mediamtx iš to paties jau atidaryto
+ryšio — ffmpeg savo `tee` mikšeriu padalija vieną demultipleksavimą į KLV
+išvestį (nepakitusią) ir geriausių pastangų perkodavimą be transkodavimo
+(`-c copy`) į mediamtx RTMP įėjimą, pažymėtą `onfail=ignore`, todėl
+neveikiantis ar iš naujo paleidžiamas mediamtx niekada neveikia KLV
+išgavimo. Persiuntus, srautas atsiranda WebUI "Streams" skirtuke ir
+pasiekia TAK/SitaWare lygiai taip pat, kaip drono srautas — kelio
+pavadinimą žr. `STANAG4609_VIDEO_PATH` faile `.env.example`.

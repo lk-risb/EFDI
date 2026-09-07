@@ -546,6 +546,8 @@ Po sėkmingo paleidimo `start.sh` išsaugo pasirinktų paslaugų sąrašą ir pa
 
 Nustatykite `TAK_HOST` ir `TAK_PORT` faile `.env`, tada paleidiklyje pasirinkite `tak-layer`. ATAK/WinTAK klientai takelius gauna tik per TAK serverį — tiesioginio multicast/unicast CoT kelio nėra.
 
+Avarinius pranešimus (squawk 7500/7600/7700 ir laivo distress) atskiru GeoChat pranešimu visiems prisijungusiems TAK klientams siunčia atskira paslauga `tak_alert_layer` (`layers/tak_alert_layer.py`) — naudoja tą pačią TAK jungtį kaip `tak-layer`, bet pasirenkama paleidiklyje atskirai ir pagal nutylėjimą išjungta. Kol ji neįjungta, avarinė būsena vis tiek matoma takelio paties CoT pastabose (remarks) — tiesiog be atskiro iššokančio pranešimo ir be žymeklio perklasifikavimo į priešišką.
+
 ### SitaWare HQ REST sekimas (pasirinktinis gaunamas adapteris)
 
 `sitaware` naudokite tik tada, kai konkretaus diegimo dokumentacijoje nurodytas suderinamas JSON vienetų resursas ir autentifikavimo būdas. `/rest/v2/*` servlet'o maršrutas nereiškia, kad egzistuoja `/rest/v2/units`; patikrintame HQ 6.22 šis spėjamas resursas grąžina 404.
@@ -586,7 +588,9 @@ Bridge'as nuskaito MIL-STD-2525B SIDC kodus iš SitaWare ir nukreipia kiekvieną
 
 ### NATO NFFI draugiškų pajėgų protokolo vertiklis
 
-`nffi` prenumeruoja pilnus NFFI XML dokumentus, kuriuos partnerio imtuvas ar aptikimo sistema jau paskelbė Zenoh temoje `…/raw/nffi/{source-id}`. Kiekvienas vienetas išverčiamas į `…/land/nato/c2/friendly/unit/{type}/{id}/sapient`. Modulis neturi TCP kliento, klausyklės, galinio taško ar kadravimo logikos. Konkrečiam produktui skirtas prisijungimas turi būti atskirame `_bridge.py`, kai žinomas jo galinis taškas ir ICD.
+`nffi` prenumeruoja pilnus NFFI XML dokumentus, kuriuos partnerio imtuvas ar aptikimo sistema jau paskelbė Zenoh temoje `…/raw/nffi/{source-id}`. Kiekvienas vienetas išverčiamas į `…/land/nato/c2/friendly/unit/{type}/{id}/sapient`. Modulis pats neturi TCP kliento, klausyklės, galinio taško ar kadravimo logikos — tai sąmoningai atskirta nuo konkretaus produkto ryšio.
+
+Gaunamąją pusę teikia `nffi-bridge` (`bridges/nffi_bridge.py`): jis prisijungia prie partnerio NFFI/FFI serverio (pvz. SitaWare Headquarters „NFFI and FFI Manager"), išskiria pilnus `NFFIMessage`/`track` XML dokumentus iš TCP srauto ir publikuoja neapdorotus baitus į `…/raw/nffi/{source-id}`, kur juos nepakeistus perima `nffi`. Prisijungimo/kadravimo/pakartotinio bandymo struktūra perimta iš pasitvirtinusio `tak_bridge.py` modelio, bet reali NFFI/FFI serverio elgsena (transportas, kuri pusė prisijungia, tikslus kadravimas, numatytasis prievadas) dar nepatvirtinta prieš tikrą galinį tašką — žr. modulio paties docstring, kuriame atskirai nurodyta, kas yra pasitvirtinęs modelis, o kas — nepatikrinta prielaida. Paleidiklyje pasirinkite `nffi-bridge`; jis paklaus `NFFI_HOST`/`NFFI_PORT`.
 
 NFFI draugiškų pajėgų sąveiką aprašo ADatP-36 / STANAG 5527. STANAG 4677 yra atskira išlaipinto kario sistemų sąveikos šeima; 4677 JDSSDM-per-NFFI profiliui reikėtų atskiro, konkrečiam profiliui skirto įgyvendinimo.
 
@@ -594,6 +598,8 @@ NFFI draugiškų pajėgų sąveiką aprašo ADatP-36 / STANAG 5527. STANAG 4677 
 
 ```bash
 NFFI_INPUT_TOPIC=               # neprivaloma; numatyta: …/raw/nffi/*
+NFFI_HOST=                      # nffi-bridge: partnerio NFFI/FFI serverio adresas
+NFFI_PORT=                      # nffi-bridge: partnerio NFFI/FFI serverio prievadas
 ```
 
 ### SitaWare Headquarters (siunčiamas NVG srautas, kurį ima HQ)
@@ -685,7 +691,10 @@ Adresas priima tik GET/HEAD, pagal nutylėjimą reikalauja Basic autentifikavimo
 | `dronuradaras` | `bridges/dronuradaras_bridge.py` | `…/land/dronuradaras/acoustic/neutral/sensor/{type}/{id}/sapient` | Tik prisijungusių įrenginių apklausa 60 s ir atsijungusių pašalinimas / aptikimų apklausa 10 s |
 | `sitaware` | `bridges/sitaware_bridge.py` | `…/land/sitaware/c2/friendly/unit/{type}/{id}/sapient` | Konfigūruojama REST apklausa |
 | `nffi` | `protocols/random/nffi.py` | `…/land/nato/c2/friendly/unit/{type}/{id}/sapient` | Pilni XML dokumentai Zenoh temoje `…/raw/nffi/*` |
+| `nffi-bridge` | `bridges/nffi_bridge.py` | `…/raw/nffi/{source-id}` | Prisijungimas prie partnerio NFFI/FFI serverio (TCP) |
 | `tak-layer` | `layers/tak_layer.py` | Prenumeratorius — visos temos | Įvykio valdomas |
+| `tak-bridge` | `bridges/tak_bridge.py` | Prenumeratorius — visos temos | TAK matomo CoT srauto priėmimas |
+| `tak_alert_layer` | `layers/tak_alert_layer.py` | Prenumeratorius — `…/air/**`, `…/sea/**` | Įvykio valdomas; pasirenkama atskirai, pagal nutylėjimą išjungta |
 | `sitaware-hq-nvg` | `layers/sitaware_hq_nvg_feed.py` | Prenumeratorius — visos takelių temos | HQ periodiškai ima NVG būseną |
 | `track-fusion` | `protocols/fusion.py` | CAT-48 + CAT-21 prenumeratorius | Įvykio valdomas |
 
@@ -697,6 +706,23 @@ išduotą kliento sertifikatą, kai įjungtas `TAK_TLS=1`. Dabartiniame EFDI
 runtime nėra atskiro TAK arba SitaWare CoT priėmimo tilto. Jei konkretus
 diegimas teikia NFFI, pilnus XML dokumentus skelbkite į
 `…/raw/nffi/{source-id}` per prijungtą Zenoh mazgą.
+
+### Vaizdo srautas (mediamtx)
+
+Dronų vaizdo srautas eina atskiru keliu, ne per Zenoh: `mediamtx`
+(`bridges/mediamtx/mediamtx`, konfigūracija
+`compose/bridges/mediamtx/mediamtx.yml`) priima vieno drono RTMP srautą ir
+paskirsto tą patį srautą TAK, SitaWare bei WebUI "Streams" skirtukui —
+RTSP (tik TCP) ir WebRTC (WHEP) išvestimis, plius paskutinių 10 minučių
+fMP4 įrašais peržiūros slankikliui. Nustatymai redaguojami tiesiogiai iš
+WebUI "Streams" skirtuko.
+
+STANAG 4609 MPEG-TS+KLV vaizdo srautas KLV metaduomenis išgauna
+`bridges/4609_bridge.py`, veikiantis kaip SRT jungties klausytojas (sensorius
+prisijungia į jį). Nustačius `STANAG4609_VIDEO_RELAY_ENABLE=1`, tas pats
+vertėjas papildomai persiunčia vaizdo/garso srautą į mediamtx (be
+transkodavimo), todėl jis atsiranda tame pačiame "Streams" skirtuke — KLV
+išgavimas lieka nepaliestas net jei mediamtx tuo metu neveikia.
 
 CoT ir abi SitaWare NVG išvestys naudoja tą pačią scenarijaus priklausomybės
 taisyklę: orlaiviai iš nustatytų RU/BY ICAO adresų intervalų bei laivai su RU/BY

@@ -231,6 +231,11 @@ services:
       - EFDI_BACKBONE_FABRIC_LABEL=${EFDI_BACKBONE_FABRIC_LABEL:-Backbone}
       - EFDI_BACKBONE_FABRIC_ENDPOINTS=${EFDI_BACKBONE_FABRIC_ENDPOINTS:-[]}
       - EFDI_BACKBONE_FABRIC_PROFILE=${EFDI_BACKBONE_FABRIC_PROFILE:-backbone}
+      # Streams tab: mediamtx runs as a native host process (start.sh), reachable
+      # here because this container also uses network_mode: host.
+      - MEDIAMTX_API_URL=${MEDIAMTX_API_URL:-http://127.0.0.1:9997}
+      - MEDIAMTX_RECORDINGS_DIR=/mediamtx-recordings
+      - MEDIAMTX_CONFIG_PATH=/mediamtx-config/mediamtx.yml
     volumes:
       # Least-privilege identity mount: never expose efdi-ca-root-key.pem (or a
       # router-CA key) to the WebUI container — that file simply never lives
@@ -250,6 +255,14 @@ services:
       - ${POD_STATE_DIR}/logs:/runtime-logs:ro
       - ${POD_STATE_DIR}/stats:/runtime-stats:ro
       - ${POD_STATE_DIR}/integrations/tak:/integrations/tak:rw
+      # Read-only: mediamtx (native host process) writes these, the WebUI's
+      # Streams tab only serves them back for the scrub-back bar.
+      - ./bridges/mediamtx/recordings:/mediamtx-recordings:ro
+      # Read-write: the Streams tab's config editor (streams.py) saves
+      # settings here directly, then restarts mediamtx (a native host
+      # process, same as start.sh launches it) via the existing
+      # /v1/services/{name}/restart control-agent action for them to apply.
+      - ./bridges/mediamtx/mediamtx.yml:/mediamtx-config/mediamtx.yml:rw
     healthcheck:
       disable: true
 
