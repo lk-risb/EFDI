@@ -109,6 +109,7 @@ function StreamTile({stream, onClick}: {stream: StreamInfo; onClick: () => void}
       onClick={onClick}
       className="hud-card hud-glass hud-frame relative aspect-video cursor-pointer overflow-hidden border border-zinc-200 bg-black dark:border-white/10"
     >
+      <HudCorners />
       {stream.ready ? (
         <video ref={videoRef} autoPlay muted playsInline className="h-full w-full object-contain" />
       ) : (
@@ -219,7 +220,7 @@ function Toggle({label, help, checked, disabled, onChange}: {
   label: string; help?: string; checked: boolean; disabled: boolean; onChange: (v: boolean) => void
 }) {
   return (
-    <div className="flex items-start justify-between gap-4">
+    <div className="flex max-w-sm items-start justify-between gap-4">
       <div>
         <p className="text-sm text-zinc-700 dark:text-zinc-300">{label}</p>
         {help && <p className="mt-0.5 text-xs text-zinc-500">{help}</p>}
