@@ -51,6 +51,7 @@ _HEADERS          = {"Origin": ORIGIN_HEADER, "Referer": REFERER_HEADER, "User-A
 _device_names:     dict[str, str]   = {}   # device_id → display_name
 _device_positions: dict[str, tuple] = {}   # device_id → (lat, lon)
 _last_detection:   dict[str, float] = {}   # device_id → epoch of most recent detection
+_last_detection_audio: dict[str, str] = {} # device_id → audio URL of most recent detection
 _online_devices:   set[str]         = set()
 _offline_announced: set[str]        = set()
 _device_lock  = threading.Lock()
@@ -137,6 +138,7 @@ def run_devices(pub: "zenoh.Publisher", verbose: bool):
                     if dev_id not in online_ids:
                         _device_positions.pop(dev_id, None)
                         _last_detection.pop(dev_id, None)
+                        _last_detection_audio.pop(dev_id, None)
 
             published_online = 0
             removed_offline = 0
@@ -152,8 +154,10 @@ def run_devices(pub: "zenoh.Publisher", verbose: bool):
                     if is_online:
                         _device_positions[dev_id] = (lat, lon)
                         last_det = _last_detection.get(dev_id)
+                        last_audio = _last_detection_audio.get(dev_id)
                     else:
                         last_det = None
+                        last_audio = None
 
                 payload = {
                     "_src":        "dronuradaras.lt",
@@ -171,6 +175,8 @@ def run_devices(pub: "zenoh.Publisher", verbose: bool):
                     removed_offline += 1
                 elif last_det is not None:
                     payload["last_detection_ts"] = last_det
+                    if last_audio:
+                        payload["last_detection_audio_url"] = last_audio
                     published_online += 1
                 else:
                     published_online += 1
@@ -219,6 +225,8 @@ def _publish_sensor_alert(pub_dev: "zenoh.Publisher", dev_id: str, last_detectio
         pos  = _device_positions.get(dev_id)
         name = _device_names.get(dev_id, dev_id[:8] if dev_id else "unknown")
         is_online = dev_id in _online_devices
+        if audio_url:
+            _last_detection_audio[dev_id] = audio_url
     if pos is None or not is_online:
         return  # never revive a device marked offline by the latest device poll
     lat, lon = pos

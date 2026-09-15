@@ -668,7 +668,7 @@ Adresas priima tik GET/HEAD, pagal nutylėjimą reikalauja Basic autentifikavimo
 | Raudonas orlaivis | `a-h-A-M-F` | SitaWare priešiškas oro vienetas |
 | Mėlynas laivas | `a-f-S-X-L` | SitaWare draugiškas laivas |
 | Raudonas laivas | `a-h-S-X-L` | SitaWare priešiškas laivas |
-| Žalia/geltona/raudona sensorių dėžutė (ta pati ikona, keičiasi spalva) | `a-n-G-E-S` / `a-u-G-E-S` / `a-h-G-E-S` | šiuo metu prisijungęs dronuradaras.lt akustinis jutiklis — žalia=neaktyvus, geltona=atvėsta, raudona=aptikimas aktyvus (paskutinės 60s); atsijungę jutikliai pašalinami |
+| Žalia/raudona sensorių dėžutė (ta pati ikona, keičiasi spalva) | `a-n-G-E-S` / `a-h-G-E-S` | šiuo metu prisijungęs dronuradaras.lt akustinis jutiklis — žalia=neaktyvus arba atvėsta, raudona=aptikimas aktyvus (paskutinės 60s); atsijungę jutikliai pašalinami. Atvėsimo būsena anksčiau naudojo atskirą geltoną `a-u-G-E-S` tipą, bet WinTAK/ATAK jo tinkamai nekategorizuoja kaip "Equipment > Sensor" — pastabose (remarks) vis tiek matomas „[COOLING DOWN...]" tekstas |
 | Balta nežinoma orlaivio | `a-u-A-C-F` | Neklasifikuotas radaro takelis |
 
 > Radaro žymeklio pozicija, greitis ir kursas atnaujinami automatiškai iš gyvo CAT-34 srauto. Mobilioje platformoje ATAK rodys greičio vektorių ir judėjimo taką.
