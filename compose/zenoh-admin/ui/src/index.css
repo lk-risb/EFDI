@@ -184,7 +184,11 @@ body {
    its own live map). */
 .terminal-map { background: var(--color-hud-0); }
 .dark .terminal-map-tiles {
-  filter: invert(1) hue-rotate(180deg) brightness(0.9) contrast(0.9);
+  /* A plain invert(1) hue-rotate(180deg) round-trips OSM's own palette back
+     toward its original hues (land tan -> dark -> back toward a washed-out
+     green/blue) instead of landing on a clean uniform dark grey. Desaturate
+     first so the round-trip has nothing colorful left to reintroduce. */
+  filter: grayscale(0.6) invert(0.92) hue-rotate(180deg) brightness(0.85) contrast(1.15);
 }
 .terminal-map .leaflet-control-zoom a {
   background: #ffffff;
