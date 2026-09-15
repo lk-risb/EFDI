@@ -1,13 +1,15 @@
 import {createFileRoute, redirect} from '@tanstack/react-router'
-import {useEffect, useRef, useState} from 'react'
+import {useEffect, useMemo, useRef, useState} from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+import {HudCorners} from '@/components/HudCorners'
 import {Layout} from '@/components/Layout'
 import {PageHeader} from '@/components/PageHeader'
 import {StreamsPanel} from '@/components/StreamsPanel'
 import {apiJson, errorMessage} from '@/lib/api'
 import {notify} from '@/lib/notify'
 import {useAuth} from '@/store/auth'
+import {cn} from '@/lib/utils'
 
 export const Route = createFileRoute('/terminal')({
   beforeLoad: () => {
@@ -31,11 +33,6 @@ interface Entity {
   raw: Record<string, unknown>
 }
 
-// Matches tak_layer.py's _SENSOR_ALERT_HOT_S / _SENSOR_ALERT_WARM_S — a
-// detection older than this has fully reverted to idle on the TAK map too
-// (same threshold sensors.tsx used before this tab replaced it).
-const DETECTION_WARM_S = 300
-
 const STATUS_COLOR: Record<string, string> = {
   emergency: '#ef4444',
   armed: '#f59e0b',
@@ -49,12 +46,14 @@ function colorFor(entity: Entity): string {
   return STATUS_COLOR[entity.status] ?? (entity.kind === 'sensor' ? '#22c55e' : '#3b82f6')
 }
 
-function glowIcon(color: string): L.DivIcon {
+function glowIcon(color: string, selected: boolean): L.DivIcon {
+  const size = selected ? 15 : 11
+  const ring = selected ? `0 0 0 3px ${color}55, ` : ''
   return L.divIcon({
     className: '',
-    html: `<span style="display:block;width:11px;height:11px;border-radius:9999px;background:${color};box-shadow:0 0 6px 2px ${color}88;border:1.5px solid rgba(255,255,255,0.8)"></span>`,
-    iconSize: [11, 11],
-    iconAnchor: [5.5, 5.5],
+    html: `<span style="display:block;width:${size}px;height:${size}px;border-radius:9999px;background:${color};box-shadow:${ring}0 0 6px 2px ${color}88;border:1.5px solid rgba(255,255,255,0.8)"></span>`,
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
   })
 }
 
@@ -69,47 +68,142 @@ function escapeHtml(value: string): string {
 function timeAgo(ts: number): string {
   const s = Math.max(0, Date.now() / 1000 - ts)
   if (s < 60) return `${Math.round(s)}s ago`
-  return `${Math.round(s / 60)}m ago`
+  if (s < 3600) return `${Math.round(s / 60)}m ago`
+  return `${Math.round(s / 3600)}h ago`
 }
 
-function buildStatCard(entity: Entity, color: string): string {
-  const rows: string[] = []
-  const row = (label: string, value: string | number | null | undefined) => {
+// Shared field list for both the map popup (HTML string) and the Details
+// panel (JSX) — one source of truth for what a statcard shows.
+function entityRows(entity: Entity): [string, string][] {
+  const rows: [string, string][] = []
+  const push = (label: string, value: string | number | null | undefined) => {
     if (value === null || value === undefined || value === '') return
-    rows.push(`<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(String(value))}</dd></div>`)
+    rows.push([label, String(value)])
   }
-  row('Source', entity.source)
-  row('Status', entity.status)
-  row('Lat, Lon', `${entity.lat.toFixed(5)}°, ${entity.lon.toFixed(5)}°`)
-  if (entity.alt_m !== null) row('Altitude', `${Math.round(entity.alt_m)} m`)
-  if (entity.heading_deg !== null) row('Heading', `${Math.round(entity.heading_deg)}°`)
-  if (entity.speed_kts !== null) row('Speed', `${Math.round(entity.speed_kts)} kts`)
-  if (entity.updated_ts) row('Updated', timeAgo(entity.updated_ts))
+  push('Source', entity.source)
+  push('Status', entity.status)
+  push('Lat, Lon', `${entity.lat.toFixed(5)}°, ${entity.lon.toFixed(5)}°`)
+  if (entity.alt_m !== null) push('Altitude', `${Math.round(entity.alt_m)} m`)
+  if (entity.heading_deg !== null) push('Heading', `${Math.round(entity.heading_deg)}°`)
+  if (entity.speed_kts !== null) push('Speed', `${Math.round(entity.speed_kts)} kts`)
+  if (entity.updated_ts) push('Updated', timeAgo(entity.updated_ts))
   const raw = entity.raw
-  if (typeof raw.battery_pct === 'number') row('Battery', `${Math.round(raw.battery_pct)}%`)
-  if (typeof raw.mission_phase === 'string') row('Mission phase', raw.mission_phase)
-  if (typeof raw.alerts === 'string') row('Alerts', raw.alerts)
-  if (typeof raw.last_detection_ts === 'number') row('Last detection', timeAgo(raw.last_detection_ts))
+  if (typeof raw.battery_pct === 'number') push('Battery', `${Math.round(raw.battery_pct)}%`)
+  if (typeof raw.mission_phase === 'string') push('Mission phase', raw.mission_phase)
+  if (typeof raw.alerts === 'string') push('Alerts', raw.alerts)
+  if (typeof raw.last_detection_ts === 'number') push('Last detection', timeAgo(raw.last_detection_ts))
+  return rows
+}
 
-  const audio = typeof raw.last_detection_audio_url === 'string'
-    ? `<audio class="terminal-statcard-audio" controls preload="none" src="${escapeHtml(raw.last_detection_audio_url)}"></audio>`
+function buildPopupHtml(entity: Entity, color: string): string {
+  const rows = entityRows(entity)
+    .map(([label, value]) => `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`)
+    .join('')
+  const audioUrl = entity.raw.last_detection_audio_url
+  const audio = typeof audioUrl === 'string'
+    ? `<audio class="terminal-statcard-audio" controls preload="none" src="${escapeHtml(audioUrl)}"></audio>`
     : ''
-
   return `
     <div style="--card-color:${color}" class="terminal-statcard-header">
       <strong>${escapeHtml(entity.callsign)}</strong>
       <span class="terminal-statcard-type">${escapeHtml(entity.kind.toUpperCase())}</span>
     </div>
-    <dl class="hud-kv">${rows.join('')}</dl>
+    <dl class="hud-kv">${rows}</dl>
     ${audio}
   `
+}
+
+// Small panel chrome matching TERMINAL's bordered, titled panels (Fleet /
+// Map / Video / Telemetry each sit in their own framed box with a header
+// row) — not a pixel copy, but the same "cockpit of panels" structure
+// instead of one full-bleed page.
+function Panel({title, badge, className, bodyClassName, children}: {
+  title: string; badge?: string; className?: string; bodyClassName?: string; children: React.ReactNode
+}) {
+  return (
+    <div className={cn('hud-card hud-glass hud-frame relative flex flex-col overflow-hidden rounded-lg border border-zinc-200 dark:border-white/10', className)}>
+      <HudCorners />
+      <div className="flex shrink-0 items-center justify-between border-b border-zinc-200 px-3 py-2 dark:border-white/10">
+        <span className="hud-label text-xs text-zinc-600 dark:text-zinc-400">{title}</span>
+        {badge && <span className="hud-label text-[11px] text-zinc-500">{badge}</span>}
+      </div>
+      <div className={cn('min-h-0 flex-1 overflow-auto', bodyClassName ?? 'p-3')}>{children}</div>
+    </div>
+  )
+}
+
+function batteryColor(pct: number): string {
+  if (pct <= 20) return '#ef4444'
+  if (pct <= 45) return '#f59e0b'
+  return '#22c55e'
+}
+
+function FleetRow({entity, selected, onSelect}: {entity: Entity; selected: boolean; onSelect: () => void}) {
+  const battery = typeof entity.raw.battery_pct === 'number' ? entity.raw.battery_pct : null
+  return (
+    <button
+      onClick={onSelect}
+      className={cn(
+        'flex w-full items-center gap-2 border-b border-zinc-100 px-2 py-1.5 text-left text-xs last:border-0 dark:border-white/5',
+        selected ? 'bg-accent-fill/10' : 'hover:bg-zinc-100 dark:hover:bg-zinc-900'
+      )}
+    >
+      <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{background: colorFor(entity)}} />
+      <span className="min-w-0 flex-1 truncate font-mono text-zinc-800 dark:text-zinc-200">{entity.callsign}</span>
+      <span className="hud-label shrink-0 text-[10px] text-zinc-500">{entity.status}</span>
+      {battery !== null && (
+        <span className="shrink-0 font-mono text-[10px]" style={{color: batteryColor(battery)}}>
+          {Math.round(battery)}%
+        </span>
+      )}
+    </button>
+  )
+}
+
+function DetailsPanel({entity}: {entity: Entity | null}) {
+  if (!entity) {
+    return <p className="text-xs text-zinc-500">Select an entity on the map or in the Fleet list to see details.</p>
+  }
+  const rows = entityRows(entity)
+  const audioUrl = entity.raw.last_detection_audio_url
+  return (
+    <div>
+      <div
+        style={{'--card-color': colorFor(entity)} as React.CSSProperties}
+        className="terminal-statcard-header"
+      >
+        <strong className="text-sm text-zinc-900 dark:text-zinc-100">{entity.callsign}</strong>
+        <span className="terminal-statcard-type">{entity.kind.toUpperCase()}</span>
+      </div>
+      <dl className="hud-kv">
+        {rows.map(([label, value]) => (
+          <div key={label}><dt>{label}</dt><dd>{value}</dd></div>
+        ))}
+      </dl>
+      {typeof audioUrl === 'string' && (
+        <audio className="terminal-statcard-audio" controls preload="none" src={audioUrl} />
+      )}
+    </div>
+  )
 }
 
 function TerminalPage() {
   const mapRef = useRef<HTMLDivElement>(null)
   const mapInstance = useRef<L.Map | null>(null)
   const markersRef = useRef<Map<string, L.Marker>>(new Map())
-  const [entityCount, setEntityCount] = useState(0)
+  const [entities, setEntities] = useState<Entity[]>([])
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+
+  const selected = useMemo(() => entities.find(e => e.id === selectedId) ?? null, [entities, selectedId])
+
+  function selectAndFocus(id: string) {
+    setSelectedId(id)
+    const marker = markersRef.current.get(id)
+    if (marker && mapInstance.current) {
+      mapInstance.current.panTo(marker.getLatLng())
+      marker.openPopup()
+    }
+  }
 
   useEffect(() => {
     if (!mapRef.current || mapInstance.current) return
@@ -127,37 +221,43 @@ function TerminalPage() {
     }
   }, [])
 
+  // Rebuild/refresh markers whenever the entity list changes, and keep the
+  // selected marker's icon a bit larger so it's findable on a busy map.
+  useEffect(() => {
+    if (!mapInstance.current) return
+    const seen = new Set<string>()
+    for (const entity of entities) {
+      seen.add(entity.id)
+      const color = colorFor(entity)
+      const icon = glowIcon(color, entity.id === selectedId)
+      const popup = buildPopupHtml(entity, color)
+      const existing = markersRef.current.get(entity.id)
+      if (existing) {
+        existing.setLatLng([entity.lat, entity.lon])
+        existing.setIcon(icon)
+        existing.setPopupContent(popup)
+      } else {
+        const marker = L.marker([entity.lat, entity.lon], {icon}).addTo(mapInstance.current)
+        marker.bindPopup(popup, {maxWidth: 280})
+        marker.on('click', () => setSelectedId(entity.id))
+        markersRef.current.set(entity.id, marker)
+      }
+    }
+    for (const [id, marker] of markersRef.current) {
+      if (!seen.has(id)) {
+        marker.remove()
+        markersRef.current.delete(id)
+      }
+    }
+  }, [entities, selectedId])
+
   useEffect(() => {
     let cancelled = false
 
     async function poll() {
       try {
         const res = await apiJson<{entities: Entity[]}>('/api/terminal/entities')
-        if (cancelled || !mapInstance.current) return
-        const seen = new Set<string>()
-        for (const entity of res.entities) {
-          seen.add(entity.id)
-          const color = colorFor(entity)
-          const icon = glowIcon(color)
-          const popup = buildStatCard(entity, color)
-          const existing = markersRef.current.get(entity.id)
-          if (existing) {
-            existing.setLatLng([entity.lat, entity.lon])
-            existing.setIcon(icon)
-            existing.setPopupContent(popup)
-          } else {
-            const marker = L.marker([entity.lat, entity.lon], {icon}).addTo(mapInstance.current)
-            marker.bindPopup(popup, {maxWidth: 280})
-            markersRef.current.set(entity.id, marker)
-          }
-        }
-        for (const [id, marker] of markersRef.current) {
-          if (!seen.has(id)) {
-            marker.remove()
-            markersRef.current.delete(id)
-          }
-        }
-        setEntityCount(markersRef.current.size)
+        if (!cancelled) setEntities(res.entities)
       } catch (e) {
         if (!cancelled) notify.error(errorMessage(e))
       }
@@ -173,11 +273,27 @@ function TerminalPage() {
 
   return (
     <Layout>
-      <PageHeader title="Terminal" eyebrow="LIVE MAP" count={entityCount} countLabel="tracked" />
-      <div
-        ref={mapRef}
-        className="terminal-map h-[70vh] w-full overflow-hidden rounded-lg border border-zinc-200 dark:border-white/10"
-      />
+      <PageHeader title="Terminal" eyebrow="LIVE MAP" count={entities.length} countLabel="tracked" />
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[240px_1fr_300px]">
+        <Panel title="Fleet" badge={`${entities.length}`} className="h-[60vh]" bodyClassName="overflow-y-auto">
+          {entities.length === 0 ? (
+            <p className="p-2 text-xs text-zinc-500">No entities tracked yet.</p>
+          ) : (
+            entities
+              .slice()
+              .sort((a, b) => a.callsign.localeCompare(b.callsign))
+              .map(e => (
+                <FleetRow key={e.id} entity={e} selected={e.id === selectedId} onSelect={() => selectAndFocus(e.id)} />
+              ))
+          )}
+        </Panel>
+        <Panel title="Map" className="h-[60vh]" bodyClassName="p-0">
+          <div ref={mapRef} className="terminal-map h-full w-full" />
+        </Panel>
+        <Panel title="Details" className="h-[60vh]">
+          <DetailsPanel entity={selected} />
+        </Panel>
+      </div>
       <div className="mt-8">
         <StreamsPanel />
       </div>

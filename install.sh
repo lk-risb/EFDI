@@ -94,9 +94,18 @@ dump_service_logs() {
 # shellcheck source=scripts/_ask.sh
 . "$SCRIPT_DIR/scripts/_ask.sh"
 
-# ── Banner ────────────────────────────────────────────────────────────────────
-echo ""
-echo -e "${BOLD}  EFDI — Bridge Stack Installer${NC}"
+# ── Banner (ported from the INTCORE installer's ASCII splash) ──────────────
+echo -e "${CYAN}"
+cat <<'BANNER'
+=====================================================================
+ _____ _____ ____ ___    ____    _  _____ _______        ___ __   __
+| ____|  ___|  _ \_ _|  / ___|  / \|_   _| ____\ \      / / \\ \ / /
+|  _| | |_  | | | | |  | |  _  / _ \ | | |  _|  \ \ /\ / / _ \\ V /
+| |___|  _| | |_| | |  | |_| |/ ___ \| | | |___  \ V  V / ___ \| |
+|_____|_|   |____/___|  \____/_/   \_\_| |_____|  \_/\_/_/   \_\_|
+=====================================================================
+BANNER
+echo -e "${NC}"
 echo "  Sensor bridges: ASTERIX · SitaWare · dronuradaras"
 echo ""
 
