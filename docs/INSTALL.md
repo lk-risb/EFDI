@@ -734,7 +734,7 @@ Do not clear a shared operational layer to work around this limitation.
 | Red aircraft | `a-h-A-M-F` | SitaWare hostile air unit |
 | Blue vessel | `a-f-S-X-L` | SitaWare friendly vessel |
 | Red vessel | `a-h-S-X-L` | SitaWare hostile vessel |
-| Green/yellow/red sensor box (same icon, recolors) | `a-n-G-E-S` / `a-u-G-E-S` / `a-h-G-E-S` | currently-online dronuradaras.lt acoustic sensor — green=idle, yellow=cooling down, red=active detection (last 60s); offline devices are removed |
+| Green/red sensor box (same icon, recolors) | `a-n-G-E-S` / `a-h-G-E-S` | currently-online dronuradaras.lt acoustic sensor — green=idle or cooling down, red=active detection (last 60s); offline devices are removed. Cooling-down used to be a separate yellow `a-u-G-E-S` type, but ATAK/WinTAK doesn't reliably categorize it as "Equipment > Sensor" — the remarks text still shows "[COOLING DOWN...]" |
 | White unknown aircraft | `a-u-A-C-F` | Unclassified radar track |
 
 > Position, speed, and course on the radar marker update automatically from the live CAT-34 stream. On a mobile platform, ATAK will show a speed vector and movement trail.

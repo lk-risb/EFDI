@@ -146,19 +146,27 @@ _CIV_SEA_TYPE = "a-n-S-X-L"
 # was reported at that sensor. Used by dronuradaras.lt: no separate drone
 # marker exists, the sensor's own marker recolors instead (there's no reliable
 # drone position, only "sensor X heard something just now").
+#
+# The cooling-down state used to be "u" (unknown — 2525's own yellow
+# convention), but ATAK/WinTAK's CoT-type dictionary doesn't have a clean
+# "Equipment > Sensor" category entry for a-u-G-E-S the way it does for
+# a-n/a-h-G-E-S — confirmed live: some dronuradaras markers were categorized
+# correctly and others weren't, with the yellow (cooling-down) ones the odd
+# ones out. Using "n" (neutral) for cooling-down too keeps the marker typed
+# correctly at the cost of green and yellow sharing one CoT type; the
+# "[COOLING DOWN — ...]" remarks text (below) still carries that state, it's
+# just not a distinct icon color anymore.
 _SENSOR_ALERT_HOT_S  = 60    # red  — detection within the last minute
-_SENSOR_ALERT_WARM_S = 300   # yellow — cooling down, matches the bridge's DETECT_WINDOW_S
+_SENSOR_ALERT_WARM_S = 300   # cooling down, matches the bridge's DETECT_WINDOW_S
 
 def _sensor_alert_cot_type(track: dict) -> str:
     ts = track.get("last_detection_ts")
     if not ts:
-        return "a-n-G-E-S"   # green — no alert on record
+        return "a-n-G-E-S"   # neutral — no alert on record
     age = time.time() - float(ts)
     if age <= _SENSOR_ALERT_HOT_S:
         return "a-h-G-E-S"   # red — active
-    if age <= _SENSOR_ALERT_WARM_S:
-        return "a-u-G-E-S"   # yellow — cooling down
-    return "a-n-G-E-S"       # green — reverted
+    return "a-n-G-E-S"       # neutral — cooling down or reverted
 
 
 # Sources that must NOT reach ATAK directly — they must pass through
