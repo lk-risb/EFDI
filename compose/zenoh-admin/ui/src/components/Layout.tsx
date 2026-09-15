@@ -19,6 +19,7 @@ import {
     LogOut,
     Moon,
     Network,
+    Radar,
     Radio,
     ScrollText,
     Settings2,
@@ -57,6 +58,7 @@ const navItems = [
   { to: '/network', label: 'Network', icon: Network },
   { to: '/topics', label: 'Topics', icon: ListTree },
   { to: '/streams', label: 'Streams', icon: Video },
+  { to: '/sensors', label: 'Sensors', icon: Radar },
 ]
 
 const adminItems = [
