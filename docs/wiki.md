@@ -1347,7 +1347,7 @@ Do not clear a shared operational layer to work around this limitation.
 | Service | Script | Zenoh topic (abbreviated) | Trigger |
 | --- | --- | --- | --- |
 | `asterix` | `protocols/vendors/asterix/cat.py` | `…/raw/asterix/catNN` and category-specific normalized ASTERIX topics | ASTERIX vendor's CAT protocol bundle: mixed UDP ingress plus per-category translators |
-| `dronuradaras` | `bridges/dronuradaras_bridge.py` | `…/land/dronuradaras/acoustic/neutral/sensor/{type}/{id}/sapient` | 60 s online-only device poll with offline eviction / 10 s detection poll |
+| `dronuradaras` | `bridges/vendors/mainline/dronuradaras_bridge.py` | `…/land/mainline_dronuradaras/acoustic/neutral/sensor/{type}/{id}/sapient` | 60 s online-only device poll with offline eviction / 10 s detection poll |
 | `sitaware` | `bridges/sitaware_bridge.py` | `…/land/sitaware/c2/friendly/unit/{type}/{id}/sapient` | Configurable REST poll |
 | `nffi` | `protocols/random/nffi.py` | `…/land/nato/c2/friendly/unit/{type}/{id}/sapient` | Complete XML documents under `…/raw/nffi/*` in Zenoh |
 | `stanag` | `protocols/vendors/stanag/stanag.py --proto {4586,4607,4609,5516}` | `…/raw/stanag_4609/klv`, `…/air/stanag_4609/camera/unknown/uav`, STANAG 4586 track topics, and `…/{air,sea,land}/stanag_5516/c2/**` | Launcher starts each configured `--proto` directly |
@@ -3157,7 +3157,7 @@ Protobuf views are published **self-describing**: the Zenoh `Encoding` is
 ```
 LTU/CISB/hq/air/partner-adsb/adsb/civ/aircraft/b738/ly-abc/sapient
 LTU/CISB/hq/air/010-042/radar/unknown/aircraft/unknown/cat48-010-042-4211/json
-LTU/CISB/hq/land/dronuradaras/acoustic/unknown/drone/unknown/1/sapient
+LTU/CISB/hq/land/mainline_dronuradaras/acoustic/unknown/drone/unknown/1/sapient
 ```
 
 | Segment | Meaning | Example |

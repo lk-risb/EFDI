@@ -58,7 +58,7 @@ function LoginPage() {
       <div className="hud-frame hud-glass w-full max-w-sm space-y-6 p-8 border border-zinc-200 dark:border-white/10">
         <HudCorners />
         <div className="flex flex-col items-center text-center">
-          {logoUrl && <img src={logoUrl} alt="" className="w-20 h-20 rounded-none object-contain mb-4" />}
+          {logoUrl && <img src={logoUrl} alt="" className="w-20 h-20 rounded-lg object-contain mb-4" />}
           <h1 className="font-display text-3xl font-bold tracking-tight text-zinc-900 dark:text-white">{orgName}</h1>
           <p className="hud-label text-xs text-zinc-500 dark:text-zinc-500 mt-2">Sign in to manage the Zenoh router</p>
         </div>
@@ -70,7 +70,7 @@ function LoginPage() {
               value={username}
               onChange={e => setUsername(e.target.value)}
               required
-              className="w-full px-3 py-2 rounded-md bg-zinc-200 dark:bg-[#141416] border border-zinc-300 dark:border-white/10 text-zinc-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-accent-ring"
+              className="w-full px-3 py-2 rounded-md bg-zinc-200 dark:bg-zinc-950 border border-zinc-300 dark:border-white/10 text-zinc-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-accent-ring"
             />
           </div>
           <div className="space-y-1">
@@ -79,7 +79,7 @@ function LoginPage() {
               value={password}
               onChange={e => setPassword(e.target.value)}
               required
-              className="w-full px-3 py-2 rounded-md bg-zinc-200 dark:bg-[#141416] border border-zinc-300 dark:border-white/10 text-zinc-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-accent-ring"
+              className="w-full px-3 py-2 rounded-md bg-zinc-200 dark:bg-zinc-950 border border-zinc-300 dark:border-white/10 text-zinc-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-accent-ring"
             />
           </div>
           <button
@@ -99,7 +99,7 @@ function LoginPage() {
             </div>
             <a
               href="/auth/oidc/login"
-              className="block w-full py-2.5 rounded-md border border-zinc-300 dark:border-white/10 bg-zinc-100 dark:bg-[#141416] hover:bg-zinc-200 dark:hover:bg-[#232326] text-zinc-900 dark:text-white text-sm font-semibold text-center transition-colors"
+              className="block w-full py-2.5 rounded-md border border-zinc-300 dark:border-white/10 bg-zinc-100 dark:bg-zinc-950 hover:bg-zinc-200 dark:hover:bg-zinc-800 text-zinc-900 dark:text-white text-sm font-semibold text-center transition-colors"
             >
               Sign in with {oidc.provider_name}
             </a>
