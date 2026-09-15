@@ -38,7 +38,7 @@ Protobuf views are published **self-describing**: the Zenoh `Encoding` is
 ```
 LTU/CISB/hq/air/partner-adsb/adsb/civ/aircraft/b738/ly-abc/sapient
 LTU/CISB/hq/air/010-042/radar/unknown/aircraft/unknown/cat48-010-042-4211/json
-LTU/CISB/hq/land/dronuradaras/acoustic/unknown/drone/unknown/1/sapient
+LTU/CISB/hq/land/mainline_dronuradaras/acoustic/unknown/drone/unknown/1/sapient
 ```
 
 | Segment | Meaning | Example |

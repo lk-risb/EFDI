@@ -576,4 +576,52 @@ preventing a direct (non-relayed) path. Check
 it never upgrades from Relayed, that's an environment/network constraint on
 the sending side, not something to keep retrying from here.
 
+### A detection's audio URL never makes it to the sensor marker
+
+**Symptom:** A real drone detection from an acoustic sensor (dronuradaras.lt)
+shows up on the map/WebUI, but `last_detection_audio_url` is missing from the
+sensor's payload even though the vendor's own API did return an audio clip
+for that detection.
+
+**Cause:** `dronuradaras_bridge.py` has two independent publisher code paths
+writing to the *same* Zenoh key: a periodic device-status poll (every
+`DEVICE_POLL_S`) and a detection-triggered alert. Zenoh's `pub.put()` on a
+given key fully **replaces** the prior message — there is no field merging.
+Whichever path published last won outright; since the device-poll path ran
+on its own timer and didn't carry `last_detection_audio_url` at all, it
+would silently overwrite the alert's audio URL moments after the alert had
+just set it.
+
+**Fix:** already applied — a module-level `_last_detection_audio` cache
+(keyed by `dev_id`) is updated whenever `_publish_sensor_alert()` sees a
+truthy `audio_url`, and the periodic device-poll path now reads that cache
+and includes `last_detection_audio_url` in its own payload when present,
+instead of omitting the field. General lesson: two publishers sharing one
+Zenoh key must each publish the *union* of fields the key is expected to
+carry, never just their own subset — the latest `put()` is the only thing a
+subscriber ever sees.
+
+### A sensor's CoT marker never gets the "Equipment > Sensor" icon in ATAK/WinTAK
+
+**Symptom:** A track publishes with a CoT type that looks correct by the
+MIL-STD-2525C spec (affiliation + battle-dimension + function code), but
+ATAK/WinTAK renders it as a generic/uncategorized marker instead of under
+Equipment > Sensor — even though the *identical* function code under a
+different affiliation (e.g. `a-n-G-E-S`, `a-f-G-E-S`) categorizes correctly.
+
+**Cause:** ATAK/WinTAK's own type-to-category lookup table doesn't cover
+every affiliation+function-code combination the 2525C spec technically
+allows — confirmed live (WinTAK screenshot) that `a-u-G-E-S` (unknown
+affiliation + Equipment/Sensor) silently falls through to no category, while
+the same function code under `a-n-`/`a-f-` resolves fine. This is a gap in
+the client apps, not a bug in the CoT type being published.
+
+**Fix:** avoid publishing the uncategorized combination — map that case to
+a CoT type ATAK/WinTAK is confirmed to categorize correctly instead of the
+"technically correct by spec" one. If a new sensor/track source hits this
+same silent-uncategorized behavior for some other affiliation+function
+pairing, check the combination against a live ATAK/WinTAK client before
+assuming the publisher-side type mapping is wrong — the type can be
+spec-valid and still not resolve to a client-side icon.
+
 ---

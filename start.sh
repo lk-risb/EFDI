@@ -2,6 +2,23 @@
 # start.sh — interactive EFDI service launcher
 # Usage: ./start.sh [--restore]
 
+# ── Startup banner (ported from the INTCORE installer's ASCII splash) ──────
+if [[ -t 1 ]]; then
+    echo -e '\033[0;36m'
+fi
+cat <<'BANNER'
+=====================================================================
+ _____ _____ ____ ___    ____    _  _____ _______        ___ __   __
+| ____|  ___|  _ \_ _|  / ___|  / \|_   _| ____\ \      / / \\ \ / /
+|  _| | |_  | | | | |  | |  _  / _ \ | | |  _|  \ \ /\ / / _ \\ V /
+| |___|  _| | |_| | |  | |_| |/ ___ \| | | |___  \ V  V / ___ \| |
+|_____|_|   |____/___|  \____/_/   \_\_| |_____|  \_/\_/_/   \_\_|
+=====================================================================
+BANNER
+if [[ -t 1 ]]; then
+    echo -e '\033[0m'
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COMPOSE_DIR="$SCRIPT_DIR/compose"
 ENV_FILE="$SCRIPT_DIR/compose/.env"
@@ -85,7 +102,7 @@ SERVICES=(
     admin-control
     cert-renewer supervisor presence
     meteolt
-    sitaware dronuradaras asterix track-fusion
+    sitaware dronuradaras mainline_terminal asterix track-fusion
     nffi sapient stanag4586 stanag4609 stanag5516
     sapient-raw stanag4586-raw stanag4609-raw stanag5516-raw
     mqtt-raw aartos-raw aartos-wifi-raw
@@ -164,7 +181,7 @@ declare -A SVC_CAT=(
     [asterix]="Sensor bridges"
     [mqtt]="Protocols" [sparkplug]="Protocols"
     [nffi]="Protocols"
-    [sitaware]="Sensor bridges" [dronuradaras]="Sensor bridges"
+    [sitaware]="Sensor bridges" [dronuradaras]="Sensor bridges" [mainline_terminal]="Sensor bridges"
     [sapient]="Protocols" [stanag4586]="Protocols" [stanag4609]="Protocols" [stanag5516]="Protocols"
     [tak-bridge]="C2 inputs" [nffi-bridge]="C2 inputs"
     [mqtt-raw]="Sensor bridges"
@@ -192,6 +209,7 @@ declare -A SVC_DESC=(
     [sitaware]="SitaWare HQ friendly force tracking (inbound REST)"
     [nffi]="Raw NFFI XML on Zenoh → normalized friendly-force tracks"
     [dronuradaras]="dronuradaras.lt drone detection network"
+    [mainline_terminal]="mainline.inc TERMINAL drone-fleet C2 (WebSocket)"
     [sapient]="SAPIENT / BSI Flex 335 sensor feed"
     [stanag4586]="STANAG 4586 UAV control (VSM)"
     [stanag4609]="STANAG 4609 KLV decoder (raw → tracks)"
@@ -243,6 +261,7 @@ svc_ready() {
         stanag4609-raw) [[ "${STANAG4609_SRT_URL:-}" ]] ;;
         stanag5516-raw) return 0 ;;  # UDP listener, default port 3010
         sitaware)     return 0 ;;  # always ready; prompts for server IP at launch if unset
+        mainline_terminal) return 0 ;;  # always ready; prompts for credentials at launch if unset
         tak-bridge)   [[ "${TAK_HOST:-}" || "${TAK_HOST_FALLBACK:-}" || "${TAK_HOST_TAILSCALE:-}" ]] ;;
         sapient) return 0 ;;
         stanag4586) [[ "${STANAG4586_PROFILE:-}" == "legacy_ed3_approx" &&
@@ -861,7 +880,21 @@ launch() {
             ;;
 
         dronuradaras)
-            _start dronuradaras bridges/dronuradaras_bridge.py
+            _start dronuradaras bridges/vendors/mainline/dronuradaras_bridge.py
+            ;;
+
+        mainline_terminal)
+            if [[ -z "${MAINLINE_TERMINAL_USER:-}" ]]; then
+                local mt_user mt_pass
+                _prompt_credentials "mainline.inc TERMINAL" mt_user mt_pass
+                if [[ -z "$mt_user" ]]; then
+                    printf "  ${YELLOW}[skip]${R}  mainline_terminal no credentials entered\n"
+                    return
+                fi
+                export MAINLINE_TERMINAL_USER="$mt_user"
+                export MAINLINE_TERMINAL_PASS="$mt_pass"
+            fi
+            _start mainline_terminal bridges/vendors/mainline/terminal_bridge.py
             ;;
 
 

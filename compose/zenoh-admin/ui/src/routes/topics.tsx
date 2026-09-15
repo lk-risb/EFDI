@@ -53,7 +53,7 @@ const emptyForm: TopicForm = {
   description: '',
 }
 
-const inputClass = 'w-full rounded-md border border-zinc-300 bg-zinc-100 px-3 py-2 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-accent-ring dark:border-white/10 dark:bg-[#141416] dark:text-white'
+const inputClass = 'w-full rounded-md border border-zinc-300 bg-zinc-100 px-3 py-2 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-accent-ring dark:border-white/10 dark:bg-zinc-950 dark:text-white'
 const cardClass = 'hud-card hud-glass hud-frame relative border border-zinc-200 p-5 dark:border-white/10'
 
 function formatSeen(value: string): string {
@@ -261,7 +261,7 @@ function TopicsPage() {
                         <button
                           onClick={() => void unregister(topic)}
                           aria-label={`Unregister ${topic.key_expr}`}
-                          className="rounded-none p-2 text-zinc-500 hover:bg-red-500/10 hover:text-red-500"
+                          className="rounded-lg p-2 text-zinc-500 hover:bg-red-500/10 hover:text-red-500"
                         >
                           <Trash2 size={15} />
                         </button>

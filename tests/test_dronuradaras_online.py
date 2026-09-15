@@ -9,7 +9,7 @@ import pytest
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "compose"))
 sys.path.insert(0, str(ROOT / "compose" / "control"))
-sys.path.insert(0, str(ROOT / "compose" / "bridges"))
+sys.path.insert(0, str(ROOT / "compose" / "bridges" / "vendors" / "mainline"))
 
 import dronuradaras_bridge as bridge  # noqa: E402
 
@@ -79,7 +79,7 @@ def test_offline_tombstone_is_not_republished_every_poll(monkeypatch):
         False,
         True,
     ]
-    assert {record["sensor_id"] for record in records} == {"DRONU-device-0"}
+    assert {record["sensor_id"] for record in records} == {"MAINLINE-DRONU-device-0"}
 
 
 def test_disappeared_online_device_gets_last_position_tombstone(monkeypatch):

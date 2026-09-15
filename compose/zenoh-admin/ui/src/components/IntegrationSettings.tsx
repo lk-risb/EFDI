@@ -404,7 +404,7 @@ export function IntegrationSettings() {
         value={values[key] ?? ''}
         onChange={e => setValue(key, e.target.value)}
         placeholder={secret && secrets[key] ? 'Leave blank to keep current value' : ''}
-        className="w-full rounded-md border border-zinc-300 bg-zinc-100 px-2.5 py-2 font-mono text-xs text-zinc-900 focus:outline-none focus:ring-2 focus:ring-accent-ring disabled:opacity-50 dark:border-white/10 dark:bg-[#141416] dark:text-white"
+        className="w-full rounded-md border border-zinc-300 bg-zinc-100 px-2.5 py-2 font-mono text-xs text-zinc-900 focus:outline-none focus:ring-2 focus:ring-accent-ring disabled:opacity-50 dark:border-white/10 dark:bg-zinc-950 dark:text-white"
       />
     </label>
   }
@@ -486,7 +486,7 @@ export function IntegrationSettings() {
                             value={values[field.key] ?? ''}
                             onChange={e => setValue(field.key, e.target.value)}
                             placeholder={secret && secrets[field.key] ? 'Leave blank to keep current value' : field.placeholder}
-                            className="w-full rounded-md border border-zinc-300 bg-zinc-100 px-2.5 py-2 font-mono text-xs text-zinc-900 focus:outline-none focus:ring-2 focus:ring-accent-ring disabled:opacity-50 dark:border-white/10 dark:bg-[#141416] dark:text-white"
+                            className="w-full rounded-md border border-zinc-300 bg-zinc-100 px-2.5 py-2 font-mono text-xs text-zinc-900 focus:outline-none focus:ring-2 focus:ring-accent-ring disabled:opacity-50 dark:border-white/10 dark:bg-zinc-950 dark:text-white"
                           />
                           {field.help && <span className="block text-[10.5px] leading-snug text-zinc-500">{field.help}</span>}
                         </label>
@@ -551,24 +551,24 @@ export function IntegrationSettings() {
                               <div className="flex items-center gap-1.5">
                                 <span className={`h-2 w-2 shrink-0 rounded-full ${row.isNew ? 'bg-zinc-400' : row.running ? 'bg-emerald-400 hud-live-dot' : row.enabled ? 'bg-amber-400' : 'bg-zinc-400 dark:bg-zinc-700'}`} title={row.isNew ? 'not yet saved' : row.running ? 'running' : row.enabled ? 'not running' : 'disabled'} />
                                 <input value={row.name} disabled={!row.isNew || !canWrite} onChange={e => setIngressField(row.id, 'name', e.target.value)}
-                                  placeholder="name" className="w-24 rounded-md border border-zinc-300 bg-zinc-100 px-2 py-1.5 font-mono text-xs disabled:opacity-60 dark:border-white/10 dark:bg-[#141416]" />
+                                  placeholder="name" className="w-24 rounded-md border border-zinc-300 bg-zinc-100 px-2 py-1.5 font-mono text-xs disabled:opacity-60 dark:border-white/10 dark:bg-zinc-950" />
                                 <input value={row.url} disabled={!canWrite} onChange={e => setIngressField(row.id, 'url', e.target.value)}
-                                  placeholder="https://swhq.efdi.ltu:10006" className="min-w-0 flex-1 rounded-md border border-zinc-300 bg-zinc-100 px-2 py-1.5 font-mono text-xs dark:border-white/10 dark:bg-[#141416]" />
+                                  placeholder="https://swhq.efdi.ltu:10006" className="min-w-0 flex-1 rounded-md border border-zinc-300 bg-zinc-100 px-2 py-1.5 font-mono text-xs dark:border-white/10 dark:bg-zinc-950" />
                                 <label className="flex shrink-0 items-center gap-1 text-[10px] text-zinc-500">
                                   <input type="checkbox" checked={row.enabled} disabled={!canWrite} onChange={() => toggleIngressEnabled(row)} className="h-3.5 w-3.5 accent-accent-fill" /> on
                                 </label>
-                                <button title="Save" disabled={!canWrite || row.saving || !row.name || !row.url} onClick={() => saveIngressRow(row)} className="shrink-0 rounded-none p-1 text-zinc-500 hover:bg-emerald-500/10 hover:text-emerald-500 disabled:opacity-30"><Save size={12} /></button>
-                                <button title="Delete" disabled={!canWrite} onClick={() => removeIngressRow(row)} className="shrink-0 rounded-none p-1 text-zinc-500 hover:bg-red-500/10 hover:text-red-500 disabled:opacity-30"><Trash2 size={12} /></button>
+                                <button title="Save" disabled={!canWrite || row.saving || !row.name || !row.url} onClick={() => saveIngressRow(row)} className="shrink-0 rounded-lg p-1 text-zinc-500 hover:bg-emerald-500/10 hover:text-emerald-500 disabled:opacity-30"><Save size={12} /></button>
+                                <button title="Delete" disabled={!canWrite} onClick={() => removeIngressRow(row)} className="shrink-0 rounded-lg p-1 text-zinc-500 hover:bg-red-500/10 hover:text-red-500 disabled:opacity-30"><Trash2 size={12} /></button>
                               </div>
                               <div className="mt-1.5 flex flex-wrap items-center gap-1.5 pl-3.5">
                                 <input value={row.url_fallback} disabled={!canWrite} onChange={e => setIngressField(row.id, 'url_fallback', e.target.value)}
-                                  placeholder="fallback URL (optional)" className="w-36 rounded-md border border-zinc-300 bg-zinc-100 px-1.5 py-1 font-mono text-[10.5px] dark:border-white/10 dark:bg-[#141416]" />
+                                  placeholder="fallback URL (optional)" className="w-36 rounded-md border border-zinc-300 bg-zinc-100 px-1.5 py-1 font-mono text-[10.5px] dark:border-white/10 dark:bg-zinc-950" />
                                 <input value={row.url_tailscale} disabled={!canWrite} onChange={e => setIngressField(row.id, 'url_tailscale', e.target.value)}
-                                  placeholder="tailscale URL (optional)" className="w-36 rounded-md border border-zinc-300 bg-zinc-100 px-1.5 py-1 font-mono text-[10.5px] dark:border-white/10 dark:bg-[#141416]" />
+                                  placeholder="tailscale URL (optional)" className="w-36 rounded-md border border-zinc-300 bg-zinc-100 px-1.5 py-1 font-mono text-[10.5px] dark:border-white/10 dark:bg-zinc-950" />
                                 <input value={row.username} disabled={!canWrite} onChange={e => setIngressField(row.id, 'username', e.target.value)}
-                                  placeholder="username" className="w-24 rounded-md border border-zinc-300 bg-zinc-100 px-1.5 py-1 text-[10.5px] dark:border-white/10 dark:bg-[#141416]" />
+                                  placeholder="username" className="w-24 rounded-md border border-zinc-300 bg-zinc-100 px-1.5 py-1 text-[10.5px] dark:border-white/10 dark:bg-zinc-950" />
                                 <input type="password" value={row.password} disabled={!canWrite} onChange={e => setIngressField(row.id, 'password', e.target.value)}
-                                  placeholder={row.has_credentials ? 'unchanged' : 'password'} className="w-24 rounded-md border border-zinc-300 bg-zinc-100 px-1.5 py-1 text-[10.5px] dark:border-white/10 dark:bg-[#141416]" />
+                                  placeholder={row.has_credentials ? 'unchanged' : 'password'} className="w-24 rounded-md border border-zinc-300 bg-zinc-100 px-1.5 py-1 text-[10.5px] dark:border-white/10 dark:bg-zinc-950" />
                               </div>
                             </div>
                           ))}
@@ -588,24 +588,24 @@ export function IntegrationSettings() {
                               <div className="flex flex-wrap items-center gap-1.5">
                                 <span className={`h-2 w-2 shrink-0 rounded-full ${row.isNew ? 'bg-zinc-400' : row.running ? 'bg-emerald-400 hud-live-dot' : row.enabled ? 'bg-amber-400' : 'bg-zinc-400 dark:bg-zinc-700'}`} title={row.isNew ? 'not yet saved' : row.running ? 'running' : row.enabled ? 'not running' : 'disabled'} />
                                 <input value={row.name} disabled={!row.isNew || !canWrite} onChange={e => setEgressField(row.id, 'name', e.target.value)}
-                                  placeholder="name" className="w-24 rounded-md border border-zinc-300 bg-zinc-100 px-2 py-1.5 font-mono text-xs disabled:opacity-60 dark:border-white/10 dark:bg-[#141416]" />
+                                  placeholder="name" className="w-24 rounded-md border border-zinc-300 bg-zinc-100 px-2 py-1.5 font-mono text-xs disabled:opacity-60 dark:border-white/10 dark:bg-zinc-950" />
                                 <input value={row.bind} disabled={!canWrite} onChange={e => setEgressField(row.id, 'bind', e.target.value)}
-                                  placeholder="0.0.0.0" className="w-24 rounded-md border border-zinc-300 bg-zinc-100 px-2 py-1.5 font-mono text-xs dark:border-white/10 dark:bg-[#141416]" />
+                                  placeholder="0.0.0.0" className="w-24 rounded-md border border-zinc-300 bg-zinc-100 px-2 py-1.5 font-mono text-xs dark:border-white/10 dark:bg-zinc-950" />
                                 <input value={row.port} disabled={!canWrite} onChange={e => setEgressField(row.id, 'port', e.target.value)}
-                                  placeholder="8088" className="w-16 rounded-md border border-zinc-300 bg-zinc-100 px-2 py-1.5 font-mono text-xs dark:border-white/10 dark:bg-[#141416]" />
+                                  placeholder="8088" className="w-16 rounded-md border border-zinc-300 bg-zinc-100 px-2 py-1.5 font-mono text-xs dark:border-white/10 dark:bg-zinc-950" />
                                 <input value={row.path} disabled={!canWrite} onChange={e => setEgressField(row.id, 'path', e.target.value)}
-                                  placeholder="/nvg" className="w-20 rounded-md border border-zinc-300 bg-zinc-100 px-2 py-1.5 font-mono text-xs dark:border-white/10 dark:bg-[#141416]" />
+                                  placeholder="/nvg" className="w-20 rounded-md border border-zinc-300 bg-zinc-100 px-2 py-1.5 font-mono text-xs dark:border-white/10 dark:bg-zinc-950" />
                                 <label className="flex shrink-0 items-center gap-1 text-[10px] text-zinc-500">
                                   <input type="checkbox" checked={row.enabled} disabled={!canWrite} onChange={() => toggleEgressEnabled(row)} className="h-3.5 w-3.5 accent-accent-fill" /> on
                                 </label>
-                                <button title="Save" disabled={!canWrite || row.saving || !row.name || !row.port} onClick={() => saveEgressRow(row)} className="shrink-0 rounded-none p-1 text-zinc-500 hover:bg-emerald-500/10 hover:text-emerald-500 disabled:opacity-30"><Save size={12} /></button>
-                                <button title="Delete" disabled={!canWrite} onClick={() => removeEgressRow(row)} className="shrink-0 rounded-none p-1 text-zinc-500 hover:bg-red-500/10 hover:text-red-500 disabled:opacity-30"><Trash2 size={12} /></button>
+                                <button title="Save" disabled={!canWrite || row.saving || !row.name || !row.port} onClick={() => saveEgressRow(row)} className="shrink-0 rounded-lg p-1 text-zinc-500 hover:bg-emerald-500/10 hover:text-emerald-500 disabled:opacity-30"><Save size={12} /></button>
+                                <button title="Delete" disabled={!canWrite} onClick={() => removeEgressRow(row)} className="shrink-0 rounded-lg p-1 text-zinc-500 hover:bg-red-500/10 hover:text-red-500 disabled:opacity-30"><Trash2 size={12} /></button>
                               </div>
                               <div className="mt-1.5 flex flex-wrap items-center gap-1.5 pl-3.5">
                                 <input value={row.username} disabled={!canWrite} onChange={e => setEgressField(row.id, 'username', e.target.value)}
-                                  placeholder="username" className="w-24 rounded-md border border-zinc-300 bg-zinc-100 px-1.5 py-1 text-[10.5px] dark:border-white/10 dark:bg-[#141416]" />
+                                  placeholder="username" className="w-24 rounded-md border border-zinc-300 bg-zinc-100 px-1.5 py-1 text-[10.5px] dark:border-white/10 dark:bg-zinc-950" />
                                 <input type="password" value={row.password} disabled={!canWrite} onChange={e => setEgressField(row.id, 'password', e.target.value)}
-                                  placeholder={row.has_credentials ? 'unchanged' : 'password'} className="w-24 rounded-md border border-zinc-300 bg-zinc-100 px-1.5 py-1 text-[10.5px] dark:border-white/10 dark:bg-[#141416]" />
+                                  placeholder={row.has_credentials ? 'unchanged' : 'password'} className="w-24 rounded-md border border-zinc-300 bg-zinc-100 px-1.5 py-1 text-[10.5px] dark:border-white/10 dark:bg-zinc-950" />
                               </div>
                             </div>
                           ))}
@@ -623,7 +623,7 @@ export function IntegrationSettings() {
         })}
       </div>
 
-      <div className="mt-5 border-t border-zinc-200 pt-4 dark:border-white/10"><h3 className="hud-label flex items-center gap-2 text-[11px] font-semibold text-zinc-600 dark:text-zinc-300"><Wrench size={13} /> Advanced protocol setting</h3><p className="mb-2 mt-1 text-[11px] text-zinc-500">Use this for CATxx_TCP, raw ports, input topics, and other documented `.env` fields.</p><div className="flex gap-2"><input value={advancedKey} onChange={e => setAdvancedKey(e.target.value)} placeholder="CAT48_TCP" className="w-32 rounded-md border border-zinc-300 bg-zinc-100 px-2.5 py-2 font-mono text-xs dark:border-white/10 dark:bg-[#141416]" /><input value={advancedValue} onChange={e => setAdvancedValue(e.target.value)} placeholder="value" className="min-w-0 flex-1 rounded-md border border-zinc-300 bg-zinc-100 px-2.5 py-2 font-mono text-xs dark:border-white/10 dark:bg-[#141416]" /><button disabled={!canWrite} onClick={addAdvanced} className="rounded-md border border-accent-ring/50 px-3 text-xs text-accent-ring disabled:opacity-40">Add</button></div></div>
+      <div className="mt-5 border-t border-zinc-200 pt-4 dark:border-white/10"><h3 className="hud-label flex items-center gap-2 text-[11px] font-semibold text-zinc-600 dark:text-zinc-300"><Wrench size={13} /> Advanced protocol setting</h3><p className="mb-2 mt-1 text-[11px] text-zinc-500">Use this for CATxx_TCP, raw ports, input topics, and other documented `.env` fields.</p><div className="flex gap-2"><input value={advancedKey} onChange={e => setAdvancedKey(e.target.value)} placeholder="CAT48_TCP" className="w-32 rounded-md border border-zinc-300 bg-zinc-100 px-2.5 py-2 font-mono text-xs dark:border-white/10 dark:bg-zinc-950" /><input value={advancedValue} onChange={e => setAdvancedValue(e.target.value)} placeholder="value" className="min-w-0 flex-1 rounded-md border border-zinc-300 bg-zinc-100 px-2.5 py-2 font-mono text-xs dark:border-white/10 dark:bg-zinc-950" /><button disabled={!canWrite} onClick={addAdvanced} className="rounded-md border border-accent-ring/50 px-3 text-xs text-accent-ring disabled:opacity-40">Add</button></div></div>
       {configuredKeys.length > 0 && <div className="mt-5 border-t border-zinc-200 pt-4 dark:border-white/10"><h3 className="hud-label text-[11px] font-semibold text-zinc-600 dark:text-zinc-300">Additional deployment settings</h3><p className="mb-3 mt-1 text-[11px] text-zinc-500">These fields are present in the deployment environment but are not tied to a fixed partner form.</p><div className="grid gap-3 sm:grid-cols-2">{configuredKeys.map(renderSetting)}</div></div>}
       <div className="mt-5 rounded-md border border-amber-500/20 bg-amber-500/10 p-3 text-[11px] text-amber-700 dark:text-amber-300"><Terminal size={13} className="mb-1" />Saving changes updates the deployment environment. Restart only the affected service after checking its log; secrets are write-only and never displayed.</div>
     </Card>
