@@ -1,96 +1,56 @@
 @import "tailwindcss";
 @import "@xterm/xterm/css/xterm.css";
+@import "@fontsource-variable/ibm-plex-sans";
+@import "@fontsource/ibm-plex-mono";
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* Self-hosted (not Google Fonts CDN) — this panel needs to work in
-   disconnected/air-gapped deployments, so no runtime dependency on an
-   external font host. Latin + Latin Extended-A only (covers Lithuanian
-   diacritics); other scripts fall back to the system font.
-   Values ported from Scout's real packages/ui/src/styles/globals.css, not a
-   reverse-engineered mockup: Aldrich display face (single 400 weight — never
-   synthetically bold it), Spline Sans body, Spline Sans Mono data/labels. */
-@font-face {
-  font-family: "Aldrich";
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url("./assets/fonts/Aldrich-400-latin.woff2") format("woff2");
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122;
-}
-@font-face {
-  font-family: "Spline Sans";
-  font-style: normal;
-  font-weight: 400 700;
-  font-display: swap;
-  src: url("./assets/fonts/SplineSans-latin.woff2") format("woff2");
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122;
-}
-@font-face {
-  font-family: "Spline Sans";
-  font-style: normal;
-  font-weight: 400 700;
-  font-display: swap;
-  src: url("./assets/fonts/SplineSans-latin-ext.woff2") format("woff2");
-  unicode-range: U+0100-024F, U+0300-0331, U+1E00-1EFF;
-}
-@font-face {
-  font-family: "Spline Sans Mono";
-  font-style: normal;
-  font-weight: 400 700;
-  font-display: swap;
-  src: url("./assets/fonts/SplineSansMono-latin.woff2") format("woff2");
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122;
-}
-@font-face {
-  font-family: "Spline Sans Mono";
-  font-style: normal;
-  font-weight: 400 700;
-  font-display: swap;
-  src: url("./assets/fonts/SplineSansMono-latin-ext.woff2") format("woff2");
-  unicode-range: U+0100-024F, U+0300-0331, U+1E00-1EFF;
-}
-
 @theme {
-  /* --- Real Scout tokens, read from packages/ui/src/styles/globals.css ---
-     Signal blue primary; steel neutrals; green/amber/red reserved for
-     operational status only. Square corners everywhere, corner-bracket
-     panels instead of shadow for identity. */
-  --color-accent-fill: var(--brand-accent-fill, oklch(0.52 0.22 264));
-  --color-accent-fill-hover: var(--brand-accent-fill-hover, oklch(0.62 0.2 262));
-  --color-accent-text: var(--brand-accent-text, oklch(0.98 0.01 260));
-  --color-accent-ring: var(--brand-accent-ring, oklch(0.62 0.2 262 / 0.5));
+  /* --- mainline.inc TERMINAL palette, direct copy — replaces the old
+     Scout steel/signal-blue tokens. TERMINAL's own neutral ramp is
+     Tailwind's stock zinc scale (verified by converting its captured
+     oklch values back to sRGB — they land on zinc-50/100/200/500/800/900/950
+     almost exactly), so the zinc-* utility classes already used throughout
+     this app's pages need no remapping; only the accent/status/hud tokens
+     below and the handful of non-zinc hardcoded hex values in components
+     (see git history for the sweep) had to change. */
+  --color-accent-fill: var(--brand-accent-fill, oklch(44.3% 0.11 240.79));
+  --color-accent-fill-hover: var(--brand-accent-fill-hover, oklch(50% 0.134 242.749));
+  --color-accent-text: var(--brand-accent-text, oklch(97.7% 0.013 236.62));
+  --color-accent-ring: var(--brand-accent-ring, oklch(55.2% 0.016 285.938 / 0.5));
 
-  /* Steel ramp — cool, slightly blue neutral scale (Scout's dark-default). */
-  --color-hud-0: oklch(0.145 0.006 248);
-  --color-hud-1: oklch(0.178 0.007 244);
-  --color-hud-2: oklch(0.208 0.008 240);
-  --color-hud-3: oklch(0.242 0.009 238);
-  --color-hud-4: oklch(0.31 0.011 236);
+  /* hud-0..4: dark-mode surface ramp, background -> raised, TERMINAL exact. */
+  --color-hud-0: oklch(14.1% 0.005 285.823);
+  --color-hud-1: oklch(21% 0.006 285.885);
+  --color-hud-2: oklch(27.4% 0.006 286.033);
+  --color-hud-3: oklch(27.4% 0.006 286.033 / 0.7);
+  --color-hud-4: oklch(37% 0.008 286);
 
-  /* Operational status — trio per tone (text / surface / border), never
-     used decoratively. */
-  --color-nominal: oklch(0.82 0.19 150);
-  --color-nominal-surface: oklch(0.74 0.18 153 / 0.13);
-  --color-nominal-border: oklch(0.74 0.18 153 / 0.34);
-  --color-warning: oklch(0.86 0.16 88);
-  --color-warning-surface: oklch(0.79 0.15 76 / 0.14);
-  --color-warning-border: oklch(0.79 0.15 76 / 0.34);
-  --color-critical: oklch(0.72 0.2 24);
-  --color-critical-surface: oklch(0.64 0.23 26 / 0.15);
-  --color-critical-border: oklch(0.64 0.23 26 / 0.4);
+  /* TERMINAL's 5-state status vocabulary, mapped onto the existing
+     nominal/warning/critical names so components don't need renaming. */
+  --color-nominal: oklch(74% 0.17 150);
+  --color-nominal-surface: oklch(74% 0.17 150 / 0.13);
+  --color-nominal-border: oklch(74% 0.17 150 / 0.34);
+  --color-warning: oklch(78% 0.15 75);
+  --color-warning-surface: oklch(78% 0.15 75 / 0.14);
+  --color-warning-border: oklch(78% 0.15 75 / 0.34);
+  --color-critical: oklch(70.4% 0.191 22.216);
+  --color-critical-surface: oklch(70.4% 0.191 22.216 / 0.15);
+  --color-critical-border: oklch(70.4% 0.191 22.216 / 0.4);
 
-  /* Aldrich display headings (single 400 weight — size/tracking carry it,
-     never weight); Spline Sans body; Spline Sans Mono for data, labels, nav. */
-  --font-sans: "Spline Sans", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Aldrich", "Spline Sans", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "Spline Sans Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  /* Type — IBM Plex Sans Variable (UI), IBM Plex Mono (data/labels), direct
+     copy of TERMINAL's own type system. No separate display face — TERMINAL
+     carries heading hierarchy with size/tracking, not a distinct font. */
+  --font-sans: "IBM Plex Sans Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "IBM Plex Sans Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
-  /* Scout is square everywhere — no rounded corners at all. */
-  --radius-sm: 0px;
-  --radius-md: 0px;
-  --radius-lg: 0px;
-  --radius-xl: 0px;
-  --radius-2xl: 0px;
+  /* TERMINAL uses a 0.625rem base radius, rounded corners throughout —
+     replaces Scout's square-everywhere look. */
+  --radius-sm: calc(var(--radius-base) * 0.6);
+  --radius-md: calc(var(--radius-base) * 0.8);
+  --radius-lg: var(--radius-base);
+  --radius-xl: calc(var(--radius-base) * 1.6);
+  --radius-2xl: calc(var(--radius-base) * 2.4);
 
   --tracking-label: 0.14em;
 
@@ -100,18 +60,21 @@
   --ease-out-soft: cubic-bezier(0.2, 0, 0, 1);
 }
 
+:root {
+  --radius-base: 0.625rem;
+}
+
 /* Tailwind v4's preflight only wires --font-sans into the default body font
    automatically when it's read via the `font-sans` utility; apply it
-   directly so Spline Sans actually renders instead of sitting unused (the
-   Inter faces this replaced had the same gap — declared, never selected). */
+   directly so IBM Plex Sans actually renders instead of sitting unused. */
 body {
   font-family: var(--font-sans);
 }
 
-/* HUD identity: uppercase, letter-spaced small labels used for table
-   headers, stat labels, and nav section dividers. */
+/* Mono uppercase micro-label — matches TERMINAL's own eyebrow/stat labels,
+   ported from the Aldrich display treatment this replaces. */
 .hud-label {
-  font-family: var(--font-display);
+  font-family: var(--font-mono);
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
@@ -172,28 +135,25 @@ body {
   animation: hud-pulse-dot 2s ease-in-out infinite;
 }
 
-/* Canvas — Scout prototype's dot-grid texture on the exact canvas color. */
+/* Canvas — flat TERMINAL surface color, no dot-grid texture (that was a
+   Scout-only HUD motif; TERMINAL's own canvas is plain). */
 .dark .hud-grid-bg {
   background-color: var(--color-hud-0);
-  background-image: radial-gradient(rgb(255 255 255 / 0.05) 1px, transparent 1px);
-  background-size: 18px 18px;
 }
 
 /* `hud-frame` establishes the positioning context corner brackets rely on —
-   the actual bracket rendering is DOM-based now (HudCorners.tsx), matching
-   Scout's real CardBrackets component exactly rather than a CSS gradient
-   hack: 4 positioned corner spans, not a ::before background trick. */
-:root { --bracket-color: rgb(0 0 0 / 0.18); }
-.dark { --bracket-color: rgb(255 255 255 / 0.18); }
+   bracket rendering itself is DOM-based (HudCorners.tsx). TERMINAL has no
+   corner-bracket motif, so --bracket-color is transparent in both themes;
+   this var is kept only so HudCorners.tsx doesn't need a conditional. */
+:root { --bracket-color: transparent; }
+.dark { --bracket-color: transparent; }
 .hud-frame {
   position: relative;
 }
 
-/* Light theme — same dot-grid texture, inverted to a dark dot on a light canvas. */
+/* Light theme — same flat TERMINAL surface, no dot-grid texture. */
 .hud-grid-bg:not(.dark .hud-grid-bg) {
-  background-color: #fafafb;
-  background-image: radial-gradient(rgb(0 0 0 / 0.06) 1px, transparent 1px);
-  background-size: 18px 18px;
+  background-color: #ffffff;
 }
 
 /* Structural definition-list layout for label/value panel content — no
@@ -216,3 +176,56 @@ body {
 .topology-node-surface-selected { fill: rgb(240 253 250); }
 .dark .topology-node-surface { fill: #141518; }
 .dark .topology-node-surface-selected { fill: #102a2a; }
+
+/* Terminal tab's live map. Plain OSM tiles are light by default (no free
+   no-key dark tile provider left) — invert then hue-rotate back to
+   natural-ish colors in dark mode, the standard trick for a dark basemap
+   without a paid/keyed tile source (same approach TAK's admin/ui uses for
+   its own live map). */
+.terminal-map { background: var(--color-hud-0); }
+.dark .terminal-map-tiles {
+  filter: invert(1) hue-rotate(180deg) brightness(0.9) contrast(0.9);
+}
+.terminal-map .leaflet-control-zoom a {
+  background: #ffffff;
+  color: #27272a;
+  border-color: rgb(0 0 0 / 0.1) !important;
+}
+.dark .terminal-map .leaflet-control-zoom a {
+  background: var(--color-hud-1);
+  color: #e4e4e7;
+  border-color: rgb(255 255 255 / 0.1) !important;
+}
+.dark .terminal-map .leaflet-control-zoom a:hover {
+  background: var(--color-hud-2);
+}
+.dark .terminal-map .leaflet-control-attribution {
+  background: rgb(0 0 0 / 0.5);
+  color: #a1a1aa;
+}
+.dark .terminal-map .leaflet-control-attribution a { color: #d4d4d8; }
+.dark .terminal-map .leaflet-popup-content-wrapper,
+.dark .terminal-map .leaflet-popup-tip {
+  background: var(--color-hud-1);
+  color: #e4e4e7;
+}
+
+/* Statcard popup content — built as an HTML string for Leaflet's
+   bindPopup(), so styled with plain classes rather than Tailwind utilities.
+   Reuses .hud-kv (above) for the field grid instead of a parallel set of
+   card/row/label classes. */
+.terminal-statcard-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding-bottom: 0.35rem;
+  margin-bottom: 0.35rem;
+  border-bottom: 2px solid var(--card-color, var(--color-accent-fill));
+}
+.terminal-statcard-header strong { font-size: 0.9rem; }
+.terminal-statcard-type {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: rgb(113 113 122);
+}
+.terminal-statcard-audio { width: 100%; height: 32px; margin-top: 0.5rem; }

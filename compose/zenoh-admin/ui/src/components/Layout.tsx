@@ -28,8 +28,7 @@ import {
     SlidersHorizontal,
     Sun,
     Terminal,
-    Users,
-    Video
+    Users
 } from 'lucide-react'
 
 // Three-bar icon that morphs into an X on open — plain CSS transitions on
@@ -57,8 +56,7 @@ const navItems = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/network', label: 'Network', icon: Network },
   { to: '/topics', label: 'Topics', icon: ListTree },
-  { to: '/streams', label: 'Streams', icon: Video },
-  { to: '/sensors', label: 'Sensors', icon: Radar },
+  { to: '/terminal', label: 'Terminal', icon: Radar },
 ]
 
 const adminItems = [
@@ -123,7 +121,7 @@ function ChangePasswordFields({ onClose }: { onClose: () => void }) {
     return (
       <div className="space-y-4">
         <p className="text-green-600 dark:text-green-400 text-sm">Password changed successfully.</p>
-        <button onClick={onClose} className="w-full py-2 rounded-none bg-zinc-300 dark:bg-[#232326] hover:bg-zinc-400 dark:hover:bg-[#2b2b2f] text-sm">Close</button>
+        <button onClick={onClose} className="w-full py-2 rounded-lg bg-zinc-300 dark:bg-zinc-800 hover:bg-zinc-400 dark:hover:bg-zinc-700 text-sm">Close</button>
       </div>
     )
   }
@@ -131,15 +129,15 @@ function ChangePasswordFields({ onClose }: { onClose: () => void }) {
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
       <PasswordInput placeholder="Current password" value={current} onChange={e => setCurrent(e.target.value)}
-        className="w-full bg-zinc-200 dark:bg-[#141416] border border-zinc-300 dark:border-white/10 rounded-none px-3 py-2 text-sm" required />
+        className="w-full bg-zinc-200 dark:bg-zinc-950 border border-zinc-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm" required />
       <div className="space-y-1">
         <PasswordInput placeholder="New password (min 12 chars)" value={next} onChange={e => setNext(e.target.value)}
-          className="w-full bg-zinc-200 dark:bg-[#141416] border border-zinc-300 dark:border-white/10 rounded-none px-3 py-2 text-sm" required />
+          className="w-full bg-zinc-200 dark:bg-zinc-950 border border-zinc-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm" required />
         {next.length > 0 && (
           <div className="space-y-1">
             <div className="flex gap-1 h-1">
               {[1,2,3,4,5,6].map(i => (
-                <div key={i} className={`flex-1 rounded-full ${i <= strength.score ? strength.color : 'bg-zinc-300 dark:bg-[#232326]'}`} />
+                <div key={i} className={`flex-1 rounded-full ${i <= strength.score ? strength.color : 'bg-zinc-300 dark:bg-zinc-800'}`} />
               ))}
             </div>
             <p className="text-xs text-zinc-600 dark:text-zinc-400">{strength.label} · must have uppercase, lowercase, digit, special char</p>
@@ -147,11 +145,11 @@ function ChangePasswordFields({ onClose }: { onClose: () => void }) {
         )}
       </div>
       <PasswordInput placeholder="Confirm new password" value={confirm} onChange={e => setConfirm(e.target.value)}
-        className="w-full bg-zinc-200 dark:bg-[#141416] border border-zinc-300 dark:border-white/10 rounded-none px-3 py-2 text-sm" required />
+        className="w-full bg-zinc-200 dark:bg-zinc-950 border border-zinc-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm" required />
       {error && <p className="text-red-600 dark:text-red-400 text-xs">{error}</p>}
       <div className="flex gap-2 pt-1">
-        <button type="button" onClick={onClose} className="flex-1 py-2 rounded-none bg-zinc-300 dark:bg-[#232326] hover:bg-zinc-400 dark:hover:bg-[#2b2b2f] text-sm">Cancel</button>
-        <button type="submit" className="flex-1 py-2 rounded-none bg-accent-fill hover:bg-accent-fill-hover text-accent-text text-sm">Change</button>
+        <button type="button" onClick={onClose} className="flex-1 py-2 rounded-lg bg-zinc-300 dark:bg-zinc-800 hover:bg-zinc-400 dark:hover:bg-zinc-700 text-sm">Cancel</button>
+        <button type="submit" className="flex-1 py-2 rounded-lg bg-accent-fill hover:bg-accent-fill-hover text-accent-text text-sm">Change</button>
       </div>
     </form>
   )
@@ -189,7 +187,7 @@ function UserSettingsModal({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60]">
-      <div className="bg-zinc-100 dark:bg-[#0c0c0e] border border-zinc-300 dark:border-white/10 rounded-md p-6 w-full max-w-sm space-y-6">
+      <div className="bg-zinc-100 dark:bg-zinc-900 border border-zinc-300 dark:border-white/10 rounded-md p-6 w-full max-w-sm space-y-6">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">User Settings</h2>
           <button onClick={onClose} className="text-zinc-500 hover:text-zinc-900 dark:hover:text-white text-sm">Close</button>
@@ -202,11 +200,11 @@ function UserSettingsModal({ onClose }: { onClose: () => void }) {
           ) : (
             <form onSubmit={handleUsernameSubmit} className="space-y-3">
               <input type="text" placeholder="New username" value={newUsername} onChange={e => setNewUsername(e.target.value)}
-                className="w-full bg-zinc-200 dark:bg-[#141416] border border-zinc-300 dark:border-white/10 rounded-none px-3 py-2 text-sm" required />
+                className="w-full bg-zinc-200 dark:bg-zinc-950 border border-zinc-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm" required />
               <PasswordInput placeholder="Current password" value={usernamePassword} onChange={e => setUsernamePassword(e.target.value)}
-                className="w-full bg-zinc-200 dark:bg-[#141416] border border-zinc-300 dark:border-white/10 rounded-none px-3 py-2 text-sm" required />
+                className="w-full bg-zinc-200 dark:bg-zinc-950 border border-zinc-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm" required />
               {usernameError && <p className="text-red-600 dark:text-red-400 text-xs">{usernameError}</p>}
-              <button type="submit" className="w-full py-2 rounded-none bg-accent-fill hover:bg-accent-fill-hover text-accent-text text-sm">Change Username</button>
+              <button type="submit" className="w-full py-2 rounded-lg bg-accent-fill hover:bg-accent-fill-hover text-accent-text text-sm">Change Username</button>
             </form>
           )}
         </div>
@@ -259,29 +257,29 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const extraItems = role === 'superadmin' ? superAdminItems : []
 
   return (
-    <div className="flex h-screen bg-zinc-50 dark:bg-[#000000] text-zinc-900 dark:text-zinc-100">
+    <div className="flex h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100">
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:px-3 focus:py-2 focus:rounded-md focus:bg-accent-fill focus:text-accent-text focus:text-sm"
       >
         Skip to content
       </a>
-      <header className="fixed top-0 left-0 right-0 z-50 h-14 pl-16 pr-4 flex items-center gap-2 min-w-0 border-b border-zinc-200 dark:border-white/10 bg-white/97 dark:bg-[#0c0c0e]/97 backdrop-blur-xl">
+      <header className="fixed top-0 left-0 right-0 z-50 h-14 pl-16 pr-4 flex items-center gap-2 min-w-0 border-b border-zinc-200 dark:border-white/10 bg-white/97 dark:bg-zinc-900/97 backdrop-blur-xl">
         <button
           onClick={() => setSidebarOpen(v => !v)}
-          className="fixed top-2.5 left-3 z-50 flex items-center justify-center p-2.5 rounded-md bg-zinc-100 dark:bg-[#0c0c0e] border border-zinc-200 dark:border-white/10 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white transition-colors"
+          className="fixed top-2.5 left-3 z-50 flex items-center justify-center p-2.5 rounded-md bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white transition-colors"
           aria-label="Toggle menu"
           aria-expanded={sidebarOpen}
         >
           <HamburgerIcon open={sidebarOpen} />
         </button>
-        {logoUrl && <img src={logoUrl} alt="" className="w-7 h-7 rounded-none object-contain shrink-0" />}
+        {logoUrl && <img src={logoUrl} alt="" className="w-7 h-7 rounded-lg object-contain shrink-0" />}
         <span className="font-display font-bold text-xl tracking-tight truncate">{orgName}</span>
         <div className="relative ml-auto">
           <button
             onClick={() => setNotifOpen((v) => !v)}
             aria-label="Notifications"
-            className="p-1.5 rounded-none hover:bg-zinc-200 dark:hover:bg-[#141416] text-zinc-600 dark:text-zinc-400 relative focus:outline-none focus:ring-2 focus:ring-accent-ring"
+            className="p-1.5 rounded-lg hover:bg-zinc-200 dark:hover:bg-zinc-950 text-zinc-600 dark:text-zinc-400 relative focus:outline-none focus:ring-2 focus:ring-accent-ring"
           >
             <Bell size={16} />
             {notifications.length > 0 && (
@@ -360,7 +358,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       )}
       <aside className={cn(
         'w-64 flex-shrink-0 border-r border-zinc-200 dark:border-white/10 flex flex-col',
-        'fixed top-14 bottom-0 left-0 z-40 bg-white/97 dark:bg-[#0c0c0e]/97 shadow-xl backdrop-blur-xl transition-transform duration-300 ease-in-out',
+        'fixed top-14 bottom-0 left-0 z-40 bg-white/97 dark:bg-zinc-900/97 shadow-xl backdrop-blur-xl transition-transform duration-300 ease-in-out',
         sidebarOpen ? 'translate-x-0' : '-translate-x-full'
       )}>
         <nav className="flex-1 p-2 space-y-1">

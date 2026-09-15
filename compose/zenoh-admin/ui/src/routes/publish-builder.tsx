@@ -80,7 +80,7 @@ function emptyRow(): Row {
   return { topic: '', message: '', count: 1, interval_s: 1.0 }
 }
 
-const inputClass = 'w-full rounded-md border border-zinc-300 bg-zinc-200 px-3 py-2 text-sm font-mono text-zinc-900 focus:outline-none focus:ring-2 focus:ring-accent-ring disabled:opacity-50 dark:border-white/10 dark:bg-[#141416] dark:text-white'
+const inputClass = 'w-full rounded-md border border-zinc-300 bg-zinc-200 px-3 py-2 text-sm font-mono text-zinc-900 focus:outline-none focus:ring-2 focus:ring-accent-ring disabled:opacity-50 dark:border-white/10 dark:bg-zinc-950 dark:text-white'
 const textareaClass = `${inputClass} min-h-24`
 const SAFE_ENDPOINT_RE = /^[A-Za-z0-9._/:-]+$/
 
@@ -489,7 +489,7 @@ function PublishBuilderPage() {
 
             <div className="mt-4 space-y-3">
               {rows.map((row, index) => (
-                <div key={index} className="hud-frame relative rounded-md border border-zinc-200 bg-white p-4 dark:border-white/10 dark:bg-[#0c0c0e]">
+                <div key={index} className="hud-frame relative rounded-md border border-zinc-200 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
                   <HudCorners />
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_2fr_auto_auto_auto]">
                     <label className="space-y-1">
@@ -646,7 +646,7 @@ function PublishBuilderPage() {
               )}
 
               <textarea
-                className="min-h-[420px] w-full rounded-md border border-zinc-300 bg-zinc-100 p-3 font-mono text-xs leading-5 text-zinc-900 focus:outline-none focus:ring-2 focus:ring-accent-ring dark:border-white/10 dark:bg-[#141416] dark:text-white"
+                className="min-h-[420px] w-full rounded-md border border-zinc-300 bg-zinc-100 p-3 font-mono text-xs leading-5 text-zinc-900 focus:outline-none focus:ring-2 focus:ring-accent-ring dark:border-white/10 dark:bg-zinc-950 dark:text-white"
                 value={routerConfigText}
                 onChange={e => {
                   setRouterConfigText(e.target.value)
@@ -708,7 +708,7 @@ function PublishBuilderPage() {
               {routerServices.map(service => {
                 const busy = routerBusy?.startsWith(`${service.name}:`) ? routerBusy.split(':')[1] : null
                 return (
-                  <div key={service.name} className="grid grid-cols-[1.2fr_auto_auto_auto] items-center gap-2 rounded-md border border-zinc-200 bg-white px-3 py-2 dark:border-white/10 dark:bg-[#0c0c0e]">
+                  <div key={service.name} className="grid grid-cols-[1.2fr_auto_auto_auto] items-center gap-2 rounded-md border border-zinc-200 bg-white px-3 py-2 dark:border-white/10 dark:bg-zinc-900">
                     <div className="min-w-0">
                       <p className="truncate font-mono text-sm text-zinc-800 dark:text-zinc-200">
                         {service.name}{service.name === 'zenoh' ? ' (this host)' : ''}
@@ -724,7 +724,7 @@ function PublishBuilderPage() {
                         title="Start"
                         disabled={!!busy || service.running}
                         onClick={() => void routerAction(service.name, 'start')}
-                        className="rounded-none p-2 text-zinc-500 transition-colors hover:bg-emerald-500/10 hover:text-emerald-500 disabled:opacity-30"
+                        className="rounded-lg p-2 text-zinc-500 transition-colors hover:bg-emerald-500/10 hover:text-emerald-500 disabled:opacity-30"
                       >
                         <Play size={13} />
                       </button>
@@ -733,7 +733,7 @@ function PublishBuilderPage() {
                         title="Stop"
                         disabled={!!busy || !service.running}
                         onClick={() => void routerAction(service.name, 'stop')}
-                        className="rounded-none p-2 text-zinc-500 transition-colors hover:bg-red-500/10 hover:text-red-500 disabled:opacity-30"
+                        className="rounded-lg p-2 text-zinc-500 transition-colors hover:bg-red-500/10 hover:text-red-500 disabled:opacity-30"
                       >
                         <Square size={12} />
                       </button>
@@ -742,7 +742,7 @@ function PublishBuilderPage() {
                         title="Refresh"
                         disabled={!!busy}
                         onClick={() => void loadRuntime()}
-                        className="rounded-none p-2 text-zinc-500 transition-colors hover:bg-zinc-200/50 hover:text-zinc-900 disabled:opacity-30 dark:hover:bg-white/[0.05] dark:hover:text-white"
+                        className="rounded-lg p-2 text-zinc-500 transition-colors hover:bg-zinc-200/50 hover:text-zinc-900 disabled:opacity-30 dark:hover:bg-white/[0.05] dark:hover:text-white"
                       >
                         <RefreshCw size={13} className={busy === 'restart' ? 'animate-spin' : ''} />
                       </button>

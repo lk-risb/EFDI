@@ -14,7 +14,7 @@ MIL-STD-2525C affiliation letter changes: neutral (green, no alert) → unknown
 See tak_layer.py's _sensor_alert_cot_type().
 
 Zenoh topic:
-  <ORG>/land/dronuradaras/acoustic/neutral/sensor/json/status   — sensor nodes
+  <ORG>/land/mainline_dronuradaras/acoustic/neutral/sensor/json/status   — sensor nodes
   (carries last_detection_ts when a detection has occurred recently)
 
 No API key required — uses the same public CORS origin as the website.
@@ -84,7 +84,7 @@ def _get(path: str) -> dict | None:
 # ---------------------------------------------------------------------------
 
 def run_devices(pub: "zenoh.Publisher", verbose: bool):
-    topic_suffix = "land/dronuradaras/acoustic/neutral/sensor"
+    topic_suffix = "land/mainline_dronuradaras/acoustic/neutral/sensor"
     print("Device poll topic: {}/{}".format(TOPIC_ROOT, topic_suffix), flush=True)
 
     while True:
@@ -163,7 +163,7 @@ def run_devices(pub: "zenoh.Publisher", verbose: bool):
                     "_src":        "dronuradaras.lt",
                     "_ts":         time.time(),
                     "sensor_type": "acoustic",
-                    "sensor_id":   "DRONU-{}".format(dev_id[:8]),
+                    "sensor_id":   "MAINLINE-DRONU-{}".format(dev_id[:8]),
                     "sensor_name": dev.get("display_name", "dronu-sensor"),
                     "lat_deg":     round(lat, 6),
                     "lon_deg":     round(lon, 6),
@@ -195,7 +195,7 @@ def run_devices(pub: "zenoh.Publisher", verbose: bool):
                     "_src":        "dronuradaras.lt",
                     "_ts":         time.time(),
                     "sensor_type": "acoustic",
-                    "sensor_id":   "DRONU-{}".format(dev_id[:8]),
+                    "sensor_id":   "MAINLINE-DRONU-{}".format(dev_id[:8]),
                     "sensor_name": _device_names.get(dev_id, "dronu-sensor"),
                     "lat_deg":     round(lat, 6),
                     "lon_deg":     round(lon, 6),
@@ -234,7 +234,7 @@ def _publish_sensor_alert(pub_dev: "zenoh.Publisher", dev_id: str, last_detectio
         "_src":              "dronuradaras.lt",
         "_ts":                time.time(),
         "sensor_type":        "acoustic",
-        "sensor_id":          "DRONU-{}".format(dev_id[:8]),
+        "sensor_id":          "MAINLINE-DRONU-{}".format(dev_id[:8]),
         "sensor_name":        name,
         "lat_deg":            round(lat, 6),
         "lon_deg":            round(lon, 6),
@@ -247,7 +247,7 @@ def _publish_sensor_alert(pub_dev: "zenoh.Publisher", dev_id: str, last_detectio
 
 
 def run_detections(pub_dev: "zenoh.Publisher", verbose: bool):
-    print("Detection poll — recolors sensor markers on {}/land/dronuradaras/acoustic/neutral/sensor"
+    print("Detection poll — recolors sensor markers on {}/land/mainline_dronuradaras/acoustic/neutral/sensor"
           .format(TOPIC_ROOT), flush=True)
 
     seen: dict[str, float] = {}   # detection_id → published_at timestamp
@@ -333,7 +333,7 @@ def main():
             print("dronuradaras Zenoh connect failed: {} — retry in 10s".format(exc), flush=True)
             time.sleep(10)
 
-    topic_dev = "{}/land/dronuradaras/acoustic/neutral/sensor/tracks/v1".format(TOPIC_ROOT)
+    topic_dev = "{}/land/mainline_dronuradaras/acoustic/neutral/sensor/tracks/v1".format(TOPIC_ROOT)
     pub_dev = session.declare_publisher(topic_dev)
 
     print("dronuradaras bridge starting", flush=True)

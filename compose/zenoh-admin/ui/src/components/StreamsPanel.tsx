@@ -1,20 +1,10 @@
-import {createFileRoute, redirect} from '@tanstack/react-router'
 import {useEffect, useRef, useState} from 'react'
 import {Settings2, X} from 'lucide-react'
 import {HudCorners} from '@/components/HudCorners'
-import {Layout} from '@/components/Layout'
-import {PageHeader} from '@/components/PageHeader'
 import {apiJson, errorMessage} from '@/lib/api'
 import {notify} from '@/lib/notify'
 import {useAuth} from '@/store/auth'
 import {cn} from '@/lib/utils'
-
-export const Route = createFileRoute('/streams')({
-  beforeLoad: () => {
-    if (!useAuth.getState().token) throw redirect({to: '/login'})
-  },
-  component: StreamsPage,
-})
 
 interface StreamInfo {
   name: string
@@ -239,7 +229,7 @@ function Toggle({label, help, checked, disabled, onChange}: {
   )
 }
 
-const inputClass = 'w-24 rounded-md border border-zinc-300 bg-zinc-100 px-2 py-1 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-accent-ring disabled:opacity-50 dark:border-white/10 dark:bg-[#141416] dark:text-white'
+const inputClass = 'w-24 rounded-md border border-zinc-300 bg-zinc-100 px-2 py-1 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-accent-ring disabled:opacity-50 dark:border-white/10 dark:bg-zinc-950 dark:text-white'
 
 function MediamtxSettingsPanel({settings, canWrite, onSaved}: {
   settings: MediamtxSettings; canWrite: boolean; onSaved: (s: MediamtxSettings) => void
@@ -383,7 +373,13 @@ function MediamtxSettingsPanel({settings, canWrite, onSaved}: {
   )
 }
 
-function StreamsPage() {
+// Ported from the deleted routes/streams.tsx — the Terminal tab hosts this
+// below the live map instead of a separate Streams tab. No data link
+// between a map entity and a stream tile: a drone's RTMP path is whatever
+// an operator typed into its GCS app, not something EFDI can associate
+// with a specific tracked uid (see docs/11-troubleshooting.md's TAK UAS
+// Tool video note for the same limitation on the TAK side).
+export function StreamsPanel() {
   const {role} = useAuth()
   const [streams, setStreams] = useState<StreamInfo[]>([])
   const [enlarged, setEnlarged] = useState<string | null>(null)
@@ -398,8 +394,6 @@ function StreamsPage() {
       }
     }
     load()
-    // Matches this codebase's existing dashboard poll cadence (network.tsx,
-    // index.tsx's /api/health) — MediaMTX's own path list is cheap to poll.
     const interval = setInterval(load, 5000)
     return () => clearInterval(interval)
   }, [])
@@ -411,8 +405,11 @@ function StreamsPage() {
   }, [])
 
   return (
-    <Layout>
-      <PageHeader title="Streams" eyebrow="VIDEO" count={streams.length} countLabel="active" />
+    <div>
+      <div className="mb-4 flex items-baseline gap-3">
+        <h2 className="hud-label text-sm text-zinc-700 dark:text-zinc-300">Video streams</h2>
+        <span className="hud-label text-xs text-zinc-500">{streams.length} active</span>
+      </div>
       <MediamtxSettingsPanel
         settings={settings}
         canWrite={role === 'superadmin'}
@@ -436,6 +433,6 @@ function StreamsPage() {
           onClose={() => setEnlarged(null)}
         />
       )}
-    </Layout>
+    </div>
   )
 }
