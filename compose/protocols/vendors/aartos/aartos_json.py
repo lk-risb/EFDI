@@ -57,6 +57,43 @@ _AFFILIATION = {
 # host -> _entity_kind -> {"track_id": str, "uid": str, "last_seen": float}
 _class_identity: dict[str, dict[str, dict]] = {}
 
+# Stable per-host antenna-site identity, same churn problem as
+# _class_identity above but for antennaID instead of trackID: RTSA-Suite
+# PRO reassigns a fresh antennaID to the same physical IsoLOG unit across
+# samples (confirmed live — a single stationary antenna was showing as ~10
+# stacked, identically-named CoT markers in WinTAK, one per antennaID it
+# had cycled through). A surveyed antenna doesn't move between samples the
+# way a detected track does, so identity here is by proximity — the same
+# _distance_m() helper the antenna-fallback filter below already uses —
+# rather than by _entity_kind, which has no meaning for a site.
+# host -> [{"uid": str, "lat": float, "lon": float}]
+_site_identity: dict[str, list[dict]] = {}
+
+# Two samples of the SAME physical antenna land within GPS-survey jitter of
+# each other (well under a meter, typically); two genuinely DIFFERENT
+# antennas are expected to be much further apart than this. Deliberately
+# tighter than _ANTENNA_FALLBACK_RADIUS_M below (40m, a different check —
+# "is a drone fix suspiciously on top of an antenna" — not "is this the
+# same antenna as last time").
+_SITE_IDENTITY_RADIUS_M = 15.0
+
+
+def _stable_site_uid(host: str, antenna_id, lat: float, lon: float) -> str:
+    identities = _site_identity.setdefault(host, [])
+    for ident in identities:
+        if _distance_m(lat, lon, ident["lat"], ident["lon"]) < _SITE_IDENTITY_RADIUS_M:
+            ident["lat"], ident["lon"] = lat, lon
+            return ident["uid"]
+    # Host-scoped, matching the track-identity fallback's own
+    # "aartos-{host}-{id}" convention (_class_identity above) — bare
+    # _site_key(antenna_id) has no host in it, so two independent
+    # RTSA-Suite instances reporting the same small antennaID (a per-
+    # installation index, not a globally unique value) would otherwise
+    # collide onto one site marker.
+    uid = "aartos-{}-{}".format(_key_segment(host), _key_segment(str(antenna_id)))
+    identities.append({"uid": uid, "lat": lat, "lon": lon})
+    return uid
+
 # Seconds a class must be absent (using AARTOS's own sample timestamp, not
 # wall-clock) before its identity is actually tombstoned. AARTOS's own
 # detection is noisy enough to skip a class for one poll and pick it back up
@@ -280,6 +317,9 @@ def run() -> None:
             site = antenna_to_site(antenna, ref_ts)
             if site is None:
                 continue
+            stable_uid = _stable_site_uid(host, antenna.get("antennaID"), site["lat_deg"], site["lon_deg"])
+            site["sensor_id"] = stable_uid
+            site["uid"] = stable_uid
             antenna_positions.append((site["lat_deg"], site["lon_deg"]))
             session.put(site_topic(site), json.dumps(site).encode(), encoding="application/json")
 

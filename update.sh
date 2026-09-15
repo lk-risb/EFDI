@@ -16,6 +16,19 @@ PYTHON="$ROOT/compose/venv/bin/python3"
 # shellcheck source=scripts/cleanup_stale_pycache.sh
 . "$ROOT/scripts/cleanup_stale_pycache.sh"
 
+# ── Startup banner (ported from the INTCORE installer's ASCII splash) ──────
+echo -e "${C}"
+cat <<'BANNER'
+=====================================================================
+ _____ _____ ____ ___    ____    _  _____ _______        ___ __   __
+| ____|  ___|  _ \_ _|  / ___|  / \|_   _| ____\ \      / / \\ \ / /
+|  _| | |_  | | | | |  | |  _  / _ \ | | |  _|  \ \ /\ / / _ \\ V /
+| |___|  _| | |_| | |  | |_| |/ ___ \| | | |___  \ V  V / ___ \| |
+|_____|_|   |____/___|  \____/_/   \_\_| |_____|  \_/\_/_/   \_\_|
+=====================================================================
+BANNER
+echo -e "${NC}"
+
 [ -f "$ENV_FILE" ] || fail "compose/.env not found — run ./install.sh first"
 [ -d "$ROOT/.git" ] || fail "Not a git repo — clone via git, not a manual download"
 cd "$ROOT"
