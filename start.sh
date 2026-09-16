@@ -102,7 +102,7 @@ SERVICES=(
     admin-control
     cert-renewer supervisor presence
     meteolt
-    sitaware dronuradaras mainline_terminal asterix track-fusion
+    sitaware dronuradaras mainline_terminal mavlink-command asterix track-fusion
     nffi sapient stanag4586 stanag4609 stanag5516
     sapient-raw stanag4586-raw stanag4609-raw stanag5516-raw
     mqtt-raw aartos-raw aartos-wifi-raw
@@ -182,6 +182,7 @@ declare -A SVC_CAT=(
     [mqtt]="Protocols" [sparkplug]="Protocols"
     [nffi]="Protocols"
     [sitaware]="Sensor bridges" [dronuradaras]="Sensor bridges" [mainline_terminal]="Sensor bridges"
+    [mavlink-command]="Sensor bridges"
     [sapient]="Protocols" [stanag4586]="Protocols" [stanag4609]="Protocols" [stanag5516]="Protocols"
     [tak-bridge]="C2 inputs" [nffi-bridge]="C2 inputs"
     [mqtt-raw]="Sensor bridges"
@@ -210,6 +211,7 @@ declare -A SVC_DESC=(
     [nffi]="Raw NFFI XML on Zenoh → normalized friendly-force tracks"
     [dronuradaras]="dronuradaras.lt drone detection network"
     [mainline_terminal]="mainline.inc TERMINAL drone-fleet C2 (WebSocket)"
+    [mavlink-command]="Generic MAVLink drone command bridge (arm/takeoff/rtl/land/hold/goto)"
     [sapient]="SAPIENT / BSI Flex 335 sensor feed"
     [stanag4586]="STANAG 4586 UAV control (VSM)"
     [stanag4609]="STANAG 4609 KLV decoder (raw → tracks)"
@@ -262,6 +264,7 @@ svc_ready() {
         stanag5516-raw) return 0 ;;  # UDP listener, default port 3010
         sitaware)     return 0 ;;  # always ready; prompts for server IP at launch if unset
         mainline_terminal) return 0 ;;  # always ready; prompts for credentials at launch if unset
+        mavlink-command) return 0 ;;  # always ready; MAVLINK_ENDPOINT has a sensible default
         tak-bridge)   [[ "${TAK_HOST:-}" || "${TAK_HOST_FALLBACK:-}" || "${TAK_HOST_TAILSCALE:-}" ]] ;;
         sapient) return 0 ;;
         stanag4586) [[ "${STANAG4586_PROFILE:-}" == "legacy_ed3_approx" &&
@@ -895,6 +898,10 @@ launch() {
                 export MAINLINE_TERMINAL_PASS="$mt_pass"
             fi
             _start mainline_terminal bridges/vendors/mainline/terminal_bridge.py
+            ;;
+
+        mavlink-command)
+            _start mavlink-command bridges/mavlink_command_bridge.py
             ;;
 
 
