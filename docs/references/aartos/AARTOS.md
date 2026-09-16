@@ -89,6 +89,55 @@ session, not just a synthetic self-consistency check:
   issue, and not something that starts producing data just because a drone
   starts flying.
 
+**2026-09-16 update — WiFi/spectrum blocks now wired, `/sample` still stale:**
+the operator rewired the RTSA-Suite PRO flow graph on the AARTOS laptop
+today (new mission `automatic_master_final_nauja_0916_efdi.rmix`, confirmed
+via `/info`): added a merger/mux block (`/inputs` on port 54663 now lists
+16 `muxN` inputs plus `main`, where it previously had none) and connected
+every detector directly to it, intending all data to reach a single HTTP
+Server block on port 54663. Checked live against `/healthstatus`:
+
+- `WIFI 180`/`WIFI 183`/`WIFI 184` blocks are now present with
+  `state: 5` (operational) — this directly supersedes the 2026-09-02 entry
+  above, which found the WiFi/operator-position block wired to an HTTP
+  endpoint but with **no** detector connected (empty health tree). It has a
+  real detector connected now.
+- `SPECTRAN 180`/`SPECTRAN 184` (Aaronia SPECTRAN V6B spectrum-analyzer
+  blocks) also report `state: 5`; `SPECTRAN 183` reports `state: 7`
+  (Warning) — consistently, across every place it appears in the tree — an
+  operator-side issue to check, not something visible from `/sample`.
+- `IQ DJI DroneID Decoder` blocks (one per antenna: 180/183/184) are present
+  with `state: 5` — a DJI RemoteID (DroneID) decode path exists in this
+  flow graph. Not yet cross-checked against a real decoded payload (no
+  drone was broadcasting DroneID during this check).
+
+Despite all of that, `/sample` on port 54663 returned the **exact same
+`data.antennas[]` snapshot, same `updateTime`, across every poll over a
+10+ minute window** (`trackings: []` throughout) — the live health tree
+above proves the flow graph itself is running and freshly updating (its own
+`Last Update` timestamp advances), but whatever `/sample` actually
+serializes did not pick up new data in that window. Two explanations,
+neither confirmed:
+1. Nothing was actually detected in that window (no aircraft flying, no
+   WiFi target in range) — `trackings: []` would be correct, not stale.
+2. The HTTP Server block's own sample-source binding was not repointed at
+   the new merger's output when the merger was added, and is still reading
+   whatever single block fed it before.
+Whichever it is, `aartos_json.py`'s decoder was not touched — nothing in
+that decoder's field mapping needs to change based on the merger itself;
+merging multiple blocks into one HTTP Server does not create any new JSON
+key or shape, per the 2026-09-02 finding above ("no separate endpoint for a
+particular detection type ... depends entirely on what's wired").
+
+Also worth stating explicitly since it came up in this check: RTSA-Suite
+PRO's HTTP Server block only ever serializes Sample/TrackState JSON
+(`antennas[]`/`trackings[]`) regardless of what's wired to it — raw
+spectrum-sweep/waterfall data from a SPECTRAN block is not expected to
+appear in this JSON at all, even once everything is correctly wired. That
+data class is not part of this vendor contract as understood so far;
+treat any future report of "spectrum data over `/sample`" as needing new
+research, not an extension of the existing decoder.
+
 ## What hasn't been verified
 
 - `data.trackings[]` (an actual drone detection) has not yet been observed
