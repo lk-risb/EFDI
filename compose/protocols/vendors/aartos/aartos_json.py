@@ -34,10 +34,13 @@ INPUT_TOPIC = os.environ.get("AARTOS_INPUT_TOPIC") or TOPIC_ROOT + "/raw/aartos/
 RAW_PREFIX = TOPIC_ROOT + "/raw/aartos/"
 
 # alertLevel (vendor's own threat classification) -> the affiliation segment
-# tak_layer.py's _TOPIC_COT wildcards already key off of.
+# tak_layer.py's _TOPIC_COT wildcards already key off of. "warning" is AARTOS's
+# own lowest-severity alert tier (below "defend"/"panic") — not yet a
+# confirmed hostile act, so it maps to "unknown" rather than "hostile" to
+# avoid over-calling a track before it's escalated.
 _AFFILIATION = {
     "friendly": "friendly",
-    "warning": "hostile",
+    "warning": "unknown",
     "defend": "hostile",
     "panic": "hostile",
     "unknown": "unknown",
