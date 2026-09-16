@@ -701,9 +701,23 @@ def _4607_decode_packet(data: bytes) -> tuple[dict, list[dict]] | None:
                 track = {
                     "_ts": time.time(),
                     "_src": "STANAG 4607",
-                    "uid": "stanag4607-{}-{}".format(
-                        header["job_id"], report.get("target_report_index", len(tracks))),
+                    # target_report_index is only unique WITHIN one dwell
+                    # (it resets each dwell — the base 4607 dwell segment
+                    # has no persistent per-target track ID at all, unlike
+                    # STANAG 4586's or a radar decoder's own stable IDs).
+                    # Without dwell_index in the key, two unrelated targets
+                    # in two different dwells that land on the same index
+                    # collide onto one uid — a map marker jumping between
+                    # them, same failure class as the aartos antenna-site
+                    # uid-churn bug. This does NOT correlate the same
+                    # physical target across dwells (4607 alone can't); it
+                    # only guarantees two different reports never share a
+                    # uid, which is the part that was actually broken.
+                    "uid": "stanag4607-{}-{}-{}".format(
+                        header["job_id"], dwell["dwell_index"],
+                        report.get("target_report_index", len(tracks))),
                     "job_id": header["job_id"],
+                    "dwell_index": dwell["dwell_index"],
                     "dwell_time_s": dwell["dwell_time_s"],
                     "sensor_lat_deg": dwell["sensor_lat_deg"],
                     "sensor_lon_deg": dwell["sensor_lon_deg"],

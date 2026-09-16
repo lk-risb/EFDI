@@ -77,7 +77,22 @@ ok()      { echo -e "${GREEN}[✓]${NC} $*"; }
 info()    { echo -e "${CYAN}[*]${NC} $*"; }
 warn()    { echo -e "${YELLOW}[!]${NC} $*"; }
 err()     { echo -e "${RED}[✗]${NC} $*"; exit 1; }
-section() { echo -e "\n${CYAN}── $* ──────────────────────────────────────────────────────${NC}"; }
+# Numbered, framed step banners (ported from the INTCORE installer's
+# "====\n[N/TOTAL] Title...\n====" style) instead of a bare underlined
+# heading — TOTAL_STEPS must match the number of section()/section_done()
+# pairs actually reachable in a single run (see the calls below).
+TOTAL_STEPS=12
+STEP=0
+SECTION_TITLE=""
+_SECTION_RULE="$(printf '=%.0s' $(seq 1 70))"
+section() {
+    STEP=$((STEP + 1))
+    SECTION_TITLE="$*"
+    echo -e "\n${CYAN}${_SECTION_RULE}${NC}"
+    echo -e "${CYAN}[$STEP/$TOTAL_STEPS] ${SECTION_TITLE}...${NC}"
+    echo -e "${CYAN}${_SECTION_RULE}${NC}\n"
+}
+section_done() { ok "[$STEP/$TOTAL_STEPS] ${SECTION_TITLE} COMPLETED."; }
 
 # A failed `docker compose up` only reports orchestration events
 # ("dependency ... is unhealthy"), never the failing container's own
@@ -122,7 +137,9 @@ if [ -f "$ENV_FILE" ]; then
         warn "compose/.env exists but this deployment was never fully installed"
         warn "(no ${_EXISTING_POD_STATE_DIR}/zenoh/config.json5) — reconfiguring instead of offering Reinstall."
     else
-        section "Existing installation"
+        # Not a numbered step (section()) — this is a pre-flow branch point,
+        # not part of the linear 1..TOTAL_STEPS sequence below.
+        echo -e "\n${CYAN}── Existing installation ──────────────────────────────────${NC}"
         echo "  [R] Reinstall (remove local images/containers, keep certs and data)"
         echo "  [C] Full reconfigure"
         echo "  [Q] Cancel"
@@ -155,6 +172,7 @@ if [ "$INSTALL_MODE" = "testing" ]; then
 else
     echo -e "  ${GREEN}Production mode${NC}: certs from scripts/gen-certs.sh required, mTLS enforced."
 fi
+section_done
 
 # ── OS update ─────────────────────────────────────────────────────────────────
 section "OS update"
@@ -175,6 +193,7 @@ if (( REBOOT_NEEDED )); then
     exit 0
 fi
 ok "System up to date."
+section_done
 
 # ── Prerequisites ─────────────────────────────────────────────────────────────
 section "Prerequisites"
@@ -286,6 +305,7 @@ if (( DOCKER_JUST_INSTALLED )); then
     warn "Log out and back in (or reboot), then re-run ./install.sh to continue."
     exit 0
 fi
+section_done
 
 # ── Networking (NetBird mesh) ──────────────────────────────────────────────────
 # Production mode only — testing mode is explicitly local-only, no fabric.
@@ -346,6 +366,7 @@ if [ "$INSTALL_MODE" = "production" ]; then
             esac
         done
     fi
+    section_done
 fi
 
 # ── EFDI certs / namespace ──────────────────────────────────────────────────────
@@ -373,6 +394,7 @@ if [ "$INSTALL_MODE" = "production" ]; then
     ZENOH_LOCAL_ENDPOINT="tcp/127.0.0.1:7448"
     info "Generated placeholder PARTNER_NAMESPACE: $PARTNER_NAMESPACE"
     info "Replace certs and namespace from the WebUI's Certificates page after first boot."
+    section_done
 else
     # Testing mode — generate everything automatically
     section "Test namespace and directories"
@@ -384,6 +406,7 @@ else
     info "Generated PARTNER_NAMESPACE: $PARTNER_NAMESPACE"
     info "Test certs directory       : $BUNDLE_DIR"
     info "Pod state directory        : $POD_STATE_DIR"
+    section_done
 fi
 
 # ── Sensor bridges ─────────────────────────────────────────────────────────────
@@ -396,6 +419,7 @@ fi
 section "Sensor and C2 integrations"
 info "Configure ASTERIX radar, SitaWare, and TAK Server connections after"
 info "first boot from the Zenoh Admin GUI (Integration Settings)."
+section_done
 
 # ── Admin credentials and generated secrets ──────────────────────────────────
 section "Zenoh WebUI administrator"
@@ -433,6 +457,7 @@ ZENOH_ADMIN_SECRET_KEY="$(env_value ZENOH_ADMIN_SECRET_KEY)"
 ZENOH_ADMIN_SECRET_KEY="${ZENOH_ADMIN_SECRET_KEY:-$(openssl rand -hex 32)}"
 EFDI_CONTROL_TOKEN="$(env_value EFDI_CONTROL_TOKEN)"
 EFDI_CONTROL_TOKEN="${EFDI_CONTROL_TOKEN:-$(openssl rand -hex 32)}"
+section_done
 
 # ── Summary ────────────────────────────────────────────────────────────────────
 echo ""
@@ -506,6 +531,7 @@ if [ "$INSTALL_MODE" = "production" ]; then
 else
     warn "Test certificates are NOT suitable for production — valid 10 years, self-signed."
 fi
+section_done
 
 # ── Pod state dirs + Zenoh config (bootstrap — TCP, no mTLS) ───────────────────
 # Every install boots plaintext first, regardless of mode. Real mTLS is turned
@@ -562,6 +588,7 @@ printf '%s\n' "${NAMESPACE_PREFIX}" > "${POD_STATE_DIR}/data-topic-prefix"
 chgrp 10001 "${POD_STATE_DIR}/data-topic-prefix" 2>/dev/null || true
 chmod 664 "${POD_STATE_DIR}/data-topic-prefix" 2>/dev/null || true
 ok "Data topic prefix written: ${POD_STATE_DIR}/data-topic-prefix (${NAMESPACE_PREFIX})"
+section_done
 
 # ── Write compose/.env ─────────────────────────────────────────────────────────
 section "Writing compose/.env"
@@ -641,6 +668,7 @@ fi
 } > "$ENV_FILE"
 chmod 600 "$ENV_FILE"
 ok "compose/.env written (mode 600)"
+section_done
 
 # ── Python venv ────────────────────────────────────────────────────────────────
 section "Python virtual environment"
@@ -657,6 +685,7 @@ info "Synchronizing Python runtime dependencies…"
     -r "$SCRIPT_DIR/compose/requirements.txt" \
     -r "$SCRIPT_DIR/compose/zenoh-admin/requirements.txt"
 ok "Venv ready from compose/requirements.txt"
+section_done
 
 # ── Infrastructure ────────────────────────────────────────────────────────────
 section "EFDI infrastructure"
@@ -691,16 +720,17 @@ scrub_admin_bootstrap_secret "$ENV_FILE" \
 
 EFDI_NONINTERACTIVE=1 "$SCRIPT_DIR/start.sh" --restore
 ok "Infrastructure and saved native services started"
+section_done
 
-# ── Done ──────────────────────────────────────────────────────────────────────
+# ── Done (ported from the INTCORE installer's final completion banner) ─────
 echo ""
-echo -e "${BOLD}╔══════════════════════════════════════════════════════════════╗${NC}"
+echo -e "${GREEN}${_SECTION_RULE}${NC}"
 if [ "$INSTALL_MODE" = "testing" ]; then
-echo -e "${YELLOW}${BOLD}║           EFDI bridge stack ready  [TESTING MODE]            ║${NC}"
+    echo -e "${YELLOW}${BOLD}  EFDI BRIDGE STACK INSTALLATION COMPLETED SUCCESSFULLY  [TESTING MODE]${NC}"
 else
-echo -e "${GREEN}${BOLD}║                  EFDI bridge stack ready                     ║${NC}"
+    echo -e "${GREEN}${BOLD}  EFDI BRIDGE STACK INSTALLATION COMPLETED SUCCESSFULLY${NC}"
 fi
-echo -e "${BOLD}╚══════════════════════════════════════════════════════════════╝${NC}"
+echo -e "${GREEN}${_SECTION_RULE}${NC}"
 echo ""
 echo "  Start bridges  : ./start.sh"
 echo "  Stop bridges   : ./stop.sh"

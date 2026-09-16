@@ -29,6 +29,23 @@ cat <<'BANNER'
 BANNER
 echo -e "${NC}"
 
+# Numbered, framed step banners (ported from the INTCORE installer's
+# "====\n[N/TOTAL] Title...\n====" style), overriding _spinner.sh's plain
+# underlined section() for this script only.
+TOTAL_STEPS=8
+STEP=0
+SECTION_TITLE=""
+_SECTION_RULE="$(printf '=%.0s' $(seq 1 70))"
+section() {
+    STEP=$((STEP + 1))
+    SECTION_TITLE="$*"
+    echo -e "\n${C}${_SECTION_RULE}${NC}"
+    echo -e "${C}[$STEP/$TOTAL_STEPS] ${SECTION_TITLE}...${NC}"
+    echo -e "${C}${_SECTION_RULE}${NC}\n"
+}
+section_done() { ok "[$STEP/$TOTAL_STEPS] ${SECTION_TITLE} COMPLETED."; }
+
+section "Pre-flight checks"
 [ -f "$ENV_FILE" ] || fail "compose/.env not found — run ./install.sh first"
 [ -d "$ROOT/.git" ] || fail "Not a git repo — clone via git, not a manual download"
 cd "$ROOT"
@@ -71,9 +88,9 @@ if [ -n "$BUNDLE_DIR" ] && [ -d "${BUNDLE_DIR}/efdi" ]; then
     chgrp 10001 "${BUNDLE_DIR}/efdi" 2>/dev/null || true
     chmod 775 "${BUNDLE_DIR}/efdi" 2>/dev/null || true
 fi
+section_done
 
-banner "Update"
-
+section "Host OS packages"
 # Host OS packages — separate from the pinned container/Python/JS dependency
 # versions below, and previously never touched by this script at all. Only
 # apt-based hosts are supported; anything else is skipped with a warning
@@ -108,7 +125,9 @@ if command -v apt-get >/dev/null 2>&1; then
 else
     warn "apt-get not found — skipping host OS package update (unsupported host OS)"
 fi
+section_done
 
+section "Pulling latest changes"
 branch="$(git symbolic-ref --quiet --short HEAD)" \
     || fail "Repo is in detached HEAD state — check out a branch first"
 upstream="$(git rev-parse --abbrev-ref "${branch}@{upstream}" 2>/dev/null)" \
@@ -166,7 +185,9 @@ if [ "$old_head" != "$(git rev-parse HEAD)" ]; then
 else
     dim "No changes — already up to date."
 fi
+section_done
 
+section "Environment backfill"
 chmod 600 "$ENV_FILE"
 backfill() {
     local key="$1" value="$2"
@@ -185,7 +206,9 @@ backfill ZENOH_ADMIN_FIRST_USER admin
 backfill EFDI_CONTROL_TOKEN "$(openssl rand -hex 32)"
 grep -q '^ZENOH_ADMIN_FIRST_PASS=' "$ENV_FILE" \
     || printf 'ZENOH_ADMIN_FIRST_PASS=\n' >>"$ENV_FILE"
+section_done
 
+section "Docker storage preflight"
 EFDI_DB_DATA_DIR="$(grep '^EFDI_DB_DATA_DIR=' "$ENV_FILE" | head -1 | cut -d= -f2- | tr -d '[:space:]')"
 mkdir -p "$EFDI_DB_DATA_DIR"
 # Same FUSE guard as install.sh — the database must never end up on the
@@ -209,7 +232,9 @@ if (( free_mb < min_free_mb )); then
     fail "Only ${free_mb} MiB free on Docker storage; ${min_free_mb} MiB required"
 fi
 ok "Docker storage preflight: ${free_mb} MiB free"
+section_done
 
+section "Python dependencies"
 if [ ! -x "$PYTHON" ]; then
     python3 -m venv "$ROOT/compose/venv"
 fi
@@ -218,7 +243,9 @@ run_spin "Synchronizing Python dependencies" "Python dependencies synchronized" 
         -r "$ROOT/compose/requirements.txt" \
         -r "$ROOT/compose/zenoh-admin/requirements.txt" \
     || fail "Python dependency installation failed"
+section_done
 
+section "Infrastructure rebuild and restart"
 GIT_COMMIT="$(git rev-parse HEAD)"
 export GIT_COMMIT
 run_spin "Building updated infrastructure" "Infrastructure image built" \
@@ -242,17 +269,18 @@ info "Restarting zenoh-admin-proxy to refresh the backend connection..."
 docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" restart zenoh-admin-proxy \
     || fail "zenoh-admin-proxy restart failed"
 ok "zenoh-admin-proxy restarted"
+section_done
 
-printf '\n'
+section "Self-test"
 if ! efdi_selftest; then
     warn "Self-test failed — escalating to health.sh for automatic recovery"
     EFDI_NONINTERACTIVE=1 bash "$ROOT/health.sh" || fail "Health check failed — see output above"
 fi
+section_done
 
-printf '\n'
-printf '  %b┌────────────────────────────────────────────────┐%b\n' "$G" "$NC"
-printf '  %b│%b  %bUpdate complete%b                              %b│%b\n' \
-    "$G" "$NC" "$W" "$NC" "$G" "$NC"
-printf '  %b└────────────────────────────────────────────────┘%b\n\n' "$G" "$NC"
+# ── Done (ported from the INTCORE installer's final completion banner) ─────
+echo -e "\n${G}${_SECTION_RULE}${NC}"
+echo -e "${G}${BOLD}  EFDI UPDATE COMPLETED SUCCESSFULLY${NC}"
+echo -e "${G}${_SECTION_RULE}${NC}\n"
 printf '  %bLogs:%b  tail -f "%s"\n\n' \
     "$DIM" "$NC" "\${POD_STATE_DIR}/logs/<service>.log"
