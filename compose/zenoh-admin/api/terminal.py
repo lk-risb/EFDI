@@ -54,12 +54,18 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
+from typing import Literal
 
+import zenoh
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse, Response
+from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from .deps import require_role
+from .db import get_db
+from .deps import require_role, write_audit
 from .local_zenoh import open_local_session
+from .topics import _data_prefix
 
 router = APIRouter(prefix="/api/terminal", tags=["terminal"])
 
@@ -79,6 +85,55 @@ _SENSORS: dict[str, dict] = {}   # sensor_id -> latest known sensor payload
 
 _AIR_KEY_EXPR = "**/air/**"
 _SENSOR_KEY_EXPR = "**/land/**/sensor/**"
+
+# Reused for outbound command publishes too (see send_command below) instead
+# of opening a fresh Zenoh session per request — same session
+# start_terminal_observer() already holds for the app's lifespan.
+_session = None
+
+_ACKS: dict[str, dict] = {}   # entity_id -> latest {cmd, result, _ts, ...} ack
+_ACK_KEY_EXPR = "**/air/mavlink/ack/**"
+
+_COMMAND_CMDS = {"arm", "disarm", "takeoff", "rtl", "land", "hold", "goto"}
+
+
+def _topic_root() -> str:
+    """This pod's <prefix>/<PARTNER_NAMESPACE> data root.
+
+    Same shape as compose/control/namespace_prefix.py's topic_root(), used by
+    every native bridge (e.g. mavlink_command_bridge.py) to build its command
+    key expression. This container never mounts compose/control (it isn't in
+    the zenoh-admin image), but topics.py's own _data_prefix() reads the exact
+    same bind-mounted state files (see docker-compose.yml's zenoh-admin
+    NAMESPACE_PREFIX_FILE/DATA_NAMESPACE_PREFIX_FILE env vars, both pointed at
+    the same POD_STATE_DIR files namespace_prefix.py resolves natively) — so
+    the two always agree without this module reimplementing file resolution.
+    """
+    namespace = os.environ.get("PARTNER_NAMESPACE", "").strip("/")
+    return "/".join(part for part in (_data_prefix(), namespace) if part)
+
+
+def _cmd_topic(entity_id: str) -> str:
+    return "{}/air/mavlink/cmd/{}".format(_topic_root(), entity_id)
+
+
+def _observe_ack(sample) -> None:
+    try:
+        payload = json.loads(bytes(sample.payload).decode())
+    except (ValueError, TypeError, UnicodeDecodeError):
+        return
+    if not isinstance(payload, dict):
+        return
+    entity_id = str(sample.key_expr).rsplit("/", 1)[-1]
+    with _LOCK:
+        _ACKS[entity_id] = payload
+
+
+class CommandIn(BaseModel):
+    cmd: Literal["arm", "disarm", "takeoff", "rtl", "land", "hold", "goto"]
+    alt_m: float | None = None
+    lat_deg: float | None = None
+    lon_deg: float | None = None
 
 
 def _observe_drone(sample) -> None:
@@ -116,10 +171,13 @@ def _observe_sensor(sample) -> None:
 
 
 def start_terminal_observer():
+    global _session
     try:
         session = open_local_session()
         session.declare_subscriber(_AIR_KEY_EXPR, _observe_drone)
         session.declare_subscriber(_SENSOR_KEY_EXPR, _observe_sensor)
+        session.declare_subscriber(_ACK_KEY_EXPR, _observe_ack)
+        _session = session
         return session
     except Exception as exc:
         print(f"[terminal] observer not started: {exc}", flush=True)
@@ -238,3 +296,49 @@ async def list_entities(_=Depends(require_role("readonly", "admin", "superadmin"
         if entity is not None:
             entities.append(entity)
     return {"entities": entities, "server_time": time.time()}
+
+
+@router.post("/entities/{entity_id}/command", status_code=202)
+async def send_command(
+    entity_id: str,
+    request: CommandIn,
+    db: AsyncSession = Depends(get_db),
+    actor=Depends(require_role("admin", "superadmin")),
+):
+    """Publish a drone command for a bridge (currently mavlink_command_bridge.py)
+    to pick up and execute — see that file's module docstring for the exact
+    command flow and JSON shape. This only confirms the command was published;
+    whether the drone actually accepted it comes back asynchronously on the
+    <topic_root>/air/mavlink/ack/<entity_id> topic, polled via the ack route
+    below (mirrors mainline.inc TERMINAL's own async "goto executing" pattern).
+    """
+    if request.cmd == "goto" and (request.lat_deg is None or request.lon_deg is None):
+        raise HTTPException(status_code=422, detail="goto requires lat_deg and lon_deg")
+    if _session is None:
+        raise HTTPException(status_code=503, detail="Zenoh session not available")
+
+    payload = {"cmd": request.cmd}
+    if request.alt_m is not None:
+        payload["alt_m"] = request.alt_m
+    if request.lat_deg is not None:
+        payload["lat_deg"] = request.lat_deg
+    if request.lon_deg is not None:
+        payload["lon_deg"] = request.lon_deg
+
+    _session.put(
+        _cmd_topic(entity_id),
+        json.dumps(payload).encode(),
+        encoding=zenoh.Encoding.APPLICATION_JSON,
+    )
+    await write_audit(db, actor.id, "terminal_command", "{}: {}".format(entity_id, request.cmd))
+    return {"queued": True, "entity_id": entity_id, "cmd": request.cmd}
+
+
+@router.get("/entities/{entity_id}/command/ack")
+async def get_command_ack(
+    entity_id: str,
+    _=Depends(require_role("readonly", "admin", "superadmin")),
+):
+    with _LOCK:
+        ack = _ACKS.get(entity_id)
+    return {"ack": ack}

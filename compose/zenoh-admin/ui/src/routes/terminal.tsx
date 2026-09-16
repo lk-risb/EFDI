@@ -141,26 +141,90 @@ function batteryColor(pct: number): string {
 function FleetRow({entity, selected, onSelect}: {entity: Entity; selected: boolean; onSelect: () => void}) {
   const battery = typeof entity.raw.battery_pct === 'number' ? entity.raw.battery_pct : null
   return (
-    <button
+    <tr
       onClick={onSelect}
       className={cn(
-        'flex w-full items-center gap-2 border-b border-zinc-100 px-2 py-1.5 text-left text-xs last:border-0 dark:border-white/5',
+        'cursor-pointer border-b border-zinc-100 text-[11px] last:border-0 dark:border-white/5',
         selected ? 'bg-accent-fill/10' : 'hover:bg-zinc-100 dark:hover:bg-zinc-900'
       )}
     >
-      <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{background: colorFor(entity)}} />
-      <span className="min-w-0 flex-1 truncate font-mono text-zinc-800 dark:text-zinc-200">{entity.callsign}</span>
-      <span className="hud-label shrink-0 text-[10px] text-zinc-500">{entity.status}</span>
-      {battery !== null && (
-        <span className="shrink-0 font-mono text-[10px]" style={{color: batteryColor(battery)}}>
-          {Math.round(battery)}%
-        </span>
-      )}
-    </button>
+      <td className="whitespace-nowrap px-2 py-1.5 font-mono text-zinc-800 dark:text-zinc-200">
+        <span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full align-middle" style={{background: colorFor(entity)}} />
+        {entity.callsign}
+      </td>
+      <td className="hud-label px-2 py-1.5 text-[10px] text-zinc-500">{entity.status}</td>
+      <td className="px-2 py-1.5 text-right font-mono" style={battery !== null ? {color: batteryColor(battery)} : undefined}>
+        {battery !== null ? `${Math.round(battery)}%` : '—'}
+      </td>
+      <td className="px-2 py-1.5 text-right font-mono text-zinc-500">
+        {entity.alt_m !== null ? `${Math.round(entity.alt_m)}m` : '—'}
+      </td>
+    </tr>
   )
 }
 
-function DetailsPanel({entity}: {entity: Entity | null}) {
+// Only the one-click commands mavlink_command_bridge.py handles without
+// extra input (see its module docstring) — "goto" needs a lat/lon and has
+// no map-click-to-target UI yet, so it's left out here.
+const COMMAND_BUTTONS: {cmd: string; label: string}[] = [
+  {cmd: 'arm', label: 'Arm'},
+  {cmd: 'disarm', label: 'Disarm'},
+  {cmd: 'takeoff', label: 'Takeoff'},
+  {cmd: 'hold', label: 'Hold'},
+  {cmd: 'rtl', label: 'RTL'},
+  {cmd: 'land', label: 'Land'},
+]
+
+interface CommandAck {
+  cmd?: string
+  result?: string
+  detail?: string
+  _ts?: number
+}
+
+function CommandPanel({entityId, canCommand, ack, sending, onSend}: {
+  entityId: string
+  canCommand: boolean
+  ack: CommandAck | null
+  sending: string | null
+  onSend: (cmd: string) => void
+}) {
+  if (!canCommand) return null
+  return (
+    <div className="mt-3 border-t border-zinc-200 pt-3 dark:border-white/10">
+      <div className="hud-label mb-2 text-[10px] text-zinc-500">Commands</div>
+      <div className="flex flex-wrap gap-1.5">
+        {COMMAND_BUTTONS.map(({cmd, label}) => (
+          <button
+            key={cmd}
+            type="button"
+            disabled={sending !== null}
+            onClick={() => onSend(cmd)}
+            className="rounded border border-zinc-300 px-2 py-1 text-[11px] font-medium text-zinc-700 hover:bg-zinc-100 disabled:opacity-50 dark:border-white/15 dark:text-zinc-300 dark:hover:bg-zinc-800"
+          >
+            {sending === cmd ? '…' : label}
+          </button>
+        ))}
+      </div>
+      {ack && (
+        <p className="mt-2 text-[11px] text-zinc-500">
+          {ack.cmd ?? '—'}: <span className="font-medium">{ack.result ?? '—'}</span>
+          {ack.detail ? ` — ${ack.detail}` : ''}
+          {ack._ts ? ` (${timeAgo(ack._ts)})` : ''}
+        </p>
+      )}
+      <p className="mt-1 text-[10px] text-zinc-400">Entity: {entityId} — generic MAVLink airframes only.</p>
+    </div>
+  )
+}
+
+function DetailsPanel({entity, canCommand, ack, sending, onSend}: {
+  entity: Entity | null
+  canCommand: boolean
+  ack: CommandAck | null
+  sending: string | null
+  onSend: (cmd: string) => void
+}) {
   if (!entity) {
     return <p className="text-xs text-zinc-500">Select an entity on the map or in the Fleet list to see details.</p>
   }
@@ -183,6 +247,9 @@ function DetailsPanel({entity}: {entity: Entity | null}) {
       {typeof audioUrl === 'string' && (
         <audio className="terminal-statcard-audio" controls preload="none" src={audioUrl} />
       )}
+      {entity.kind === 'drone' && (
+        <CommandPanel entityId={entity.id} canCommand={canCommand} ack={ack} sending={sending} onSend={onSend} />
+      )}
     </div>
   )
 }
@@ -193,8 +260,29 @@ function TerminalPage() {
   const markersRef = useRef<Map<string, L.Marker>>(new Map())
   const [entities, setEntities] = useState<Entity[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [ack, setAck] = useState<CommandAck | null>(null)
+  const [sending, setSending] = useState<string | null>(null)
+  const role = useAuth(s => s.role)
+  const canCommand = role === 'admin' || role === 'superadmin'
 
   const selected = useMemo(() => entities.find(e => e.id === selectedId) ?? null, [entities, selectedId])
+
+  async function sendCommand(cmd: string) {
+    if (!selectedId) return
+    setSending(cmd)
+    try {
+      await apiJson(`/api/terminal/entities/${encodeURIComponent(selectedId)}/command`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({cmd}),
+      })
+      notify.success(`${cmd} queued for ${selectedId}`)
+    } catch (e) {
+      notify.error(errorMessage(e))
+    } finally {
+      setSending(null)
+    }
+  }
 
   function selectAndFocus(id: string) {
     setSelectedId(id)
@@ -271,27 +359,66 @@ function TerminalPage() {
     }
   }, [])
 
+  // Poll the selected drone's latest command ack — separate from the entity
+  // poll above since it only matters while something is selected, and resets
+  // to null on selection change so a stale ack from a previously selected
+  // drone never appears to belong to the newly selected one.
+  useEffect(() => {
+    setAck(null)
+    if (!selectedId || !canCommand) return
+    let cancelled = false
+
+    async function poll() {
+      try {
+        const res = await apiJson<{ack: CommandAck | null}>(`/api/terminal/entities/${encodeURIComponent(selectedId!)}/command/ack`)
+        if (!cancelled) setAck(res.ack)
+      } catch {
+        // Ack polling failure isn't worth a toast — the command buttons
+        // themselves already report their own send failures.
+      }
+    }
+
+    poll()
+    const interval = setInterval(poll, 3000)
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
+  }, [selectedId, canCommand])
+
   return (
     <Layout>
       <PageHeader title="Terminal" eyebrow="LIVE MAP" count={entities.length} countLabel="tracked" />
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[240px_1fr_300px]">
-        <Panel title="Fleet" badge={`${entities.length}`} className="h-[60vh]" bodyClassName="overflow-y-auto">
+        <Panel title="Fleet" badge={`${entities.length}`} className="h-[60vh]" bodyClassName="overflow-y-auto p-0">
           {entities.length === 0 ? (
-            <p className="p-2 text-xs text-zinc-500">No entities tracked yet.</p>
+            <p className="p-3 text-xs text-zinc-500">No entities tracked yet.</p>
           ) : (
-            entities
-              .slice()
-              .sort((a, b) => a.callsign.localeCompare(b.callsign))
-              .map(e => (
-                <FleetRow key={e.id} entity={e} selected={e.id === selectedId} onSelect={() => selectAndFocus(e.id)} />
-              ))
+            <table className="w-full border-collapse">
+              <thead className="sticky top-0 bg-zinc-50 dark:bg-zinc-950">
+                <tr className="hud-label border-b border-zinc-200 text-[10px] text-zinc-500 dark:border-white/10">
+                  <th className="px-2 py-1.5 text-left font-medium">CS</th>
+                  <th className="px-2 py-1.5 text-left font-medium">STATE</th>
+                  <th className="px-2 py-1.5 text-right font-medium">BATT</th>
+                  <th className="px-2 py-1.5 text-right font-medium">ALT</th>
+                </tr>
+              </thead>
+              <tbody>
+                {entities
+                  .slice()
+                  .sort((a, b) => a.callsign.localeCompare(b.callsign))
+                  .map(e => (
+                    <FleetRow key={e.id} entity={e} selected={e.id === selectedId} onSelect={() => selectAndFocus(e.id)} />
+                  ))}
+              </tbody>
+            </table>
           )}
         </Panel>
         <Panel title="Map" className="h-[60vh]" bodyClassName="p-0">
           <div ref={mapRef} className="terminal-map h-full w-full" />
         </Panel>
         <Panel title="Details" className="h-[60vh]">
-          <DetailsPanel entity={selected} />
+          <DetailsPanel entity={selected} canCommand={canCommand} ack={ack} sending={sending} onSend={sendCommand} />
         </Panel>
       </div>
       <div className="mt-8">
