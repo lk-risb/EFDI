@@ -125,9 +125,22 @@ def run(args) -> None:
     if args.mode == "poll":
         print("AARTOS ingress (poll): {}:{}/sample every {}s -> {}".format(
             args.host, args.port, args.poll_interval, key), flush=True)
+        # One HTTP/1.1 keep-alive connection reused across every poll, not a
+        # fresh TCP connect+close per GET /sample — connecting/tearing down
+        # every single cycle is fine at a 1-2s interval, but at the sub-second
+        # intervals this deployment actually runs at (down to 0.1s) it made
+        # RTSA-Suite PRO's own connection indicator visibly flap (reported
+        # live by the operator). http.client already keeps the socket open
+        # across request()/getresponse() calls as long as the response body
+        # is fully read each time (poll_sample() already does via
+        # response.read()) and the connection is never explicitly closed in
+        # between — only reconnect (conn = None, so the next iteration opens
+        # a fresh one) when a request actually fails.
+        conn: http.client.HTTPConnection | None = None
         try:
             while True:
-                conn = http.client.HTTPConnection(args.host, args.port, timeout=args.timeout)
+                if conn is None:
+                    conn = http.client.HTTPConnection(args.host, args.port, timeout=args.timeout)
                 try:
                     sample = poll_sample(conn)
                     if sample is not None:
@@ -137,16 +150,17 @@ def run(args) -> None:
                 except KeyboardInterrupt:
                     raise
                 except Exception as exc:
-                    print("AARTOS poll error: {} — retry in {}s".format(exc, _RECONNECT_S), flush=True)
+                    print("AARTOS poll error: {} — reconnecting in {}s".format(exc, _RECONNECT_S), flush=True)
                     conn.close()
+                    conn = None
                     time.sleep(_RECONNECT_S)
                     continue
-                finally:
-                    conn.close()
                 time.sleep(args.poll_interval)
         except KeyboardInterrupt:
             pass
         finally:
+            if conn is not None:
+                conn.close()
             session.close()
         return
 
