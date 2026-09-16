@@ -106,17 +106,17 @@ function BrandingCard() {
         <label className="space-y-1 block">
           <span className="text-sm text-zinc-700 dark:text-zinc-300">Organisation name</span>
           <input value={name} onChange={e => setName(e.target.value)} disabled={!isSuper} maxLength={64}
-            className="w-full rounded-md border border-zinc-300 bg-zinc-100 px-3 py-2 text-sm disabled:opacity-50 dark:border-white/10 dark:bg-zinc-950" />
+            className="w-full rounded-md border border-zinc-300 bg-zinc-100 px-3 py-2 text-sm disabled:opacity-50 dark:border-white/10 dark:bg-[#141416]" />
         </label>
 
         <ColorField label="Accent colour" value={fill} onChange={setFill} />
         <ColorField label="Accent text colour" value={text} onChange={setText} />
 
-        <div className="flex items-center justify-between gap-3 rounded-md border border-zinc-200 bg-zinc-50 p-3 dark:border-white/10 dark:bg-zinc-950">
+        <div className="flex items-center justify-between gap-3 rounded-md border border-zinc-200 bg-zinc-50 p-3 dark:border-white/10 dark:bg-[#141416]">
           <div className="flex items-center gap-3">
             {logoUrl
-              ? <img src={logoUrl} alt="logo" className="h-9 w-9 rounded-lg object-contain" />
-              : <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-zinc-200 text-zinc-500 dark:bg-white/5"><ImagePlus size={16} /></div>}
+              ? <img src={logoUrl} alt="logo" className="h-9 w-9 rounded-none object-contain" />
+              : <div className="flex h-9 w-9 items-center justify-center rounded-none bg-zinc-200 text-zinc-500 dark:bg-white/5"><ImagePlus size={16} /></div>}
             <div>
               <p className="text-sm text-zinc-700 dark:text-zinc-300">Logo</p>
               <p className="text-xs text-zinc-500">PNG or JPG, up to 2&nbsp;MB.</p>
@@ -191,7 +191,7 @@ function UiSettingsPage() {
                 <select
                   value={refreshIntervalMs}
                   onChange={e => setRefreshIntervalMs(Number(e.target.value))}
-                  className="w-full rounded-md border border-zinc-300 bg-zinc-100 px-3 py-2 text-sm dark:border-white/10 dark:bg-zinc-950"
+                  className="w-full rounded-md border border-zinc-300 bg-zinc-100 px-3 py-2 text-sm dark:border-white/10 dark:bg-[#141416]"
                 >
                   <option value={2000}>2 seconds</option>
                   <option value={5000}>5 seconds</option>
@@ -200,7 +200,7 @@ function UiSettingsPage() {
                 </select>
               </label>
 
-              <div className="rounded-md border border-zinc-200 bg-zinc-50 p-3 text-xs text-zinc-600 dark:border-white/10 dark:bg-zinc-950 dark:text-zinc-400">
+              <div className="rounded-md border border-zinc-200 bg-zinc-50 p-3 text-xs text-zinc-600 dark:border-white/10 dark:bg-[#141416] dark:text-zinc-400">
                 <div className="flex items-center gap-2">
                   <MonitorCog size={14} className="text-accent-ring" />
                   Browser settings are saved locally on this device.

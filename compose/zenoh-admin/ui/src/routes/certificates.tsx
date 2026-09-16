@@ -57,7 +57,7 @@ function certState(days: number): 'ok' | 'warn' | 'critical' {
   return 'ok'
 }
 
-const inputClass = 'w-full rounded-md border border-zinc-300 bg-zinc-100 px-3 py-2 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-accent-ring dark:border-white/10 dark:bg-zinc-950 dark:text-white'
+const inputClass = 'w-full rounded-md border border-zinc-300 bg-zinc-100 px-3 py-2 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-accent-ring dark:border-white/10 dark:bg-[#141416] dark:text-white'
 
 function CertificatesPage() {
   const [certs, setCerts] = useState<CertInfo[] | null>(null)
@@ -311,7 +311,7 @@ function CertificatesPage() {
         {newInvitation?.token && (
           <div className="mb-6 rounded-md border border-amber-500/30 bg-amber-500/10 p-4">
             <p className="hud-label text-xs text-amber-700 dark:text-amber-300">Shown once · enrollment token</p>
-            <div className="mt-2 flex gap-2"><code className="min-w-0 flex-1 break-all rounded-lg bg-black/5 p-2 text-xs dark:bg-black/30">{newInvitation.token}</code><button onClick={copyToken} className="rounded-md border border-amber-500/30 px-3 text-amber-700 dark:text-amber-300" aria-label="Copy token"><Copy size={15} /></button></div>
+            <div className="mt-2 flex gap-2"><code className="min-w-0 flex-1 break-all rounded-none bg-black/5 p-2 text-xs dark:bg-black/30">{newInvitation.token}</code><button onClick={copyToken} className="rounded-md border border-amber-500/30 px-3 text-amber-700 dark:text-amber-300" aria-label="Copy token"><Copy size={15} /></button></div>
             <p className="mt-2 text-xs text-zinc-600 dark:text-zinc-400">The child generates all three private keys locally and submits only its router-CA, transport, and policy-signer CSRs with this token.</p>
           </div>
         )}
