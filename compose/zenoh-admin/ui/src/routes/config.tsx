@@ -422,7 +422,7 @@ function ConfigPage() {
     }
   }
 
-  const inputClass = "w-full px-3 py-2 rounded-md bg-zinc-200 dark:bg-zinc-950 border border-zinc-300 dark:border-white/10 text-zinc-900 dark:text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-accent-ring disabled:opacity-50"
+  const inputClass = "w-full px-3 py-2 rounded-md bg-zinc-200 dark:bg-[#141416] border border-zinc-300 dark:border-white/10 text-zinc-900 dark:text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-accent-ring disabled:opacity-50"
 
   return (
     <Layout>
@@ -462,7 +462,7 @@ function ConfigPage() {
         />
 
         <div className="mb-6 grid gap-3 sm:grid-cols-2">
-          <div className="hud-frame relative flex min-h-20 items-center gap-3 rounded-md border border-zinc-200 bg-white px-4 py-3 dark:border-white/10 dark:bg-zinc-900">
+          <div className="hud-frame relative flex min-h-20 items-center gap-3 rounded-md border border-zinc-200 bg-white px-4 py-3 dark:border-white/10 dark:bg-[#0c0c0e]">
             <HudCorners />
             <FileCode2 size={18} className="shrink-0 text-zinc-500" />
             <div className="min-w-0">
@@ -473,7 +473,7 @@ function ConfigPage() {
             </div>
           </div>
 
-          <div className="hud-frame relative flex min-h-20 items-center gap-3 rounded-md border border-zinc-200 bg-white px-4 py-3 dark:border-white/10 dark:bg-zinc-900">
+          <div className="hud-frame relative flex min-h-20 items-center gap-3 rounded-md border border-zinc-200 bg-white px-4 py-3 dark:border-white/10 dark:bg-[#0c0c0e]">
             <HudCorners />
             <Waypoints size={18} className="shrink-0 text-zinc-500" />
             <div className="min-w-0 flex-1">
@@ -588,7 +588,7 @@ function ConfigPage() {
                     return (
                       <div key={index} className="flex gap-2">
                         <div
-                          className={`flex flex-1 items-center gap-2 rounded-md border bg-zinc-200 px-3 focus-within:ring-2 focus-within:ring-accent-ring dark:bg-zinc-950 ${statusBorder}`}
+                          className={`flex flex-1 items-center gap-2 rounded-md border bg-zinc-200 px-3 focus-within:ring-2 focus-within:ring-accent-ring dark:bg-[#141416] ${statusBorder}`}
                           title={status?.detail ?? 'Endpoint status is available after saving'}
                         >
                           <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${statusColor}`} />
@@ -640,7 +640,7 @@ function ConfigPage() {
                 <input type="text" disabled={!canWrite} className={inputClass}
                   value={fields.inbound_namespace} onChange={e => set('inbound_namespace', e.target.value)} />
               </Field>
-              <p className="rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+              <p className="rounded-none border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
                 Namespace changes restart the router. Native bridge processes must also be restarted to publish under the new prefix.
               </p>
             </ConfigSection>

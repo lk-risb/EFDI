@@ -251,7 +251,7 @@ function NetworkPage() {
             ? 'Local HQ'
             : node.namespace.replace(/^router:/, 'Router ')
           return (
-            <section className="hud-frame relative mb-6 rounded-md border border-accent-ring/40 bg-white p-5 dark:bg-zinc-900">
+            <section className="hud-frame relative mb-6 rounded-md border border-accent-ring/40 bg-white p-5 dark:bg-[#0c0c0e]">
               <HudCorners />
               <div className="mb-5 flex flex-wrap items-start justify-between gap-3 border-b border-zinc-200 pb-4 dark:border-white/10">
                 <div>
@@ -347,11 +347,11 @@ function NetworkPage() {
                   <p className="mt-1 text-[11px] text-zinc-500">trust: {authority?.state ?? 'not linked'}{authority ? ` · expires ${new Date(authority.not_after).toLocaleDateString()}` : ''}</p>
                 </div>
                 {authority && <div className="relative z-10 flex gap-1">
-                  <button title="Rotate link credential" disabled={changing !== null || authority.state !== 'active'} onClick={() => rotateLink(authority)} className="rounded-lg p-2 text-zinc-500 hover:bg-zinc-100 disabled:opacity-30 dark:hover:bg-white/5"><RefreshCw size={14} /></button>
+                  <button title="Rotate link credential" disabled={changing !== null || authority.state !== 'active'} onClick={() => rotateLink(authority)} className="rounded-none p-2 text-zinc-500 hover:bg-zinc-100 disabled:opacity-30 dark:hover:bg-white/5"><RefreshCw size={14} /></button>
                   {authority.state === 'quarantined' ?
-                    <button title="Restore authority" disabled={changing !== null} onClick={() => lifecycle(authority, 'restore')} className="rounded-lg p-2 text-green-600 hover:bg-green-500/10"><ShieldCheck size={14} /></button> :
-                    <button title="Quarantine authority" disabled={changing !== null || authority.state !== 'active'} onClick={() => lifecycle(authority, 'quarantine')} className="rounded-lg p-2 text-amber-600 hover:bg-amber-500/10 disabled:opacity-30"><Ban size={14} /></button>}
-                  <button title="Irreversibly decommission" disabled={changing !== null || authority.state === 'decommissioned'} onClick={() => lifecycle(authority, 'decommission')} className="rounded-lg p-2 text-red-600 hover:bg-red-500/10 disabled:opacity-30"><ShieldOff size={14} /></button>
+                    <button title="Restore authority" disabled={changing !== null} onClick={() => lifecycle(authority, 'restore')} className="rounded-none p-2 text-green-600 hover:bg-green-500/10"><ShieldCheck size={14} /></button> :
+                    <button title="Quarantine authority" disabled={changing !== null || authority.state !== 'active'} onClick={() => lifecycle(authority, 'quarantine')} className="rounded-none p-2 text-amber-600 hover:bg-amber-500/10 disabled:opacity-30"><Ban size={14} /></button>}
+                  <button title="Irreversibly decommission" disabled={changing !== null || authority.state === 'decommissioned'} onClick={() => lifecycle(authority, 'decommission')} className="rounded-none p-2 text-red-600 hover:bg-red-500/10 disabled:opacity-30"><ShieldOff size={14} /></button>
                 </div>}
               </div>
                 )

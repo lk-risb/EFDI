@@ -21,21 +21,31 @@ fi
     exit 1
 }
 
-# Build into a fresh sibling directory and swap it in with two atomic
-# renames, rather than deleting $OUTPUT's contents in place and regenerating
+# Build into a fresh sibling directory and swap it in via a single symlink
+# rename, rather than deleting $OUTPUT's contents in place and regenerating
 # on top of it. start.sh runs this on every single invocation, unconditional
 # of which service was requested — deleting first left a real window where
 # $OUTPUT existed but was empty, and any process starting (or being
-# auto-restarted by supervisor.py after an unrelated crash) during that
-# window failed with "No module named 'protocols.proto.X_pb2'" for no
-# reason connected to its own code. A `mv` within the same filesystem is an
-# atomic directory-entry swap: $OUTPUT is always either the complete old
-# tree or the complete new one, never a partially-emptied one, and any
-# process that already opened a file from the old tree keeps reading it
-# fine even after the swap (POSIX unlink-on-rename semantics).
+# auto-restarted by supervisor.py after an unrelated crash, concurrently
+# with a second start.sh invocation regenerating protobufs for an unrelated
+# --service request) during that window failed with "No module named
+# 'protocols.proto.X_pb2'" for no reason connected to its own code — this
+# is exactly what happened on the EFDI box on 2026-09-16 (aartos_json.py hit
+# it after a WebUI-triggered restart raced supervisor.py's own restart of a
+# different bridge). An in-place two-step "mv old aside, mv new into place"
+# (the previous approach here) is NOT actually atomic as a whole — there are
+# two separate rename() syscalls with a real window of total absence between
+# them, and two concurrent runs of this script can also interleave their own
+# renames unpredictably since neither locks the other out. A single `mv -T`
+# of a symlink onto $OUTPUT is exactly one rename() syscall: $OUTPUT is
+# always either the complete old tree (via the old symlink) or the complete
+# new one, with no window where it resolves to nothing, and no way for two
+# concurrent regenerations to leave it half-swapped — whichever one's final
+# rename() lands last simply wins outright, same as any other lock-free
+# last-writer-wins rename.
 TMP_OUTPUT="$(mktemp -d "$ROOT/compose/generated.XXXXXX")"
 trap 'rm -rf "$TMP_OUTPUT"' EXIT
-OUTPUT_OLD="$ROOT/compose/generated.old.$$"
+OUTPUT_LINK="$ROOT/compose/generated.link.$$"
 VENDOR_ROOT="$ROOT/compose/protocols/vendors/sapient"
 
 mapfile -t contracts < <(find "$ROOT/compose/protocols" -type f -name '*.proto' -not -path "$VENDOR_ROOT/sapient_msg/*" -print | sort)
@@ -65,11 +75,20 @@ fi
     --python_out="$TMP_OUTPUT" \
     "${contract_names[@]}" "${vendor_names[@]}"
 
-# Swap the freshly-built tree in. $OUTPUT may not exist yet (first run ever)
-# — only rename it aside if it does, so that case isn't an error.
-[[ -e "$OUTPUT" ]] && mv "$OUTPUT" "$OUTPUT_OLD"
-mv "$TMP_OUTPUT" "$OUTPUT"
+# Swap the freshly-built tree in with one atomic rename. rename(2) cannot
+# replace a non-empty real directory with a symlink directly, so a plain
+# directory left over from before this script used symlinks (or a first-ever
+# run where $OUTPUT doesn't exist) needs a one-time plain removal first —
+# only real directories take this path; on every run after the first,
+# $OUTPUT is already a symlink and this branch never triggers again, so the
+# steady-state swap below is always a single rename() with no window.
+if [[ -e "$OUTPUT" && ! -L "$OUTPUT" ]]; then
+    rm -rf "$OUTPUT"
+fi
+OLD_TARGET="$(readlink "$OUTPUT" 2>/dev/null || true)"
+ln -s "$TMP_OUTPUT" "$OUTPUT_LINK"
+mv -T "$OUTPUT_LINK" "$OUTPUT"
 trap - EXIT
-rm -rf "$OUTPUT_OLD"
+[[ -n "$OLD_TARGET" && -e "$OLD_TARGET" ]] && rm -rf "$OLD_TARGET"
 
 echo "Generated $(( ${#contracts[@]} + ${#vendor_names[@]} )) Python protobuf bindings in $OUTPUT"
