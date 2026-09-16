@@ -142,11 +142,14 @@ body {
 }
 
 /* `hud-frame` establishes the positioning context corner brackets rely on —
-   bracket rendering itself is DOM-based (HudCorners.tsx). TERMINAL has no
-   corner-bracket motif, so --bracket-color is transparent in both themes;
-   this var is kept only so HudCorners.tsx doesn't need a conditional. */
-:root { --bracket-color: transparent; }
-.dark { --bracket-color: transparent; }
+   the actual bracket rendering is DOM-based (HudCorners.tsx), matching
+   Scout's real CardBrackets component exactly rather than a CSS gradient
+   hack: 4 positioned corner spans, not a ::before background trick. Reverted
+   back from the TERMINAL reskin's transparent value (a deliberate
+   bracket-less look that only lasted one round) at the user's explicit call
+   — Scout's corner-bracket motif stays on every hud-card/hud-frame. */
+:root { --bracket-color: rgb(0 0 0 / 0.18); }
+.dark { --bracket-color: rgb(255 255 255 / 0.18); }
 .hud-frame {
   position: relative;
 }

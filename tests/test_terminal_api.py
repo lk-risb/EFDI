@@ -1,3 +1,4 @@
+import json
 import os
 import pathlib
 import sys
@@ -231,3 +232,102 @@ def test_cmd_topic_matches_mavlink_command_bridge_subscription_shape(monkeypatch
     monkeypatch.setenv("PARTNER_NAMESPACE", "site-alpha")
 
     assert terminal._cmd_topic("drone-1") == "EFDI/site-alpha/air/mavlink/cmd/drone-1"
+
+
+# ── event log (_push_event / _observe_drone / _observe_ack) ─────────────────
+
+def _reset_event_state():
+    terminal._EVENTS.clear()
+    terminal._LAST_STATUS.clear()
+    terminal._LAST_ALERTS.clear()
+    terminal._DRONES.clear()
+    terminal._ACKS.clear()
+
+
+def test_observe_drone_does_not_log_a_status_event_on_first_sighting():
+    _reset_event_state()
+    terminal._observe_drone(Sample("EFDI/x/air/trk-1", b'{"uid": "trk-1", "lat_deg": 1, "armed": true}'))
+    assert terminal._EVENTS == []
+    assert terminal._LAST_STATUS["trk-1"] == "armed"
+
+
+def test_observe_drone_logs_a_status_transition_after_first_sighting():
+    _reset_event_state()
+    terminal._observe_drone(Sample("EFDI/x/air/trk-1", b'{"uid": "trk-1", "lat_deg": 1, "armed": true}'))
+    terminal._observe_drone(Sample("EFDI/x/air/trk-1", b'{"uid": "trk-1", "lat_deg": 1, "on_ground": true}'))
+    assert len(terminal._EVENTS) == 1
+    event = terminal._EVENTS[0]
+    assert event["entity_id"] == "trk-1"
+    assert event["kind"] == "status"
+    assert event["message"] == "status -> on_ground"
+    assert event["severity"] == "info"
+
+
+def test_observe_drone_logs_emergency_status_as_critical():
+    _reset_event_state()
+    terminal._observe_drone(Sample("EFDI/x/air/trk-1", b'{"uid": "trk-1", "lat_deg": 1, "armed": true}'))
+    terminal._observe_drone(Sample("EFDI/x/air/trk-1", b'{"uid": "trk-1", "lat_deg": 1, "emergency": true}'))
+    assert terminal._EVENTS[-1]["severity"] == "crit"
+
+
+def test_observe_drone_does_not_repeat_an_unchanged_status():
+    _reset_event_state()
+    terminal._observe_drone(Sample("EFDI/x/air/trk-1", b'{"uid": "trk-1", "lat_deg": 1, "armed": true}'))
+    terminal._observe_drone(Sample("EFDI/x/air/trk-1", b'{"uid": "trk-1", "lat_deg": 1, "armed": true}'))
+    assert terminal._EVENTS == []
+
+
+def test_observe_drone_logs_a_new_alert_after_first_sighting_with_parsed_severity():
+    _reset_event_state()
+    terminal._observe_drone(Sample("EFDI/x/air/trk-1", b'{"uid": "trk-1", "lat_deg": 1}'))
+    terminal._observe_drone(Sample(
+        "EFDI/x/air/trk-1",
+        json.dumps({"uid": "trk-1", "lat_deg": 1, "alerts": "SD card full: 100% (crit)"}).encode(),
+    ))
+    alert_events = [e for e in terminal._EVENTS if e["kind"] == "alert"]
+    assert len(alert_events) == 1
+    assert alert_events[0]["message"] == "SD card full: 100% (crit)"
+    assert alert_events[0]["severity"] == "crit"
+
+
+def test_observe_drone_does_not_log_alert_on_first_sighting_even_if_present():
+    _reset_event_state()
+    terminal._observe_drone(Sample(
+        "EFDI/x/air/trk-1",
+        json.dumps({"uid": "trk-1", "lat_deg": 1, "alerts": "SD card full: 100% (crit)"}).encode(),
+    ))
+    assert terminal._EVENTS == []
+    assert terminal._LAST_ALERTS["trk-1"] == "SD card full: 100% (crit)"
+
+
+def test_observe_drone_clears_deleted_entity_from_status_and_alert_caches():
+    _reset_event_state()
+    terminal._observe_drone(Sample("EFDI/x/air/trk-1", b'{"uid": "trk-1", "lat_deg": 1, "armed": true}'))
+    terminal._observe_drone(Sample("EFDI/x/air/trk-1", b'{"uid": "trk-1", "deleted": true}'))
+    assert "trk-1" not in terminal._LAST_STATUS
+    assert "trk-1" not in terminal._DRONES
+
+
+def test_observe_ack_logs_a_cmd_event_with_severity_from_result():
+    _reset_event_state()
+    terminal._observe_ack(Sample(
+        "EFDI/router-a/air/mavlink/ack/drone-1",
+        b'{"cmd": "arm", "result": "MAV_RESULT_ACCEPTED"}',
+    ))
+    terminal._observe_ack(Sample(
+        "EFDI/router-a/air/mavlink/ack/drone-1",
+        b'{"cmd": "land", "result": "MAV_RESULT_DENIED"}',
+    ))
+    assert terminal._EVENTS[0]["message"] == "arm MAV_RESULT_ACCEPTED"
+    assert terminal._EVENTS[0]["severity"] == "info"
+    assert terminal._EVENTS[1]["message"] == "land MAV_RESULT_DENIED"
+    assert terminal._EVENTS[1]["severity"] == "warn"
+
+
+def test_events_ring_buffer_caps_at_events_cap(monkeypatch):
+    _reset_event_state()
+    monkeypatch.setattr(terminal, "_EVENTS_CAP", 5)
+    for i in range(10):
+        terminal._push_event("trk-1", "status", "info", "event {}".format(i))
+    assert len(terminal._EVENTS) == 5
+    assert terminal._EVENTS[-1]["message"] == "event 9"

@@ -49,6 +49,7 @@ correct since those views are never valid JSON to begin with.
 import asyncio
 import json
 import os
+import re
 import threading
 import time
 import urllib.error
@@ -96,6 +97,40 @@ _ACK_KEY_EXPR = "**/air/mavlink/ack/**"
 
 _COMMAND_CMDS = {"arm", "disarm", "takeoff", "rtl", "land", "hold", "goto"}
 
+# A real (not fabricated) event log, matching mainline.inc TERMINAL's own
+# "cmd goto accepted/executing/succeeded"-style event feed shown in its
+# Events panel — but only for events this module can actually observe: a
+# command being queued, its ack coming back, a drone's derived status
+# changing, and a drone's health.alerts string appearing/changing (the same
+# field terminal_bridge.py's _flight_state_to_track already joins from
+# mainline.inc's own health data). No TERMINAL-side event we cannot see
+# (its own internal mission/geofence logic, other operators' actions) is
+# invented here.
+_EVENTS: list[dict] = []       # newest last; capped, see _push_event
+_EVENTS_CAP = 300
+_LAST_STATUS: dict[str, str] = {}   # uid -> last _drone_status() seen
+_LAST_ALERTS: dict[str, str] = {}   # uid -> last raw alerts string seen
+
+# terminal_bridge.py joins each alert as "<message> (<severity>)" — see its
+# own tests (test_flight_state_joins_health_alerts_into_one_string). Parsed
+# back out here only to color the event row; a message with no parseable
+# trailing "(word)" tag still shows, just without a specific severity color.
+_ALERT_SEVERITY_RE = re.compile(r"\((\w+)\)\s*$")
+
+
+def _push_event(entity_id: str, kind: str, severity: str, message: str, ts: float | None = None) -> None:
+    event = {
+        "ts": ts if ts is not None else time.time(),
+        "entity_id": entity_id,
+        "kind": kind,          # "cmd" | "status" | "alert"
+        "severity": severity,  # "info" | "warn" | "crit"
+        "message": message,
+    }
+    with _LOCK:
+        _EVENTS.append(event)
+        if len(_EVENTS) > _EVENTS_CAP:
+            del _EVENTS[: len(_EVENTS) - _EVENTS_CAP]
+
 
 def _topic_root() -> str:
     """This pod's <prefix>/<PARTNER_NAMESPACE> data root.
@@ -127,6 +162,11 @@ def _observe_ack(sample) -> None:
     entity_id = str(sample.key_expr).rsplit("/", 1)[-1]
     with _LOCK:
         _ACKS[entity_id] = payload
+    result = payload.get("result")
+    severity = "info" if result in ("MAV_RESULT_ACCEPTED", "MAV_RESULT_IN_PROGRESS") else "warn"
+    cmd = payload.get("cmd") or "?"
+    detail = " — {}".format(payload["detail"]) if payload.get("detail") else ""
+    _push_event(entity_id, "cmd", severity, "{} {}{}".format(cmd, result or "no ack", detail), payload.get("_ts"))
 
 
 class CommandIn(BaseModel):
@@ -149,8 +189,34 @@ def _observe_drone(sample) -> None:
     with _LOCK:
         if payload.get("deleted") or payload.get("_delete"):
             _DRONES.pop(uid, None)
+            _LAST_STATUS.pop(uid, None)
+            _LAST_ALERTS.pop(uid, None)
             return
         _DRONES[uid] = payload
+
+    # Only log a transition, not the first-ever sighting of a uid — every
+    # entity present at observer startup would otherwise log a spurious
+    # "status -> X" the instant this process (re)connects, drowning out
+    # real transitions in a fleet of any size.
+    status = _drone_status(payload)
+    previous_status = _LAST_STATUS.get(uid)
+    _LAST_STATUS[uid] = status
+    if previous_status is not None and previous_status != status:
+        severity = "crit" if status == "emergency" else "info"
+        _push_event(uid, "status", severity, "status -> {}".format(status), payload.get("_ts"))
+
+    alerts = payload.get("alerts")
+    previous_alerts = _LAST_ALERTS.get(uid, "")
+    if alerts:
+        _LAST_ALERTS[uid] = alerts
+    elif uid in _LAST_ALERTS:
+        del _LAST_ALERTS[uid]
+    if alerts and alerts != previous_alerts and previous_status is not None:
+        match = _ALERT_SEVERITY_RE.search(alerts)
+        severity = {"crit": "crit", "critical": "crit", "warn": "warn", "warning": "warn"}.get(
+            (match.group(1).lower() if match else ""), "warn"
+        )
+        _push_event(uid, "alert", severity, alerts, payload.get("_ts"))
 
 
 def _observe_sensor(sample) -> None:
@@ -331,6 +397,7 @@ async def send_command(
         encoding=zenoh.Encoding.APPLICATION_JSON,
     )
     await write_audit(db, actor.id, "terminal_command", "{}: {}".format(entity_id, request.cmd))
+    _push_event(entity_id, "cmd", "info", "{} queued by {}".format(request.cmd, actor.username))
     return {"queued": True, "entity_id": entity_id, "cmd": request.cmd}
 
 
@@ -342,3 +409,18 @@ async def get_command_ack(
     with _LOCK:
         ack = _ACKS.get(entity_id)
     return {"ack": ack}
+
+
+@router.get("/events")
+async def list_events(
+    limit: int = 200,
+    _=Depends(require_role("readonly", "admin", "superadmin")),
+):
+    """Newest-first slice of the real event log (see _push_event) — command
+    lifecycle, drone status transitions, and health.alerts changes only.
+    Feeds the WebUI's Events/Alerts panels and timeline strip."""
+    limit = max(1, min(limit, _EVENTS_CAP))
+    with _LOCK:
+        events = list(_EVENTS[-limit:])
+    events.reverse()
+    return {"events": events, "server_time": time.time()}

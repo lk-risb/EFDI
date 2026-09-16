@@ -218,6 +218,102 @@ function CommandPanel({entityId, canCommand, ack, sending, onSend}: {
   )
 }
 
+interface TerminalEvent {
+  ts: number
+  entity_id: string
+  kind: 'cmd' | 'status' | 'alert'
+  severity: 'info' | 'warn' | 'crit'
+  message: string
+}
+
+const SEVERITY_COLOR: Record<TerminalEvent['severity'], string> = {
+  info: '#3b82f6',
+  warn: '#f59e0b',
+  crit: '#ef4444',
+}
+
+// Real events only — see terminal.py's _push_event: command sends/acks,
+// drone status transitions, and health.alerts changes. No fabricated
+// mission/geofence event types mainline.inc TERMINAL has that this backend
+// cannot actually observe.
+function EventRow({event}: {event: TerminalEvent}) {
+  return (
+    <div className="flex items-start gap-2 border-b border-zinc-100 px-3 py-1.5 text-[11px] last:border-0 dark:border-white/5">
+      <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" style={{background: SEVERITY_COLOR[event.severity]}} />
+      <span className="w-12 shrink-0 font-mono text-zinc-400">{timeAgo(event.ts)}</span>
+      <span className="w-20 shrink-0 truncate font-mono text-zinc-500" title={event.entity_id}>{event.entity_id}</span>
+      <span className="hud-label shrink-0 text-[9px] text-zinc-400">{event.kind}</span>
+      <span className="flex-1 text-zinc-700 dark:text-zinc-300">{event.message}</span>
+    </div>
+  )
+}
+
+// mainline.inc TERMINAL's Alerts panel tracks acked/unacked state server-side.
+// This backend has no such workflow (nothing anywhere persists an ack), so
+// "Dismiss" here only hides an alert in this browser tab — it does not write
+// anything back. Labeled as such rather than pretending to be the real thing.
+function AlertsPanel({alerts, dismissed, onDismiss}: {
+  alerts: TerminalEvent[]
+  dismissed: Set<string>
+  onDismiss: (key: string) => void
+}) {
+  const visible = alerts.filter(a => !dismissed.has(`${a.entity_id}-${a.ts}`))
+  if (visible.length === 0) {
+    return <p className="p-3 text-xs text-zinc-500">No active alerts.</p>
+  }
+  return (
+    <div>
+      {visible.map(alert => {
+        const key = `${alert.entity_id}-${alert.ts}`
+        return (
+          <div key={key} className="flex items-start gap-2 border-b border-zinc-100 px-3 py-2 text-[11px] last:border-0 dark:border-white/5">
+            <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" style={{background: SEVERITY_COLOR[alert.severity]}} />
+            <div className="min-w-0 flex-1">
+              <p className="truncate font-medium text-zinc-800 dark:text-zinc-200" title={alert.entity_id}>{alert.entity_id}</p>
+              <p className="text-zinc-500">{alert.message}</p>
+              <p className="text-[10px] text-zinc-400">{timeAgo(alert.ts)}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => onDismiss(key)}
+              className="shrink-0 rounded border border-zinc-300 px-1.5 py-0.5 text-[10px] text-zinc-500 hover:bg-zinc-100 dark:border-white/15 dark:hover:bg-zinc-800"
+              title="Hide in this browser tab only — does not acknowledge anything server-side."
+            >
+              Dismiss
+            </button>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// A visualization of the same event log on a time axis, not an interactive
+// scrubber — this backend keeps no historical entity/map state to "scrub"
+// back to, unlike mainline.inc TERMINAL's own timeline. Ticks are purely
+// informational (hover for what happened, when).
+function TimelineStrip({events, windowMs = 60 * 60 * 1000}: {events: TerminalEvent[]; windowMs?: number}) {
+  const now = Date.now()
+  const windowStart = now - windowMs
+  const inWindow = events.filter(e => e.ts * 1000 >= windowStart)
+  return (
+    <div className="relative h-8 w-full overflow-hidden rounded border border-zinc-200 bg-zinc-50 dark:border-white/10 dark:bg-zinc-950">
+      {inWindow.map(event => {
+        const pct = Math.min(100, Math.max(0, ((event.ts * 1000 - windowStart) / windowMs) * 100))
+        return (
+          <span
+            key={`${event.entity_id}-${event.ts}`}
+            className="absolute top-1/2 h-3 w-0.5 -translate-y-1/2 rounded-full"
+            style={{left: `${pct}%`, background: SEVERITY_COLOR[event.severity]}}
+            title={`${event.entity_id}: ${event.message} (${timeAgo(event.ts)})`}
+          />
+        )
+      })}
+      <span className="hud-label pointer-events-none absolute left-1.5 top-1/2 -translate-y-1/2 text-[9px] text-zinc-400">1H</span>
+    </div>
+  )
+}
+
 function DetailsPanel({entity, canCommand, ack, sending, onSend}: {
   entity: Entity | null
   canCommand: boolean
@@ -262,8 +358,11 @@ function TerminalPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [ack, setAck] = useState<CommandAck | null>(null)
   const [sending, setSending] = useState<string | null>(null)
+  const [events, setEvents] = useState<TerminalEvent[]>([])
+  const [dismissedAlerts, setDismissedAlerts] = useState<Set<string>>(new Set())
   const role = useAuth(s => s.role)
   const canCommand = role === 'admin' || role === 'superadmin'
+  const alerts = useMemo(() => events.filter(e => e.kind === 'alert'), [events])
 
   const selected = useMemo(() => entities.find(e => e.id === selectedId) ?? null, [entities, selectedId])
 
@@ -386,6 +485,26 @@ function TerminalPage() {
     }
   }, [selectedId, canCommand])
 
+  useEffect(() => {
+    let cancelled = false
+
+    async function poll() {
+      try {
+        const res = await apiJson<{events: TerminalEvent[]}>('/api/terminal/events')
+        if (!cancelled) setEvents(res.events)
+      } catch (e) {
+        if (!cancelled) notify.error(errorMessage(e))
+      }
+    }
+
+    poll()
+    const interval = setInterval(poll, 5000)
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
+  }, [])
+
   return (
     <Layout>
       <PageHeader title="Terminal" eyebrow="LIVE MAP" count={entities.length} countLabel="tracked" />
@@ -421,6 +540,33 @@ function TerminalPage() {
           <DetailsPanel entity={selected} canCommand={canCommand} ack={ack} sending={sending} onSend={sendCommand} />
         </Panel>
       </div>
+
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[1fr_320px]">
+        <Panel title="Events" badge={`${events.length}`} className="h-64" bodyClassName="overflow-y-auto p-0">
+          {events.length === 0 ? (
+            <p className="p-3 text-xs text-zinc-500">No events yet.</p>
+          ) : (
+            events.map(event => <EventRow key={`${event.entity_id}-${event.ts}-${event.kind}`} event={event} />)
+          )}
+        </Panel>
+        <Panel
+          title="Alerts"
+          badge={`${alerts.filter(a => !dismissedAlerts.has(`${a.entity_id}-${a.ts}`)).length} active`}
+          className="h-64"
+          bodyClassName="overflow-y-auto p-0"
+        >
+          <AlertsPanel
+            alerts={alerts}
+            dismissed={dismissedAlerts}
+            onDismiss={key => setDismissedAlerts(prev => new Set(prev).add(key))}
+          />
+        </Panel>
+      </div>
+
+      <div className="mt-4">
+        <TimelineStrip events={events} />
+      </div>
+
       <div className="mt-8">
         <StreamsPanel />
       </div>
