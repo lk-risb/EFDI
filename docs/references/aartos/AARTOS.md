@@ -149,10 +149,36 @@ research, not an extension of the existing decoder.
 - `_OPERATOR_CATEGORIES` (`wlan`/`remote`/`poa` — intended to route a drone
   *operator's* RF-detected position to a ground-unit marker instead of a
   UAV one) is based on category *names* observed in a real `/dronesdb`
-  response from this deployment, but the WiFi/operator-geolocation block
-  identified above is confirmed unwired (see the 2026-09-02 entry) — so
-  the actual JSON shape such a tracking entry would carry is still
-  unconfirmed, and so is whether `_OPERATOR_CATEGORIES`'s reclassification
-  is even wired into `tracking_to_track()`/`topic_for_track()` yet (as of
-  this entry, it isn't — the field is computed but unused). Treat this
-  mapping as provisional until the block goes live and a real one is seen.
+  response from this deployment. **Correction to this file's own earlier
+  claim:** as of commit 7a81c04, this reclassification IS wired end to
+  end — `tracking_to_track()` sets `_entity_kind: "unit"` for any tracking
+  whose `categoryName` matches, and `topic_for_track()` routes it onto
+  `{root}/land/aartos/passive_rf/{affiliation}/unit` instead of the usual
+  `air/.../uav` topic. tak_layer.py already has generic, source-agnostic
+  CoT mappings for every affiliation on that exact shape
+  (`land/**/friendly|hostile|neutral|unknown/unit/**`, all four), so once a
+  real WiFi/operator tracking entry flows through, it renders on TAK as a
+  ground unit with zero additional code — checked directly in
+  compose/layers/tak_layer.py, not assumed. What remains genuinely
+  unverified: the actual JSON *shape* of such a tracking entry, since no
+  operator/WiFi tracking has been observed in a real payload yet (the
+  2026-09-16 rewiring above got the WIFI/SPECTRAN blocks to `state: 5` in
+  `/healthstatus`, but `/sample` never produced a single non-empty
+  `trackings[]` entry, WiFi or otherwise, in that session — no format was
+  ever captured to decode, only proof the pipeline is enabled). Treat the
+  field-name mapping inside `tracking_to_track()` as provisional until an
+  actual operator-category tracking entry is seen; the *routing* (unit vs.
+  uav, land vs. air, and TAK's rendering of it) is not provisional — that
+  part is code-verified today.
+
+- `alertLevel`'s exact trigger condition is unconfirmed. RTSA-Suite PRO's
+  zone editor has three colored zone tiers (user-confirmed 2026-09-16:
+  green/yellow/red), which plausibly map onto `_AFFILIATION`'s tiers —
+  yellow -> `warning`, red -> `defend`/`panic` — matching why `_AFFILIATION`
+  puts `warning` at `unknown` (a caution zone, not yet a confirmed hostile
+  act) and only `defend`/`panic` at `hostile` (2026-09-16 change, previously
+  `warning` was also mapped to `hostile`). This is naming-plausible, not
+  confirmed: no real zone crossing has been observed via `/sample` yet. To
+  confirm, watch `trackings[].alertLevel` + `.zoneIDs` together during an
+  actual green/yellow/red zone crossing and update this entry with what
+  RTSA-Suite PRO actually sends.
