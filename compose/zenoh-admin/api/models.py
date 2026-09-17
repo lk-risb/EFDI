@@ -149,6 +149,47 @@ class TopicRegistration(Base):
     )
 
 
+class TerminalAsset(Base):
+    """Operator-placed point-of-interest marker for the Terminal tab's map —
+    a GSM tower, a building, a rally point — the same "Assets" concept
+    mainline.inc TERMINAL's own Fleet panel has a tab and a "Manage assets"
+    link for. Unlike every other marker on that map, this is not detected
+    from any sensor feed; it exists purely because an admin placed it."""
+    __tablename__ = "terminal_assets"
+
+    id: Mapped[str] = mapped_column(UUID_STRING, primary_key=True, default=_uuid)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    category: Mapped[str] = mapped_column(String(32), nullable=False, default="generic")
+    lat_deg: Mapped[float] = mapped_column(nullable=False)
+    lon_deg: Mapped[float] = mapped_column(nullable=False)
+    description: Mapped[str] = mapped_column(String(512), nullable=False, default="")
+    created_by: Mapped[str] = mapped_column(ForeignKey("admin_users.id"), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=lambda: datetime.now(timezone.utc))
+
+
+class TerminalZone(Base):
+    """Operator-drawn geofence/area-of-interest circle for the Terminal
+    tab's map — mainline.inc TERMINAL's "Bounding Box"/"Alpha Zona" style
+    markers, drawn in its Plan module. A simple circle (center + radius) —
+    not a full polygon editor — same scope tradeoff as everything else here:
+    real, but the smallest honest version of the real feature."""
+    __tablename__ = "terminal_zones"
+
+    id: Mapped[str] = mapped_column(UUID_STRING, primary_key=True, default=_uuid)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    # Mirrors AARTOS's own green/yellow/red zone-tier convention (see
+    # docs/references/aartos/AARTOS.md's 2026-09-16 entry) rather than
+    # inventing a separate vocabulary — "info"/"warn"/"crit" match this
+    # app's existing TerminalEvent severity scale everywhere else.
+    tier: Mapped[str] = mapped_column(String(16), nullable=False, default="info")
+    center_lat_deg: Mapped[float] = mapped_column(nullable=False)
+    center_lon_deg: Mapped[float] = mapped_column(nullable=False)
+    radius_m: Mapped[float] = mapped_column(nullable=False)
+    description: Mapped[str] = mapped_column(String(512), nullable=False, default="")
+    created_by: Mapped[str] = mapped_column(ForeignKey("admin_users.id"), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=lambda: datetime.now(timezone.utc))
+
+
 class PkiInvitation(Base):
     __tablename__ = "pki_invitations"
 
