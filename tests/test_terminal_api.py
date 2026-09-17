@@ -1,7 +1,12 @@
+import asyncio
 import json
 import os
 import pathlib
+import re
 import sys
+
+import pydantic
+import pytest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "compose" / "zenoh-admin"))
@@ -174,6 +179,94 @@ def test_observe_drone_ignores_malformed_or_non_dict_payloads():
     assert terminal._DRONES == {}
 
 
+# ── _normalize_unit / _observe_unit ─────────────────────────────────────────
+# Ground/operator-position tracks (e.g. AARTOS's WiFi/direction-finding
+# block, once wired) publish under land/**/*/unit/** — a real gap found by
+# comparing against mainline.inc TERMINAL's own phone/operator markers: this
+# data already reached tak_layer.py's identical wildcard and rendered on
+# TAK, but terminal.py never subscribed to it, so it never reached this map.
+
+def test_normalize_unit_maps_a_ground_position_track():
+    payload = {
+        "uid": "aartos-op-1",
+        "callsign": "Operator-1",
+        "lat_deg": 54.1,
+        "lon_deg": 25.2,
+        "_src": "AARTOS",
+        "_ts": 111.0,
+    }
+    entity = terminal._normalize_unit(payload)
+    assert entity["id"] == "aartos-op-1"
+    assert entity["kind"] == "unit"
+    assert entity["callsign"] == "Operator-1"
+    assert entity["lat"] == 54.1
+    assert entity["lon"] == 25.2
+    assert entity["raw"] is payload
+
+
+def test_normalize_unit_falls_back_to_uid_without_a_callsign():
+    entity = terminal._normalize_unit({"uid": "aartos-op-2", "lat_deg": 1, "lon_deg": 2})
+    assert entity["callsign"] == "aartos-op-2"
+
+
+def test_normalize_unit_returns_none_without_a_position_fix():
+    assert terminal._normalize_unit({"uid": "aartos-op-1"}) is None
+
+
+def test_observe_unit_stores_by_uid_and_deletes_on_tombstone():
+    terminal._UNITS.clear()
+    terminal._observe_unit(Sample("EFDI/x/land/aartos/passive_rf/unknown/unit", b'{"uid": "op-1", "lat_deg": 1, "lon_deg": 2}'))
+    assert "op-1" in terminal._UNITS
+    terminal._observe_unit(Sample("EFDI/x/land/aartos/passive_rf/unknown/unit", b'{"uid": "op-1", "deleted": true}'))
+    assert "op-1" not in terminal._UNITS
+
+
+def test_observe_unit_ignores_malformed_or_non_dict_payloads():
+    terminal._UNITS.clear()
+    terminal._observe_unit(Sample("EFDI/x/land/aartos/passive_rf/unknown/unit", b"not json"))
+    terminal._observe_unit(Sample("EFDI/x/land/aartos/passive_rf/unknown/unit", b"[1, 2]"))
+    terminal._observe_unit(Sample("EFDI/x/land/aartos/passive_rf/unknown/unit", b'{"no_uid": true}'))
+    assert terminal._UNITS == {}
+
+
+def test_list_entities_key_expressions_cover_air_sensor_and_unit_topics():
+    # Regression guard for the exact gap that was found: a unit-kind track
+    # under land/**/*/unit/** must actually match _UNIT_KEY_EXPR, the same
+    # way tak_layer.py's own wildcard already matches it.
+    pattern = terminal._UNIT_KEY_EXPR.replace("**", ".*")
+    topic = "EFDI/site-a/land/aartos/passive_rf/hostile/unit/aartos-op-1"
+    assert re.fullmatch(pattern, topic)
+    assert not re.fullmatch(terminal._AIR_KEY_EXPR.replace("**", ".*"), topic)
+    assert not re.fullmatch(terminal._SENSOR_KEY_EXPR.replace("**", ".*"), topic)
+
+
+# ── AssetIn / ZoneIn validation (pure Pydantic, no DB needed) ────────────────
+
+def test_asset_in_accepts_a_valid_payload():
+    asset = terminal.AssetIn(name="GSM Tower 1", category="gsm_tower", lat_deg=54.1, lon_deg=25.2)
+    assert asset.category == "gsm_tower"
+
+
+def test_asset_in_rejects_an_empty_name():
+    with pytest.raises(pydantic.ValidationError):
+        terminal.AssetIn(name="", lat_deg=54.1, lon_deg=25.2)
+
+
+def test_zone_in_rejects_a_non_positive_radius():
+    with pytest.raises(pydantic.ValidationError):
+        terminal.ZoneIn(name="Alpha Zone", center_lat_deg=54.1, center_lon_deg=25.2, radius_m=0)
+
+
+def test_zone_in_rejects_an_absurdly_large_radius():
+    with pytest.raises(pydantic.ValidationError):
+        terminal.ZoneIn(name="Alpha Zone", center_lat_deg=54.1, center_lon_deg=25.2, radius_m=500_000)
+
+
+def test_zone_in_accepts_a_valid_payload():
+    zone = terminal.ZoneIn(name="Alpha Zone", tier="crit", center_lat_deg=54.1, center_lon_deg=25.2, radius_m=500)
+    assert zone.tier == "crit"
+
+
 # ── _observe_ack ─────────────────────────────────────────────────────────────
 
 def test_observe_ack_stores_latest_payload_keyed_by_entity_id_from_topic():
@@ -331,3 +424,87 @@ def test_events_ring_buffer_caps_at_events_cap(monkeypatch):
         terminal._push_event("trk-1", "status", "info", "event {}".format(i))
     assert len(terminal._EVENTS) == 5
     assert terminal._EVENTS[-1]["message"] == "event 9"
+
+
+# ── system health poller (_poll_system_health) ───────────────────────────────
+
+class _StopPoll(Exception):
+    pass
+
+
+def _run_one_poll_cycle(monkeypatch, control_responses):
+    """Drives _poll_system_health() through exactly len(control_responses)
+    iterations, then stops it the same way task.cancel() would."""
+    responses = iter(control_responses)
+
+    def fake_control(path):
+        assert path == "/v1/runtime"
+        return next(responses)
+
+    calls = {"n": 0}
+
+    async def fake_sleep(_seconds):
+        calls["n"] += 1
+        if calls["n"] >= len(control_responses):
+            raise _StopPoll
+
+    monkeypatch.setattr(terminal, "_control", fake_control)
+    monkeypatch.setattr(terminal.asyncio, "sleep", fake_sleep)
+    try:
+        asyncio.run(terminal._poll_system_health())
+    except _StopPoll:
+        pass
+
+
+def _reset_health_state():
+    terminal._EVENTS.clear()
+    terminal._LAST_SERVICE_STATUS.clear()
+
+
+def test_system_health_poll_does_not_log_on_first_sighting(monkeypatch):
+    _reset_health_state()
+    _run_one_poll_cycle(monkeypatch, [
+        {"services": [{"name": "aartos-raw", "status": "running"}]},
+    ])
+    assert terminal._EVENTS == []
+    assert terminal._LAST_SERVICE_STATUS["aartos-raw"] == "running"
+
+
+def test_system_health_poll_logs_a_crash_transition_as_critical(monkeypatch):
+    _reset_health_state()
+    _run_one_poll_cycle(monkeypatch, [
+        {"services": [{"name": "aartos-raw", "status": "running"}]},
+        {"services": [{"name": "aartos-raw", "status": "crashed"}]},
+    ])
+    events = [e for e in terminal._EVENTS if e["entity_id"] == "aartos-raw"]
+    assert len(events) == 1
+    assert events[0]["kind"] == "system"
+    assert events[0]["severity"] == "crit"
+    assert events[0]["message"] == "aartos-raw -> crashed"
+
+
+def test_system_health_poll_does_not_repeat_an_unchanged_status(monkeypatch):
+    _reset_health_state()
+    _run_one_poll_cycle(monkeypatch, [
+        {"services": [{"name": "aartos-raw", "status": "running"}]},
+        {"services": [{"name": "aartos-raw", "status": "running"}]},
+    ])
+    assert terminal._EVENTS == []
+
+
+def test_system_health_poll_survives_a_control_agent_error(monkeypatch):
+    _reset_health_state()
+
+    def fake_control(path):
+        raise ConnectionError("host control agent unavailable")
+
+    async def fake_sleep(_seconds):
+        raise _StopPoll
+
+    monkeypatch.setattr(terminal, "_control", fake_control)
+    monkeypatch.setattr(terminal.asyncio, "sleep", fake_sleep)
+    try:
+        asyncio.run(terminal._poll_system_health())
+    except _StopPoll:
+        pass
+    assert terminal._EVENTS == []

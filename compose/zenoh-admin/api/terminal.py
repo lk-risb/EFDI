@@ -60,12 +60,15 @@ from typing import Literal
 import zenoh
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from .control import _control
 from .db import get_db
 from .deps import require_role, write_audit
 from .local_zenoh import open_local_session
+from .models import TerminalAsset, TerminalZone
 from .topics import _data_prefix
 
 router = APIRouter(prefix="/api/terminal", tags=["terminal"])
@@ -83,9 +86,17 @@ _TILE_USER_AGENT = "EFDI-Admin-Terminal/1.0 (self-hosted internal deployment)"
 _LOCK = threading.Lock()
 _DRONES: dict[str, dict] = {}    # uid -> latest known NormalizedTrack-shaped payload
 _SENSORS: dict[str, dict] = {}   # sensor_id -> latest known sensor payload
+_UNITS: dict[str, dict] = {}     # uid -> latest known ground/operator-position payload
 
 _AIR_KEY_EXPR = "**/air/**"
 _SENSOR_KEY_EXPR = "**/land/**/sensor/**"
+# A ground/operator position (e.g. AARTOS's WiFi/direction-finding block,
+# once wired — see aartos_json.py's _is_operator_track()/topic_for_track())
+# publishes here, not under _AIR_KEY_EXPR or _SENSOR_KEY_EXPR — this was a
+# real gap: that data already reaches tak_layer.py's identical
+# "land/**/*/unit/**" wildcard and renders on TAK, but this module never
+# subscribed to it, so it never reached this map at all.
+_UNIT_KEY_EXPR = "**/land/**/unit/**"
 
 # Reused for outbound command publishes too (see send_command below) instead
 # of opening a fresh Zenoh session per request — same session
@@ -236,18 +247,82 @@ def _observe_sensor(sample) -> None:
         _SENSORS[sensor_id] = payload
 
 
+def _observe_unit(sample) -> None:
+    try:
+        payload = json.loads(bytes(sample.payload).decode())
+    except (ValueError, TypeError, UnicodeDecodeError):
+        return
+    if not isinstance(payload, dict):
+        return
+    uid = payload.get("uid")
+    if not uid:
+        return
+    with _LOCK:
+        if payload.get("deleted") or payload.get("_delete"):
+            _UNITS.pop(uid, None)
+            return
+        _UNITS[uid] = payload
+
+
 def start_terminal_observer():
     global _session
     try:
         session = open_local_session()
         session.declare_subscriber(_AIR_KEY_EXPR, _observe_drone)
         session.declare_subscriber(_SENSOR_KEY_EXPR, _observe_sensor)
+        session.declare_subscriber(_UNIT_KEY_EXPR, _observe_unit)
         session.declare_subscriber(_ACK_KEY_EXPR, _observe_ack)
         _session = session
         return session
     except Exception as exc:
         print(f"[terminal] observer not started: {exc}", flush=True)
         return None
+
+
+# Infrastructure/system health events — mirrors mainline.inc TERMINAL's own
+# "world-sim heartbeat is unhealthy" / "auto-operator heartbeat is unhealthy"
+# alerts (source MAINFRAME), which are service-health checks, not anything
+# derived from a tracked entity. This backend already computes exactly that
+# signal for every native bridge/layer via admin_control.py's GET /v1/runtime
+# (proxied here as control.py's _control("/v1/runtime")) — reused rather than
+# re-implemented, so this can never drift from what the Runtime Control page
+# itself shows.
+_HEALTH_POLL_INTERVAL_S = 10
+_LAST_SERVICE_STATUS: dict[str, str] = {}
+_SERVICE_STATUS_SEVERITY = {
+    "running": "info",
+    "stopped": "info",
+    "crashed": "crit",
+    "degraded": "warn",
+    "needs-config": "warn",
+    "unavailable": "warn",
+}
+
+
+async def _poll_system_health() -> None:
+    while True:
+        try:
+            data = await asyncio.to_thread(_control, "/v1/runtime")
+            for svc in data.get("services", []):
+                name, status = svc.get("name"), svc.get("status")
+                if not name or status is None:
+                    continue
+                # Only log a transition, not the first-ever poll — every
+                # configured service would otherwise log a spurious
+                # "-> running" the instant this process (re)starts.
+                previous = _LAST_SERVICE_STATUS.get(name)
+                _LAST_SERVICE_STATUS[name] = status
+                if previous is None or previous == status:
+                    continue
+                severity = _SERVICE_STATUS_SEVERITY.get(status, "warn")
+                _push_event(name, "system", severity, "{} -> {}".format(name, status))
+        except Exception as exc:
+            print(f"[terminal] system health poll failed: {exc}", flush=True)
+        await asyncio.sleep(_HEALTH_POLL_INTERVAL_S)
+
+
+def start_system_health_poller(loop):
+    return loop.create_task(_poll_system_health())
 
 
 def _speed_kts(payload: dict) -> float | None:
@@ -319,6 +394,26 @@ def _normalize_sensor(payload: dict) -> dict | None:
     }
 
 
+def _normalize_unit(payload: dict) -> dict | None:
+    lat, lon = payload.get("lat_deg"), payload.get("lon_deg")
+    if lat is None or lon is None:
+        return None
+    return {
+        "id": payload["uid"],
+        "kind": "unit",
+        "source": payload.get("_src") or payload.get("source") or "unknown",
+        "callsign": payload.get("callsign") or payload["uid"],
+        "lat": lat,
+        "lon": lon,
+        "alt_m": _alt_m(payload),
+        "heading_deg": payload.get("heading_deg"),
+        "speed_kts": _speed_kts(payload),
+        "status": _drone_status(payload),
+        "updated_ts": payload.get("_ts") or payload.get("timestamp"),
+        "raw": payload,
+    }
+
+
 def _fetch_tile(z: int, x: int, y: int) -> bytes:
     request = urllib.request.Request(
         f"https://tile.openstreetmap.org/{z}/{x}/{y}.png",
@@ -352,6 +447,7 @@ async def list_entities(_=Depends(require_role("readonly", "admin", "superadmin"
     with _LOCK:
         drones = list(_DRONES.values())
         sensors = list(_SENSORS.values())
+        units = list(_UNITS.values())
     entities = []
     for payload in drones:
         entity = _normalize_drone(payload)
@@ -359,6 +455,10 @@ async def list_entities(_=Depends(require_role("readonly", "admin", "superadmin"
             entities.append(entity)
     for payload in sensors:
         entity = _normalize_sensor(payload)
+        if entity is not None:
+            entities.append(entity)
+    for payload in units:
+        entity = _normalize_unit(payload)
         if entity is not None:
             entities.append(entity)
     return {"entities": entities, "server_time": time.time()}
@@ -424,3 +524,164 @@ async def list_events(
         events = list(_EVENTS[-limit:])
     events.reverse()
     return {"events": events, "server_time": time.time()}
+
+
+# ── Assets: operator-placed POI markers (GSM towers, buildings, rally
+# points) — mainline.inc TERMINAL's "Assets" tab/"Manage assets" link. Never
+# detected from any sensor feed; these exist purely because an admin placed
+# them, so writes are admin/superadmin-only while any signed-in role can
+# view them (same read/write split as topics.py's registrations).
+
+_ASSET_CATEGORIES = {"generic", "gsm_tower", "building", "industrial", "rally_point"}
+
+
+class AssetIn(BaseModel):
+    name: str = Field(min_length=1, max_length=128)
+    category: str = "generic"
+    lat_deg: float
+    lon_deg: float
+    description: str = Field(default="", max_length=512)
+
+
+def _asset_out(asset: TerminalAsset) -> dict:
+    return {
+        "id": asset.id,
+        "name": asset.name,
+        "category": asset.category,
+        "lat": asset.lat_deg,
+        "lon": asset.lon_deg,
+        "description": asset.description,
+        "created_at": asset.created_at.isoformat(),
+    }
+
+
+@router.get("/assets")
+async def list_assets(
+    db: AsyncSession = Depends(get_db),
+    _=Depends(require_role("readonly", "admin", "superadmin")),
+):
+    result = await db.execute(select(TerminalAsset).order_by(TerminalAsset.name))
+    return {"assets": [_asset_out(a) for a in result.scalars()]}
+
+
+@router.post("/assets", status_code=201)
+async def create_asset(
+    request: AssetIn,
+    db: AsyncSession = Depends(get_db),
+    actor=Depends(require_role("admin", "superadmin")),
+):
+    category = request.category.strip().lower()
+    if category not in _ASSET_CATEGORIES:
+        raise HTTPException(status_code=422, detail=f"category must be one of {sorted(_ASSET_CATEGORIES)}")
+    if not (-90 <= request.lat_deg <= 90) or not (-180 <= request.lon_deg <= 180):
+        raise HTTPException(status_code=422, detail="lat_deg/lon_deg out of range")
+    asset = TerminalAsset(
+        name=request.name.strip(),
+        category=category,
+        lat_deg=request.lat_deg,
+        lon_deg=request.lon_deg,
+        description=request.description.strip(),
+        created_by=actor.id,
+    )
+    db.add(asset)
+    await db.commit()
+    await db.refresh(asset)
+    await write_audit(db, actor.id, "create_terminal_asset", asset.name)
+    return _asset_out(asset)
+
+
+@router.delete("/assets/{asset_id}", status_code=204)
+async def delete_asset(
+    asset_id: str,
+    db: AsyncSession = Depends(get_db),
+    actor=Depends(require_role("admin", "superadmin")),
+):
+    asset = await db.get(TerminalAsset, asset_id)
+    if asset is None:
+        raise HTTPException(status_code=404, detail="asset not found")
+    name = asset.name
+    await db.delete(asset)
+    await db.commit()
+    await write_audit(db, actor.id, "delete_terminal_asset", name)
+
+
+# ── Zones: operator-drawn circular geofences/AOs — mainline.inc TERMINAL's
+# "Bounding Box"/"Alpha Zona" markers, drawn in its Plan module. A circle
+# (center + radius), not a full polygon editor — the smallest honest version
+# of the real feature. Tier mirrors this app's existing info/warn/crit
+# severity scale (see TerminalEvent) rather than a separate vocabulary.
+
+_ZONE_TIERS = {"info", "warn", "crit"}
+
+
+class ZoneIn(BaseModel):
+    name: str = Field(min_length=1, max_length=128)
+    tier: str = "info"
+    center_lat_deg: float
+    center_lon_deg: float
+    radius_m: float = Field(gt=0, le=200_000)
+    description: str = Field(default="", max_length=512)
+
+
+def _zone_out(zone: TerminalZone) -> dict:
+    return {
+        "id": zone.id,
+        "name": zone.name,
+        "tier": zone.tier,
+        "center_lat": zone.center_lat_deg,
+        "center_lon": zone.center_lon_deg,
+        "radius_m": zone.radius_m,
+        "description": zone.description,
+        "created_at": zone.created_at.isoformat(),
+    }
+
+
+@router.get("/zones")
+async def list_zones(
+    db: AsyncSession = Depends(get_db),
+    _=Depends(require_role("readonly", "admin", "superadmin")),
+):
+    result = await db.execute(select(TerminalZone).order_by(TerminalZone.name))
+    return {"zones": [_zone_out(z) for z in result.scalars()]}
+
+
+@router.post("/zones", status_code=201)
+async def create_zone(
+    request: ZoneIn,
+    db: AsyncSession = Depends(get_db),
+    actor=Depends(require_role("admin", "superadmin")),
+):
+    tier = request.tier.strip().lower()
+    if tier not in _ZONE_TIERS:
+        raise HTTPException(status_code=422, detail=f"tier must be one of {sorted(_ZONE_TIERS)}")
+    if not (-90 <= request.center_lat_deg <= 90) or not (-180 <= request.center_lon_deg <= 180):
+        raise HTTPException(status_code=422, detail="center_lat_deg/center_lon_deg out of range")
+    zone = TerminalZone(
+        name=request.name.strip(),
+        tier=tier,
+        center_lat_deg=request.center_lat_deg,
+        center_lon_deg=request.center_lon_deg,
+        radius_m=request.radius_m,
+        description=request.description.strip(),
+        created_by=actor.id,
+    )
+    db.add(zone)
+    await db.commit()
+    await db.refresh(zone)
+    await write_audit(db, actor.id, "create_terminal_zone", zone.name)
+    return _zone_out(zone)
+
+
+@router.delete("/zones/{zone_id}", status_code=204)
+async def delete_zone(
+    zone_id: str,
+    db: AsyncSession = Depends(get_db),
+    actor=Depends(require_role("admin", "superadmin")),
+):
+    zone = await db.get(TerminalZone, zone_id)
+    if zone is None:
+        raise HTTPException(status_code=404, detail="zone not found")
+    name = zone.name
+    await db.delete(zone)
+    await db.commit()
+    await write_audit(db, actor.id, "delete_terminal_zone", name)
