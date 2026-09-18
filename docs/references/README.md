@@ -137,7 +137,7 @@ code actually rests on.
   — EUROCONTROL's own index of which category numbers exist and which
   edition is current, used to confirm CAT-011 through CAT-247 were the
   complete remaining set with a public spec before implementing them (task
-  #112), and to check `asterix-specs`' eddition numbers against
+  #112), and to check `asterix-specs`' edition numbers against
   EUROCONTROL's own statement of the current edition.
 - [pyModeS](https://github.com/junzis/pyModeS) (GitHub repo, GPL-3.0), a
   Mode-S/ADS-B decoder from TU Delft's Aerospace Engineering faculty — used

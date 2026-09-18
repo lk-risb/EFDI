@@ -1,9 +1,9 @@
 # 01 — Architektūra (EFDI nuo A iki Ž)
 
-Šis dokumentas paaiškina visą projektą nuo pagrindų, skaitomas vieną kartą
-nuo pradžios iki galo: kas tai yra, kodėl reikalinga kiekviena dalis, kaip
-realiai juda duomenys ir kaip tai eksploatuoti. Perskaitę jį ištisai,
-galėsite tai paaiškinti kolegai neatsivertę kodo.
+Šis dokumentas paaiškina visą projektą nuo pagrindų — skaitykite jį vieną
+kartą ištisai: kas tai yra, kodėl reikalinga kiekviena dalis, kaip realiai
+juda duomenys ir kaip tai eksploatuoti. Perskaitę galėsite viską paaiškinti
+kolegai net neatsivertę kodo.
 
 Jei turite laiko tik vienam skyriui, rinkitės
 **[2. Vieno sakinio modelis](#2-vieno-sakinio-modelis)** ir
@@ -37,15 +37,14 @@ paleidžia savo aparatinėje įrangoje ir savo tinkle, prijungtą prie bendros
 niekam neatiduodant savo duomenų kontrolės.
 
 **Kur EFDI įsikomponuoja į vaizdą — ir kodėl tai svarbu.** EFDI sukurtas
-veikti *šalia* jūsų esamo C2 steko, ne vietoj jo. Jis stovi arba tiesiog
-šalia paties TAK serverio ir SitaWare HQ serverio, arba bent jau pasiekiamas
-jiems tinklu, ir kalba jų natyviu laidiniu protokolu tiesiogiai — CoT per
-TAK TCP prievadą, NVG per SitaWare HTTP srautą. Būtent dėl šio tiesioginio
-prisijungimo prie serverio ir egzistuoja vertimo sluoksniai: EFDI pats
-prisiima naštą išmokti kiekvienos C2 sistemos kalbą, kad operatoriaus
-įrankis gautų lygiai tai, ko jis jau tikisi — o EFDI tik praturtina tą
-vaizdą sulietais, kelių šaltinių takeliais, neverčiant nieko keisti savo
-darbo įpročių.
+veikti *šalia* jūsų esamo C2 steko, ne vietoj jo. Jis stovi šalia paties
+TAK ir SitaWare HQ serverio (arba bent jau pasiekiamas jiems tinklu) ir
+kalba jų natyviu laidiniu protokolu tiesiogiai — CoT per TAK TCP prievadą,
+NVG per SitaWare HTTP srautą. Kaip tik dėl šio tiesioginio prisijungimo
+prie serverio ir reikalingi vertimo sluoksniai: naštą išmokti kiekvienos
+C2 sistemos kalbą prisiima pats EFDI, kad operatoriaus įrankis gautų
+lygiai tai, ko jau tikisi — o EFDI tik praturtina tą vaizdą sulietais,
+kelių šaltinių takeliais, neverčiant niekaip keisti darbo įpročių.
 
 ## 2. Vieno sakinio modelis
 
@@ -243,12 +242,11 @@ automatiškai apima ir `/tracks/v1` galūnę, ir paverčia gautus duomenis:
 
 ### 6.7 Vykdomi nuorodiniai pavyzdžiai
 
-Kataloge `examples/` yra iliustraciniai, o ne produkciniai pavyzdžiai
-leidėjams, norintiems rašyti į EFDI duomenų magistralę — juos verta
-pritaikyti savo reikmėms, o ne tiesiog importuoti kaip biblioteką.
-Kanoninės sutartys aprašytos šiame dokumente ir faile
-`13-temu-taksonomija.md`; šie pavyzdžiai tik parodo, kaip tai atrodo
-veikiančiame kode:
+Kataloge `examples/` rasite iliustracinius, o ne produkcinius pavyzdžius
+leidėjams, norintiems rašyti į EFDI duomenų magistralę — pritaikykite juos
+savo reikmėms, o ne tiesiog importuokite kaip biblioteką. Kanoninės
+sutartys aprašytos šiame dokumente ir faile `13-temu-taksonomija.md`; šie
+pavyzdžiai tik parodo, kaip tai atrodo veikiančiame kode:
 
 | Pavyzdys | Ką jis parodo | Kokia sutartis |
 |---|---|---|
