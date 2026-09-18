@@ -1,18 +1,17 @@
 # 00 — Pradėkite čia
 
-Tai EFDI jutiklių sujungimo (sensor-fusion) pod'o operatoriaus vadovas. Jei
-šią repozitoriją matote pirmą kartą, pirmiausia perskaitykite šį puslapį,
-o tada rinkitės dokumentą pagal tai, ką šiuo metu darote — dokumentai
-sunumeruoti maždaug ta tvarka, kokia jų reikėtų diegiant pirmą kartą, bet
-niekas netrukdo iškart šokti prie problemų sprendimo, jei būtent to
-reikia.
+Tai EFDI jutiklių sujungimo (sensor-fusion) pod'o operatoriaus vadovas.
+Pirmą kartą matote šią repozitoriją? Perskaitykite šį puslapį, o tada
+rinkitės dokumentą pagal savo dabartinę užduotį — dokumentai sunumeruoti
+maždaug ta tvarka, kokia jų prireiktų diegiant pirmą kartą, bet niekas
+netrukdo iškart šokti prie problemų sprendimo, jei būtent to reikia.
 
-Svarbu žinoti iš karto: kartą įdiegtas, EFDI toliau veikia beveik
-savarankiškai — `start.sh` palaiko natyvius procesus gyvus per
-`supervisor.py`, o bet kokie konfigūracijos pakeitimai po pradinės
-sąrankos daromi per WebUI (žr. [08](08-integracijos.md)), ne rankiniu
-failų redagavimu pačiame hoste. Todėl prieš improvizuojant visada verta
-pirmiau atsiversti tą dokumentą, kuris atitinka jūsų dabartinę užduotį.
+Vieną dalyką verta žinoti iš karto: kartą įdiegtas, EFDI toliau veikia
+beveik savarankiškai. `start.sh` palaiko natyvius procesus gyvus per
+`supervisor.py`, o konfigūraciją po pradinės sąrankos keičiate per WebUI
+(žr. [08](08-integracijos.md)), ne rankiniu failų redagavimu hoste. Todėl
+prieš improvizuojant pirmiau atsiverskite dokumentą, kuris atitinka jūsų
+užduotį.
 
 ## Nuo ko pradėti
 

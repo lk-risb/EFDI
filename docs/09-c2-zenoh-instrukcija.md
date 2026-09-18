@@ -32,15 +32,15 @@ TAK_KEY=/vykdymo/kelias/tak-client-key.pem
 TAK_CA=/vykdymo/kelias/tak-ca.pem
 ```
 
-Šie turi būti TAK išduoti kredencialai. Zenoh sertifikatas negalioja TAK
-Server. `TAK_HOST` yra stabilus prisijungimo vardas; kai įdiegtas TAK
-serverio sertifikatas naudoja kitokį paveldėtą DNS SAN, nustatykite
-`TAK_TLS_SERVER_NAME` į tą SAN, o ne išjunkite vardo tikrinimą. Laboratorijos
+Šie turi būti TAK išduoti kredencialai — Zenoh sertifikatas TAK serveriui
+negalioja. `TAK_HOST` yra stabilus prisijungimo vardas; jei įdiegto TAK
+serverio sertifikatas naudoja kitokį, paveldėtą DNS SAN, nustatykite
+`TAK_TLS_SERVER_NAME` į tą SAN — vardo tikrinimo neišjunkite. Laboratorijoje
 paprastam tekstui naudokite diegimo sukonfigūruotą TCP prievadą ir palikite
-`TAK_TLS=0`. `tak-layer` išvestis yra vienakryptė; įjunkite `tak-bridge`
-grįžtamajam srautui.
+`TAK_TLS=0`. `tak-layer` išvestis yra vienakryptė; grįžtamajam srautui
+įjunkite `tak-bridge`.
 
-TAK Server pusėje:
+TAK serverio pusėje:
 
 1. Prisijunkite prie TAK Server administravimo UI su administratoriaus
    identitetu.
@@ -120,8 +120,9 @@ ryšio testo neišjunkite sertifikatų tikrinimo.
 
 ## 9.5 SitaWare HQ → Zenoh
 
-Tam reikia tikro JSON vienetų resurso, dokumentuoto tam HQ diegimui; nespėkite
-`/rest/v2/units`. Sukonfigūruokite ir pasirinkite `sitaware`:
+Tam reikia tikro JSON vienetų resurso, dokumentuoto tam HQ diegimui —
+nemanykite, kad tai bus `/rest/v2/units`. Sukonfigūruokite ir pasirinkite
+`sitaware`:
 
 ```dotenv
 SITAWARE_URL=https://<hq-serveris>
@@ -152,14 +153,14 @@ CoT Gateway sąsają.
 ## 9.6 Dalinkitės C2 kilmės duomenimis su partneriais
 
 Nerašykite įrašo iš naujo į kito partnerio vardų sritį. Patvirtinkite, kad
-kilmės vardų sritis leidžiama routerio/federacijos politikos ir kad gaunantis
+kilmės vardų sritį leidžia routerio/federacijos politika ir kad gaunantis
 partneris ją prenumeruoja. Jų `cot-*` ar `sitaware-hq-nvg` išvesties
 sluoksniai išvers autorizuotas normalizuotas temas taip pat, kaip vietiniai
 sugeneruoti jutiklio duomenys.
 
 ## 9.7 Eksploatacinio personažo testinis pratimas
 
-Naudokite keturis atskirus identitetus ar klientus teste. Tai eksploataciniai
+Testui naudokite keturis atskirus identitetus ar klientus. Tai eksploataciniai
 personažai, ne Zenoh Admin panelio `superadmin`, `admin` ir `readonly`
 vaidmenų pakaitalai.
 

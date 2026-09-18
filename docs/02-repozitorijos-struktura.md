@@ -1,9 +1,9 @@
 # 02 — Repozitorijos struktūra
 
-Šis skyrius atsako į vieną klausimą: kur ieškoti, jei reikia ką nors rasti
-repozitorijoje. Prieš leidžiantis į aklą `grep` paiešką, verta pirma
-peržvelgti šį žemėlapį — dažniausiai failas yra būtent ten, kur pagal
-paskirtį ir turėtų būti.
+Šis skyrius atsako į vieną klausimą: kur ieškoti, jei repozitorijoje
+reikia ką nors rasti. Prieš leidžiantis į aklą `grep` paiešką, verčiau
+pirma peržvelkite šį žemėlapį — failas dažniausiai yra būtent ten, kur
+pagal paskirtį ir turėtų būti.
 
 ## Viršutinis lygis
 

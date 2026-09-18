@@ -21,9 +21,9 @@ kredencialus, sugeneruotus TAK repo su `make add-service NAME=<pod-vardas>`
   pavadintas failas zip archyve vis tiek atsidurs teisingoje vietoje, jei tai
   galiojantis CA/sertifikatas/raktas.
 
-Aiškus vieno failo įkėlimas (A variantas) visada nustelbia tos pačios vietos
-zip įrašą (B variantas), todėl galite ištaisyti tik vieną failą iš kitu
-atveju gero zip, neįkeldami visko iš naujo.
+Vieno failo įkėlimas (A variantas) visada nustelbia to paties lauko įrašą iš
+zip archyvo (B variantas) — tad, jei zip kitaip geras, galite pataisyti tik
+vieną failą, neįkeldami visko iš naujo.
 
 Jei įkėlimas nepavyksta su teisių klaida, o ne patvirtinimo klaida, greičiausiai
 šio įkėlimo katalogas hoste (`$POD_STATE_DIR/integrations/tak`) priklauso ne
@@ -118,7 +118,7 @@ SITAWARE_HQ_NVG_STALE_S=120
 SITAWARE_HQ_NVG_MAX_TRACKS=10000
 ```
 
-> **Dvi WebUI formos spąstai konkrečiai:**
+> **Du konkretūs spąstai šioje WebUI formoje:**
 > 1. Keli laukai (prievadas, bind adresas, sertifikato/rakto keliai, „stale"
 >    riba) rodo pilką **pavyzdinę** reikšmę, kol iš tikrųjų kažką neįrašote —
 >    tas pilkas tekstas nėra išsaugota reikšmė. Jei paslauga vėliau praneša
@@ -182,7 +182,7 @@ Adresas priima tik GET/HEAD, pagal nutylėjimą reikalauja Basic autentifikavimo
 | Mėlynas laivas | `a-f-S-X-L` | SitaWare draugiškas laivas |
 | Raudonas laivas | `a-h-S-X-L` | SitaWare priešiškas laivas |
 | Žalia/raudona sensorių dėžutė (ta pati ikona, keičiasi spalva) | `a-n-G-E-S` / `a-h-G-E-S` | šiuo metu prisijungęs dronuradaras.lt akustinis jutiklis — žalia=neaktyvus arba atvėsta, raudona=aptikimas aktyvus (paskutinės 60s); atsijungę jutikliai pašalinami. Atvėsimo būsena anksčiau naudojo atskirą geltoną `a-u-G-E-S` tipą, bet WinTAK/ATAK jo tinkamai nekategorizuoja kaip "Equipment > Sensor" — pastabose (remarks) vis tiek matomas „[COOLING DOWN...]" tekstas |
-| Balta nežinoma orlaivio | `a-u-A-C-F` | Neklasifikuotas radaro takelis |
+| Baltas nežinomas orlaivis | `a-u-A-C-F` | Neklasifikuotas radaro takelis |
 
 > Radaro žymeklio pozicija, greitis ir kursas atnaujinami automatiškai iš gyvo CAT-34 srauto. Mobilioje platformoje ATAK rodys greičio vektorių ir judėjimo taką.
 

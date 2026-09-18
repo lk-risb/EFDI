@@ -273,3 +273,24 @@ body {
   color: rgb(113 113 122);
 }
 .terminal-statcard-audio { width: 100%; height: 32px; margin-top: 0.5rem; }
+
+/* Persistent name labels next to map markers (entities, units, assets) —
+   real TERMINAL always shows a marker's name on the map itself, not only on
+   click. Leaflet's default permanent-tooltip chrome (white box, border,
+   arrow) is stripped down to plain text so it reads as a map label, not a
+   popup. */
+.terminal-map .leaflet-tooltip.terminal-marker-label {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0 0 0 2px;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: #27272a;
+  text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 0 3px #fff;
+}
+.dark .terminal-map .leaflet-tooltip.terminal-marker-label {
+  color: #e4e4e7;
+  text-shadow: 0 0 3px #000, 0 0 3px #000, 0 0 3px #000;
+}
+.terminal-map .leaflet-tooltip.terminal-marker-label::before { display: none; }
