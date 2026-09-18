@@ -19,3 +19,4 @@ eclipse-zenoh==1.9.0
 authlib==1.7.2
 itsdangerous==2.2.0
 mgrs==1.5.0   # lat/lon -> MGRS for the Terminal tab's selected-entity position, same lib tak_layer.py already trusts
+packaging==26.3   # mgrs's own core.py imports this at runtime but doesn't declare it as a dependency itself

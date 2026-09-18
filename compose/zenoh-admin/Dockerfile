@@ -9,6 +9,19 @@ RUN pnpm install --frozen-lockfile
 COPY ui/ .
 RUN pnpm build
 
+# mgrs ships prebuilt wheels for common CPython versions, but not always the
+# newest one (cp313 here had none as of this writing) — pip then falls back
+# to compiling its C extension from source, which needs gcc. The slim base
+# image has no compiler, so that build stage exists only to have one; its
+# gcc/build output never reaches the final runtime image.
+FROM python:3.13.14-slim@sha256:afe189875f1d2f9b45e287834fb9f2c273a5d59d354ae4050ab9affbf0a6ba06 AS py-builder
+WORKDIR /app
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends build-essential \
+    && rm -rf /var/lib/apt/lists/*
+COPY requirements.txt .
+RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
+
 FROM python:3.13.14-slim@sha256:afe189875f1d2f9b45e287834fb9f2c273a5d59d354ae4050ab9affbf0a6ba06 AS runtime
 ARG GIT_COMMIT=unknown
 LABEL org.opencontainers.image.revision="${GIT_COMMIT}"
@@ -16,8 +29,7 @@ WORKDIR /app
 RUN apt-get update \
     && apt-get upgrade -y \
     && rm -rf /var/lib/apt/lists/*
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY --from=py-builder /install /usr/local
 COPY api/ ./api/
 COPY --from=ui-builder /ui/dist ./static
 # Fixed UID:GID 10001:10001 — scripts/gen-certs.sh chgrp's each pod's leaf
