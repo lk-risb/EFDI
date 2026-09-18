@@ -30,6 +30,7 @@ interface Entity {
   speed_kts: number | null
   status: string
   updated_ts: number | null
+  mgrs: string | null
   raw: Record<string, unknown>
 }
 
@@ -67,7 +68,10 @@ const STATUS_COLOR: Record<string, string> = {
 const UNIT_COLOR = '#a855f7'
 
 function colorFor(entity: Entity): string {
-  if (entity.kind === 'unit') return STATUS_COLOR[entity.status] ?? UNIT_COLOR
+  // Units keep their own purple identity regardless of status text — only
+  // emergency overrides it — so an "online" unit never reads as a green
+  // sensor and an "unknown"-status one never falls back to a generic color.
+  if (entity.kind === 'unit') return entity.status === 'emergency' ? STATUS_COLOR.emergency : UNIT_COLOR
   return STATUS_COLOR[entity.status] ?? (entity.kind === 'sensor' ? '#22c55e' : '#3b82f6')
 }
 
@@ -151,9 +155,11 @@ function entityRows(entity: Entity): [string, string][] {
     if (value === null || value === undefined || value === '') return
     rows.push([label, String(value)])
   }
+  push('Kind', entity.kind[0].toUpperCase() + entity.kind.slice(1))
   push('Source', entity.source)
   push('Status', entity.status)
   push('Lat, Lon', `${entity.lat.toFixed(5)}°, ${entity.lon.toFixed(5)}°`)
+  if (entity.mgrs) push('MGRS', entity.mgrs)
   if (entity.alt_m !== null) push('Altitude', `${Math.round(entity.alt_m)} m`)
   if (entity.heading_deg !== null) push('Heading', `${Math.round(entity.heading_deg)}°`)
   if (entity.speed_kts !== null) push('Speed', `${Math.round(entity.speed_kts)} kts`)
@@ -189,15 +195,15 @@ function buildPopupHtml(entity: Entity, color: string): string {
 // row) — not a pixel copy, but the same "cockpit of panels" structure
 // instead of one full-bleed page.
 function Panel({title, badge, className, bodyClassName, children}: {
-  title: string; badge?: string; className?: string; bodyClassName?: string; children: React.ReactNode
+  title: string; badge?: React.ReactNode; className?: string; bodyClassName?: string; children: React.ReactNode
 }) {
   return (
     <div className={cn('hud-card hud-glass hud-frame relative flex flex-col overflow-hidden rounded-lg border border-zinc-200 dark:border-white/10', className)}>
       <HudCorners />
       {title && (
-        <div className="flex shrink-0 items-center justify-between border-b border-zinc-200 px-3 py-2 dark:border-white/10">
-          <span className="hud-label text-xs text-zinc-600 dark:text-zinc-400">{title}</span>
-          {badge && <span className="hud-label text-[11px] text-zinc-500">{badge}</span>}
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-zinc-200 px-3 py-2 dark:border-white/10">
+          <span className="hud-label shrink-0 text-xs text-zinc-600 dark:text-zinc-400">{title}</span>
+          {badge && <span className="hud-label min-w-0 text-[11px] text-zinc-500">{badge}</span>}
         </div>
       )}
       <div className={cn('min-h-0 flex-1 overflow-auto', bodyClassName ?? 'p-3')}>{children}</div>
@@ -212,18 +218,47 @@ function Panel({title, badge, className, bodyClassName, children}: {
 // working control. Wiring any of these to a real feature is a separate task.
 const NAV_TABS = ['Panels', 'Layout', 'Fleet', 'Plan', 'Modules']
 
-function TerminalNav() {
+function TerminalNav({rightSlot}: {rightSlot?: React.ReactNode}) {
   return (
-    <div className="mb-3 flex items-center gap-1 border-b border-zinc-200 pb-2 dark:border-white/10">
-      {NAV_TABS.map(tab => (
-        <span
-          key={tab}
-          title="Not wired to a feature yet"
-          className="hud-label cursor-default rounded px-2 py-1 text-[10px] text-zinc-400 dark:text-zinc-600"
-        >
-          {tab}
-        </span>
-      ))}
+    <div className="mb-3 flex items-center justify-between gap-1 border-b border-zinc-200 pb-2 dark:border-white/10">
+      <div className="flex items-center gap-1">
+        {NAV_TABS.map(tab => (
+          <span
+            key={tab}
+            title="Not wired to a feature yet"
+            className="hud-label cursor-default rounded px-2 py-1 text-[10px] text-zinc-400 dark:text-zinc-600"
+          >
+            {tab}
+          </span>
+        ))}
+      </div>
+      {rightSlot}
+    </div>
+  )
+}
+
+// Compact top-right status readout, matching real TERMINAL's own
+// alerts-bell + live-clock cluster next to its nav strip — the bottom status
+// bar already covers this in more detail, this is just the same real data
+// (active alert count, connection state) surfaced where the reference also
+// shows it. No fabricated fields (no GPS-sat/ground-station counts — this
+// app has no source for those).
+function TopStatusCluster({alertCount, connected}: {alertCount: number; connected: boolean}) {
+  const [now, setNow] = useState(() => new Date())
+  useEffect(() => {
+    const interval = setInterval(() => setNow(new Date()), 1000)
+    return () => clearInterval(interval)
+  }, [])
+  const clock = now.toISOString().slice(11, 19)
+  return (
+    <div className="hud-label flex shrink-0 items-center gap-3 text-[10px] text-zinc-500">
+      <span className={cn('flex items-center gap-1', alertCount > 0 && 'text-red-500')}>
+        🔔 {alertCount}
+      </span>
+      <span className="flex items-center gap-1">
+        <span className="h-1.5 w-1.5 rounded-full" style={{background: connected ? '#22c55e' : '#71717a'}} />
+        {connected ? 'LIVE' : 'DOWN'} {clock} Z
+      </span>
     </div>
   )
 }
@@ -236,9 +271,9 @@ const FLEET_SUB_TABS = ['Assets', 'Markings', 'Selection'] as const
 type FleetSubTab = typeof FLEET_SUB_TABS[number]
 
 function FleetSubTabs({
-  selectedLabel, assets, zones, canCommand, placing, onStartPlacing, onCancelPlacing, onDelete,
+  selected, assets, zones, canCommand, placing, onStartPlacing, onCancelPlacing, onDelete, tab, onTabChange,
 }: {
-  selectedLabel: string
+  selected: Entity | null
   assets: TerminalAsset[]
   zones: TerminalZone[]
   canCommand: boolean
@@ -246,8 +281,9 @@ function FleetSubTabs({
   onStartPlacing: (kind: 'asset' | 'zone') => void
   onCancelPlacing: () => void
   onDelete: (kind: 'asset' | 'zone', id: string) => void
+  tab: FleetSubTab
+  onTabChange: (tab: FleetSubTab) => void
 }) {
-  const [tab, setTab] = useState<FleetSubTab>('Assets')
   return (
     <div className="flex h-full flex-col">
       <div className="flex shrink-0 items-center gap-1 border-b border-zinc-200 px-2 py-1 dark:border-white/10">
@@ -255,7 +291,7 @@ function FleetSubTabs({
           <button
             key={t}
             type="button"
-            onClick={() => setTab(t)}
+            onClick={() => onTabChange(t)}
             className={cn(
               'hud-label rounded px-1.5 py-0.5 text-[9px]',
               tab === t ? 'bg-zinc-200 text-zinc-600 dark:bg-white/10 dark:text-zinc-300' : 'text-zinc-400 hover:text-zinc-600 dark:text-zinc-600'
@@ -328,23 +364,44 @@ function FleetSubTabs({
             ))}
           </div>
         )}
-        {tab === 'Selection' && <p className="text-zinc-500">{selectedLabel}</p>}
+        {tab === 'Selection' && (
+          selected ? (
+            <div>
+              <p className="mb-1 font-medium text-zinc-700 dark:text-zinc-300">{selected.callsign}</p>
+              <dl className="hud-kv text-[10px]">
+                {entityRows(selected).map(([label, value]) => (
+                  <div key={label}><dt>{label}</dt><dd>{value}</dd></div>
+                ))}
+              </dl>
+            </div>
+          ) : (
+            <p className="text-zinc-500">Nothing selected.</p>
+          )
+        )}
       </div>
     </div>
   )
 }
 
-// Visual-only placeholder — real TERMINAL docks a single selected video feed
-// here. EFDI's live video already works (see StreamsPanel below), but a
-// stream's name is an arbitrary operator-set RTMP path with no structured
-// link to a map entity's id, so this can't be wired to "the selected
-// entity's feed" without guessing. Kept as an honest empty state rather than
-// a fake preview.
-function VideoPanelPlaceholder() {
+// Visual-only, matching real TERMINAL's own empty state exactly: a plain
+// "+" in the header (same non-interactive placeholder chrome as TerminalNav
+// and the Fleet/SAT columns — no per-panel "add" feature exists here) and a
+// small "no feed" pill in the body, not a centered message. A real feed
+// picker was tried here first (a manual dropdown over StreamsPanel's own
+// WHEP playback) but the reference's default state has no picker at all
+// until a feed exists — reverted rather than show UI real TERMINAL doesn't.
+function VideoHeaderPlus() {
   return (
-    <div className="flex h-full items-center justify-center p-3 text-center text-[11px] text-zinc-500">
-      Select a video feed or pin one to this panel.<br />
-      <span className="text-[10px] text-zinc-400">Not wired yet — see Video streams below.</span>
+    <span title="Not wired to a feature yet" className="hud-label cursor-default text-sm text-zinc-500 dark:text-zinc-500">
+      +
+    </span>
+  )
+}
+
+function VideoPanel() {
+  return (
+    <div className="relative h-full bg-black p-2">
+      <span className="hud-label rounded bg-zinc-800 px-2 py-1 text-[11px] text-zinc-400">no feed</span>
     </div>
   )
 }
@@ -442,6 +499,9 @@ function FleetRow({entity, selected, onSelect}: {entity: Entity; selected: boole
       <td className="whitespace-nowrap px-2 py-1.5 font-mono text-zinc-800 dark:text-zinc-200">
         <span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full align-middle" style={{background: colorFor(entity)}} />
         {entity.callsign}
+        {entity.source && entity.source !== 'unknown' && (
+          <span className="ml-1.5 text-[9px] font-normal text-zinc-400">{entity.source}</span>
+        )}
       </td>
       <td className="hud-label px-2 py-1.5 text-[10px] text-zinc-500">{entity.status}</td>
       <td className="px-2 py-1.5 text-right font-mono" style={battery !== null ? {color: batteryColor(battery)} : undefined}>
@@ -606,9 +666,10 @@ function AlertsPanel({alerts, dismissed, onDismiss}: {
           <div key={key} className="flex items-start gap-2 border-b border-zinc-100 px-3 py-2 text-[11px] last:border-0 dark:border-white/5">
             <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" style={{background: SEVERITY_COLOR[alert.severity]}} />
             <div className="min-w-0 flex-1">
-              <p className="truncate font-medium text-zinc-800 dark:text-zinc-200" title={alert.entity_id}>{alert.entity_id}</p>
-              <p className="text-zinc-500">{alert.message}</p>
-              <p className="text-[10px] text-zinc-400">{timeAgo(alert.ts)}</p>
+              <p className="truncate font-medium text-zinc-800 dark:text-zinc-200">{alert.message}</p>
+              <p className="hud-label text-[10px] text-zinc-400">
+                <span title={alert.entity_id}>{alert.entity_id.toUpperCase()}</span> · {timeAgo(alert.ts)}
+              </p>
             </div>
             <button
               type="button"
@@ -711,6 +772,22 @@ function DetailsPanel({entity, canCommand, ack, sending, onSend}: {
           <div key={label}><dt>{label}</dt><dd>{value}</dd></div>
         ))}
       </dl>
+      {entity.mgrs && (
+        <button
+          type="button"
+          onClick={async () => {
+            try {
+              await navigator.clipboard.writeText(entity.mgrs!)
+              notify.success('MGRS copied')
+            } catch (e) {
+              notify.error(errorMessage(e))
+            }
+          }}
+          className="mt-2 rounded border border-zinc-300 px-2 py-1 text-[11px] text-zinc-600 hover:bg-zinc-100 dark:border-white/15 dark:text-zinc-300 dark:hover:bg-zinc-800"
+        >
+          Copy MGRS
+        </button>
+      )}
       {typeof audioUrl === 'string' && (
         <audio className="terminal-statcard-audio" controls preload="none" src={audioUrl} />
       )}
@@ -731,6 +808,7 @@ function TerminalPage() {
   const [assets, setAssets] = useState<TerminalAsset[]>([])
   const [zones, setZones] = useState<TerminalZone[]>([])
   const [placing, setPlacing] = useState<'asset' | 'zone' | null>(null)
+  const [fleetSubTab, setFleetSubTab] = useState<FleetSubTab>('Assets')
   const placingRef = useRef(placing)
   const [pendingPoint, setPendingPoint] = useState<{lat: number; lon: number} | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -841,9 +919,13 @@ function TerminalPage() {
         existing.setLatLng([entity.lat, entity.lon])
         existing.setIcon(icon)
         existing.setPopupContent(popup)
+        existing.setTooltipContent(entity.callsign)
       } else {
         const marker = L.marker([entity.lat, entity.lon], {icon}).addTo(mapInstance.current)
         marker.bindPopup(popup, {maxWidth: 280})
+        // Permanent label, not just a click popup — matches real TERMINAL,
+        // where every marker's name is always visible on the map.
+        marker.bindTooltip(entity.callsign, {permanent: true, direction: 'right', offset: [8, 0], className: 'terminal-marker-label'})
         marker.on('click', () => setSelectedId(entity.id))
         markersRef.current.set(entity.id, marker)
       }
@@ -962,9 +1044,11 @@ function TerminalPage() {
       const existing = assetMarkersRef.current.get(asset.id)
       if (existing) {
         existing.setLatLng([asset.lat_deg, asset.lon_deg])
+        existing.setTooltipContent(asset.name)
       } else {
         const marker = L.marker([asset.lat_deg, asset.lon_deg], {icon: assetIcon(asset.category)}).addTo(mapInstance.current)
         marker.bindPopup(`<strong>${escapeHtml(asset.name)}</strong><br/><span style="opacity:.7">${escapeHtml(asset.category)}</span>${asset.description ? `<br/>${escapeHtml(asset.description)}` : ''}`)
+        marker.bindTooltip(asset.name, {permanent: true, direction: 'right', offset: [10, 0], className: 'terminal-marker-label'})
         assetMarkersRef.current.set(asset.id, marker)
       }
     }
@@ -989,6 +1073,7 @@ function TerminalPage() {
         existing.setLatLng([zone.center_lat_deg, zone.center_lon_deg])
         existing.setRadius(zone.radius_m)
         existing.setStyle({color})
+        existing.setTooltipContent(zone.name)
       } else {
         const circle = L.circle([zone.center_lat_deg, zone.center_lon_deg], {
           radius: zone.radius_m,
@@ -999,6 +1084,10 @@ function TerminalPage() {
           fillOpacity: 0.08,
         }).addTo(mapInstance.current)
         circle.bindPopup(`<strong>${escapeHtml(zone.name)}</strong><br/><span style="opacity:.7">${zone.tier.toUpperCase()} · ${Math.round(zone.radius_m)}m</span>${zone.description ? `<br/>${escapeHtml(zone.description)}` : ''}`)
+        // Permanent label on the boundary, same treatment as entity/asset
+        // markers — matches real TERMINAL's "Alpha Zona" label on its own
+        // dashed geofence circle.
+        circle.bindTooltip(zone.name, {permanent: true, direction: 'top', className: 'terminal-marker-label'})
         zoneLayersRef.current.set(zone.id, circle)
       }
     }
@@ -1091,12 +1180,13 @@ function TerminalPage() {
   return (
     <Layout>
       <PageHeader title="Terminal" eyebrow="LIVE MAP" count={entities.length} countLabel="tracked" />
-      <TerminalNav />
+      <TerminalNav rightSlot={<TopStatusCluster alertCount={activeAlertCount} connected={routerStatus?.connected ?? false} />} />
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[240px_1fr_300px]">
         <div className="flex h-[60vh] flex-col gap-4">
           <Panel title="Fleet" badge={`${entities.length}`} className="flex-1" bodyClassName="flex flex-col overflow-hidden p-0">
-            <p className="hud-label shrink-0 border-b border-zinc-200 px-2 py-1.5 text-[10px] text-zinc-500 dark:border-white/10">
-              {airborneCount} airborne · {onlineCount}/{entities.length} online
+            <p className="hud-label flex shrink-0 items-center justify-between border-b border-zinc-200 px-2 py-1.5 text-[10px] text-zinc-500 dark:border-white/10">
+              <span>{airborneCount} airborne · {onlineCount}/{entities.length} online</span>
+              <button type="button" onClick={() => setFleetSubTab('Assets')} className="text-accent-fill hover:underline">Manage assets</button>
             </p>
             <div className="min-h-0 flex-1 overflow-y-auto">
             {entities.length === 0 ? (
@@ -1128,7 +1218,7 @@ function TerminalPage() {
           </Panel>
           <Panel title="" className="h-32" bodyClassName="p-0">
             <FleetSubTabs
-              selectedLabel={selected ? `${selected.callsign} selected` : 'Nothing selected'}
+              selected={selected}
               assets={assets}
               zones={zones}
               canCommand={canCommand}
@@ -1142,6 +1232,8 @@ function TerminalPage() {
                 setPendingPoint(null)
               }}
               onDelete={deleteMarker}
+              tab={fleetSubTab}
+              onTabChange={setFleetSubTab}
             />
           </Panel>
           {pendingPoint && placing && (
@@ -1158,8 +1250,8 @@ function TerminalPage() {
           <div ref={mapRef} className="terminal-map h-full w-full" />
         </Panel>
         <div className="flex h-[60vh] flex-col gap-4">
-          <Panel title="Video" className="h-40" bodyClassName="p-0">
-            <VideoPanelPlaceholder />
+          <Panel title="Video" className="h-40" bodyClassName="p-0" badge={<VideoHeaderPlus />}>
+            <VideoPanel />
           </Panel>
           <Panel title="Telemetry" className="flex-1">
             <DetailsPanel entity={selected} canCommand={canCommand} ack={ack} sending={sending} onSend={sendCommand} />
@@ -1214,7 +1306,7 @@ function TerminalPage() {
           />
           {routerStatus?.connected ? `LIVE - ${routerStatus.endpoint}` : 'DISCONNECTED'}
         </span>
-        <span>{selected ? selected.callsign : 'no selection'}</span>
+        <span>{selected ? `${selected.callsign} · ${selected.kind[0].toUpperCase()}${selected.kind.slice(1)}` : 'no selection'}</span>
         <span className="ml-auto">{role ?? 'guest'} · {username ?? '—'}</span>
         <span>AIR {airborneCount}/{droneEntities.length}</span>
         <span>TRK {entities.length}</span>

@@ -73,6 +73,36 @@ from .topics import _data_prefix
 
 router = APIRouter(prefix="/api/terminal", tags=["terminal"])
 
+# Same optional-import guard tak_layer.py already uses for the identical
+# lat/lon -> MGRS conversion (its own CoT remarks field) — mgrs's C
+# extension is a real prod dependency (requirements.txt), but guarding it
+# means a venv missing it degrades to no MGRS field instead of a boot crash.
+try:
+    import mgrs as _mgrs_lib
+    _MGRS = _mgrs_lib.MGRS()
+    _MGRS_RE = re.compile(r"^(\d{1,2}[A-Z])([A-Z]{2})(\d+)$")
+except Exception:
+    _MGRS = None
+    _MGRS_RE = None
+
+
+def _mgrs_string(lat: float, lon: float) -> str | None:
+    """4-digit-precision (10m) MGRS, formatted like real TERMINAL's own
+    position readout ("35U LA 9224 2662") — None if mgrs isn't installed or
+    the point can't be converted (e.g. polar regions UTM doesn't cover)."""
+    if _MGRS is None:
+        return None
+    try:
+        raw = _MGRS.toMGRS(lat, lon, MGRSPrecision=4)
+    except Exception:
+        return None
+    match = _MGRS_RE.match(raw)
+    if not match:
+        return raw
+    zone, square, digits = match.groups()
+    half = len(digits) // 2
+    return "{} {} {} {}".format(zone, square, digits[:half], digits[half:])
+
 # OpenStreetMap's tile usage policy (operations.osmfoundation.org/policies/tiles)
 # requires a real, identifying User-Agent and forbids uncached direct-from-browser
 # use — a Leaflet <img> tag hitting tile servers straight from the client can't
@@ -354,6 +384,22 @@ def _drone_status(payload: dict) -> str:
     return "airborne"
 
 
+# A ground/operator track (AARTOS's own unit tracks, see aartos_json.py's
+# _is_operator_track) has none of _drone_status's fields — armed/flight_state/
+# on_ground only mean something for an airframe. Reusing _drone_status here
+# used to default every unit to "airborne", which is both nonsensical for
+# something standing on the ground and (via STATUS_COLOR) painted it the same
+# blue as a flying drone on the map instead of unitIcon's distinct color.
+def _unit_status(payload: dict) -> str:
+    if payload.get("emergency"):
+        return "emergency"
+    if payload.get("is_online") is True:
+        return "online"
+    if payload.get("is_online") is False:
+        return "offline"
+    return "unknown"
+
+
 def _normalize_drone(payload: dict) -> dict | None:
     lat, lon = payload.get("lat_deg"), payload.get("lon_deg")
     if lat is None or lon is None:
@@ -370,6 +416,7 @@ def _normalize_drone(payload: dict) -> dict | None:
         "speed_kts": _speed_kts(payload),
         "status": _drone_status(payload),
         "updated_ts": payload.get("_ts") or payload.get("timestamp"),
+        "mgrs": _mgrs_string(lat, lon),
         "raw": payload,
     }
 
@@ -390,6 +437,7 @@ def _normalize_sensor(payload: dict) -> dict | None:
         "speed_kts": None,
         "status": "online" if payload.get("is_online") else "offline",
         "updated_ts": payload.get("_ts"),
+        "mgrs": _mgrs_string(lat, lon),
         "raw": payload,
     }
 
@@ -408,8 +456,9 @@ def _normalize_unit(payload: dict) -> dict | None:
         "alt_m": _alt_m(payload),
         "heading_deg": payload.get("heading_deg"),
         "speed_kts": _speed_kts(payload),
-        "status": _drone_status(payload),
+        "status": _unit_status(payload),
         "updated_ts": payload.get("_ts") or payload.get("timestamp"),
+        "mgrs": _mgrs_string(lat, lon),
         "raw": payload,
     }
 

@@ -2839,8 +2839,8 @@ services, **Config** to configure them, **Dashboard** to confirm health.
 - **Logs** — live log tail for any host-managed service.
 - **Audit Logs** — a record of privileged actions taken through the panel (config
   changes, branding, user changes, logins).
-- **WebUI Settings** (top-right account menu) — **Branding** (organisation name,
-  accent colour, and logo — superadmin), **Appearance** (row animations, dense
+- **WebUI Settings** (top-right account menu) — **Branding** (organization name,
+  accent color, and logo — superadmin), **Appearance** (row animations, dense
   rows), **Live behavior** (refresh interval), and the light/dark theme toggle.
 
 **Two guards you may meet — both intentional.** EFDI's federation layer refuses

@@ -28,7 +28,7 @@ jokios imtuvo aparatinės įrangos ar tiekėjo tvarkyklės.
 
 ASTERIX kategorijos numeris nenustato TCP ar UDP prievado numerio. Šio
 diegimo radaras/šliuzas kategorijų neskirsto po atskirus prievadus — CAT-034
-ir CAT-048 abi ateina sumaišytos viename bendrame UDP dump'e per 50000
+ir CAT-048 ateina sumaišytos viename bendrame UDP sraute per 50000
 prievadą (`UDP_INGRESS_PORT`). `udp_ingress_bridge.py` išsaugo kiekvieną
 datagramą ir saugiai publikuoja pilnus ASTERIX kadrus nepakeistus į
 `…/raw/asterix/catNN`; kiekvienas kategorijos vertėjas lieka atskiru procesu
@@ -335,7 +335,7 @@ Dabartinis vykdymo laikas laiko SitaWare HQ REST ir NVG kelius atskirus. Jei
 diegimas eksportuoja NFFI vietoj to, publikuokite pilnus NFFI XML dokumentus
 į `…/raw/nffi/{source-id}` ir paleiskite nepriklausomą `nffi` vertėją.
 
-Visi gauti įrašai lieka gaminančio podo temoje. Autorizuoti federacijos
+Visi gauti įrašai lieka temoje to podo, kuris juos sukūrė. Autorizuoti federacijos
 maršrutai gali perduoti tą temą kitiems partnerių routeriams, kurių TAK ir
 SitaWare išvesties sluoksniai automatiškai vartoja normalizuotas temas.
 Adapteris niekada neturi rašyti tiesiai į kito partnerio temą.

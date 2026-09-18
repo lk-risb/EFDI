@@ -21,9 +21,8 @@ echo $ZENOH_LOCAL_ENDPOINT   # tikimasi: tcp/127.0.0.1:7448
 ls $EFDI_CERT_DIR/*.pem
 ```
 
-Jei `compose/.env` buvo įkeltas paprastu `source compose/.env`, kintamieji
-neeksportuojami vaikiniams procesams. Naudokite `./start.sh` (kuris tai
-sutvarko), arba:
+Paprastas `source compose/.env` neeksportuoja kintamųjų vaikiniams procesams.
+Naudokite `./start.sh` (jis tuo pasirūpina), arba:
 
 ```bash
 set -a && source compose/.env && set +a
@@ -43,10 +42,10 @@ ss -tn "( dport = :$TAK_PORT )"
 
 ### CAT-34 radaro žymeklis trūksta
 
-Radaras nesiuntė CAT-34 I034/120 (3D-Position), todėl EFDI negali saugiai
-nustatyti vietos. Patikrinkite CAT-34 žurnalą dėl `has no site position`.
-Pirmenybę teikite I034/120 įjungimui radare/šliuze; tik vienam radarui
-nustatykite atsargines koordinates `.env`:
+Radaras nesiunčia CAT-34 I034/120 (3D-Position), todėl EFDI negali saugiai
+nustatyti savo vietos. Patikrinkite CAT-34 žurnalą — ieškokite `has no site
+position`. Geriausia įjungti I034/120 pačiame radare ar šliuze; jei radaras
+vienas, atsargines koordinates galima nustatyti ir `.env`:
 
 ```bash
 grep CAT34_RADAR compose/.env
@@ -54,8 +53,8 @@ grep CAT34_RADAR compose/.env
 
 ### Drono aptikimai nepublikuojami
 
-Tiltas atmeta aptikimus, senesnius nei 300 s. Patikrinkite API ryšį ir
-duomenų šviežumą:
+Tiltas atmeta aptikimus, senesnius nei 300 s. Patikrinkite, ar API pasiekiamas
+ir ar duomenys šviežūs:
 
 ```bash
 curl -s -H "Origin: https://dronuradaras.lt" \
@@ -87,9 +86,9 @@ curl -s -u "$SITAWARE_USER:$SITAWARE_PASS" "$SITAWARE_URL/..." | python3 -m json
 **3. SIDC nesuderintas — vienetas rodomas su neteisinga ikona arba visai
 nerodomas:**
 
-SitaWare vienetai be galiojančio 15-ženklio SIDC nukreipiami į
-`…/land/sitaware/c2/unknown/unit/…` ir vaizduojami kaip nežinomi antžeminiai
-vienetai (`a-u-G-U-C`). Patikrinkite žalią SIDC reikšmę žurnale:
+Jei SitaWare vieneto SIDC negalioja (nėra 15 ženklų), jis nukeliauja į
+`…/land/sitaware/c2/unknown/unit/…` ir rodomas kaip nežinomas antžeminis
+vienetas (`a-u-G-U-C`). Patikrinkite neapdorotą SIDC reikšmę žurnale:
 
 ```bash
 grep "sidc=" $POD_STATE_DIR/logs/sitaware.log | head -10
@@ -104,39 +103,40 @@ curl -u "$SITAWARE_HQ_NVG_USER:$SITAWARE_HQ_NVG_PASS" \
   "http://127.0.0.1:${SITAWARE_HQ_NVG_PORT:-8088}${SITAWARE_HQ_NVG_PATH:-/nvg}"
 ```
 
-Laukiama būsena — `200 application/xml`. HQ NVG valdytoje patvirtinkite, kad
-prenumerata neuždaryta, prijungta, apklausia EFDI serverio adresą (ne HQ
-adresą) ir taikosi į `efdi-live / EFDI Live Tracks`. Jei sukonfigūruotas TLS,
-praleiskite `-k` po to, kai išduodanti CA yra patikima. Vietinis `200` plius
-HQ ryšio nesėkmė rodo maršrutizavimo, Windows ugniasienės, Linux ugniasienės
-ar sertifikato pasitikėjimo problemą — ne NVG konversijos nesėkmę.
+Turi būti `200 application/xml`. HQ NVG valdytoje patikrinkite, ar prenumerata
+neuždaryta, prijungta, apklausia EFDI serverio adresą (ne HQ adresą) ir
+taikosi į `efdi-live / EFDI Live Tracks`. Jei sukonfigūruotas TLS, `-k`
+praleiskite tik tada, kai jau pasitikima išduodančia CA. Jei vietinis testas
+grąžina `200`, bet HQ vis tiek nepavyksta prisijungti — tai maršrutizavimo,
+ugniasienės (Windows ar Linux) ar sertifikato pasitikėjimo problema, ne NVG
+konversijos klaida.
 
-**Latest replication** laiko žyma turi judėti pirmyn. Jei ji lieka sena ir
-**Reload** praneša nežinomą klaidą, patikrinkite tą patį URL iš PowerShell HQ
-serveryje. Ryšio nesėkmė yra maršrutizavimas/ugniasienė; HTTP 401 reiškia
-trūkstamus ar pasenusius prenumeratos kredencialus; sėkmė tik su `-k` reiškia,
-kad srauto CA nėra patikima paskyros/paslaugos, atliekančios importą. Prieš
-pakeisdami senesnį sluoksnį pataisykite replikaciją, kitaip pakaitinis
+**Latest replication** laiko žyma turi judėti pirmyn. Jei ji sena, o
+**Reload** rodo nežinomą klaidą, patikrinkite tą patį URL iš PowerShell HQ
+serveryje: ryšio nesėkmė reiškia maršrutizavimą/ugniasienę, HTTP 401 —
+trūkstamus ar pasenusius prenumeratos kredencialus, sėkmė tik su `-k` — kad
+srauto CA nepatikima paskyros/paslaugos, atliekančios importą. Pirma
+pataisykite replikaciją, tik tada keiskite senesnį sluoksnį — kitaip pakaitinis
 sluoksnis liks tuščias.
 
-Autentifikuotas sveikatos galinis taškas suteikia serverio pusės įrodymų
-neregistruojant kredencialų ar NVG turinio:
+Autentifikuotas sveikatos galinis taškas parodo serverio pusės būseną,
+neregistruodamas kredencialų ar NVG turinio:
 
 ```bash
 curl -ksS -u "$SITAWARE_HQ_NVG_USER:$SITAWARE_HQ_NVG_PASS" \
   "https://127.0.0.1:${SITAWARE_HQ_NVG_PORT:-8088}/healthz" | python3 -m json.tool
 ```
 
-- `successful_requests` lieka nulis: HQ nepasiekė srauto.
-- `unauthorized_requests` didėja: HQ pasiekė jį su trūkstamais/pasenusiais
-  Basic kredencialais.
-- `successful_requests` didėja, o HQ lieka Pending: tyrinėkite NVG
-  analizavimą ar pasirinktą tikslinį sluoksnį, ne maršrutizavimą ar
-  autentifikavimą.
+- `successful_requests` lieka nulis — HQ apskritai nepasiekė srauto.
+- `unauthorized_requests` didėja — HQ pasiekė srautą, bet su trūkstamais ar
+  pasenusiais Basic kredencialais.
+- `successful_requests` didėja, o HQ vis tiek rodo Pending — problema NVG
+  analizavime ar pasirinktame tiksliniame sluoksnyje, ne maršrutizavime ar
+  autentifikacijoje.
 
-Srauto prieigos žurnalai turi tik rezultatą, takelio skaičių ir kliento
-adresą, ir yra riboti iki vienos eilutės per minutę sėkmingiems ir
-neautorizuotiems paėmimams.
+Srauto prieigos žurnaluose lieka tik rezultatas, takelių skaičius ir kliento
+adresas — po vieną eilutę per minutę tiek sėkmingiems, tiek neautorizuotiems
+paėmimams.
 
 ### Dubliuoti proceso egzemplioriai
 
@@ -150,8 +150,8 @@ rm -f $POD_STATE_DIR/.pids/*.pid
 
 ### Radaro ikona dingsta iš ATAK
 
-`asterix` tiltas publikuoja keepalive kas 60 s nepriklausomai nuo takelio
-aktyvumo. Jei ikona dingsta, tiltas sustojo:
+`asterix` tiltas publikuoja keepalive kas 60 s, nesvarbu ar takelis aktyvus.
+Jei ikona dingo, reiškia tiltas sustojo:
 
 ```bash
 tail -20 $POD_STATE_DIR/logs/asterix.log | grep -E "keepalive|startup|error"
@@ -159,12 +159,12 @@ tail -20 $POD_STATE_DIR/logs/asterix.log | grep -E "keepalive|startup|error"
 
 ## 11.2 Pastebėti dalykai — jau apmokėtos pamokos
 
-Tai *eksploatacinis/infrastruktūrinis* palydovas
-[`../.ai/.claude/CLAUDE.md`](../.ai/.claude/CLAUDE.md) ASTERIX bitų lygio
-dekodavimo pastebėtiems dalykams ir [§11.1 Simptomais pagrįstiems sprendimams](#111-simptomais-pagrįsti-sprendimai).
-Kiekvienas čia esantis dalykas buvo tikra, patvirtinta problema, su kuria
-susidurta valdant šį podą — perskaitykite prieš derindami kažką, kas panašu
-į vieną iš šių simptomų, kad tos pačios diagnozės nereikėtų pelnyti iš naujo.
+Tai *eksploatacijos/infrastruktūros* pastebėjimų sąrašas — porininkas
+[`../.ai/.claude/CLAUDE.md`](../.ai/.claude/CLAUDE.md) (ten ASTERIX bitų lygio
+dekodavimo pastebėjimai) ir [§11.1 Simptomais pagrįstiems sprendimams](#111-simptomais-pagrįsti-sprendimai).
+Kiekvienas žemiau aprašytas dalykas — reali, patvirtinta problema, su kuria
+susidurta eksploatuojant šį podą. Perskaitykite prieš derindami ką nors panašaus
+į šiuos simptomus, kad nereikėtų iš naujo atrasti tos pačios diagnozės.
 
 ### NetBird split-DNS nematomas konteinerių viduje
 
@@ -172,36 +172,35 @@ susidurta valdant šį podą — perskaitykite prieš derindami kažką, kas pan
 `zenoh2.efdi.ltu`); konteineris net nebando prisijungti — jokio lizdo,
 jokios TLS klaidos, tik tyla.
 
-**Priežastis:** `network_mode: host` dalinasi tinklo *vardų sritimi*, ne
-`/etc/resolv.conf`. NetBird split-DNS resolveris jo mesh domenui veikia tik
+**Priežastis:** `network_mode: host` dalinasi tinklo *vardų sritimi*, bet ne
+`/etc/resolv.conf`. NetBird split-DNS resolveris mesh domenui veikia tik
 **serveryje** — konteineris vis tiek gauna Docker sugeneruotą resolverį
-(paprastai jūsų LAN DNS), kuris niekada negirdėjo apie mesh domeną. Vardas
-išsisprendžia serveryje (`getent hosts` ten veikia gerai) ir tyliai
-nepavyksta konteineryje — kas atrodo identiškai "niekas net nebando
-prisijungti".
+(dažniausiai jūsų LAN DNS), kuris apie mesh domeną nieko nežino. Serveryje
+vardas išsisprendžia be problemų (`getent hosts` ten veikia), o konteineryje
+tyliai nepavyksta — iš išorės atrodo lygiai taip, lyg konteineris net
+nebandytų prisijungti.
 
-**Sprendimas:** Pridėkite aiškius `extra_hosts` įrašus, susiejančius
-kiekvieną mesh vardą su jo dabartiniu NetBird IP konteinerio compose
-paslaugoje. Domenų vardai lieka programos konfigūracijoje; tik konteinerio
-vietinio hosts-sprendimo reikia atvaizdavimo. Iš naujo pridėkite/atnaujinkite
-juos, jei NetBird kada nors perpriskiria IP.
+**Sprendimas:** Pridėkite `extra_hosts` įrašus, kurie kiekvieną mesh vardą
+tiesiogiai susieja su jo dabartiniu NetBird IP toje konteinerio compose
+paslaugoje. Domenų vardai lieka programos konfigūracijoje — reikia tik
+konteinerio vietinio vardų sprendimo. Jei NetBird kada nors perpriskiria IP,
+šiuos įrašus reikės atnaujinti.
 
 ### TLS/mTLS identiteto profilis turi atitikti galinį tašką, kurį jis rinkis
 
 **Simptomas:** Magistralės ryšio bandymas nesukuria jokios klaidos ir jokio
 ryšio — atrodo identiškai kaip DNS problema aukščiau, ar ugniasienės blokas.
 
-**Priežastis:** Kiekvienas nuotolinis fabrikas (backbone, partnerio
-sandbox, šio podo paties vietinis mesh) pasirašytas **skirtingos** CA.
-Teisingo galinio taško nukreipimas prie neteisingo sertifikato identiteto
-nesėkmingai baigia mTLS rankos paspaudimą, ir priklausomai nuo nesėkmės
-tipo tai gali atrodyti taip, lyg nieko visai neįvyko, o ne aiškus atmetimas.
+**Priežastis:** Kiekvieną nuotolinį fabriką (backbone, partnerio sandbox,
+paties podo vietinį mesh) pasirašo **skirtinga** CA. Jei teisingas galinis
+taškas gauna neteisingą sertifikato identitetą, mTLS rankos paspaudimas
+žlunga — o priklausomai nuo žlugimo tipo, tai gali atrodyti taip, lyg nieko
+visai neįvyko, ne kaip aiškus atmetimas.
 
-**Sprendimas:** Galinis taškas ir TLS identiteto profilis yra vienas
-atominis pasirinkimas, niekada nekoreguojamas nepriklausomai. Jei jūsų
-įrankiai siūlo išankstinius nustatymus, sujunkite galinį tašką ir atitinkamą
-sertifikato profilį į vieną išankstinį nustatymą, o ne du atskirus laukus,
-kuriuos žmogus gali sumaišyti.
+**Sprendimas:** Galinis taškas ir TLS identiteto profilis — vienas atominis
+pasirinkimas, jų negalima koreguoti atskirai. Jei įrankiai siūlo išankstinius
+nustatymus, sujunkite galinį tašką su atitinkamu sertifikato profiliu į vieną
+išankstinį nustatymą, o ne į du atskirus laukus, kuriuos lengva sumaišyti.
 
 ### Vieno failo bind-mount sulaužo atominius rašymus
 
@@ -210,18 +209,18 @@ būsenos failą (pvz., vardų-srities-priešdėlio failą), nesėkmingai baigias
 su `OSError: [Errno 16] Device or resource busy`, nors pagrindinio
 konfigūracijos failo rašymas visai šalia veikia gerai.
 
-**Priežastis:** Standartinis "atominio rašymo" šablonas yra
-rašymas-į-laikiną-failą, tada `os.replace(temp, target)` — pervadinimas yra
-tai, kas garantuoja, kad skaitytojas niekada nemato pusiau įrašyto failo.
-Tas pervadinimas nepavyksta, kai `target` pats yra vieno-failo Docker
-bind-mount (`-v host/file:/container/file`): kelias *yra* mount taškas, ir
-negalima pervadinti per mount tašką. Katalogu-mounted failas neturi šios
-problemos, nes pervadinimas vyksta mounted kataloge, ne per patį mount'ą.
+**Priežastis:** Standartinis atominio rašymo šablonas — rašyti į laikiną
+failą, tada `os.replace(temp, target)`; būtent pervadinimas garantuoja, kad
+skaitytojas niekada nematys pusiau įrašyto failo. Bet šis pervadinimas
+nepavyksta, kai `target` pats yra vieno failo Docker bind-mount
+(`-v host/file:/container/file`) — kelias *yra* mount taškas, o per mount
+tašką pervadinti negalima. Katalogu sumontuotam failui šios problemos nėra,
+nes pervadinimas vyksta pačiame sumontuotame kataloge, ne per mount'ą.
 
-**Sprendimas:** Grįžkite prie perrašymo vietoje (open-write-fsync, be
-pervadinimo), kai `os.replace` nepavyksta su `EBUSY`. Tai nėra atomiška, bet
-tai vienintelė galimybė bind-mounted vienam failui, ir tai geriau nei visos
-taikymo operacijos nesėkmė dėl nesusijusio failo.
+**Sprendimas:** Kai `os.replace` žlunga su `EBUSY`, grįžkite prie perrašymo
+vietoje (open-write-fsync, be pervadinimo). Tai nėra atomiška, bet tai
+vienintelė galimybė bind-mounted vienam failui — ir geriau nei nulaužti visą
+taikymo operaciją dėl nesusijusio failo.
 
 ### Identiškai pavadintos dubliuotos funkcijų apibrėžtys tyliai užstoja
 
@@ -230,23 +229,22 @@ skaitote ją (neteisingas lauko plotis, neteisinga skalė, klaida, kuri turėtų
 būti labai matoma išvestyje) — bet produkcijos duomenys, ateinantys iš kito
 galo, atrodo gerai.
 
-**Priežastis:** Python leidžia iš naujo apibrėžti funkciją modulio apimtyje
-be jokio įspėjimo. Jei failas turi `def handler(...)` du kartus, **antra**
-apibrėžtis tyliai laimi — pirma tampa 100% negyvu kodu, kuris vis tiek
-*atrodo* gyvas (ta pati įtrauka, jokios apsaugos, dažnai net abi teisingai
-dokumentuotos). Joks šio repo įrankių grandinės linteris to nepažymi
-numatytai. Tai tiksliai taip, kaip iš tikrųjų sugadintas kodo kelias gali
-išsilaikyti faile ilgą laiką, niekada nieko neįtakodamas, ir tai gali
-kainuoti tikro derinimo laiko, kai "akivaizdžiai sugadinta" kopija yra ta,
-kurią žmogus perskaito pirmiausia.
+**Priežastis:** Python leidžia be jokio įspėjimo iš naujo apibrėžti funkciją
+tame pačiame modulyje. Jei faile du kartus yra `def handler(...)`, tyliai
+laimi **antroji** apibrėžtis — pirmoji tampa visiškai negyvu kodu, kuris vis
+tiek *atrodo* gyvas (ta pati įtrauka, jokios apsaugos, dažnai net abi
+teisingai dokumentuotos). Joks šio repo linteris to numatytai nepažymi. Taip
+realiai sugadintas kodo kelias gali metų metus išgulėti faile nieko
+neįtakodamas — ir kainuoti tikrą derinimo laiką, kai žmogus pirmiausia
+perskaito būtent tą "akivaizdžiai sugadintą" kopiją.
 
-**Sprendimas:** Prieš pasitikėdami, kad funkcija, kurią skaitote, yra ta,
-kuri iš tikrųjų veikia, patvirtinkite vykdymo metu:
-`inspect.getsourcelines(module.the_func)` pasako, kurios apibrėžties eilutės
-numeris iš tikrųjų susietas. Jei repo augo organiškai (kategorijos/variantai
-pridėti laikui bėgant, kiekvienas su "savo" panašios logikos kopija),
-ieškokite funkcijos vardo visame faile — ne tik ten, kur radote pirmą kartą —
-kai kažkas neatrodo teisingai.
+**Sprendimas:** Prieš pasitikėdami, kad skaitoma funkcija yra ta pati, kuri
+iš tikrųjų vykdoma, patikrinkite vykdymo metu:
+`inspect.getsourcelines(module.the_func)` parodys, kurios apibrėžties eilutė
+realiai susieta. Jei repo augo organiškai (kategorijos ar variantai pridėti
+laikui bėgant, kiekvienas su "savo" panašios logikos kopija), kai kas nors
+neatrodo teisingai, ieškokite funkcijos vardo visame faile — ne tik ten, kur
+radote pirmą kartą.
 
 ### Paslaugos rinkiniui reikia savos būsenos agregacijos
 
@@ -254,33 +252,31 @@ kai kažkas neatrodo teisingai.
 (keli vaikai po viena logine "paslauga") kaip nuolat sustabdytą, nors
 kiekvienas vaiko procesas iš tikrųjų veikia.
 
-**Priežastis:** Bendra per-paslaugos būsenos logika, tikrinanti vieną
-pidfile, pavadintą pagal paslaugą, niekada jo neras, jei rinkinio
-paleidiklis rašo po vieną pidfile *kiekvienam vaikui* (pvz.,
-`asterix-cat10.pid`, `asterix-cat48.pid`, ...). Pats rinkinys neturi
-pidfile, todėl visada skaito "sustabdyta."
+**Priežastis:** Bendra būsenos logika tikrina vieną pidfile, pavadintą pagal
+paslaugą — bet jo niekada neras, jei rinkinio paleidiklis rašo po vieną
+pidfile *kiekvienam vaikui* (pvz., `asterix-cat10.pid`, `asterix-cat48.pid`,
+...). Pats rinkinys savo pidfile neturi, todėl visada rodo "sustabdyta".
 
-**Sprendimas:** Rinkinio paslaugai reikia specialios būsenos logikos,
-kuri surašo ir agreguoja savo vaikų pidfile, pranešant
-veikia/sutrikusi/sustabdyta pagal tai, kiek jų gyva — ne naivus vieno-pidfile
-tikrinimas.
+**Sprendimas:** Rinkinio paslaugai reikia atskiros būsenos logikos, kuri
+surenka ir apibendrina visų vaikų pidfile, ir pagal tai, kiek jų gyva,
+praneša veikia/sutrikusi/sustabdyta — ne naiviai tikrina vieną pidfile.
 
 ### Prijungtas (bind-mount) būsenos failas priklauso ne tam naudotojui, ne tik blogai prijungtas
 
 **Simptomas:** Konfigūracijos išsaugojimas per WebUI nepavyksta su
 `[Errno 13] Permission denied: '/data-topic-prefix'` (arba
-`/namespace-prefix`, arba TAK/SitaWare kredencialų įkėlimo katalogais) — tai
-kitokia klaida nei aukščiau aprašytas `EBUSY` atominio rašymo atvejis; čia
-tiesiog teisių klaida, o ne pervadinimo per prijungimo tašką klaida.
+`/namespace-prefix`, arba TAK/SitaWare kredencialų įkėlimo katalogais). Tai
+kitokia klaida nei aukščiau aprašytas `EBUSY` atominio rašymo atvejis — čia
+paprasčiausiai teisių klaida, ne pervadinimas per mount tašką.
 
 **Priežastis:** `zenoh-admin` visada veikia fiksuotu ne-root uid/gid
-(`10001`). Keli būsenos keliai yra atskirai per bind-mount prijungti failai ar
+(`10001`). Keli būsenos keliai — atskirai per bind-mount prijungti failai ar
 katalogai (`namespace-prefix`, `data-topic-prefix`, `integrations/tak`,
-`$BUNDLE_DIR/efdi`), sukurti **hosto** pusėje to naudotojo, kuris paleido
-`install.sh`/`reinstall.sh` — dažniausiai root. Root sukurtas failas su
-teisėmis `644` yra rašomas tik savininko (root); uid 10001 neturi nei
-savininko bito, nei (nebent grupė jau būtų 10001) grupės rašymo bito, todėl
-kiekvienas rašymas iš konteinerio vidaus nepavyksta.
+`$BUNDLE_DIR/efdi`) — sukurti **hosto** pusėje to naudotojo, kuris paleido
+`install.sh`/`reinstall.sh` (dažniausiai root). Root sukurtas failas su
+teisėmis `644` rašomas tik savininko (root); uid 10001 neturi nei savininko
+bito, nei (nebent grupė jau būtų 10001) grupės rašymo bito, todėl kiekvienas
+rašymas iš konteinerio vidaus žlunga.
 
 **Sprendimas:** `install.sh` ir `reinstall.sh` dabar visiems šiems keliams po
 jų sukūrimo atlieka `chgrp 10001` + `chmod 664` (failams) / `775`
@@ -294,9 +290,9 @@ chgrp 10001 "$POD_STATE_DIR/integrations/tak" "$BUNDLE_DIR/efdi"
 chmod 775   "$POD_STATE_DIR/integrations/tak" "$BUNDLE_DIR/efdi"
 ```
 
-`health.sh` interaktyvus meniu (3 punktas, „patikrinti trūkstamus/blogai
-sukonfigūruotus būsenos failus") dabar taip pat aptinka ir automatiškai
-ištaiso neteisingas šių kelių teises, ne tik trūkstamus failus.
+`health.sh` interaktyvus meniu (3 punktas — „patikrinti trūkstamus/blogai
+sukonfigūruotus būsenos failus") dabar aptinka ir automatiškai ištaiso
+neteisingas šių kelių teises, ne tik trūkstamus failus.
 
 ### Neapdorota išimtis API apdorojime pasirodo kaip tuščias HTTP 500
 
@@ -305,20 +301,20 @@ config" arba „Request failed (HTTP 422)" be jokios papildomos informacijos —
 jokios užuominos, kas iš tikrųjų nutrūko, nors serveris *iš tikrųjų* susidūrė
 su konkrečia klaida.
 
-**Priežastis:** Apdorojimo funkcija, kuri sugauna `Exception` tik tam, kad
-ją užregistruotų, o po to tuščiai `raise` ją perduoda toliau, praranda
-originalų pranešimą, kai perima FastAPI numatytasis klaidų apdorojimas —
-klientas mato tik bendrą būsenos kodą. Jei pati pagrindinė klaida grąžino
-tuščią eilutę kaip savo „detail" (pvz., subprocesas, kuris nulūžo dar
-nespėjęs nieko parašyti į stdout/stderr), net teisingai perduota išimtis
-neturi ką parodyti.
+**Priežastis:** Apdorojimo funkcija sugauna `Exception` tik tam, kad ją
+užregistruotų, o po to tuščiu `raise` perduoda toliau — bet originalus
+pranešimas prarandamas, kai jį perima FastAPI numatytasis klaidų
+apdorojimas, ir klientas mato tik bendrą būsenos kodą. Jei pati pradinė
+klaida savo „detail" grąžino tuščią eilutę (pvz., subprocesas nulūžo dar
+nespėjęs nieko parašyti į stdout/stderr), tai net teisingai perduota
+išimtis neturi ką parodyti.
 
 **Sprendimas:** Neapdorotą išimtį paverskite `HTTPException` su realiu
-pranešimu (`raise HTTPException(500, detail=f"...: {exc}") from exc`), o bet
-kokį kelią, pranešantį apie subproceso/patikros nesėkmę, priverskite grįžti
-prie aprašomojo pakaitalo (`"exited N with no output"`) vietoj tuščios
-eilutės — kad *kitas* pasikartojimas būtų diagnozuojamas vien iš atsakymo
-turinio, be prieigos prie serverio žurnalo.
+pranešimu (`raise HTTPException(500, detail=f"...: {exc}") from exc`). Bet
+kokį kelią, kuriuo pranešama apie subproceso ar patikros nesėkmę, priverskite
+grąžinti aprašomąjį pakaitalą (`"exited N with no output"`) vietoj tuščios
+eilutės — kad *kitą* kartą būtų galima diagnozuoti vien iš atsakymo turinio,
+be prieigos prie serverio žurnalo.
 
 ### Formos laukas tyliai priima reikšmę, sudarytą visai kitokia forma nei reikia
 
@@ -329,18 +325,18 @@ nulūžta su kažkuo nesuprantamu kaip `socket.gaierror: [Errno -2] Name or
 service not known` ties `socket.bind()`.
 
 **Priežastis:** Bind adresas perduodamas tiesiai į `socket.bind((host,
-port))` — tai niekada nėra URL (nei schemos, nei prievado, nei kelio), ir tai
-yra *šio paties kompiuterio* klausymosi adresas, o ne kompiuterio, kuris prie
-jo jungsis, adresas. Paprastas teksto laukas nesustabdo naudotojo įvedus
-pilną URL arba ne tos mašinos adresą; klaida pasirodo tik toliau, bibliotekos
-viduje, per kelis sluoksnius nuo lauko, kuris ją sukėlė.
+port))` — tai niekada nebūna URL (be schemos, prievado ar kelio), ir tai yra
+*šio paties kompiuterio* klausymosi adresas, o ne kompiuterio, kuris prie jo
+jungsis. Paprastas teksto laukas neapsaugo, jei naudotojas įveda pilną URL
+ar ne tos mašinos adresą — klaida iššoka tik vėliau, bibliotekos viduje, per
+kelis sluoksnius nuo lauko, kuris ją sukėlė.
 
-**Sprendimas:** Konkrečiai `SITAWARE_HQ_NVG_BIND` reikšmė turi būti grynas
-IP — `0.0.0.0`, kad klausytųsi visų sąsajų (kad *kita* mašina, pvz., SitaWare
-HQ dėžė, galėtų pasiekti), arba `127.0.0.1` tik vietiniam ryšiui. Prievadas ir
-kelias yra atskiri laukai — jų čia neįtraukite. Bendrai: kai laukas nulūžta
-toli nuo vietos, kur jis nustatytas, pirmiausia patikrinkite jo saugomą
-reikšmę (`grep KEY .env`), o tik tada gilinkitės į nulūžimo vietą.
+**Sprendimas:** `SITAWARE_HQ_NVG_BIND` reikšmė turi būti grynas IP —
+`0.0.0.0`, kad klausytų visų sąsajų (kad pasiektų *kita* mašina, pvz.,
+SitaWare HQ dėžė), arba `127.0.0.1` tik vietiniam ryšiui. Prievadas ir kelias
+yra atskiri laukai — jų čia nerašykite. Apskritai: kai laukas nulūžta toli
+nuo vietos, kur jis nustatytas, pirmiausia patikrinkite jo saugomą reikšmę
+(`grep KEY .env`) ir tik po to gilinkitės į nulūžimo vietą.
 
 ### Naujai veikiantis srautas vis tiek atmetamas — pirma patikrinkite autentifikaciją, ne maršrutą
 
@@ -349,10 +345,10 @@ refused"/timeout), bet kiekviena užklausa vis tiek atmetama, o paties srauto
 žurnale rašoma kažkas panašaus į `rejected unauthorized request from <ip>`.
 
 **Priežastis:** Ryšio pasiekiamumas (teisingas prievadas, teisingas bind
-adresas) yra atskira problema nuo autentifikacijos. Srautas su sukonfigūruota
+adresas) — atskira problema nuo autentifikacijos. Srautas su sukonfigūruota
 Basic autentifikacija (`SITAWARE_HQ_NVG_USER`/`_PASS`) atmeta kiekvieną
-užklausą, kuri nepateikia atitinkančių kredencialų — net iš kliento, kuris
-kitu atveju yra puikiai pasiekiamas.
+užklausą be tinkamų kredencialų — net iš kliento, kuris kitu atveju puikiai
+pasiekiamas.
 
 **Sprendimas:** Arba sukonfigūruokite *nuotolinę* pusę (šiuo atveju —
 SitaWare HQ importo prenumeratą) su tuo pačiu naudotojo vardu/slaptažodžiu
@@ -366,22 +362,21 @@ praleistumėte autentifikaciją, kol patvirtinsite, jog duomenys teka.
 importe) sublyksi ir atsiranda periodu, sutampančiu su apklausos intervalu,
 nors pirminis šaltinis iš tikrųjų vis dar teikia duomenis.
 
-**Priežastis:** Srauto talpykla pašalina bet kokį objektą, kuris nebuvo
-atnaujintas per jos „stale" (paseno) langą (`SITAWARE_HQ_NVG_STALE_S`, arba
-atitinkamas nustatymas bet kuriame kitame apklausa pagrįstame sluoksnyje).
-Jei *pirminis* tiltas atnaujina konkretų objektą tik kas N sekundžių
-(pavyzdžiui, `dronuradaras_bridge.py` turi `DEVICE_POLL_S = 60` radaro mazgų
-pozicijoms), o „stale" langas trumpesnis už tai, kiekvienas objektas
-pasensta ir dingsta daliai kiekvieno pirminio ciklo, tada vėl atsiranda,
-kai ateina kitas atnaujinimas — tai slenkantis, nevienalaikis mirgėjimas, o
-ne švarus, vienalaikis.
+**Priežastis:** Srauto talpykla pašalina objektą, kuris neatsinaujino per
+„stale" (paseno) langą (`SITAWARE_HQ_NVG_STALE_S` arba atitinkamas
+nustatymas kitame apklausa pagrįstame sluoksnyje). Jei *pirminis* tiltas
+atnaujina konkretų objektą tik kas N sekundžių (pvz.,
+`dronuradaras_bridge.py` radaro mazgų pozicijoms turi `DEVICE_POLL_S = 60`),
+o „stale" langas trumpesnis už šį intervalą — objektas dalį kiekvieno
+pirminio ciklo pasensta ir dingsta, tada vėl atsiranda su kitu atnaujinimu.
+Tai slenkantis, nevienalaikis mirgėjimas, ne švarus vienalaikis.
 
-**Sprendimas:** Nustatykite srauto „stale" ribą gerokai virš lėčiausio
-pirminio atnaujinimo intervalo, kuris jį maitina (bent 2×) — pvz., `120`
-60 sekundžių pirminiam ciklui. Atskirai, žemesnės grandies C2 sistemos
-pačios „sluoksnio galiojimo"/„takelio išsaugojimo" nuostata (SitaWare Layer
-Details puslapyje yra abi) gali tai sustiprinti arba užmaskuoti; jei vien
-„stale" ribos pakėlimas neišsprendžia, patikrinkite ir tą nuostatą.
+**Sprendimas:** Nustatykite srauto „stale" ribą gerokai virš lėčiausio jį
+maitinančio pirminio atnaujinimo intervalo — bent dvigubai, pvz., `120`
+60 sekundžių pirminiam ciklui. Atskirai, tą patį efektą gali sustiprinti ar
+užmaskuoti žemesnės grandies C2 sistemos pačios „sluoksnio galiojimo"/
+„takelio išsaugojimo" nuostata (SitaWare Layer Details puslapyje yra abi) —
+jei vien „stale" ribos pakėlimas neišsprendžia, patikrinkite ir ją.
 
 ### `pip install` nepavyksta su „externally-managed-environment"
 
@@ -391,9 +386,9 @@ sisteminį `python3` (o ne per `install.sh`/`start.sh`), nepavyksta su
 managed" (PEP 668, dažna šiuolaikiniuose Debian/Ubuntu).
 
 **Priežastis:** Sisteminis Python tyčia užrakintas nuo nevaldomų `pip
-install`. `install.sh` ir `start.sh` su tuo nesikovoja — jie sukuria ir
-naudoja savo virtualią aplinką `compose/venv`, iš kurios iš tikrųjų veikia
-kiekviena šio pod'o Python paslauga, paleidžiama hoste.
+install`. `install.sh` ir `start.sh` su tuo nesikovoja — jie tiesiog sukuria
+ir naudoja savo virtualią aplinką `compose/venv`, iš kurios ir veikia
+kiekviena šio podo hoste paleista Python paslauga.
 
 **Sprendimas:** Naudokite tą virtualią aplinką tiesiogiai, ne sisteminį
 interpretatorių:
@@ -403,11 +398,11 @@ compose/venv/bin/pip install -r compose/requirements.txt
 compose/venv/bin/python3 layers/some_layer.py
 ```
 
-Jei `compose/venv` dar neegzistuoja, sukurkite ją taip pat, kaip tai daro
+Jei `compose/venv` dar neegzistuoja, sukurkite ją taip, kaip tai daro
 `install.sh`: `python3 -m venv compose/venv`, tada diekite į ją. Niekada
 neperduokite `--break-system-packages` sisteminiam `pip` — kiekviena kita
-hoste veikianti paslauga jau tikisi virtualios aplinkos, ne sisteminio
-interpretatoriaus.
+hoste veikianti paslauga jau tikisi rasti virtualią aplinką, ne sisteminį
+interpretatorių.
 
 ### Du skirtingi „Save" mygtukai tame pačiame puslapyje daro skirtingus dalykus
 
@@ -418,19 +413,19 @@ nustatymas) atrodo, tarsi nieko nedaro, arba sukelia nesusijusią klaidą
 nieko bendra su tuo, kas iš tikrųjų buvo keičiama.
 
 **Priežastis:** Zenoh Config puslapyje yra dvi nepriklausomos išsaugojimo
-funkcijos: viršuje esantis **„Save & Restart"**, kuris patvirtina ir
-pritaiko *Zenoh maršrutizatoriaus* konfigūraciją (mTLS prievadas, fabric
-galiniai taškai, vardų sritis), ir kiekvienos Integration Settings kortelės
-*savas* Save mygtukas, kuris išsaugo tik tos kortelės `.env` reikšmes ir
-niekada neliečia maršrutizatoriaus konfigūracijos. Paspaudus ne tą, kas
-aktualu, neišsaugoma nieko, o jei maršrutizatoriaus konfigūracija tuo metu
-dar nėra galiojanti (pvz., sertifikatai dar neįkelti) — iškyla klaidinantis,
-nesusijęs 422/500.
+funkcijos. Viršuje esantis **„Save & Restart"** patvirtina ir pritaiko
+*Zenoh maršrutizatoriaus* konfigūraciją (mTLS prievadas, fabric galiniai
+taškai, vardų sritis). Kiekviena Integration Settings kortelė turi *savo*
+Save mygtuką, kuris išsaugo tik tos kortelės `.env` reikšmes ir
+maršrutizatoriaus konfigūracijos neliečia. Paspaudus ne tą mygtuką,
+neišsaugoma nieko — o jei tuo metu maršrutizatoriaus konfigūracija dar
+negalioja (pvz., sertifikatai dar neįkelti), iškyla klaidinantis, nesusijęs
+422/500.
 
-**Sprendimas:** Rinkitės mygtuką pagal skyrių: maršrutizatoriaus lygio
+**Sprendimas:** Rinkitės mygtuką pagal skyrių. Maršrutizatoriaus lygio
 laukams po „Zenoh Config" (Transport, Fabric endpoints, Namespace) reikia
-viršutinio „Save & Restart"; kiekvienam laukui Integration Settings kortelėje
-(TAK, SitaWare, jutiklių srautai ir t.t.) reikia tos kortelės pačios Save
+viršutinio „Save & Restart". Kiekvienam Integration Settings kortelės laukui
+(TAK, SitaWare, jutiklių srautai ir t.t.) reikia tos pačios kortelės Save
 mygtuko, esančio žemiau puslapyje.
 
 ### Kodo pataisymas negalioja, kol veikiantis procesas nepersileidžia
@@ -440,15 +435,14 @@ patvirtinate, kad failas diske pasikeitė, ir veikiančios sistemos elgsena
 nesikeičia — arba WebUI toliau rodo paslaugas/duomenis, kurie ką tik
 pašalinti iš kodo.
 
-**Priežastis:** `.py` failo redagavimas neturi jokio poveikio jau veikiančiam
-interpretatoriui, laikančiam seną baitkodą atmintyje. Tai skamba akivaizdžiai
-pasakyta paprastai, bet lengva pamiršti tyrimo viduryje, kai keli failai
-redaguojami iš eilės ir nėra akivaizdu, *kuris* veikiantis procesas yra
-pasenęs.
+**Priežastis:** `.py` failo redagavimas jokios įtakos neturi jau veikiančiam
+interpretatoriui, kuris seną baitkodą laiko atmintyje. Skamba akivaizdžiai,
+bet lengva pamiršti tyrimo viduryje, kai iš eilės redaguojami keli failai ir
+nebeaišku, *kuris* veikiantis procesas pasenęs.
 
 **Sprendimas:** Po bet kokio ilgai veikiančios paslaugos kodo pataisymo
-persileiskite tą konkretų procesą (ne tik iš naujo sukompiliuokite/testuokite)
-prieš darant išvadą, kad pataisymas neveikė, ir prieš pranešant, kad
-simptomas vis dar neišspręstas.
+persileiskite tą konkretų procesą (neužtenka tik iš naujo sukompiliuoti ar
+testuoti), prieš darydami išvadą, kad pataisymas neveikė, arba pranešdami,
+kad simptomas dar neišspręstas.
 
 ---

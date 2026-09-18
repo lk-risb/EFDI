@@ -201,9 +201,9 @@ Jei serveris yra už atskiros tinklo ugniasienės ar saugumo grupės (debesis,
 vietinis prietaisas), tuos pačius prievadus reikės atidaryti ir ten — šis
 žingsnis apima tik paties serverio vietinę ugniasienę.
 
-#### Jūs pasiruošę
+#### Pasiruošta tęsti
 
-Šiuo metu turėtumėte galėti paleisti (viską be `sudo`):
+Dabar turėtų pavykti paleisti šias komandas (viską be `sudo`):
 ```bash
 git --version
 python3 --version      # 3.10+

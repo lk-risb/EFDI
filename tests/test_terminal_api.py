@@ -54,6 +54,30 @@ def test_alt_m_returns_none_when_no_altitude_field_present():
     assert terminal._alt_m({}) is None
 
 
+# ── _mgrs_string ──────────────────────────────────────────────────────────
+# Same mgrs library tak_layer.py already trusts for its own CoT remarks —
+# guarded the same way, so a venv without the C extension degrades to no
+# MGRS field instead of a boot crash.
+
+@pytest.mark.skipif(terminal._MGRS is None, reason="mgrs not installed in this venv")
+def test_mgrs_string_formats_a_known_lithuania_point():
+    assert terminal._mgrs_string(54.376, 25.341) == "35U LA 9224 2662"
+
+
+@pytest.mark.skipif(terminal._MGRS is None, reason="mgrs not installed in this venv")
+def test_mgrs_string_pads_and_splits_digits_into_easting_northing_halves():
+    result = terminal._mgrs_string(54.1, 25.2)
+    zone, square, easting, northing = result.split(" ")
+    assert re.fullmatch(r"\d{1,2}[A-Z]", zone)
+    assert re.fullmatch(r"[A-Z]{2}", square)
+    assert len(easting) == len(northing) == 4
+
+
+def test_mgrs_string_returns_none_when_mgrs_is_unavailable(monkeypatch):
+    monkeypatch.setattr(terminal, "_MGRS", None)
+    assert terminal._mgrs_string(54.1, 25.2) is None
+
+
 # ── _drone_status ─────────────────────────────────────────────────────────
 
 def test_drone_status_emergency_wins_over_everything_else():
@@ -103,6 +127,7 @@ def test_normalize_drone_maps_normalized_track_shaped_payload():
     assert entity["speed_kts"] == 5 * 1.943844
     assert entity["status"] == "airborne"
     assert entity["updated_ts"] == 123.0
+    assert entity["mgrs"] == terminal._mgrs_string(54.1, 25.2)
     assert entity["raw"] is payload
 
 
@@ -202,6 +227,10 @@ def test_normalize_unit_maps_a_ground_position_track():
     assert entity["lat"] == 54.1
     assert entity["lon"] == 25.2
     assert entity["raw"] is payload
+    # AARTOS's own ground tracks carry none of _drone_status's fields
+    # (armed/flight_state/on_ground only mean something for an airframe) —
+    # must not silently default to "airborne" via _drone_status.
+    assert entity["status"] == "unknown"
 
 
 def test_normalize_unit_falls_back_to_uid_without_a_callsign():
@@ -211,6 +240,24 @@ def test_normalize_unit_falls_back_to_uid_without_a_callsign():
 
 def test_normalize_unit_returns_none_without_a_position_fix():
     assert terminal._normalize_unit({"uid": "aartos-op-1"}) is None
+
+
+# ── _unit_status ─────────────────────────────────────────────────────────
+
+def test_unit_status_emergency_wins_over_everything_else():
+    assert terminal._unit_status({"emergency": True, "is_online": False}) == "emergency"
+
+
+def test_unit_status_reports_online_from_is_online_true():
+    assert terminal._unit_status({"is_online": True}) == "online"
+
+
+def test_unit_status_reports_offline_from_is_online_false():
+    assert terminal._unit_status({"is_online": False}) == "offline"
+
+
+def test_unit_status_defaults_to_unknown_without_online_data():
+    assert terminal._unit_status({}) == "unknown"
 
 
 def test_observe_unit_stores_by_uid_and_deletes_on_tombstone():

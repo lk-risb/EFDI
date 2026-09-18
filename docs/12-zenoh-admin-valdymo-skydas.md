@@ -6,7 +6,7 @@ tiltai bei sluoksniai, redaguojama konfigūracija ir kredencialai, valdoma
 sertifikatų institucija ir prekės ženklas. Skydas naudoja modernų,
 minimalistinį tamsų apipavidalinimą — vientisos švelniai tamsios kortelės,
 savarankiškai talpinamas Inter šriftas, žalsvai mėlynas akcentas —, kurį
-superadmin gali pats perkurti iš WebUI Settings.
+superadmin gali pats pakeisti per WebUI Settings.
 
 Dashboard skydelyje „Connected routers" matote kiekvieną kitą zenoh
 egzempliorių (maršrutizatorių ar tarpusavio mazgą), su kuriuo šis
