@@ -113,6 +113,12 @@ def _mgrs_string(lat: float, lon: float) -> str | None:
 _TILE_CACHE_DIR = Path(os.environ.get("TERMINAL_TILE_CACHE_DIR", "/tmp/terminal-tile-cache"))
 _TILE_USER_AGENT = "EFDI-Admin-Terminal/1.0 (self-hosted internal deployment)"
 
+# Optional: same Mapbox satellite-streets style TAK's admin/api/live_map.py
+# uses (mirrors the real mainline.inc TERMINAL reference this tab is styled
+# after). Falls back to plain OSM below when unset.
+MAPBOX_ACCESS_TOKEN = os.environ.get("MAPBOX_ACCESS_TOKEN", "").strip()
+MAPBOX_STYLE = "mapbox/satellite-streets-v12"
+
 _LOCK = threading.Lock()
 _DRONES: dict[str, dict] = {}    # uid -> latest known NormalizedTrack-shaped payload
 _SENSORS: dict[str, dict] = {}   # sensor_id -> latest known sensor payload
@@ -463,13 +469,21 @@ def _normalize_unit(payload: dict) -> dict | None:
     }
 
 
-def _fetch_tile(z: int, x: int, y: int) -> bytes:
-    request = urllib.request.Request(
-        f"https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-        headers={"User-Agent": _TILE_USER_AGENT},
-    )
+def _fetch_tile(z: int, x: int, y: int) -> tuple[bytes, str]:
+    if MAPBOX_ACCESS_TOKEN:
+        url = (
+            f"https://api.mapbox.com/styles/v1/{MAPBOX_STYLE}/tiles/512/{z}/{x}/{y}@2x"
+            f"?access_token={MAPBOX_ACCESS_TOKEN}"
+        )
+        request = urllib.request.Request(url)
+    else:
+        request = urllib.request.Request(
+            f"https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+            headers={"User-Agent": _TILE_USER_AGENT},
+        )
     with urllib.request.urlopen(request, timeout=10) as response:
-        return response.read()
+        content_type = response.headers.get("content-type", "image/png").split(";", 1)[0].strip() or "image/png"
+        return response.read(), content_type
 
 
 @router.get("/tiles/{z}/{x}/{y}.png")
@@ -477,18 +491,26 @@ async def get_tile(z: int, x: int, y: int):
     # No auth dependency, unlike every other route here — Leaflet requests
     # tiles as plain <img> tags, which can't carry this app's bearer token.
     # Tile imagery isn't sensitive; only the live entity positions above are.
-    cache_path = _TILE_CACHE_DIR / str(z) / str(x) / f"{y}.png"
+    #
+    # Cache namespaced by provider so toggling MAPBOX_ACCESS_TOKEN later
+    # doesn't serve the other provider's stale tiles out of the cache.
+    provider = "mapbox" if MAPBOX_ACCESS_TOKEN else "osm"
+    cache_dir = _TILE_CACHE_DIR / provider / str(z) / str(x)
+    cache_path = cache_dir / f"{y}.tile"
+    content_type_path = cache_dir / f"{y}.content-type"
     if cache_path.is_file():
-        return FileResponse(cache_path, media_type="image/png")
+        cached_content_type = content_type_path.read_text().strip() if content_type_path.is_file() else "image/png"
+        return FileResponse(cache_path, media_type=cached_content_type or "image/png")
     try:
-        content = await asyncio.to_thread(_fetch_tile, z, x, y)
+        content, content_type = await asyncio.to_thread(_fetch_tile, z, x, y)
     except urllib.error.HTTPError as exc:
         raise HTTPException(status_code=exc.code, detail="Tile upstream error") from exc
     except (urllib.error.URLError, TimeoutError, OSError) as exc:
         raise HTTPException(status_code=502, detail=f"Tile fetch failed: {exc}") from exc
-    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    cache_dir.mkdir(parents=True, exist_ok=True)
     cache_path.write_bytes(content)
-    return Response(content=content, media_type="image/png")
+    content_type_path.write_text(content_type)
+    return Response(content=content, media_type=content_type)
 
 
 @router.get("/entities")
@@ -510,7 +532,7 @@ async def list_entities(_=Depends(require_role("readonly", "admin", "superadmin"
         entity = _normalize_unit(payload)
         if entity is not None:
             entities.append(entity)
-    return {"entities": entities, "server_time": time.time()}
+    return {"entities": entities, "server_time": time.time(), "mapbox_enabled": bool(MAPBOX_ACCESS_TOKEN)}
 
 
 @router.post("/entities/{entity_id}/command", status_code=202)

@@ -236,6 +236,11 @@ services:
       - MEDIAMTX_API_URL=${MEDIAMTX_API_URL:-http://127.0.0.1:9997}
       - MEDIAMTX_RECORDINGS_DIR=/mediamtx-recordings
       - MEDIAMTX_CONFIG_PATH=/mediamtx-config/mediamtx.yml
+      # Optional: Terminal tab's live map uses Mapbox's satellite-streets
+      # style when set, matching the real mainline.inc TERMINAL reference
+      # (same optional token TAK's own admin live map takes) — falls back
+      # to plain OSM tiles when empty.
+      - MAPBOX_ACCESS_TOKEN=${MAPBOX_ACCESS_TOKEN:-}
     volumes:
       # Least-privilege identity mount: never expose efdi-ca-root-key.pem (or a
       # router-CA key) to the WebUI container — that file simply never lives

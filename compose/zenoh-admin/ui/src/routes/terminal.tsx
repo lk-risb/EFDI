@@ -802,9 +802,11 @@ function TerminalPage() {
   const mapRef = useRef<HTMLDivElement>(null)
   const mapInstance = useRef<L.Map | null>(null)
   const markersRef = useRef<Map<string, L.Marker>>(new Map())
+  const tileLayerRef = useRef<L.TileLayer | null>(null)
   const assetMarkersRef = useRef<Map<string, L.Marker>>(new Map())
   const zoneLayersRef = useRef<Map<string, L.Circle>>(new Map())
   const [entities, setEntities] = useState<Entity[]>([])
+  const [mapboxEnabled, setMapboxEnabled] = useState(false)
   const [assets, setAssets] = useState<TerminalAsset[]>([])
   const [zones, setZones] = useState<TerminalZone[]>([])
   const [placing, setPlacing] = useState<'asset' | 'zone' | null>(null)
@@ -886,11 +888,6 @@ function TerminalPage() {
     if (!mapRef.current || mapInstance.current) return
     const map = L.map(mapRef.current, {zoomControl: false}).setView([55.17, 23.88], 7) // Lithuania
     L.control.zoom({position: 'topright'}).addTo(map)
-    L.tileLayer('/api/terminal/tiles/{z}/{x}/{y}.png', {
-      attribution: '&copy; OpenStreetMap contributors',
-      className: 'terminal-map-tiles',
-      maxZoom: 19,
-    }).addTo(map)
     // Only fires while an admin is in "place asset/zone" mode (see
     // FleetSubTabs) — otherwise a map click just does Leaflet's own pan/zoom.
     map.on('click', e => {
@@ -901,8 +898,32 @@ function TerminalPage() {
     return () => {
       map.remove()
       mapInstance.current = null
+      tileLayerRef.current = null
     }
   }, [])
+
+  // Tiles proxy through /api/terminal/tiles (caches + sets a real
+  // User-Agent for OSM's policy). When MAPBOX_ACCESS_TOKEN is configured
+  // server-side, the same proxy serves Mapbox's satellite-streets style
+  // instead — matching the real mainline.inc TERMINAL reference this tab is
+  // styled after. Real satellite imagery shouldn't get the OSM-only
+  // dark-invert filter (terminal-map-tiles in index.css), so that class and
+  // the lower maxZoom only apply in OSM mode; rebuilds whenever the
+  // entities poll reports a change (e.g. the operator adds the token later
+  // without restarting the browser tab).
+  useEffect(() => {
+    if (!mapInstance.current) return
+    tileLayerRef.current?.remove()
+    const layer = L.tileLayer('/api/terminal/tiles/{z}/{x}/{y}.png', {
+      attribution: mapboxEnabled
+        ? '&copy; Mapbox &copy; OpenStreetMap <a href="https://www.mapbox.com/about/maps/" target="_blank" rel="noopener">Improve this map</a>'
+        : '&copy; OpenStreetMap contributors',
+      className: mapboxEnabled ? undefined : 'terminal-map-tiles',
+      maxZoom: mapboxEnabled ? 22 : 19,
+    }).addTo(mapInstance.current)
+    layer.bringToBack()
+    tileLayerRef.current = layer
+  }, [mapboxEnabled])
 
   // Rebuild/refresh markers whenever the entity list changes, and keep the
   // selected marker's icon a bit larger so it's findable on a busy map.
@@ -943,8 +964,11 @@ function TerminalPage() {
 
     async function poll() {
       try {
-        const res = await apiJson<{entities: Entity[]}>('/api/terminal/entities')
-        if (!cancelled) setEntities(res.entities)
+        const res = await apiJson<{entities: Entity[]; mapbox_enabled: boolean}>('/api/terminal/entities')
+        if (!cancelled) {
+          setEntities(res.entities)
+          setMapboxEnabled(res.mapbox_enabled)
+        }
       } catch (e) {
         if (!cancelled) notify.error(errorMessage(e))
       }
