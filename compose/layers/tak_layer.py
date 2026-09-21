@@ -1446,15 +1446,18 @@ def track_to_cot(track: dict, cot_type: str, stale_s: float = COT_STALE_S) -> st
         "start":   _ts(now),
         "stale":   _ts(stale),
     })
-    # CoT event attributes for classification/handling markings — real,
-    # standard CoT event attributes (used by ATAK/WinTAK/TAK Server, not an
-    # invention here; confirmed against snstac/pytak's cot_event()). Any
-    # source protocol that decodes classification data sets these two
-    # generic keys; this is the one place they reach the wire.
-    if track.get("classification"):
-        event.set("access", str(track["classification"]))
-    if track.get("classification_caveat"):
-        event.set("caveat", str(track["classification_caveat"]))
+    # CoT event classification/handling marking. `access` is a real CoT 2.0
+    # attribute (MITRE Event-PUBLIC.xsd: free-form string, "who has access to
+    # this event... unrestricted, nato, army, coalition"). `caveat` is NOT —
+    # confirmed against the real schema, which has no such attribute and
+    # rejects any not in its defined list; every event this function has ever
+    # emitted with a caveat set was schema-invalid until this fix. The schema
+    # defines no separate caveat field at all, so a caveat rides in the same
+    # free-form `access` string rather than inventing a non-existent one.
+    access_parts = [str(track[key]) for key in ("classification", "classification_caveat")
+                    if track.get(key)]
+    if access_parts:
+        event.set("access", " ".join(access_parts))
     ET.SubElement(event, "point", {
         "lat": str(round(lat, 6)),
         "lon": str(round(lon, 6)),
@@ -1484,10 +1487,18 @@ def track_to_cot(track: dict, cot_type: str, stale_s: float = COT_STALE_S) -> st
             except (TypeError, ValueError):
                 return
             if -180 <= x_lon <= 180 and -90 <= y_lat <= 90:
+                # `ce`/`le` are required on every CoT `point`, not just the
+                # top-level one — confirmed against the real CoT 2.0 XSD
+                # (MITRE Event-PUBLIC.xsd), not assumed. Every shape vertex
+                # this function has ever emitted was schema-invalid until
+                # this fix; nothing had validated CoT output against a real
+                # schema before.
                 ET.SubElement(parent, "point", {
                     "lat": str(round(y_lat, 6)),
                     "lon": str(round(x_lon, 6)),
                     "hae": str(_hae(track)),
+                    "ce":  str(_ce(track)),
+                    "le":  str(_le(track)),
                 })
 
         if geometry_type == "Polygon" and isinstance(coordinates, list):

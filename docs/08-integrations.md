@@ -278,6 +278,7 @@ ingress is bound to port 50000.
 | CoT/TAK output | Subscribes to matching normalized Zenoh topics | TAK TCP/mTLS host, or ATAK/WinTAK UDP destination |
 | CoT receiver | Converts an attached TAK or SitaWare CoT stream into Zenoh | Listen port or remote host; TAK uses TAK-issued mTLS credentials |
 | SitaWare HQ NVG | Maintains an automatic normalized-track snapshot | HQ is configured to poll the EFDI URL; TLS and dedicated credentials are required outside an isolated lab |
+| INT-CORE dissemination | Runs an HTTP listener that INT-CORE's Dissemination service POSTs to | INT-CORE side: a Subscription + Dissemination + HTTP Post ADT targeting the listener's URL |
 
 ### C2 to Zenoh and back
 
@@ -331,6 +332,51 @@ Gateway must be given one TCP role, the EFDI endpoint, an approved export-layer
 set, and an explicit exclusion for `EFDI Live Tracks`. Product screens not
 present in the installed license/release cannot be substituted with a guessed
 REST path.
+
+#### INT-CORE (NATO Integration Core)
+
+INT-CORE is a hub, not an endpoint — it relays data between whatever C2
+systems are connected to it, EFDI included. EFDI is one spoke: it does not
+know or need to know what else is on the other side.
+
+For Zenoh → INT-CORE, select `intcore_layer` (`layers/intcore_layer.py`). It
+subscribes to the same track topics `sitaware_layer.py` does, builds an NVG
+2.0.2 document per track (reusing `sitaware_layer.py`'s own encoder), and
+POSTs it to a pre-provisioned INT-CORE Topic:
+
+```dotenv
+INTCORE_URL=https://intcore.example
+INTCORE_API_KEY=<TopicApi ApiKey>
+INTCORE_TOPIC_ID=<GUID of an NVG-2.0-schema-validated Topic>
+INTCORE_DATA_SOURCE_ID=efdi
+```
+
+For INT-CORE → Zenoh, select `intcore-bridge` (`bridges/intcore_bridge.py`).
+It runs a small HTTP server that INT-CORE's own Dissemination service POSTs
+to — configure a Subscription bound to the Topic above, a Dissemination, and
+an HTTP Post ADT targeting `http://<this-host>:INTCORE_BRIDGE_PORT/INTCORE_BRIDGE_PATH`
+on the INT-CORE side. `INTCORE_BRIDGE_BIND` must be reachable from wherever
+INT-CORE actually runs — its own Docker bridge gateway IP, not `localhost`,
+if INT-CORE is containerized on the same host. Set `INTCORE_BRIDGE_TOKEN`
+and have INT-CORE send it as `X-EFDI-Token`; left unset, the listener accepts
+any POST that reaches it.
+
+**Do not consume INT-CORE's `TopicSubQueue` (RabbitMQ) directly.** It has
+exactly one legitimate consumer internal to INT-CORE
+(`IntCoreSubscriptionApi`) and is an ordinary competing-consumer AMQP queue —
+a second consumer there steals messages from every Topic's real dissemination
+pipeline at random, not just the one you're after. The HTTP Post ADT above is
+the correct, safe integration point; this was confirmed the hard way against
+a real INT-CORE 7 instance before `intcore-bridge` was built.
+
+**Loop prevention is asymmetric.** The HTTP Post ADT's body is raw NVG XML
+with no envelope and no `dataSourceId` field on the wire — `intcore-bridge`
+has nothing in the payload to filter its own echo by. The exclusion has to
+be configured on INT-CORE's side instead: the Topic's Subscription must
+exclude items tagged with `INTCORE_DATA_SOURCE_ID` (e.g. by keeping
+EFDI-sourced items in a Topic the "push to EFDI" Subscription never reads
+from), or every track `intcore_layer` sends will loop straight back in as
+if a different system had sent it.
 
 ### Client SDKs — connecting to the pod (`clients/`)
 
