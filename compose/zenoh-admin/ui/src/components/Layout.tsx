@@ -3,7 +3,7 @@ import {Link, useNavigate, useRouterState} from '@tanstack/react-router'
 import {useAuth} from '@/store/auth'
 import {useRoute} from '@/store/route'
 import {cn} from '@/lib/utils'
-import {apiFetch, errorDetail, errorMessage} from '@/lib/api'
+import {apiFetch, apiJson, errorDetail, errorMessage} from '@/lib/api'
 import {notify} from '@/lib/notify'
 import {useBranding} from '@/store/branding'
 import {useTheme} from '@/store/theme'
@@ -11,6 +11,7 @@ import {useNotifications} from '@/store/notifications'
 import {PasswordInput} from '@/components/PasswordInput'
 import {
     Bell,
+    ExternalLink,
     FileCog,
     GitPullRequestDraft,
     History,
@@ -234,10 +235,28 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const clearNotifications = useNotifications((s) => s.clear)
   const [notifOpen, setNotifOpen] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const [intcoreUiUrl, setIntcoreUiUrl] = useState<string | null>(null)
 
   useEffect(() => {
     setPathname(current)
   }, [current, setPathname])
+
+  // INT-CORE has its own web console (Topics/Subscriptions/Dissemination/
+  // ADTs) — EFDI never reimplements it, just links out to it when an admin
+  // has configured its URL on the Config tab. One fetch on mount, same
+  // "quiet if unset" treatment as the rest of this integration.
+  useEffect(() => {
+    if (role !== 'admin' && role !== 'superadmin') return
+    let cancelled = false
+    apiJson<{ config: Record<string, string | { configured: boolean }> }>('/api/runtime')
+      .then((data) => {
+        if (cancelled) return
+        const url = data.config.INTCORE_UI_URL
+        setIntcoreUiUrl(typeof url === 'string' && url ? url : null)
+      })
+      .catch(() => { if (!cancelled) setIntcoreUiUrl(null) })
+    return () => { cancelled = true }
+  }, [role])
 
   async function handleLogout() {
     try {
@@ -397,6 +416,21 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   {current === to ? `[ ${label} ]` : label}
                 </Link>
               ))}
+            </>
+          )}
+          {intcoreUiUrl && (
+            <>
+              <div className="hud-label pt-3 pb-1 px-3 text-[10px] font-semibold text-zinc-400 dark:text-zinc-600">External</div>
+              <a
+                href={intcoreUiUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => setSidebarOpen(false)}
+                className="flex items-center gap-3 pl-3 pr-3 py-2 text-sm border-l-2 border-transparent text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-200/50 dark:hover:bg-white/[0.05] transition-colors"
+              >
+                <ExternalLink size={16} />
+                INT-CORE
+              </a>
             </>
           )}
         </nav>

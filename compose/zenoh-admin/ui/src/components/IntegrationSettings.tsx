@@ -4,7 +4,7 @@ import {notify} from '@/lib/notify'
 import {useAuth} from '@/store/auth'
 import {Card, CardHeader} from '@/components/ui/card'
 import {
-  ChevronDown, ChevronRight, Download, KeyRound, MapPinned, Plus, Radar, Router, Save,
+  ChevronDown, ChevronRight, Download, KeyRound, MapPinned, Network, Plus, Radar, Router, Save,
   Settings2, ShieldCheck, Terminal, Trash2, Upload, UploadCloud, Video, Waypoints, Wifi, Wrench,
 } from 'lucide-react'
 
@@ -63,6 +63,19 @@ const FIELD_GROUPS: FieldGroup[] = [
     { key: 'SITAWARE_HQ_NVG_MAX_TRACKS', label: 'NVG feed max tracked entities', placeholder: '10000' },
     { key: 'SITAWARE_HQ_NVG_ALLOW_ANONYMOUS', label: 'NVG feed allow anonymous access (1/0)', placeholder: '0' },
     { key: 'SITAWARE_HQ_NVG_ALLOW_INSECURE_HTTP', label: 'NVG feed allow plain HTTP — isolated lab only (1/0)', placeholder: '0' },
+  ] },
+  { title: 'INT-CORE (NATO Integration Core)', icon: Network, description: 'Egress (intcore_layer, NVG 2.0.2 via TopicApi/SaveItems) and ingress (intcore-bridge, HTTP Post ADT listener) to a NATO Integration Core instance. INT-CORE is a hub, not an endpoint — items disseminated back through it may come from any other system connected to it, not just what EFDI itself pushed.', fields: [
+    { key: 'INTCORE_URL', label: 'INT-CORE base URL', placeholder: 'https://localhost', help: 'INT-CORE’s nginx front, no trailing slash.' },
+    { key: 'INTCORE_API_KEY', label: 'TopicApi key', secret: true, help: 'The ApiKey header value for POST /topicapi/Topic/SaveItems.' },
+    { key: 'INTCORE_TOPIC_ID', label: 'INT-CORE Topic ID', placeholder: '9fce4e97-d1dd-435e-192c-08df149237a4', help: 'GUID of a pre-provisioned Topic on the INT-CORE side, schema-validated against NVG 2.0.' },
+    { key: 'INTCORE_DATA_SOURCE_ID', label: 'Data source ID tag', placeholder: 'efdi', help: 'Tags every SaveItems call. Give this same value to whoever configures the Topic’s Subscription so it can exclude EFDI’s own items from disseminating back — the HTTP Post ADT carries no field this bridge can filter on itself.' },
+    { key: 'INTCORE_TLS_VERIFY', label: 'Verify INT-CORE TLS certificate (1/0)', placeholder: '1' },
+    { key: 'INTCORE_UI_URL', label: 'INT-CORE web console URL', placeholder: 'https://intcore.example:44383', help: 'INT-CORE’s own admin UI (Topics, Subscriptions, Dissemination, ADTs) — EFDI never reimplements this, only links out to it. Set this to show an "INT-CORE" tab in the sidebar that opens it in a new browser tab.' },
+    { key: 'INTCORE_BRIDGE_BIND', label: 'Dissemination listener bind address', placeholder: '0.0.0.0', help: 'Must be reachable from INT-CORE’s own network — its Docker bridge gateway IP, not just localhost, if INT-CORE runs in containers on this host.' },
+    { key: 'INTCORE_BRIDGE_PORT', label: 'Dissemination listener port', placeholder: '8092' },
+    { key: 'INTCORE_BRIDGE_PATH', label: 'Dissemination listener path', placeholder: '/intcore/dissemination' },
+    { key: 'INTCORE_BRIDGE_TOKEN', label: 'Dissemination listener shared secret', secret: true, help: 'Sent by INT-CORE as the X-EFDI-Token header on every POST. Strongly recommended — left blank, the listener accepts unauthenticated POSTs from anything that can reach it.' },
+    { key: 'INTCORE_SOURCE', label: 'Relayed-track source tag', placeholder: 'intcore', help: 'The _src value and topic segment for tracks intcore-bridge publishes back into Zenoh.' },
   ] },
   { title: 'Video and metadata ingest', icon: Video, description: 'SRT/KLV sources and source naming for the STANAG 4609 bridge.', fields: [
     { key: 'STANAG4609_SRT_URL', label: 'STANAG 4609 SRT URL', placeholder: 'srt://host:port?mode=listener' },

@@ -477,8 +477,14 @@ class ClassificationMarkingTests(unittest.TestCase):
     """A generic "classification"/"classification_caveat" key — set by any
     source protocol that decodes classification metadata (e.g. nffi.py from
     NFFI's secClassification/secCategory) — must reach both C2 egress
-    formats' own real classification attributes: CoT's "access"/"caveat"
-    and NVG's root "classification" (see docs/references/nffi/NFFI.md)."""
+    formats' own real classification markings: CoT's "access" and NVG's root
+    "classification" (see docs/references/nffi/NFFI.md).
+
+    CoT 2.0's real schema (MITRE Event-PUBLIC.xsd) has no "caveat" attribute
+    at all — confirmed against the actual XSD, not assumed from a reference
+    library's permissive parsing — so a caveat rides in the same free-form
+    "access" string rather than a second, non-existent attribute that made
+    every classified CoT event this function ever emitted schema-invalid."""
 
     def track(self):
         return {
@@ -490,25 +496,67 @@ class ClassificationMarkingTests(unittest.TestCase):
             "classification_caveat": "RELEASABLE TO ISAF",
         }
 
-    def test_cot_event_carries_access_and_caveat(self):
+    def test_cot_event_carries_classification_and_caveat_in_access(self):
         xml = track_to_cot(self.track(), "a-f-G-U-C")
         event = ET.fromstring(xml)
-        self.assertEqual(event.attrib["access"], "NATO RESTRICTED")
-        self.assertEqual(event.attrib["caveat"], "RELEASABLE TO ISAF")
+        self.assertEqual(event.attrib["access"], "NATO RESTRICTED RELEASABLE TO ISAF")
+        self.assertNotIn("caveat", event.attrib)
 
-    def test_cot_event_omits_attrs_when_unclassified_data_has_none(self):
+    def test_cot_event_omits_access_when_unclassified_data_has_none(self):
         track = self.track()
         del track["classification"]
         del track["classification_caveat"]
         xml = track_to_cot(track, "a-f-G-U-C")
         event = ET.fromstring(xml)
         self.assertNotIn("access", event.attrib)
-        self.assertNotIn("caveat", event.attrib)
 
     def test_nvg_root_carries_classification(self):
         _uid, xml = track_to_nvg_item(self.track(), "SFGPU-----*****")
         root = ET.fromstring(xml)
         self.assertEqual(root.attrib["classification"], "NATO RESTRICTED")
+
+
+class ShapePointTests(unittest.TestCase):
+    """CoT's own real schema (MITRE Event-PUBLIC.xsd, verified directly
+    against the real NATO CoT_Event_NATO.xsd, not assumed) requires `ce`/`le`
+    on every <point>, not only the top-level one — every polygon/line vertex
+    track_to_cot() ever emitted was schema-invalid until this fix, silently,
+    since nothing had validated this codebase's CoT output against a real
+    schema before."""
+
+    def track(self, geometry):
+        return {
+            "_ts": 100.0,
+            "lat_deg": 54.0,
+            "lon_deg": 25.0,
+            "position_uncertainty_m": 42.0,
+            "height_accuracy_m": 7.0,
+            "geometry": geometry,
+        }
+
+    def test_polygon_vertices_carry_ce_and_le(self):
+        xml = track_to_cot(self.track({
+            "type": "Polygon",
+            "coordinates": [[[24.0, 56.0], [24.1, 56.0], [24.1, 56.1], [24.0, 56.0]]],
+        }), "a-u-A")
+        event = ET.fromstring(xml)
+        vertices = event.findall("./detail/shape/polygon/point")
+        self.assertTrue(vertices)
+        for vertex in vertices:
+            self.assertEqual(vertex.attrib["ce"], "42.0")
+            self.assertEqual(vertex.attrib["le"], "7.0")
+
+    def test_linestring_vertices_carry_ce_and_le(self):
+        xml = track_to_cot(self.track({
+            "type": "LineString",
+            "coordinates": [[24.0, 56.0], [24.1, 56.1]],
+        }), "a-u-A")
+        event = ET.fromstring(xml)
+        vertices = event.findall("./detail/shape/line/point")
+        self.assertTrue(vertices)
+        for vertex in vertices:
+            self.assertEqual(vertex.attrib["ce"], "42.0")
+            self.assertEqual(vertex.attrib["le"], "7.0")
 
 
 if __name__ == "__main__":

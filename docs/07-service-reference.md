@@ -24,6 +24,8 @@
 | `tak_layer` | `layers/tak_layer.py` | Subscriber — all topics | Event-driven |
 | `tak-bridge` | `bridges/tak_bridge.py` | Subscriber — all topics | TAK-visible CoT ingress |
 | `sitaware-hq-nvg` | `layers/sitaware_layer.py` | Subscriber — all track topics | Pull-based NVG snapshot |
+| `intcore_layer` | `layers/intcore_layer.py` | Subscriber — all track topics | Event-driven; POSTs NVG 2.0.2 to INT-CORE's `Topic/SaveItems` |
+| `intcore-bridge` | `bridges/intcore_bridge.py` | `…/{domain}/intcore/c2/{affiliation}/{entity}/{type}/{id}/sapient` | HTTP Post ADT listener — INT-CORE's own Dissemination service pushes here |
 | `track-fusion` | `protocols/fusion.py` | CAT-48 + CAT-21 subscriber | Event-driven |
 
 ### TAK users and external CoT sources

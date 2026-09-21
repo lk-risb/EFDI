@@ -152,6 +152,8 @@ SERVICE_SPECS = [
     # fabric OUT to a C2 system. Which side opens the socket is a transport
     # detail: SitaWare polls sitaware_layer's feed, and that still makes it egress.
     ("sitaware_layer", "C2 outputs", "NVG feed → SitaWare (SitaWare polls)"),
+    ("intcore_layer", "C2 outputs", "EFDI tracks → INT-CORE (NVG 2.0.2 via TopicApi)"),
+    ("intcore-bridge", "C2 inputs", "INT-CORE Topic dissemination (RabbitMQ) → Zenoh"),
 ]
 SERVICE_NAMES = {name for name, _, _ in SERVICE_SPECS}
 
@@ -195,6 +197,8 @@ SERVICE_SOURCES = {
     "tak-bridge": "bridges/tak_bridge.py",
     "sitaware": "bridges/sitaware_bridge.py",
     "sitaware_layer": "layers/sitaware_layer.py",
+    "intcore_layer": "layers/intcore_layer.py",
+    "intcore-bridge": "bridges/intcore_bridge.py",
 }
 
 
@@ -220,6 +224,7 @@ def _service_kind(name: str, source: str) -> str:
 
 _SERVICE_REQUIRED_KEYS = {
     "sitaware": ("SITAWARE_URL", "SITAWARE_API_PATH"),
+    "intcore_layer": ("INTCORE_URL", "INTCORE_API_KEY", "INTCORE_TOPIC_ID"),
 }
 
 
@@ -264,6 +269,10 @@ EDITABLE_EXACT = {
     "SAPIENT_ZENOH_RAW", "SAPIENT_RAW_PORT", "SAPIENT_RAW_TOPIC",
     "STANAG4586_HOST", "STANAG4586_PORT", "STANAG4586_PROFILE", "STANAG4586_ZENOH_RAW", "STANAG4586_RAW_PORT", "STANAG4586_RAW_TOPIC",
     "STANAG4586_RAW_PORT",
+    "INTCORE_URL", "INTCORE_API_KEY", "INTCORE_TOPIC_ID", "INTCORE_DATA_SOURCE_ID", "INTCORE_TLS_VERIFY",
+    "INTCORE_UI_URL",
+    "INTCORE_BRIDGE_BIND", "INTCORE_BRIDGE_PORT", "INTCORE_BRIDGE_PATH", "INTCORE_BRIDGE_TOKEN",
+    "INTCORE_SOURCE",
 }
 EDITABLE_PREFIXES = ("CAT10_", "CAT20_", "CAT21_", "CAT34_", "CAT48_", "CAT62_", "NFFI_")
 SECRET_MARKERS = ("PASS", "PASSWORD", "TOKEN", "SECRET", "_KEY", "PRIVATE_KEY")

@@ -108,6 +108,7 @@ SERVICES=(
     mqtt-raw aartos-raw aartos-wifi-raw
     cap mqtt sparkplug sensor-health mission-route aartos
     tak_layer tak-bridge nffi-bridge sitaware_layer tak_alert_layer
+    intcore_layer intcore-bridge
     mediamtx
 )
 
@@ -192,7 +193,8 @@ declare -A SVC_CAT=(
     [cap]="Protocols"
     [sensor-health]="Protocols" [mission-route]="Protocols"
     [tak_layer]="Output layers"   [sitaware_layer]="Output layers"
-    [tak_alert_layer]="Output layers"
+    [tak_alert_layer]="Output layers" [intcore_layer]="Output layers"
+    [intcore-bridge]="C2 inputs"
     [track-fusion]="Sensor bridges"
     [mediamtx]="Sensor bridges"
 )
@@ -232,6 +234,8 @@ declare -A SVC_DESC=(
     [tak-bridge]="TAK Server CoT ingress"
     [nffi-bridge]="NFFI (STANAG 5527) TCP ingress → Zenoh raw"
     [sitaware_layer]="EFDI tracks → SitaWare (NVG feed, SitaWare polls)"
+    [intcore_layer]="EFDI tracks → INT-CORE (NVG 2.0.2 via TopicApi SaveItems)"
+    [intcore-bridge]="INT-CORE Dissemination (HTTP Post ADT) → Zenoh"
     [track-fusion]="Radar/ADS-B track correlation"
     [mediamtx]="RTMP video ingress (drone remote) → RTSP restream for TAK video feeds"
 )
@@ -273,6 +277,8 @@ svc_ready() {
         stanag5516) return 0 ;;  # UDP listener, default port 3010
         # sitaware_layer serves a feed, so it needs a port to listen on.
         sitaware_layer) [[ -n "${SITAWARE_HQ_NVG_PORT:-}" ]] ;;
+        intcore_layer) [[ -n "${INTCORE_URL:-}" && -n "${INTCORE_API_KEY:-}" && -n "${INTCORE_TOPIC_ID:-}" ]] ;;
+        intcore-bridge) return 0 ;;  # always ready; binds INTCORE_BRIDGE_PORT (default 8092)
         mediamtx) return 0 ;;  # binds default RTMP :1935 / RTSP :8554, no config required
         *)        return 0 ;;
     esac
@@ -330,6 +336,15 @@ svc_hint() {
             else
                 echo "SITAWARE_HQ_NVG_PORT not set"
             fi ;;
+        intcore_layer)
+            if [[ -n "${INTCORE_URL:-}" && -n "${INTCORE_API_KEY:-}" && -n "${INTCORE_TOPIC_ID:-}" ]]; then
+                echo "${INTCORE_URL} (topic ${INTCORE_TOPIC_ID})"
+            else
+                echo "set INTCORE_URL, INTCORE_API_KEY, INTCORE_TOPIC_ID"
+            fi ;;
+        intcore-bridge)
+            echo "listening ${INTCORE_BRIDGE_BIND:-0.0.0.0}:${INTCORE_BRIDGE_PORT:-8092}${INTCORE_BRIDGE_PATH:-/intcore/dissemination}"
+            ;;
         sitaware)
             if [[ "${SITAWARE_URL:-}" ]]; then
                 _n=0; [[ "${SITAWARE_URL_FALLBACK:-}" ]] && ((_n++)); [[ "${SITAWARE_URL_TAILSCALE:-}" ]] && ((_n++))
@@ -1020,6 +1035,18 @@ launch() {
                 return
             fi
             _start sitaware_layer layers/sitaware_layer.py
+            ;;
+
+        intcore_layer)
+            if [[ -z "${INTCORE_URL:-}" || -z "${INTCORE_API_KEY:-}" || -z "${INTCORE_TOPIC_ID:-}" ]]; then
+                printf "  ${YELLOW}[skip]${R}  intcore_layer   set INTCORE_URL, INTCORE_API_KEY, INTCORE_TOPIC_ID\n"
+                return
+            fi
+            _start intcore_layer layers/intcore_layer.py
+            ;;
+
+        intcore-bridge)
+            _start intcore-bridge bridges/intcore_bridge.py
             ;;
 
         track-fusion)
