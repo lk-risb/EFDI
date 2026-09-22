@@ -546,7 +546,7 @@ Po sėkmingo paleidimo `start.sh` išsaugo pasirinktų paslaugų sąrašą ir pa
 
 Nustatykite `TAK_HOST` ir `TAK_PORT` faile `.env`, tada paleidiklyje pasirinkite `tak-layer`. ATAK/WinTAK klientai takelius gauna tik per TAK serverį — tiesioginio multicast/unicast CoT kelio nėra.
 
-Avarinius pranešimus (squawk 7500/7600/7700 ir laivo distress) atskiru GeoChat pranešimu visiems prisijungusiems TAK klientams siunčia atskira paslauga `tak_alert_layer` (`layers/tak_alert_layer.py`) — naudoja tą pačią TAK jungtį kaip `tak-layer`, bet pasirenkama paleidiklyje atskirai ir pagal nutylėjimą išjungta. Kol ji neįjungta, avarinė būsena vis tiek matoma takelio paties CoT pastabose (remarks) — tiesiog be atskiro iššokančio pranešimo ir be žymeklio perklasifikavimo į priešišką.
+Akustinio jutiklio (dronuradaras.lt) aptiktą droną atskiru GeoChat pranešimu visiems prisijungusiems TAK klientams praneša atskira paslauga `tak_alert_layer` (`layers/tak_alert_layer.py`) — naudoja tą pačią TAK jungtį kaip `tak-layer`, bet pasirenkama paleidiklyje atskirai ir pagal nutylėjimą išjungta. Kol ji neįjungta, aptikimas vis tiek matomas paties jutiklio žymeklio spalvos pasikeitime ir CoT pastabose (remarks) — tiesiog be atskiro iššokančio pranešimo.
 
 ### SitaWare HQ REST sekimas (pasirinktinis gaunamas adapteris)
 
@@ -694,7 +694,7 @@ Adresas priima tik GET/HEAD, pagal nutylėjimą reikalauja Basic autentifikavimo
 | `nffi-bridge` | `bridges/nffi_bridge.py` | `…/raw/nffi/{source-id}` | Prisijungimas prie partnerio NFFI/FFI serverio (TCP) |
 | `tak-layer` | `layers/tak_layer.py` | Prenumeratorius — visos temos | Įvykio valdomas |
 | `tak-bridge` | `bridges/tak_bridge.py` | Prenumeratorius — visos temos | TAK matomo CoT srauto priėmimas |
-| `tak_alert_layer` | `layers/tak_alert_layer.py` | Prenumeratorius — `…/air/**`, `…/sea/**` | Įvykio valdomas; pasirenkama atskirai, pagal nutylėjimą išjungta |
+| `tak_alert_layer` | `layers/tak_alert_layer.py` | Prenumeratorius — `…/land/**` | Įvykio valdomas; pasirenkama atskirai, pagal nutylėjimą išjungta |
 | `sitaware-hq-nvg` | `layers/sitaware_hq_nvg_feed.py` | Prenumeratorius — visos takelių temos | HQ periodiškai ima NVG būseną |
 | `track-fusion` | `protocols/fusion.py` | CAT-48 + CAT-21 prenumeratorius | Įvykio valdomas |
 

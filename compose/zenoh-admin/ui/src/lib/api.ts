@@ -48,9 +48,28 @@ export function errorMessage(e: unknown): string {
 // `statusText` (common under HTTP/2, which has no reason phrases) slip
 // through as '', producing an undiagnosable "Operation failed" toast with
 // no indication of whether the backend even received the request.
+//
+// FastAPI's own request-body validation (a field missing/wrong type on a
+// Pydantic model, before a route handler ever runs — e.g. ConfigFields)
+// returns `detail` as an ARRAY of {loc, msg, type} objects, not a string.
+// The plain `typeof detail === 'string'` check below used to miss this
+// entirely and fall through to the generic "Request failed (HTTP 422)" —
+// technically correct, but useless for figuring out which field was wrong.
 export function errorDetail(body: { detail?: unknown } | null | undefined, res: Response): string {
   const detail = body?.detail
   if (typeof detail === 'string' && detail.trim()) return detail
+  if (Array.isArray(detail) && detail.length) {
+    const parts = detail.map(item => {
+      if (item && typeof item === 'object' && 'msg' in item) {
+        const loc = Array.isArray((item as { loc?: unknown }).loc)
+          ? (item as { loc: unknown[] }).loc.filter(p => p !== 'body').join('.')
+          : ''
+        return loc ? `${loc}: ${(item as { msg: unknown }).msg}` : String((item as { msg: unknown }).msg)
+      }
+      return typeof item === 'string' ? item : JSON.stringify(item)
+    })
+    if (parts.join('').trim()) return parts.join('; ')
+  }
   return res.statusText || `Request failed (HTTP ${res.status})`
 }
 
