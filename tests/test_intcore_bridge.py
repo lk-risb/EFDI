@@ -67,6 +67,39 @@ class NvgParseTests(unittest.TestCase):
         topic = intcore_bridge.sidc_to_topic("SFGPU-----*****")
         self.assertTrue(topic.endswith("/land/intcore/c2/friendly/unit"))
 
+    def test_non_sidc_symbol_scheme_is_dropped_not_misrouted(self):
+        # Regression: IntCoreKMLToNVG20.xslt's CreateSymbol/ExtractSymbolCode
+        # templates prove `symbol` isn't always `app6x:<SIDC>` — a KML
+        # Placemark styled with a flag or a custom icon comes out as
+        # `flag:<code>` or `icon:<href-or-code>`. Before the scheme
+        # allowlist, treating that code as a real SIDC misrouted it:
+        # sidc[1]='S'/sidc[2]='A' landed on real affiliation/dimension chars
+        # by coincidence, so a "USA" flag item came out hostile/aircraft.
+        # Now any non-SIDC scheme falls back to "" — same safe unknown/unit
+        # routing already used when the transform omits `symbol` entirely.
+        track, sidc = intcore_bridge.nvg_item_to_track(
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            '<nvg xmlns="https://tide.act.nato.int/schemas/2012/10/nvg" version="2.0.2">'
+            '<point uri="urn:efdi:FLAG-1" symbol="flag:USA" label="FLAG-1" '
+            'x="24.1" y="56.9"/></nvg>'
+        )
+        self.assertEqual(sidc, "")
+        self.assertEqual(
+            intcore_bridge.sidc_to_topic(sidc),
+            intcore_bridge.TOPIC_ROOT + "/land/intcore/c2/unknown/unit",
+        )
+
+    def test_app6_scheme_symbol_still_parses(self):
+        # Case-insensitive scheme check ("APP6C" as well as "app6c") must
+        # not itself start rejecting the real, already-tested SIDC path.
+        track, sidc = intcore_bridge.nvg_item_to_track(
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            '<nvg xmlns="https://tide.act.nato.int/schemas/2012/10/nvg" version="2.0.2">'
+            '<point uri="urn:efdi:BAR-1" symbol="APP6C:SFGPU-----*****" label="BAR-1" '
+            'x="24.1" y="56.9"/></nvg>'
+        )
+        self.assertEqual(sidc, "SFGPU-----*****")
+
     def test_parses_real_vendor_nvg_with_point_nested_under_g(self):
         # Regression: root.find(NVG_NS + "point") only matched a direct
         # child and silently returned None against this real shape — every

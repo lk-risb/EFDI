@@ -81,6 +81,9 @@ MAX_BODY = 1_000_000
 _SOURCE = os.environ.get("INTCORE_SOURCE", "intcore")
 _TOKEN  = os.environ.get("INTCORE_BRIDGE_TOKEN", "")
 
+# `symbol` schemes that are actually SIDC (see nvg_item_to_track).
+_SIDC_SCHEMES = ("app6a", "app6b", "app6c", "app6d", "milstd2525b", "milstd2525c")
+
 
 # ---------------------------------------------------------------------------
 # NVG 2.0.2 -> track (best-effort: position, uid, label, SIDC — see docstring)
@@ -143,8 +146,17 @@ def nvg_item_to_track(xml_str: str) -> tuple[dict, str] | None:
         except ValueError:
             pass
 
+    # IntCoreKMLToNVG20.xslt's CreateSymbol/ExtractSymbolCode templates prove
+    # `symbol` isn't always `app6x:<SIDC>` — a KML Placemark styled with a
+    # flag or a custom icon comes out as `flag:<code>` or `icon:<href>`.
+    # Treating that code as if it were a real SIDC misrouted it: sidc[1]/[2]
+    # landed on real affiliation/dimension chars by coincidence (a "USA"
+    # flag came out hostile/aircraft). Only accept the schemes that are
+    # actually SIDC; anything else falls back to "" — same safe unknown/unit
+    # routing already used when the transform omits `symbol` entirely.
     symbol = point.get("symbol", "")
-    sidc = symbol.split(":", 1)[1] if ":" in symbol else symbol
+    scheme, _, code = symbol.partition(":")
+    sidc = code if scheme.lower() in _SIDC_SCHEMES else ""
     return track, sidc
 
 
