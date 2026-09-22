@@ -106,6 +106,27 @@ function CertificatesPage() {
     }
   }
 
+  // Best-effort convenience: read the certificate's own CN so the operator
+  // doesn't have to run `openssl x509 -noout -subject` and copy it in by
+  // hand. Never overwrites a value already typed, and any failure (not a
+  // real cert yet, network hiccup, no CN present) is silently ignored — this
+  // is a prefill, not a validation step, and /bootstrap's own server-side
+  // checks are what actually enforce correctness on submit.
+  async function inspectCertFile(file: File) {
+    try {
+      const form = new FormData()
+      form.append('certificate', file)
+      const body = await apiJson<{ common_name: string | null }>('/api/certs/inspect', {
+        method: 'POST', body: form,
+      })
+      if (body.common_name) {
+        setBootPartnerNamespace(current => current || body.common_name!)
+      }
+    } catch {
+      // best-effort — leave the field for the operator to fill in by hand
+    }
+  }
+
   async function uploadBootstrapIdentity(event: React.FormEvent) {
     event.preventDefault()
     if (!caFile || !certFile || !keyFile) {
@@ -215,27 +236,32 @@ function CertificatesPage() {
             <p className="mb-4 text-xs text-zinc-500">
               {bootstrapStatus?.bootstrap === true
                 ? <>This pod is running on a throwaway self-signed identity with no mTLS. Upload your real CA root,
-                    certificate, and private key from <code>scripts/gen-certs.sh</code> below to switch the router to
-                    mTLS. The admin service restarts briefly afterward.</>
-                : <>Replaces this pod's current identity with a newly issued CA root, certificate, and private key
-                    from <code>scripts/gen-certs.sh</code>. The router and admin service restart briefly afterward —
-                    make sure the new material is signed for the same PARTNER_NAMESPACE unless you intend to move slots.</>}
+                    certificate, and private key below to switch the router to mTLS — from <code>scripts/gen-certs.sh</code>,
+                    or from your own org's issuer. The admin service restarts briefly afterward.</>
+                : <>Replaces this pod's current identity with a newly issued CA root, certificate, and private key —
+                    from <code>scripts/gen-certs.sh</code>, or from your own org's issuer. The router and admin service
+                    restart briefly afterward — make sure the new material is signed for the same PARTNER_NAMESPACE
+                    unless you intend to move slots.</>}
             </p>
             <form onSubmit={uploadBootstrapIdentity} className="grid gap-3 sm:grid-cols-2">
               <label className="text-xs text-zinc-500">
-                CA root (efdi-ca-root.pem)
+                CA root (.crt or .pem)
                 <input type="file" required accept=".pem,.crt,.cer"
                   onChange={event => setCaFile(event.target.files?.[0] ?? null)}
                   className="mt-1 block w-full text-xs text-zinc-500 file:mr-3 file:rounded-md file:border-0 file:bg-zinc-200 file:px-3 file:py-1.5 file:text-xs file:text-zinc-900 dark:file:bg-white/10 dark:file:text-white" />
               </label>
               <label className="text-xs text-zinc-500">
-                Certificate (&lt;namespace&gt;-cert.pem)
+                Certificate (.crt or .pem)
                 <input type="file" required accept=".pem,.crt,.cer"
-                  onChange={event => setCertFile(event.target.files?.[0] ?? null)}
+                  onChange={event => {
+                    const file = event.target.files?.[0] ?? null
+                    setCertFile(file)
+                    if (file) void inspectCertFile(file)
+                  }}
                   className="mt-1 block w-full text-xs text-zinc-500 file:mr-3 file:rounded-md file:border-0 file:bg-zinc-200 file:px-3 file:py-1.5 file:text-xs file:text-zinc-900 dark:file:bg-white/10 dark:file:text-white" />
               </label>
               <label className="text-xs text-zinc-500">
-                Private key (&lt;namespace&gt;-key.pem)
+                Private key (.key or .pem)
                 <input type="file" required accept=".pem,.key"
                   onChange={event => setKeyFile(event.target.files?.[0] ?? null)}
                   className="mt-1 block w-full text-xs text-zinc-500 file:mr-3 file:rounded-md file:border-0 file:bg-zinc-200 file:px-3 file:py-1.5 file:text-xs file:text-zinc-900 dark:file:bg-white/10 dark:file:text-white" />
