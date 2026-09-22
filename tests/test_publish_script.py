@@ -90,3 +90,22 @@ def test_ltu_publish_root_uses_environment_slot_without_legacy_prefix(monkeypatc
     )
 
     assert publish_script._publish_root(fields) == "router-slot"
+
+
+def test_profile_details_does_not_crash_for_the_plaintext_sandbox_profile():
+    """"ltu-local" (EFDI LTU SANDBOX) has no publish_client_cert/key filenames
+    at all (None, not a formattable string) — _profile_details() used to call
+    .format() on them unconditionally, which would crash this function for
+    EVERY profile the moment a plaintext one existed in _TLS_PROFILES, since
+    get_publish_defaults() calls it once per profile regardless of which one
+    is actually active."""
+    details = publish_script._profile_details("ltu-local", client_cn="")
+    assert details["client_cert_filename"] is None
+    assert details["client_key_filename"] is None
+    assert details["requires_client_cn"] is False
+
+    # The real crash site: iterating every profile, unconditionally, is
+    # exactly what GET /publish-script/defaults does.
+    from api.config import _TLS_PROFILES
+    for name in _TLS_PROFILES:
+        publish_script._profile_details(name, client_cn="")

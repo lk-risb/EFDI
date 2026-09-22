@@ -13,7 +13,7 @@ os.environ.setdefault("ZENOH_ADMIN_DB_PASSWORD", "test")
 os.environ.setdefault("ZENOH_ADMIN_SECRET_KEY", "test-secret")
 os.environ.setdefault("PARTNER_NAMESPACE", "hq")
 
-from api import config, federation_apply, federation_paths, topology  # noqa: E402
+from api import certs_bootstrap, config, federation_apply, federation_paths, topology  # noqa: E402
 
 
 def fields(namespace: str = "hq") -> config.ConfigFields:
@@ -75,25 +75,69 @@ def test_safe_apply_activates_only_after_preflight_and_health(monkeypatch, tmp_p
     assert (tmp_path / "config.last-known-good").read_text() == "old-config"
 
 
-def test_ltu_profile_uses_canonical_runtime_paths(monkeypatch):
+def test_ltu_sandbox_profile_is_plaintext_with_no_cert_material(monkeypatch):
+    """"ltu-local" is EFDI LTU SANDBOX — the one profile with no certs at all,
+    confirmed live against a real zenohd (eclipse/zenoh:1.9.0): empty
+    transport.link.tls paths are harmless as long as every listen/connect
+    endpoint uses tcp:// rather than tls://. The mesh-facing listen port
+    (bound 0.0.0.0) must render as tcp://, not tls://, for this profile —
+    every other profile keeps tls:// there."""
     monkeypatch.setattr(
         config,
         "TEMPLATE_PATH",
         str(ROOT / "examples" / "zenoh-router.json5.tmpl"),
     )
-    ltu = fields()
-    ltu.fabric_tls_profile = "ltu-local"
-    rendered = config._render_config(ltu)
-    assert rendered.count(
-        'certificate: "/etc/zenoh/tls/ltu/client-chain.pem"'
-    ) == 2
-    assert rendered.count(
-        'private_key: "/etc/zenoh/tls/ltu/client.key"'
-    ) == 2
+    sandbox = fields()
+    sandbox.fabric_tls_profile = "ltu-local"
+    rendered = config._render_config(sandbox)
+    assert '"tcp/0.0.0.0:7447"' in rendered
+    assert '"tls/0.0.0.0:7447"' not in rendered
+    assert 'certificate: ""' in rendered
 
     parsed = config._extract_fields(rendered)
 
     assert parsed.fabric_tls_profile == "ltu-local"
+    assert parsed.mtls_port == 7447
+    assert parsed.local_tcp_port == 7448
+
+
+def test_efdi_profile_still_uses_mtls_on_the_mesh_facing_port(monkeypatch):
+    """Regression guard alongside the sandbox test above: relabeling "efdi"
+    to "EFDI LTU" and switching the mesh-facing listen scheme to a computed
+    value (ZENOH_LISTEN_ENDPOINTS) must not silently drop mTLS for the real
+    profiles."""
+    monkeypatch.setattr(
+        config,
+        "TEMPLATE_PATH",
+        str(ROOT / "examples" / "zenoh-router.json5.tmpl"),
+    )
+    rendered = config._render_config(fields())
+    assert '"tls/0.0.0.0:7447"' in rendered
+    assert '"tcp/0.0.0.0:7447"' not in rendered
+    assert rendered.count('certificate: "/etc/zenoh/tls/pod-cert.pem"') == 2
+
+    parsed = config._extract_fields(rendered)
+
+    assert parsed.fabric_tls_profile == "efdi"
+    assert parsed.mtls_port == 7447
+    assert parsed.local_tcp_port == 7448
+
+
+def test_cert_bootstrap_upload_targets_a_real_non_plaintext_profile():
+    """certs_bootstrap.py's upload endpoint writes an uploaded CA/cert/key to
+    /etc/zenoh/tls/{ca-roots,pod-cert,pod-key}.pem and then applies
+    _BOOTSTRAP_TLS_PROFILE. If that profile were ever repointed at a
+    plaintext one (or at a profile whose paths don't match what was just
+    written), the uploaded cert would sit on disk unused and the router
+    would stay silently unsecured — exactly the near-miss this test exists
+    to catch before it ships again."""
+    profile = config._TLS_PROFILES[certs_bootstrap._BOOTSTRAP_TLS_PROFILE]
+    assert not profile.get("plaintext")
+    assert profile["listen_certificate"] == "/etc/zenoh/tls/pod-cert.pem"
+    assert profile["listen_private_key"] == "/etc/zenoh/tls/pod-key.pem"
+    assert profile["connect_certificate"] == "/etc/zenoh/tls/pod-cert.pem"
+    assert profile["connect_private_key"] == "/etc/zenoh/tls/pod-key.pem"
+    assert profile["root_ca"] == "/etc/zenoh/tls/ca-roots.pem"
 
 
 def test_remote_fabric_requires_link_recovery():

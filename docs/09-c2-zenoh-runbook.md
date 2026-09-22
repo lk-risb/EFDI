@@ -145,7 +145,90 @@ sequence of public HQ menu clicks for this operation and no universal units
 resource; if the administrator cannot identify that screen/resource, do not
 enable `sitaware`. Use the deployment's NFFI or CoT Gateway interface instead.
 
-## 9.6 Share C2-origin data with partners
+## 9.6 Zenoh → INT-CORE
+
+Enable `intcore_layer` with a pre-provisioned, NVG-2.0-schema-validated
+Topic already created on the INT-CORE side:
+
+```dotenv
+INTCORE_URL=https://<intcore-host>
+INTCORE_API_KEY=<TopicApi ApiKey>
+INTCORE_TOPIC_ID=<GUID of the provisioned Topic>
+INTCORE_DATA_SOURCE_ID=efdi
+INTCORE_TLS_VERIFY=1
+```
+
+Verify with:
+
+```bash
+tail -f "${POD_STATE_DIR:-compose/state}/logs/intcore_layer.log"
+```
+
+`intcore_layer` egress is one-way; enable `intcore-bridge` for a return
+path. Give the INT-CORE administrator the value of `INTCORE_DATA_SOURCE_ID`
+— it must be excluded on the Topic's Subscription before any return path
+(9.7) is wired, or EFDI's own tracks loop straight back in as if a
+different system had sent them (see 9.7's warning; this is INT-CORE-side
+config, not something `intcore_layer`/`intcore-bridge` can enforce
+themselves).
+
+## 9.7 INT-CORE → Zenoh
+
+Enable `intcore-bridge` — a small HTTP listener, not a poller:
+
+```dotenv
+INTCORE_BRIDGE_BIND=0.0.0.0
+INTCORE_BRIDGE_PORT=8092
+INTCORE_BRIDGE_PATH=/intcore/dissemination
+INTCORE_BRIDGE_TOKEN=<a shared secret you generate, e.g. `openssl rand -hex 16`>
+```
+
+`INTCORE_BRIDGE_BIND` must be reachable from wherever INT-CORE actually
+runs — its own Docker bridge gateway IP (`docker network inspect` on the
+INT-CORE host), not `localhost`, if INT-CORE is containerized on a
+different network namespace than this listener.
+
+On the INT-CORE administration side, create — do **not** reuse an existing
+Dissemination meant for another consumer:
+
+```text
+Subscription:      bound to the Topic from 9.6, content-scoped to exclude
+                    items tagged with INTCORE_DATA_SOURCE_ID above
+Dissemination:      targets a new Adt, not shared with any other consumer
+Adt (type):         HTTP Post
+Adt (URL):          http://<intcore-bridge-host>:INTCORE_BRIDGE_PORT/INTCORE_BRIDGE_PATH
+Adt (headers):      X-EFDI-Token: <same value as INTCORE_BRIDGE_TOKEN>
+```
+
+**Do not point a Dissemination at INT-CORE's `TopicSubQueue` (RabbitMQ)
+directly, and do not consume it with a separate bridge.** It has exactly
+one legitimate consumer internal to INT-CORE and is an ordinary
+competing-consumer AMQP queue — a second consumer there steals messages
+from every Topic's real dissemination pipeline at random. The HTTP Post
+Adt above is the only integration point confirmed safe against a real
+INT-CORE 7 instance.
+
+The `dataSourceId` exclusion on the Subscription is load-bearing the moment
+this section goes live, not before: `intcore-bridge`'s own HTTP listener
+has nothing in the POST body to filter its own echo by (confirmed on a
+real captured request — no envelope, no `dataSourceId` field on the wire
+at all), so the exclusion has to hold on the INT-CORE side or every track
+`intcore_layer` sends loops straight back in as if a NATO partner had sent
+it, with no error on either end.
+
+Verify with:
+
+```bash
+tail -f "${POD_STATE_DIR:-compose/state}/logs/intcore-bridge.log"
+```
+
+If INT-CORE is also configured to disseminate straight to a C2 system EFDI
+already reaches directly through its own layer (e.g. the TAK Server
+`tak-layer` already talks to), that system receives the same track twice.
+That is a Dissemination-target decision made on the INT-CORE side; neither
+`intcore_layer` nor `intcore-bridge` can detect or prevent it.
+
+## 9.8 Share C2-origin data with partners
 
 Do not rewrite the record into another partner's namespace. Confirm that the
 origin namespace is permitted by the router/federation policy and that the
@@ -153,7 +236,7 @@ receiving partner subscribes to it. Their `cot-*` or `sitaware-hq-nvg` output
 layers will translate authorized normalized topics in the same way as locally
 generated sensor data.
 
-## 9.7 Operational-persona test exercise
+## 9.9 Operational-persona test exercise
 
 Use four separate identities or clients in a test. These are operational
 personas, not replacements for the Zenoh Admin panel's `superadmin`, `admin`,
@@ -161,7 +244,7 @@ and `readonly` roles.
 
 | Persona | Test client and action | EFDI services | Expected result |
 | --- | --- | --- | --- |
-| C2 operator | A TAK/WinTAK/ATAK or SitaWare HQ operator account observes the configured CoT output. | `tak-layer` and/or `sitaware-hq-nvg`. | Normalized EFDI tracks appear in the authorized C2 system. |
+| C2 operator | A TAK/WinTAK/ATAK, SitaWare HQ, or INT-CORE operator account observes the configured output. | `tak-layer`, `sitaware-hq-nvg`, and/or `intcore_layer`. | Normalized EFDI tracks appear in the authorized C2 system. |
 | Sensor publisher | A receiver/detection system attached to a local Zenoh router publishes complete frames/documents to that protocol's `…/raw/<protocol>/<source-id>` topic. For a lab publisher, an admin can generate a script in **Publish Script** after entering that publisher's current router endpoint. | The matching protocol translator and desired C2 output layers. | The translator creates normalized EFDI tracks; the C2 systems show derived markers, not the raw frame. |
 | Fabric admin | A separate Zenoh Admin panel account manages router/federation configuration only. | Infrastructure/admin UI; no sensor or C2 feed is required. | May perform its assigned panel actions but is not an operational TAK/SitaWare identity. |
 

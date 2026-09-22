@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .config import (
     CONFIG_PATH,
     ConfigFields,
+    _TLS_PROFILES,
     _data_topic_root,
     _is_bootstrap_config,
     _render_config,
@@ -32,8 +33,18 @@ from .deps import require_role, write_audit
 router = APIRouter(prefix="/api/certs", tags=["certs"])
 _superadmin = require_role("superadmin")
 
+# The profile this endpoint switches a pod to after a successful upload —
+# must be the one whose listen/connect cert paths are the exact files
+# written below (/etc/zenoh/tls/{ca-roots,pod-cert,pod-key}.pem), and must
+# never be a plaintext profile (config.py's _TLS_PROFILES "plaintext" flag)
+# — a plaintext target would apply a config that ignores what was just
+# uploaded, leaving the router silently still unsecured. Named as a module
+# constant, not an inline literal, so tests/test_managed_router.py can
+# assert this invariant directly instead of it silently drifting.
+_BOOTSTRAP_TLS_PROFILE = "efdi"
+
 # Router's own listen/connect identity — read-only mounted into zenoh-router
-# at /etc/zenoh/tls (see config.py's _TLS_PROFILES["efdi"]).
+# at /etc/zenoh/tls (see config.py's _TLS_PROFILES[_BOOTSTRAP_TLS_PROFILE]).
 _ROUTER_TLS_DIR = os.path.join(os.path.dirname(CONFIG_PATH), "tls")
 # This container's own client identity — rw-mounted at EFDI_CERT_DIR (see
 # docker-compose.yml).
@@ -171,7 +182,7 @@ async def upload_bootstrap_identity(
         publish_prefix=namespace_prefix,
         verify_name_on_connect=False,
         plugins_loading_enabled=True,
-        fabric_tls_profile="efdi",
+        fabric_tls_profile=_BOOTSTRAP_TLS_PROFILE,
     )
     rendered = _render_config(fields)
     # No existing remote management link to preserve on a bootstrap → mTLS

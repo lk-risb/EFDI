@@ -47,8 +47,18 @@ ZENOH_ROUTER_SERVICE_LABEL = os.environ.get("ZENOH_ROUTER_CONTAINER", "efdi-pod-
 # atomic configuration change; mixed-trust endpoints still require separate
 # router processes.
 _TLS_PROFILES = {
+    # EFDI LTU (production) — this pod's own base secured identity. Wired
+    # into TWO other subsystems, not just this dropdown, so its cert paths
+    # must never change without checking both: examples/first-boot.sh
+    # mandatorily stages this exact file set at every pod's initial boot,
+    # and api/certs_bootstrap.py's cert-upload endpoint ("switches the pod
+    # from its plaintext bootstrap listener... to real mTLS") writes an
+    # uploaded CA/cert/key to these exact paths and then applies this exact
+    # profile name. Confirmed both before choosing this mapping — this is
+    # the pod's primary, always-first-provisioned identity, not a
+    # renamable "local mesh" placeholder.
     "efdi": {
-        "label": "Local mesh (EFDI CA)",
+        "label": "EFDI LTU",
         "publish_cert_dir": "efdi",
         "publish_root_ca": "efdi-ca-root.pem",
         "publish_client_cert": "{client_cn}-cert.pem",
@@ -60,7 +70,7 @@ _TLS_PROFILES = {
         "root_ca": "/etc/zenoh/tls/ca-roots.pem",
     },
     "backbone": {
-        "label": "Backbone (Desert Bread CA)",
+        "label": "EFDI BACKBONE SANDBOX",
         "publish_cert_dir": "efdi-backbone",
         "publish_root_ca": "ca-roots.pem",
         "publish_client_cert": "cert.pem",
@@ -76,26 +86,37 @@ _TLS_PROFILES = {
         "connect_private_key": "/etc/zenoh/tls/backbone/key.pem",
         "root_ca": "/etc/zenoh/tls/backbone/ca-roots.pem",
     },
+    # No cert/key material at all, by design — this is EFDI LTU SANDBOX, the
+    # genuinely plaintext option. Confirmed live against a real zenohd
+    # (eclipse/zenoh:1.9.0): empty transport.link.tls paths + enable_mtls
+    # false do not stop the router starting as long as every listen/connect
+    # endpoint uses tcp:// rather than tls:// — Zenoh does not eagerly
+    # validate an unused transport link's cert paths. _render_config()
+    # switches the mesh-facing listen endpoint's scheme to tcp:// for any
+    # profile with plaintext=True; do not add cert fields to this entry, the
+    # whole point is that the sandbox has none.
+    #
+    # This key used to be "LTU sandbox (EFDI LTU CA)" wired to
+    # scripts/connect-ltu.sh's real mTLS identity (compose/certs/efdi-ltu/).
+    # Repurposing it to plaintext orphans that script and its cert bundle —
+    # confirmed and accepted: "efdi" above is the pod's real production
+    # identity per the two subsystems wired to it, so it keeps its cert
+    # material; this was the only slot left for a genuine plaintext option
+    # without touching those two subsystems. If connect-ltu.sh's separate
+    # LTU identity is still needed for something, it needs a new profile
+    # key of its own — it no longer has one.
     "ltu-local": {
-        "label": "LTU sandbox (EFDI LTU CA)",
-        # Source bundle: compose/certs/efdi-ltu/. connect-ltu.sh validates and
-        # stages the fixed-name client identity and LTU trust root.
-        "publish_cert_dir": "efdi-ltu",
-        "publish_root_ca": "ca.crt",
-        "publish_client_cert": "client.pem",
-        "publish_client_key": "client.key",
-        # This certificate permits both TLS serverAuth and clientAuth. Use it
-        # in both directions: LTU peers that dial this router otherwise reject
-        # the unrelated pod-local EFDI listener certificate with UnknownCA.
-        "listen_certificate": "/etc/zenoh/tls/ltu/client-chain.pem",
-        "listen_private_key": "/etc/zenoh/tls/ltu/client.key",
-        # connect-ltu.sh prepares a complete leaf+intermediate chain and a
-        # runtime-only unencrypted key. Zenoh has no private-key passphrase
-        # setting, so pointing it at the source bundle's encrypted key can
-        # never establish a link.
-        "connect_certificate": "/etc/zenoh/tls/ltu/client-chain.pem",
-        "connect_private_key": "/etc/zenoh/tls/ltu/client.key",
-        "root_ca": "/etc/zenoh/tls/ltu/ca.crt",
+        "label": "EFDI LTU SANDBOX",
+        "plaintext": True,
+        "publish_cert_dir": None,
+        "publish_root_ca": None,
+        "publish_client_cert": None,
+        "publish_client_key": None,
+        "listen_certificate": "",
+        "listen_private_key": "",
+        "connect_certificate": "",
+        "connect_private_key": "",
+        "root_ca": "",
     },
 }
 
@@ -292,13 +313,17 @@ def _is_bootstrap_config(raw: str) -> bool:
 def _extract_fields(raw: str) -> ConfigFields:
     data = json5.loads(raw)
 
+    # Matched by BIND ADDRESS, not scheme: the mesh-facing endpoint (0.0.0.0)
+    # is tls:// on every profile except the plaintext EFDI LTU SANDBOX, where
+    # it's tcp:// too — scheme alone can no longer tell mesh-facing apart
+    # from the always-tcp:// local-only loopback endpoint.
     mtls_port = None
     local_tcp_port = None
     for ep in data["listen"]["endpoints"]:
-        m = re.match(r"tls/[^:]+:(\d+)$", ep)
+        m = re.match(r"(?:tls|tcp)/0\.0\.0\.0:(\d+)$", ep)
         if m:
             mtls_port = int(m.group(1))
-        m = re.match(r"tcp/[^:]+:(\d+)$", ep)
+        m = re.match(r"tcp/127\.0\.0\.1:(\d+)$", ep)
         if m:
             local_tcp_port = int(m.group(1))
 
@@ -382,8 +407,18 @@ def _render_config(fields: ConfigFields) -> str:
 
     fabric_endpoints = fields.fabric_endpoints or ([fields.fabric_endpoint] if fields.fabric_endpoint else [])
     tls_profile = _TLS_PROFILES[fields.fabric_tls_profile]
+    # EFDI LTU SANDBOX is the one profile with no cert material at all
+    # (verified live against a real zenohd: empty transport.link.tls paths
+    # are harmless as long as nothing actually connects via tls://) — its
+    # mesh-facing listener binds tcp:// instead of tls://. Every other
+    # profile keeps the mTLS scheme unchanged.
+    mesh_scheme = "tcp" if tls_profile.get("plaintext") else "tls"
+    listen_endpoints = json5.dumps([
+        "{}/0.0.0.0:{}".format(mesh_scheme, fields.mtls_port),
+        "tcp/127.0.0.1:{}".format(fields.local_tcp_port),
+    ])
     subs = {
-        "ZENOH_LISTEN_PORT": str(fields.mtls_port),
+        "ZENOH_LISTEN_ENDPOINTS": listen_endpoints,
         "ZENOH_LOCAL_TCP_PORT": str(fields.local_tcp_port),
         "ZENOH_CONNECT_ENDPOINTS": json5.dumps(fabric_endpoints),
         "PARTNER_NAMESPACE": fields.partner_namespace,
@@ -718,6 +753,13 @@ async def get_config(_=Depends(require_role("admin", "superadmin"))):
         "tls_profiles": {
             name: profile["label"] for name, profile in _TLS_PROFILES.items()
         },
+        # Lets the UI build tcp:// endpoint strings instead of tls:// for the
+        # one profile with no cert material at all (EFDI LTU SANDBOX) —
+        # without this the endpoint editor has no way to know which profile
+        # that is and would keep hardcoding tls:// regardless of selection.
+        "plaintext_tls_profiles": [
+            name for name, profile in _TLS_PROFILES.items() if profile.get("plaintext")
+        ],
     }
     if _is_bootstrap_config(raw):
         return {"bootstrap": True, "fields": None, **common}
