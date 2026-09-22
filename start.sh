@@ -230,7 +230,7 @@ declare -A SVC_DESC=(
     [sensor-health]="Sensor health on Zenoh"
     [mission-route]="UAV routes and corridors on Zenoh"
     [tak_layer]="CoT → TAK Server (mTLS)"
-    [tak_alert_layer]="Emergency squawk / ship distress → TAK GeoChat (opt-in, off unless selected)"
+    [tak_alert_layer]="Acoustic sensor detection (dronuradaras) → TAK GeoChat (opt-in, off unless selected)"
     [tak-bridge]="TAK Server CoT ingress"
     [nffi-bridge]="NFFI (STANAG 5527) TCP ingress → Zenoh raw"
     [sitaware_layer]="EFDI tracks → SitaWare (NVG feed, SitaWare polls)"
@@ -945,8 +945,8 @@ launch() {
         tak_alert_layer)
             # Same TAK egress connection as tak_layer (TAK_HOST/PORT/TLS) — a
             # separate process/subscriber, opt-in (not in the default
-            # selection below), broadcasting emergency squawk / ship
-            # distress GeoChat alerts independently of CoT translation.
+            # selection below), broadcasting acoustic sensor (dronuradaras)
+            # detection GeoChat alerts independently of CoT translation.
             local alert_host="${TAK_HOST:-}"
             local alert_host2="${TAK_HOST_FALLBACK:-}"
             local alert_host3="${TAK_HOST_TAILSCALE:-}"

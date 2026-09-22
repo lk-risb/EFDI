@@ -42,7 +42,15 @@ node_modules/
 __pycache__/
 compose/zenoh-admin/ui/dist/
 compose/zenoh-admin/ui/src/routeTree.gen.ts
-compose/generated/
+# compose/generated is a symlink (scripts/generate-protobuf.sh swaps it via a
+# single rename onto a fresh compose/generated.XXXXXX mktemp dir each run) —
+# the trailing-slash form here never matched the symlink itself, and the
+# random suffix never matched either, so both slipped past git and got
+# committed once (compose/generated + compose/generated.LjxNfM, removed in
+# the same change that added this comment). Cover the symlink (no trailing
+# slash, matches non-directories too) and every mktemp-suffixed sibling.
+compose/generated
+compose/generated.*
 # docs/ is tracked (public guides + design notes). Only local/scratch stays out.
 docs/superpowers/
 
