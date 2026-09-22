@@ -228,8 +228,16 @@ docker_root="${docker_root:-/var/lib/docker}"
 free_mb="$(df -Pm "$docker_root" | awk 'NR == 2 {print $4}')"
 [[ "$free_mb" =~ ^[0-9]+$ ]] || fail "Could not determine Docker storage free space"
 if (( free_mb < min_free_mb )); then
+    # Build cache is pure rebuild-time savings, never data — safe to reclaim
+    # automatically instead of failing every update once it piles up.
+    warn "Only ${free_mb} MiB free on Docker storage; ${min_free_mb} MiB required. Reclaiming unused build cache..."
+    docker builder prune -af >/dev/null 2>&1 || true
+    free_mb="$(df -Pm "$docker_root" | awk 'NR == 2 {print $4}')"
+fi
+if (( free_mb < min_free_mb )); then
     docker system df 2>/dev/null || true
-    fail "Only ${free_mb} MiB free on Docker storage; ${min_free_mb} MiB required"
+    warn "Reclaim images unused by containers: docker image prune -af"
+    fail "Only ${free_mb} MiB free on Docker storage even after reclaiming build cache; ${min_free_mb} MiB required"
 fi
 ok "Docker storage preflight: ${free_mb} MiB free"
 section_done
