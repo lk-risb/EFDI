@@ -15,6 +15,7 @@ from cryptography import x509
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec, padding, rsa
+from cryptography.x509.oid import NameOID
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -129,6 +130,30 @@ def _write_pem(path: str, data: bytes, mode: int) -> None:
         except OSError:
             pass
         raise
+
+
+@router.post("/inspect")
+async def inspect_certificate(
+    certificate: UploadFile = File(...),
+    _=Depends(require_role("admin", "superadmin")),
+):
+    """Read-only best-effort peek at an uploaded cert, before /bootstrap.
+
+    Lets the WebUI prefill PARTNER_NAMESPACE from the certificate's own CN
+    instead of making the operator run `openssl x509 -noout -subject`
+    themselves and copy it in by hand — the convention this endpoint reads
+    from is the same one /bootstrap writes: PARTNER_NAMESPACE becomes the
+    "{partner_namespace}-cert.pem" filename stem, which is expected to match
+    the CN the cert was actually issued for. No CA/key needed, no identity
+    switch, nothing written to disk — just a parse.
+    """
+    cert_pem = await _read_pem(certificate, "certificate")
+    try:
+        cert = x509.load_pem_x509_certificate(cert_pem)
+    except ValueError:
+        return {"common_name": None}
+    names = cert.subject.get_attributes_for_oid(NameOID.COMMON_NAME)
+    return {"common_name": str(names[0].value) if names else None}
 
 
 @router.post("/bootstrap")
