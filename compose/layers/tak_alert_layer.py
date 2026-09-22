@@ -19,6 +19,9 @@ Currently covers:
   - Emergency squawk (ICAO Annex 10: 7500 hijack, 7600 comms failure,
     7700 mayday) on air tracks.
   - Ship distress (AIS nav_status: aground, not under command) on sea tracks.
+  - Acoustic sensor detection (dronuradaras.lt) on land tracks — same
+    last_detection_ts tak_layer.py uses to recolor the sensor's own marker
+    (see its _sensor_alert_cot_type); this is the separate GeoChat popup.
 """
 
 import argparse
@@ -39,6 +42,10 @@ TOPIC_ROOT = topic_root()
 
 _EMERGENCY_SQUAWK = {"7500": "HIJACK", "7600": "COMMS FAILURE", "7700": "MAYDAY"}
 _DISTRESS_NAV = frozenset({"aground", "not_under_command", "not under command"})
+# Matches tak_layer.py's own _SENSOR_ALERT_HOT_S — "active" window for the
+# same acoustic detection, kept in sync by comment since these two layers
+# have no shared import path for it (see module docstring).
+_ACOUSTIC_ALERT_HOT_S = 60
 
 # Raw pre-fusion radar tracks are duplicates of what fusion will shortly
 # publish under air/trackfusion/fused/** — alerting on both would fire twice
@@ -224,6 +231,37 @@ def make_distress_handler(sender, verbose: bool):
     return handler
 
 
+def make_acoustic_handler(sender, verbose: bool):
+    def handler(sample):
+        key = str(sample.key_expr)
+        if _terminal_view(key) in _NON_JSON_VIEWS:
+            return
+        try:
+            track = json.loads(bytes(sample.payload).decode())
+        except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
+            return
+        if track.get("_ingress") == "tak_server":
+            return
+        if track.get("sensor_type") != "acoustic":
+            return
+        uid = _uid(track)
+        last_det = track.get("last_detection_ts")
+        age = time.time() - float(last_det) if last_det else None
+        if age is None or age > _ACOUSTIC_ALERT_HOT_S:
+            _clear_alert(uid)
+            return
+        if not _fire_once(uid):
+            return
+        lat  = track.get("lat_deg", 0)
+        lon  = track.get("lon_deg", 0)
+        name = (track.get("sensor_name") or track.get("sensor_id") or "SENSOR").upper()
+        msg  = "[DRONE DETECTED] {} - {:.0f}s ago - {:.3f}/{:.3f}".format(name, age, lat, lon)
+        _send_geochat_alert(sender, uid, lat, lon, msg)
+        if verbose:
+            print("ALERT {}".format(msg), flush=True)
+    return handler
+
+
 def run(args):
     hosts = [(h, args.port) for h in args.host]
     tls = getattr(args, "tls", False)
@@ -250,9 +288,11 @@ def run(args):
     subs = [
         subscribe(session, "{}/air/**".format(TOPIC_ROOT), make_squawk_handler(sender, args.verbose)),
         subscribe(session, "{}/sea/**".format(TOPIC_ROOT), make_distress_handler(sender, args.verbose)),
+        subscribe(session, "{}/land/**".format(TOPIC_ROOT), make_acoustic_handler(sender, args.verbose)),
     ]
     print("SUB {}/air/** → emergency squawk alerts".format(TOPIC_ROOT), flush=True)
     print("SUB {}/sea/** → ship distress alerts".format(TOPIC_ROOT), flush=True)
+    print("SUB {}/land/** → acoustic sensor detection alerts".format(TOPIC_ROOT), flush=True)
 
     stop = threading.Event()
 
