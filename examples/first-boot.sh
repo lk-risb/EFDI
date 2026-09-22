@@ -27,6 +27,17 @@ set +a
 : "${ZENOH_LOCAL_TCP_PORT:=7448}"
 : "${ZENOH_VERIFY_NAME_ON_CONNECT:=false}"
 : "${ZENOH_PLUGINS_LOADING_ENABLED:=true}"
+# Which of config.py's _TLS_PROFILES this pod boots into. Default "efdi" is
+# the real production identity (this pod's own base cert/key, staged below) —
+# switching to "ltu-local" (EFDI LTU SANDBOX, plaintext, no certs) or
+# "backbone" (EFDI BACKBONE SANDBOX) later through the WebUI's Zenoh Config
+# page does not require re-running first-boot; this only matters for what a
+# BRAND NEW pod starts as.
+: "${EFDI_ROUTER_TLS_PROFILE:=efdi}"
+case "${EFDI_ROUTER_TLS_PROFILE}" in
+  efdi|backbone|ltu-local) ;;
+  *) echo "EFDI_ROUTER_TLS_PROFILE must be one of: efdi, backbone, ltu-local (got: ${EFDI_ROUTER_TLS_PROFILE})"; exit 2 ;;
+esac
 : "${PARTNER_NAMESPACE:?PARTNER_NAMESPACE must be set in compose/.env}"
 # INBOUND_NAMESPACE: bilateral prefix the fabric publishes TO the pod. Default to the pod's own
 # namespace so the rendered ACL is always valid even when no bilateral inbound is granted yet.
@@ -79,7 +90,7 @@ validate_runtime_identity() {
 }
 
 # --- [1/4] Lay this pod's Zenoh mTLS certs --------------------------------------------------------
-echo "==> [1/4] laying Zenoh mTLS certs"
+echo "==> [1/4] laying Zenoh mTLS certs (profile: ${EFDI_ROUTER_TLS_PROFILE})"
 CERT_BUNDLE_DIR="${BUNDLE_DIR}/efdi"
 CERT_PATH="${CERT_BUNDLE_DIR}/${PARTNER_NAMESPACE}-cert.pem"
 KEY_PATH="${CERT_BUNDLE_DIR}/${PARTNER_NAMESPACE}-key.pem"
@@ -92,12 +103,20 @@ if [ ! -f "$CERT_PATH" ] || [ ! -f "$KEY_PATH" ] || [ ! -f "$CA_PATH" ]; then
   KEY_PATH="${CERT_BUNDLE_DIR}/${PARTNER_NAMESPACE}-key.pem"
   CA_PATH="${CERT_BUNDLE_DIR}/efdi-ca-root.pem"
 fi
-for f in "$CERT_PATH" "$KEY_PATH" "$CA_PATH"; do
-  [ -f "$f" ] || { echo "missing ${f} — run scripts/gen-certs.sh ${PARTNER_NAMESPACE} first"; exit 1; }
-done
-install -m 600 "$CERT_PATH" "${ZENOH_TLS_DIR}/pod-cert.pem"
-install -m 600 "$KEY_PATH"  "${ZENOH_TLS_DIR}/pod-key.pem"
-install -m 644 "$CA_PATH"   "${ZENOH_TLS_DIR}/ca-roots.pem"
+if [ -f "$CERT_PATH" ] && [ -f "$KEY_PATH" ] && [ -f "$CA_PATH" ]; then
+  install -m 600 "$CERT_PATH" "${ZENOH_TLS_DIR}/pod-cert.pem"
+  install -m 600 "$KEY_PATH"  "${ZENOH_TLS_DIR}/pod-key.pem"
+  install -m 644 "$CA_PATH"   "${ZENOH_TLS_DIR}/ca-roots.pem"
+elif [ "${EFDI_ROUTER_TLS_PROFILE}" = "ltu-local" ]; then
+  # EFDI LTU SANDBOX (config.py's _TLS_PROFILES["ltu-local"], plaintext) needs
+  # no cert material at all — the only profile where a missing base bundle is
+  # not an error, since first boot never renders EFDI/Backbone listen/connect
+  # paths in this branch.
+  echo "    no EFDI pod cert bundle found — fine, EFDI_ROUTER_TLS_PROFILE=ltu-local needs none"
+else
+  echo "missing ${CERT_PATH} (or its key/CA) — run scripts/gen-certs.sh ${PARTNER_NAMESPACE} first, or set EFDI_ROUTER_TLS_PROFILE=ltu-local for a cert-free sandbox boot"
+  exit 1
+fi
 
 # Stage the optional Backbone client profile when its fixed-name bundle is
 # present. The WebUI can then switch profiles without exposing source keys to
@@ -121,28 +140,20 @@ if [ -e "${BACKBONE_SOURCE}/cert.pem" ] \
   install -m 644 "${BACKBONE_SOURCE}/ca-roots.pem" "${BACKBONE_RUNTIME}/ca-roots.pem"
   echo "    staged optional Backbone profile"
 fi
-
-# An LTU profile can also be discovered without a helper when the operator
-# supplies a runtime-ready full chain and an unencrypted key. Encrypted source
-# bundles still go through scripts/connect-ltu.sh so the passphrase is entered
-# interactively and never stored in compose/.env or tracked files.
-LTU_SOURCE="${BUNDLE_DIR}/efdi-ltu"
-LTU_RUNTIME="${ZENOH_TLS_DIR}/ltu"
-if [ -e "${LTU_SOURCE}/client-chain.pem" ]; then
-  for f in client-chain.pem client.key ca.crt; do
-    [ -f "${LTU_SOURCE}/${f}" ] || {
-      echo "incomplete runtime-ready LTU bundle: missing ${LTU_SOURCE}/${f}"
+if [ "${EFDI_ROUTER_TLS_PROFILE}" = "backbone" ]; then
+  for f in cert.pem key.pem ca-roots.pem; do
+    [ -f "${BACKBONE_RUNTIME}/${f}" ] || {
+      echo "EFDI_ROUTER_TLS_PROFILE=backbone but no Backbone bundle is staged — ${BACKBONE_RUNTIME}/${f} is missing (needs ${BACKBONE_SOURCE}/${f} at first boot)"
       exit 1
     }
   done
-  validate_runtime_identity \
-    "${LTU_SOURCE}/client-chain.pem" "${LTU_SOURCE}/client.key" "LTU"
-  install -d -m 700 "${LTU_RUNTIME}"
-  install -m 644 "${LTU_SOURCE}/client-chain.pem" "${LTU_RUNTIME}/client-chain.pem"
-  install -m 600 "${LTU_SOURCE}/client.key" "${LTU_RUNTIME}/client.key"
-  install -m 644 "${LTU_SOURCE}/ca.crt" "${LTU_RUNTIME}/ca.crt"
-  echo "    staged optional runtime-ready LTU profile"
 fi
+
+# scripts/connect-ltu.sh + compose/certs/efdi-ltu/ used to back a real mTLS
+# "ltu-local" profile. That key is EFDI LTU SANDBOX now (plaintext, config.py's
+# _TLS_PROFILES "plaintext" flag) — connect-ltu.sh's identity has no profile
+# to attach to any more. Not staged here; if that separate LTU identity is
+# still needed, it needs a new profile key of its own first.
 
 # --- [2/4] Render the pod Zenoh router config ----------------------------------------------------
 echo "==> [2/4] rendering Zenoh router config"
@@ -156,17 +167,48 @@ elif [ -n "${ZENOH_FABRIC_ENDPOINT}" ]; then
   # shellcheck disable=SC2089  # JSON quotes are data consumed by envsubst.
   printf -v ZENOH_CONNECT_ENDPOINTS '["%s"]' "${ZENOH_FABRIC_ENDPOINT}"
 fi
+# Cert paths and mesh-facing scheme both follow EFDI_ROUTER_TLS_PROFILE.
+# Kept in sync BY HAND with config.py's _TLS_PROFILES — bash has no way to
+# import that dict directly. Any change to one needs the same change here.
+MESH_SCHEME="tls"
+case "${EFDI_ROUTER_TLS_PROFILE}" in
+  efdi)
+    LISTEN_CERT_PEM="/etc/zenoh/tls/pod-cert.pem"    # in-container paths (compose mounts ZENOH_TLS_DIR ro)
+    LISTEN_KEY_PEM="/etc/zenoh/tls/pod-key.pem"
+    CONNECT_CERT_PEM="/etc/zenoh/tls/pod-cert.pem"
+    CONNECT_KEY_PEM="/etc/zenoh/tls/pod-key.pem"
+    CA_ROOTS_PEM="/etc/zenoh/tls/ca-roots.pem"
+    ;;
+  backbone)
+    LISTEN_CERT_PEM="/etc/zenoh/tls/pod-cert.pem"
+    LISTEN_KEY_PEM="/etc/zenoh/tls/pod-key.pem"
+    CONNECT_CERT_PEM="/etc/zenoh/tls/backbone/cert.pem"
+    CONNECT_KEY_PEM="/etc/zenoh/tls/backbone/key.pem"
+    CA_ROOTS_PEM="/etc/zenoh/tls/backbone/ca-roots.pem"
+    ;;
+  ltu-local)
+    # EFDI LTU SANDBOX — plaintext, no cert material at all. Confirmed live
+    # against a real zenohd (eclipse/zenoh:1.9.0): empty transport.link.tls
+    # paths are harmless as long as every listen/connect endpoint uses
+    # tcp:// rather than tls://.
+    LISTEN_CERT_PEM=""
+    LISTEN_KEY_PEM=""
+    CONNECT_CERT_PEM=""
+    CONNECT_KEY_PEM=""
+    CA_ROOTS_PEM=""
+    MESH_SCHEME="tcp"
+    ;;
+esac
+# shellcheck disable=SC2089  # JSON quotes are data consumed by envsubst.
+printf -v ZENOH_LISTEN_ENDPOINTS '["%s/0.0.0.0:%s", "tcp/127.0.0.1:%s"]' \
+  "${MESH_SCHEME}" "${ZENOH_LISTEN_PORT}" "${ZENOH_LOCAL_TCP_PORT}"
 # shellcheck disable=SC2090  # Preserve the JSON string for envsubst below.
-export ZENOH_LISTEN_PORT ZENOH_LOCAL_TCP_PORT ZENOH_CONNECT_ENDPOINTS PARTNER_NAMESPACE INBOUND_NAMESPACE NAMESPACE_PREFIX NAMESPACE_ROOT DATA_NAMESPACE_PREFIX DATA_TOPIC_ROOT
+export ZENOH_LISTEN_ENDPOINTS ZENOH_LOCAL_TCP_PORT ZENOH_CONNECT_ENDPOINTS PARTNER_NAMESPACE INBOUND_NAMESPACE NAMESPACE_PREFIX NAMESPACE_ROOT DATA_NAMESPACE_PREFIX DATA_TOPIC_ROOT
 export ZENOH_VERIFY_NAME_ON_CONNECT ZENOH_PLUGINS_LOADING_ENABLED
-export LISTEN_CERT_PEM="/etc/zenoh/tls/pod-cert.pem"   # in-container paths (compose mounts ZENOH_TLS_DIR ro)
-export LISTEN_KEY_PEM="/etc/zenoh/tls/pod-key.pem"
-export CONNECT_CERT_PEM="/etc/zenoh/tls/pod-cert.pem"
-export CONNECT_KEY_PEM="/etc/zenoh/tls/pod-key.pem"
-export CA_ROOTS_PEM="/etc/zenoh/tls/ca-roots.pem"
+export LISTEN_CERT_PEM LISTEN_KEY_PEM CONNECT_CERT_PEM CONNECT_KEY_PEM CA_ROOTS_PEM
 # shellcheck disable=SC2016  # envsubst requires literal variable names here.
 envsubst \
-  '${ZENOH_LISTEN_PORT} ${ZENOH_LOCAL_TCP_PORT} ${ZENOH_CONNECT_ENDPOINTS} ${PARTNER_NAMESPACE} ${INBOUND_NAMESPACE} ${NAMESPACE_PREFIX} ${NAMESPACE_ROOT} ${DATA_TOPIC_ROOT} ${ZENOH_VERIFY_NAME_ON_CONNECT} ${ZENOH_PLUGINS_LOADING_ENABLED} ${LISTEN_CERT_PEM} ${LISTEN_KEY_PEM} ${CONNECT_CERT_PEM} ${CONNECT_KEY_PEM} ${CA_ROOTS_PEM}' \
+  '${ZENOH_LISTEN_ENDPOINTS} ${ZENOH_LOCAL_TCP_PORT} ${ZENOH_CONNECT_ENDPOINTS} ${PARTNER_NAMESPACE} ${INBOUND_NAMESPACE} ${NAMESPACE_PREFIX} ${NAMESPACE_ROOT} ${DATA_TOPIC_ROOT} ${ZENOH_VERIFY_NAME_ON_CONNECT} ${ZENOH_PLUGINS_LOADING_ENABLED} ${LISTEN_CERT_PEM} ${LISTEN_KEY_PEM} ${CONNECT_CERT_PEM} ${CONNECT_KEY_PEM} ${CA_ROOTS_PEM}' \
   < "${POD_DIR}/examples/zenoh-router.json5.tmpl" \
   > "${POD_STATE_DIR}/zenoh/config.json5"
 echo "    wrote ${POD_STATE_DIR}/zenoh/config.json5"

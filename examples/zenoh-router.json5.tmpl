@@ -4,8 +4,13 @@
 // Every value below comes from compose/.env — nothing stack-specific is hardcoded.
 //
 // Placeholders (all supplied by first-boot.sh from compose/.env + scripts/gen-certs.sh output):
-//   ${ZENOH_LISTEN_PORT}      mTLS listen port for mesh-facing pod-side clients (audit-sink, peers)
 //   ${ZENOH_LOCAL_TCP_PORT}   plaintext TCP listen port for local-only clients (bridges, zenoh-admin GUI)
+//   ${ZENOH_LISTEN_ENDPOINTS} JSON array of the two listen endpoints — mesh-facing port first
+//                             (tls:// normally, tcp:// only for the plaintext EFDI LTU SANDBOX
+//                             profile — see config.py's _TLS_PROFILES "plaintext" flag), then
+//                             the local-only tcp:// loopback port. Pre-built as a whole array so
+//                             the mesh-facing entry's scheme can vary by profile without a
+//                             templating conditional (envsubst/str.replace have none).
 //   ${ZENOH_CONNECT_ENDPOINTS} JSON list containing the explicitly configured remote endpoints
 //                              this pod dials OUT, or [] when this pod is the fabric root
 //   ${PARTNER_NAMESPACE}      the pod's first-party write/read prefix (its slot, or release/<partner>)
@@ -25,15 +30,18 @@
 {
   mode: "router",
 
-  // Local listen: mTLS for mesh-facing pod-side clients (audit-sink, peers), plaintext TCP
-  // for local-only clients (bridges, zenoh-admin GUI) — matches the "local-tcp" ACL subject below.
-  // The plaintext port binds loopback ONLY: local-tcp's ACL subject grants full
+  // Local listen: mTLS for mesh-facing pod-side clients (audit-sink, peers) on every profile
+  // except EFDI LTU SANDBOX (plaintext tcp:// there, by design), plaintext TCP for local-only
+  // clients (bridges, zenoh-admin GUI) always — matches the "local-tcp" ACL subject below.
+  // The local-only port binds loopback ONLY: local-tcp's ACL subject grants full
   // pod-firstparty/pod-inbound/pod-admin-introspect/pod-federation-config trust to
   // ANY tcp connection with no cert/credential check, so this port must never be
   // reachable off-box — every local-tcp client is itself a container on this same
-  // host (network_mode: host shares the loopback across all of them).
+  // host (network_mode: host shares the loopback across all of them). The mesh-facing
+  // port's own scheme is baked into ZENOH_LISTEN_ENDPOINTS by _render_config(), not
+  // hardcoded here, so it can be tcp:// too for the plaintext sandbox profile.
   listen: {
-    endpoints: ["tls/0.0.0.0:${ZENOH_LISTEN_PORT}", "tcp/127.0.0.1:${ZENOH_LOCAL_TCP_PORT}"],
+    endpoints: ${ZENOH_LISTEN_ENDPOINTS},
   },
 
   // Dial OUT to the remote fabric endpoint (a peer router, or nothing yet on an isolated pod).

@@ -113,7 +113,7 @@ function ConfigSection({
 }
 
 function parseFabricEndpoint(v: string): { host: string; port: number } {
-  const m = v.match(/^tls\/(.+):(\d+)$/)
+  const m = v.match(/^(?:tls|tcp)\/(.+):(\d+)$/)
   return m ? { host: m[1], port: Number(m[2]) } : { host: v, port: 7447 }
 }
 
@@ -154,6 +154,7 @@ function ConfigPage() {
   const [endpointStatuses, setEndpointStatuses] = useState<Record<string, EndpointStatus>>({})
   const [fabricPresets, setFabricPresets] = useState<FabricPreset[]>([])
   const [tlsProfiles, setTlsProfiles] = useState<Record<string, string>>({})
+  const [plaintextTlsProfiles, setPlaintextTlsProfiles] = useState<string[]>([])
   const [bootstrap, setBootstrap] = useState(false)
   const configFileRef = useRef<HTMLInputElement>(null)
 
@@ -190,10 +191,12 @@ function ConfigPage() {
         path: string
         fabric_presets?: FabricPreset[]
         tls_profiles?: Record<string, string>
+        plaintext_tls_profiles?: string[]
       }>('/api/config')
       setPath(data.path)
       setFabricPresets(data.fabric_presets ?? [])
       setTlsProfiles(data.tls_profiles ?? {})
+      setPlaintextTlsProfiles(data.plaintext_tls_profiles ?? [])
       if (!data.fields) {
         // Plaintext bootstrap config — no mTLS fields exist yet on disk. Real
         // certs/namespace come from the Certificates page's upload flow, or
@@ -568,7 +571,9 @@ function ConfigPage() {
                   </select>
                 </Field>
                 <div className="space-y-2">
-                  {endpointValues().map((endpoint, index) => {
+                  {(() => {
+                    const scheme = plaintextTlsProfiles.includes(fields.fabric_tls_profile) ? 'tcp' : 'tls'
+                    return endpointValues().map((endpoint, index) => {
                     const parsed = parseFabricEndpoint(endpoint)
                     const status = target === 'local' ? endpointStatuses[endpoint] : undefined
                     const statusColor = status?.state === 'connected'
@@ -592,16 +597,16 @@ function ConfigPage() {
                           title={status?.detail ?? 'Endpoint status is available after saving'}
                         >
                           <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${statusColor}`} />
-                          <span className="shrink-0 text-sm text-zinc-500">tls://</span>
+                          <span className="shrink-0 text-sm text-zinc-500">{scheme}://</span>
                           <input type="text" disabled={!canWrite} placeholder="host or NetBird name"
                             className="flex-1 bg-transparent py-2 font-mono text-sm text-zinc-900 focus:outline-none disabled:opacity-50 dark:text-white"
                             value={parsed.host}
-                            onChange={e => setEndpoint(index, e.target.value ? `tls/${e.target.value}:${parsed.port}` : '')} />
+                            onChange={e => setEndpoint(index, e.target.value ? `${scheme}/${e.target.value}:${parsed.port}` : '')} />
                         </div>
                         <input type="number" min={1} max={65535} disabled={!canWrite}
                           className={`${inputClass} w-28`}
                           value={parsed.port}
-                          onChange={e => setEndpoint(index, parsed.host ? `tls/${parsed.host}:${e.target.value}` : '')} />
+                          onChange={e => setEndpoint(index, parsed.host ? `${scheme}/${parsed.host}:${e.target.value}` : '')} />
                         {endpointValues().length > 1 && (
                           <button type="button" disabled={!canWrite} onClick={() => removeEndpoint(index)}
                             className="rounded-md px-2 text-zinc-500 hover:bg-zinc-200 hover:text-red-600 disabled:opacity-50 dark:hover:bg-white/[0.05] dark:hover:text-red-400" aria-label="Remove endpoint">
@@ -610,7 +615,8 @@ function ConfigPage() {
                         )}
                       </div>
                     )
-                  })}
+                  })
+                  })()}
                   <button type="button" disabled={!canWrite} onClick={addEndpoint}
                     className="flex items-center gap-1.5 text-xs text-accent-ring hover:underline disabled:opacity-50">
                     <Plus size={13} /> Add direct link

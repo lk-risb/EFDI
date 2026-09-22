@@ -105,6 +105,8 @@ class PublishScriptRequest(BaseModel):
     @model_validator(mode="after")
     def _check_dynamic_certificate_name(self):
         profile = _TLS_PROFILES[self.tls_profile]
+        if profile.get("plaintext"):
+            return self
         filenames = (profile["publish_client_cert"], profile["publish_client_key"])
         if any("{client_cn}" in filename for filename in filenames) and not self.client_cn:
             raise ValueError("client_cn is required by the selected TLS profile")
@@ -174,6 +176,25 @@ if __name__ == "__main__":
 
 def _profile_details(name: str, client_cn: str) -> dict[str, object]:
     profile = _TLS_PROFILES[name]
+    # A plaintext profile (see config.py's _TLS_PROFILES, "plaintext": True)
+    # has no cert material at all by design — nothing to hand a publisher.
+    # Guard instead of calling .format() on None, which crashed this
+    # endpoint outright for EVERY profile the moment a plaintext one
+    # existed in the dict (this function is called once per profile below,
+    # unconditionally, not just for whichever one is currently active).
+    if profile.get("plaintext"):
+        return {
+            "id": name,
+            "label": profile["label"],
+            "cert_subdir": None,
+            "root_ca_filename": None,
+            "client_cert_filename": None,
+            "client_key_filename": None,
+            "router_connect_certificate": "",
+            "router_connect_private_key": "",
+            "router_root_ca": "",
+            "requires_client_cn": False,
+        }
     return {
         "id": name,
         "label": profile["label"],
@@ -215,7 +236,7 @@ async def get_publish_defaults(_=Depends(require_role("superadmin"))):
     except (OSError, ValueError, KeyError, TypeError) as exc:
         raise HTTPException(status_code=500, detail=f"Could not parse current config: {exc}") from exc
     current_profile = _TLS_PROFILES[fields.fabric_tls_profile]
-    requires_client_cn = any(
+    requires_client_cn = not current_profile.get("plaintext") and any(
         "{client_cn}" in filename
         for filename in (
             current_profile["publish_client_cert"],
