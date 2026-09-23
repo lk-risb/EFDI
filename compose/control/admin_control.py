@@ -200,6 +200,7 @@ SERVICE_SOURCES = {
     "sitaware_layer": "layers/sitaware_layer.py",
     "intcore_layer": "layers/intcore_layer.py",
     "intcore-bridge": "bridges/intcore_bridge.py",
+    "backbone-bridge": "bridges/backbone_bridge.py",
 }
 
 
