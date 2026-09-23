@@ -110,6 +110,7 @@ SERVICES=(
     tak_layer tak-bridge nffi-bridge sitaware_layer tak_alert_layer
     intcore_layer intcore-bridge
     mediamtx
+    backbone-bridge
 )
 
 # Restore only non-secret launcher choices. Explicit compose/.env values win;
@@ -197,6 +198,7 @@ declare -A SVC_CAT=(
     [intcore-bridge]="C2 inputs"
     [track-fusion]="Sensor bridges"
     [mediamtx]="Sensor bridges"
+    [backbone-bridge]="Backbone"
 )
 
 declare -A SVC_DESC=(
@@ -238,6 +240,7 @@ declare -A SVC_DESC=(
     [intcore-bridge]="INT-CORE Dissemination (HTTP Post ADT) → Zenoh"
     [track-fusion]="Radar/ADS-B track correlation"
     [mediamtx]="RTMP video ingress (drone remote) → RTSP restream for TAK video feeds"
+    [backbone-bridge]="EFDI Backbone trial fabric → EFDI tracks (feeds tak_layer + sitaware_layer)"
 )
 
 # ── Ready check — 0=can start, 1=missing config ───────────────────────────
@@ -280,6 +283,7 @@ svc_ready() {
         intcore_layer) [[ -n "${INTCORE_URL:-}" && -n "${INTCORE_API_KEY:-}" && -n "${INTCORE_TOPIC_ID:-}" ]] ;;
         intcore-bridge) return 0 ;;  # always ready; binds INTCORE_BRIDGE_PORT (default 8092)
         mediamtx) return 0 ;;  # binds default RTMP :1935 / RTSP :8554, no config required
+        backbone-bridge) return 0 ;;  # always ready; reads over the pod's own already-configured local router connection, no-op until a backbone identity is uploaded
         *)        return 0 ;;
     esac
 }
@@ -1047,6 +1051,10 @@ launch() {
 
         intcore-bridge)
             _start intcore-bridge bridges/intcore_bridge.py
+            ;;
+
+        backbone-bridge)
+            _start backbone-bridge bridges/backbone_bridge.py
             ;;
 
         track-fusion)

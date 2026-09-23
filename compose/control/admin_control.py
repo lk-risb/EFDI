@@ -155,6 +155,7 @@ SERVICE_SPECS = [
     ("sitaware_layer", "C2 outputs", "NVG feed → SitaWare (SitaWare polls)"),
     ("intcore_layer", "C2 outputs", "EFDI tracks → INT-CORE (NVG 2.0.2 via TopicApi)"),
     ("intcore-bridge", "C2 inputs", "INT-CORE Topic dissemination (RabbitMQ) → Zenoh"),
+    ("backbone-bridge", "Backbone", "EFDI Backbone trial fabric → EFDI tracks (feeds tak_layer + sitaware_layer)"),
 ]
 SERVICE_NAMES = {name for name, _, _ in SERVICE_SPECS}
 
