@@ -69,6 +69,7 @@ class BackboneBootstrapTests(unittest.TestCase):
             ca_pem, cert_pem, key_pem = _ca_and_leaf(tmp)
             backbone_bootstrap._BACKBONE_TLS_DIR = os.path.join(tmp, "backbone-tls")
             backbone_bootstrap._BACKBONE_CONFIG_PATH = os.path.join(tmp, "backbone-config", "config.json5")
+            backbone_bootstrap._ROUTER_TLS_DIR = os.path.join(tmp, "primary-router-tls")
 
             template_dir = os.path.join(tmp, "tmpl")
             os.makedirs(template_dir)
@@ -100,6 +101,13 @@ class BackboneBootstrapTests(unittest.TestCase):
             start_mock.assert_called_once()
             for name in ("ca-roots.pem", "cert.pem", "key.pem"):
                 self.assertTrue(os.path.isfile(os.path.join(backbone_bootstrap._BACKBONE_TLS_DIR, name)))
+            # Also staged into the primary router's own "backbone" TLS
+            # profile slot, so the Zenoh Config page's "Backbone" fabric
+            # preset pill works if an operator deliberately selects it —
+            # separate from, and in addition to, the dedicated router above.
+            primary_backbone_dir = os.path.join(backbone_bootstrap._ROUTER_TLS_DIR, "backbone")
+            for name in ("ca-roots.pem", "cert.pem", "key.pem"):
+                self.assertTrue(os.path.isfile(os.path.join(primary_backbone_dir, name)))
             with open(backbone_bootstrap._BACKBONE_CONFIG_PATH) as f:
                 rendered = f.read()
             self.assertIn("tcp/127.0.0.1:7448", rendered)
@@ -114,6 +122,7 @@ class BackboneBootstrapTests(unittest.TestCase):
             ca_pem, cert_pem, key_pem = _ca_and_leaf(tmp)
             backbone_bootstrap._BACKBONE_TLS_DIR = os.path.join(tmp, "backbone-tls")
             backbone_bootstrap._BACKBONE_CONFIG_PATH = os.path.join(tmp, "backbone-config", "config.json5")
+            backbone_bootstrap._ROUTER_TLS_DIR = os.path.join(tmp, "primary-router-tls")
             template_path = os.path.join(tmp, "zenoh-router-backbone.json5.tmpl")
             with open(template_path, "w") as f:
                 f.write('{ connect: { endpoints: ${ZENOH_BACKBONE_CONNECT_ENDPOINTS} } }')
@@ -143,6 +152,7 @@ class BackboneBootstrapTests(unittest.TestCase):
             ca_pem, cert_pem, key_pem = _ca_and_leaf(tmp)
             backbone_bootstrap._BACKBONE_TLS_DIR = os.path.join(tmp, "backbone-tls")
             backbone_bootstrap._BACKBONE_CONFIG_PATH = os.path.join(tmp, "backbone-config", "config.json5")
+            backbone_bootstrap._ROUTER_TLS_DIR = os.path.join(tmp, "primary-router-tls")
             template_path = os.path.join(tmp, "zenoh-router-backbone.json5.tmpl")
             with open(template_path, "w") as f:
                 f.write('{ connect: { endpoints: ${ZENOH_BACKBONE_CONNECT_ENDPOINTS} } }')

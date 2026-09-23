@@ -134,10 +134,19 @@ EOF
 # no behavioral guesswork.
 
 systemctl daemon-reload
-systemctl enable --now "$SERVICE_NAME"
+systemctl enable "$SERVICE_NAME"
+# Always a full restart, never just "start if not already running":
+# confirmed live, a running daemon does NOT recreate its WireGuard interface
+# just because a later `netbird up` call below passes a different
+# --interface-name/--wireguard-port — those only take effect from a clean
+# process start. Without this, a re-run of this script (rotating a setup
+# key, or picking up an interface/port fix) silently keeps the daemon on
+# whatever interface/port it happened to create the FIRST time it ever
+# started, no matter what flags `up` is given afterward.
+systemctl restart "$SERVICE_NAME"
 
-# Give the freshly started daemon a moment to open its control socket before
-# the client CLI tries to dial it.
+# Give the freshly (re)started daemon a moment to open its control socket
+# before the client CLI tries to dial it.
 for _ in $(seq 1 20); do
   [ -S "/var/run/netbird-${NAME}.sock" ] && break
   sleep 0.5

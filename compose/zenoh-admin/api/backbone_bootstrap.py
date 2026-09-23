@@ -1,13 +1,23 @@
 """Backbone identity upload: gives the dedicated zenoh-router-backbone
-container its mTLS identity for the EFDI Backbone trial fabric.
+container its mTLS identity for the EFDI Backbone trial fabric — and ALSO
+stages the same identity for the primary router's own "backbone" TLS
+profile slot, so the Zenoh Config page's "Backbone" fabric preset pill
+works as a deliberate, one-at-a-time swap of the primary router itself
+(distinct from, and in addition to, the always-on dedicated router below).
 
 Distinct from certs_bootstrap.py, which bootstraps THIS pod's own EFDI-CA
-identity on the primary zenoh-router. Zenoh 1.x applies one TLS identity to
-the whole router session (see config.py's _TLS_PROFILES header comment), so
-the backbone's own Desert-Bread-CA identity cannot live on the primary
-router alongside the EFDI-CA identity zenoh1/zenoh2 verify — it needs its
-own router process, and that process needs its own cert upload path. See
-examples/zenoh-router-backbone.json5.tmpl for the config this renders.
+identity on the primary zenoh-router's DEFAULT ("efdi") profile. Zenoh 1.x
+applies one TLS identity to the whole router session (see config.py's
+_TLS_PROFILES header comment), so a router can only ever be on ONE of
+these profiles at a time — selecting "Backbone" on the Config page drops
+the primary router's EFDI identity (and with it, zenoh1/zenoh2
+connectivity) for as long as it's selected. That tradeoff is the operator's
+deliberate choice via that page's pill, not something this upload endpoint
+decides; this endpoint only makes the swap actually WORK once chosen,
+instead of failing with "Zenoh transport not established" because the
+profile's cert slot was never populated. See
+examples/zenoh-router-backbone.json5.tmpl for the SEPARATE dedicated
+router's own config, which stays on unaffected either way.
 """
 
 import json
@@ -17,7 +27,7 @@ import json5
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .certs_bootstrap import _load_identity, _read_pem, _write_pem
+from .certs_bootstrap import _ROUTER_TLS_DIR, _load_identity, _read_pem, _write_pem
 from .config import ConfigFields
 from .db import get_db
 from .deps import require_role, write_audit
@@ -122,11 +132,24 @@ async def upload_backbone_identity(
     except Exception:  # noqa: BLE001 — best-effort, see comment above
         pass
 
+    # Primary router's own "backbone" TLS profile slot (config.py's
+    # _TLS_PROFILES["backbone"]: connect_certificate/_private_key/root_ca at
+    # exactly these paths) — populated so the Zenoh Config page's "Backbone"
+    # fabric preset pill actually works when an operator deliberately
+    # selects it, instead of failing with "Zenoh transport not established"
+    # because this slot was never provisioned. Separate from, and in
+    # addition to, the dedicated router's own identity below.
+    _primary_router_backbone_tls_dir = os.path.join(_ROUTER_TLS_DIR, "backbone")
     try:
         os.makedirs(_BACKBONE_TLS_DIR, exist_ok=True)
         _write_pem(os.path.join(_BACKBONE_TLS_DIR, "ca-roots.pem"), ca_pem, 0o644)
         _write_pem(os.path.join(_BACKBONE_TLS_DIR, "cert.pem"), cert_pem, 0o644)
         _write_pem(os.path.join(_BACKBONE_TLS_DIR, "key.pem"), key_pem, 0o600)
+
+        os.makedirs(_primary_router_backbone_tls_dir, exist_ok=True)
+        _write_pem(os.path.join(_primary_router_backbone_tls_dir, "ca-roots.pem"), ca_pem, 0o644)
+        _write_pem(os.path.join(_primary_router_backbone_tls_dir, "cert.pem"), cert_pem, 0o644)
+        _write_pem(os.path.join(_primary_router_backbone_tls_dir, "key.pem"), key_pem, 0o600)
     except OSError as exc:
         raise HTTPException(
             status_code=500,
