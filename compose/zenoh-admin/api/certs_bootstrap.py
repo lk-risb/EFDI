@@ -14,7 +14,7 @@ import tempfile
 from cryptography import x509
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import ec, padding, rsa
+from cryptography.hazmat.primitives.asymmetric import ec, ed448, ed25519, padding, rsa
 from cryptography.x509.oid import NameOID
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -85,7 +85,20 @@ def _load_identity(ca_pem: bytes, cert_pem: bytes, key_pem: bytes) -> None:
     except (ValueError, TypeError) as exc:
         raise HTTPException(status_code=400, detail=f"invalid or encrypted private key: {exc}") from exc
 
-    if leaf_cert.public_key().public_numbers() != private_key.public_key().public_numbers():
+    # .public_numbers() only exists on RSA/EC keys — crashes with a bare
+    # AttributeError (confirmed live, uploading a real EFDI Backbone trial
+    # fabric identity: its leaf keys are Ed25519) on any key type that isn't
+    # one of those two. Comparing the algorithm-agnostic DER
+    # SubjectPublicKeyInfo encoding instead works for every key type
+    # `cryptography` supports, not just the two this fabric happened to be
+    # tested against first.
+    leaf_pub_der = leaf_cert.public_key().public_bytes(
+        serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo
+    )
+    key_pub_der = private_key.public_key().public_bytes(
+        serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo
+    )
+    if leaf_pub_der != key_pub_der:
         raise HTTPException(status_code=400, detail="certificate and private key do not match")
 
     ca_public_key = ca_cert.public_key()
@@ -100,6 +113,10 @@ def _load_identity(ca_pem: bytes, cert_pem: bytes, key_pem: bytes) -> None:
                 leaf_cert.signature, leaf_cert.tbs_certificate_bytes,
                 ec.ECDSA(leaf_cert.signature_hash_algorithm),
             )
+        elif isinstance(ca_public_key, (ed25519.Ed25519PublicKey, ed448.Ed448PublicKey)):
+            # EdDSA signs the message directly — no separate hash algorithm
+            # or padding parameter, unlike RSA/ECDSA above.
+            ca_public_key.verify(leaf_cert.signature, leaf_cert.tbs_certificate_bytes)
         else:
             raise HTTPException(status_code=400, detail="unsupported CA key type")
     except InvalidSignature as exc:
