@@ -1,6 +1,6 @@
 import {createFileRoute, redirect} from '@tanstack/react-router'
 import {useEffect, useState} from 'react'
-import {CheckCircle2, Copy, KeyRound, Lock, Network, Plus, ShieldAlert, ShieldCheck, UploadCloud} from 'lucide-react'
+import {CheckCircle2, Copy, KeyRound, Lock, Network, Plus, ShieldAlert, ShieldCheck, UploadCloud, Wifi} from 'lucide-react'
 import {Layout} from '@/components/Layout'
 import {PageHeader} from '@/components/PageHeader'
 import {HudCorners} from '@/components/HudCorners'
@@ -21,6 +21,7 @@ export const Route = createFileRoute('/certificates')({
 })
 
 interface BootstrapStatus { bootstrap: boolean }
+interface BackboneStatus { identity_uploaded: boolean; endpoints_configured: boolean }
 interface CertInfo { name: string; expires_at: string; days_remaining: number }
 interface PkiStatus {
   configured: boolean
@@ -81,19 +82,39 @@ function CertificatesPage() {
   const [uploading, setUploading] = useState(false)
   const [showRotate, setShowRotate] = useState(false)
 
+  // Backbone identity — a SEPARATE mTLS identity (Desert Bread CA, not
+  // EFDI's own) for the dedicated zenoh-router-backbone container. See
+  // api/backbone_bootstrap.py: Zenoh 1.x applies one TLS identity per router
+  // session, so this can never be the same upload flow as the pod's own
+  // identity above.
+  const [backboneStatus, setBackboneStatus] = useState<BackboneStatus | null>(null)
+  const [backboneCaFile, setBackboneCaFile] = useState<File | null>(null)
+  const [backboneCertFile, setBackboneCertFile] = useState<File | null>(null)
+  const [backboneKeyFile, setBackboneKeyFile] = useState<File | null>(null)
+  const [backboneUploading, setBackboneUploading] = useState(false)
+
+  // Backbone NetBird join — a second, independent netbird daemon on this
+  // host (efdi.ltu and the backbone are separate NetBird accounts; one
+  // daemon can only join one). See api/netbird_instances.py.
+  const [netbirdManagementUrl, setNetbirdManagementUrl] = useState('')
+  const [netbirdSetupKey, setNetbirdSetupKey] = useState('')
+  const [netbirdConfiguring, setNetbirdConfiguring] = useState(false)
+
   async function load() {
     try {
-      const [health, status, invites, boot, config] = await Promise.all([
+      const [health, status, invites, boot, config, backbone] = await Promise.all([
         apiJson<{ system: { certs: CertInfo[] } }>('/api/health'),
         apiJson<PkiStatus>('/api/pki/status'),
         apiJson<Invitation[]>('/api/pki/invitations'),
         apiJson<BootstrapStatus>('/api/certs/bootstrap/status'),
         apiJson<{ fields: { partner_namespace: string; namespace_prefix: string } | null }>('/api/config'),
+        apiJson<BackboneStatus>('/api/certs/backbone/status'),
       ])
       setCerts(health.system.certs)
       setPki(status)
       setInvitations(invites)
       setBootstrapStatus(boot)
+      setBackboneStatus(backbone)
       // Prefill so rotating an already-secured identity doesn't require
       // retyping values the pod already knows — only bootstrap mode (no
       // fields yet) needs the operator to type these from scratch.
@@ -160,6 +181,57 @@ function CertificatesPage() {
       // always re-check state after a delay rather than trusting the outcome
       // of this specific fetch.
       setTimeout(load, 6000)
+    }
+  }
+
+  async function uploadBackboneIdentity(event: React.FormEvent) {
+    event.preventDefault()
+    if (!backboneCaFile || !backboneCertFile || !backboneKeyFile) {
+      notify.error('CA root, certificate, and private key are all required')
+      return
+    }
+    setBackboneUploading(true)
+    try {
+      const form = new FormData()
+      form.append('ca_root', backboneCaFile)
+      form.append('certificate', backboneCertFile)
+      form.append('private_key', backboneKeyFile)
+      const response = await apiFetch('/api/certs/backbone/bootstrap', { method: 'POST', body: form })
+      const body = await response.json().catch(() => ({ detail: response.statusText }))
+      if (!response.ok) throw new Error(errorDetail(body, response))
+      notify.success('Backbone identity applied — zenoh-router-backbone starting.')
+      setBackboneCaFile(null)
+      setBackboneCertFile(null)
+      setBackboneKeyFile(null)
+    } catch (error) {
+      notify.error(errorMessage(error))
+    } finally {
+      setBackboneUploading(false)
+      setTimeout(load, 4000)
+    }
+  }
+
+  async function configureBackboneNetbird(event: React.FormEvent) {
+    event.preventDefault()
+    if (!netbirdManagementUrl || !netbirdSetupKey) {
+      notify.error('Management URL and setup key are both required')
+      return
+    }
+    setNetbirdConfiguring(true)
+    try {
+      const response = await apiFetch('/api/netbird/backbone/configure', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ management_url: netbirdManagementUrl, setup_key: netbirdSetupKey }),
+      })
+      const body = await response.json().catch(() => ({ detail: response.statusText }))
+      if (!response.ok) throw new Error(errorDetail(body, response))
+      notify.success('Backbone NetBird instance joined. DNS/routing for the backbone endpoint should resolve shortly.')
+      setNetbirdSetupKey('')
+    } catch (error) {
+      notify.error(errorMessage(error))
+    } finally {
+      setNetbirdConfiguring(false)
     }
   }
 
@@ -283,6 +355,83 @@ function CertificatesPage() {
             </form>
           </section>
         )}
+
+        <section className="hud-card hud-glass hud-frame relative mb-6 border border-zinc-200 p-4 dark:border-white/10">
+          <HudCorners />
+          <div className="mb-3 flex items-center gap-2">
+            <Wifi size={16} className="text-zinc-500" />
+            <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Backbone NetBird join</h2>
+          </div>
+          <p className="mb-4 text-xs text-zinc-500">
+            This pod's own NetBird instance and the EFDI Backbone trial fabric are separate NetBird
+            accounts — one daemon can only join one. This provisions a SECOND, independent netbird
+            service on this host (its own systemd unit, config dir, and control socket) purely to reach
+            the backbone, without touching the pod's existing NetBird connection. Required before the
+            backbone identity below can resolve or route anywhere. Get the management URL and a fresh
+            setup key from the backbone NetBird admin panel — each peer needs its own setup key.
+          </p>
+          <form onSubmit={configureBackboneNetbird} className="grid gap-3 sm:grid-cols-2">
+            <label className="text-xs text-zinc-500">
+              Management URL
+              <input className={`${inputClass} mt-1 font-mono`} value={netbirdManagementUrl}
+                onChange={event => setNetbirdManagementUrl(event.target.value)}
+                placeholder="https://netbird.efdi-backbone.net:443" required />
+            </label>
+            <label className="text-xs text-zinc-500">
+              Setup key
+              <input type="password" className={`${inputClass} mt-1 font-mono`} value={netbirdSetupKey}
+                onChange={event => setNetbirdSetupKey(event.target.value)}
+                placeholder="one-time join key" required />
+            </label>
+            <button disabled={netbirdConfiguring} className="sm:col-span-2 flex items-center justify-center gap-2 rounded-md bg-accent-fill px-4 py-2 text-sm text-accent-text disabled:opacity-50">
+              <Wifi size={14} /> {netbirdConfiguring ? 'Joining…' : 'Join backbone NetBird network'}
+            </button>
+          </form>
+        </section>
+
+        <section className="hud-card hud-glass hud-frame relative mb-6 border border-zinc-200 p-4 dark:border-white/10">
+          <HudCorners />
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Network size={16} className="text-zinc-500" />
+              <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Backbone identity</h2>
+            </div>
+            <StatusPill
+              text={backboneStatus?.identity_uploaded ? 'zenoh-router-backbone identity uploaded' : 'no backbone identity'}
+              tone={backboneStatus?.identity_uploaded ? 'ok' : 'neutral'}
+            />
+          </div>
+          <p className="mb-4 text-xs text-zinc-500">
+            Separate mTLS identity for the dedicated <code>zenoh-router-backbone</code> container that
+            bridges this pod to the EFDI Backbone trial fabric. Distinct CA from this pod's own identity
+            above — Zenoh applies one TLS identity per router session, so the backbone link runs as its
+            own router process. Set the endpoint under Integration Settings' Backbone fabric preset
+            first ({backboneStatus?.endpoints_configured ? 'configured' : 'not yet configured'}).
+          </p>
+          <form onSubmit={uploadBackboneIdentity} className="grid gap-3 sm:grid-cols-2">
+            <label className="text-xs text-zinc-500">
+              CA root (.crt or .pem)
+              <input type="file" required accept=".pem,.crt,.cer"
+                onChange={event => setBackboneCaFile(event.target.files?.[0] ?? null)}
+                className="mt-1 block w-full text-xs text-zinc-500 file:mr-3 file:rounded-md file:border-0 file:bg-zinc-200 file:px-3 file:py-1.5 file:text-xs file:text-zinc-900 dark:file:bg-white/10 dark:file:text-white" />
+            </label>
+            <label className="text-xs text-zinc-500">
+              Certificate (.crt or .pem)
+              <input type="file" required accept=".pem,.crt,.cer"
+                onChange={event => setBackboneCertFile(event.target.files?.[0] ?? null)}
+                className="mt-1 block w-full text-xs text-zinc-500 file:mr-3 file:rounded-md file:border-0 file:bg-zinc-200 file:px-3 file:py-1.5 file:text-xs file:text-zinc-900 dark:file:bg-white/10 dark:file:text-white" />
+            </label>
+            <label className="text-xs text-zinc-500 sm:col-span-2">
+              Private key (.key or .pem)
+              <input type="file" required accept=".pem,.key"
+                onChange={event => setBackboneKeyFile(event.target.files?.[0] ?? null)}
+                className="mt-1 block w-full text-xs text-zinc-500 file:mr-3 file:rounded-md file:border-0 file:bg-zinc-200 file:px-3 file:py-1.5 file:text-xs file:text-zinc-900 dark:file:bg-white/10 dark:file:text-white" />
+            </label>
+            <button disabled={backboneUploading} className="sm:col-span-2 flex items-center justify-center gap-2 rounded-md bg-accent-fill px-4 py-2 text-sm text-accent-text disabled:opacity-50">
+              <UploadCloud size={14} /> {backboneUploading ? 'Applying…' : backboneStatus?.identity_uploaded ? 'Upload and rotate backbone identity' : 'Upload and start backbone router'}
+            </button>
+          </form>
+        </section>
 
         <div className="mb-5 flex flex-wrap items-center gap-2 text-xs">
           <span className="flex items-center gap-1">

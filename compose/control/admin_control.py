@@ -45,6 +45,7 @@ STATE_DIR = Path(os.environ.get("POD_STATE_DIR", str(ROOT / "compose" / "state")
 ENV_FILE = Path(os.environ.get("EFDI_ENV_FILE", str(ROOT / "compose" / ".env")))
 START_SCRIPT = ROOT / "start.sh"
 STOP_SCRIPT = ROOT / "stop.sh"
+NETBIRD_INSTANCE_SCRIPT = ROOT / "scripts" / "netbird-instance.sh"
 CONTROL_HOST = os.environ.get("EFDI_CONTROL_BIND", "127.0.0.1")
 CONTROL_PORT = int(os.environ.get("EFDI_CONTROL_PORT", "18896"))
 
@@ -723,6 +724,58 @@ def _recreate_container(name: str) -> dict:
         return {"ok": result.returncode == 0, "returncode": result.returncode, "output": output[-8000:]}
     except subprocess.TimeoutExpired:
         return {"ok": False, "returncode": 124, "output": "container recreate timed out"}
+    except OSError as exc:
+        return {"ok": False, "returncode": 127, "output": str(exc)}
+
+
+# The only NetBird instance names this agent will provision — see
+# scripts/netbird-instance.sh's own header for why a second, fully separate
+# netbird daemon (not just a config edit) is required at all. Extend this set
+# only for a genuinely new second network this host must join concurrently,
+# same reasoning as _RECREATABLE_CONTAINERS above.
+_NETBIRD_INSTANCES = {"backbone"}
+
+
+def _configure_netbird_instance(name: str, management_url: str, setup_key: str) -> dict:
+    if name not in _NETBIRD_INSTANCES:
+        return {"ok": False, "returncode": 400, "output": "unknown netbird instance"}
+    if not management_url or not setup_key:
+        return {"ok": False, "returncode": 400, "output": "management_url and setup_key are both required"}
+    try:
+        result = subprocess.run(
+            [str(NETBIRD_INSTANCE_SCRIPT), name, management_url, setup_key],
+            cwd=str(ROOT), capture_output=True, text=True, timeout=90, check=False,
+        )
+        # setup_key is a one-time-use join credential, already consumed by the
+        # instant it reaches this point — never echoed back, and the script
+        # itself never writes it to disk (see the script's own comment).
+        output = (result.stdout + result.stderr).replace(setup_key, "***").strip()
+        return {"ok": result.returncode == 0, "returncode": result.returncode, "output": output[-8000:]}
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "returncode": 124, "output": "netbird instance configure timed out"}
+    except OSError as exc:
+        return {"ok": False, "returncode": 127, "output": str(exc)}
+
+
+# Narrowly scoped like _recreate_container above: this is the ONE
+# docker-compose service startable this way, under its own profile, because
+# it doesn't exist until a backbone identity has been uploaded via
+# backbone_bootstrap.py — there is no bounce/restart route for it in
+# SERVICE_NAMES (those are native start.sh/stop.sh processes, not compose
+# containers). `up -d` is idempotent: re-running it after a fresh identity
+# upload just recreates the container to pick up the newly rendered config.
+def _start_backbone_router() -> dict:
+    try:
+        result = subprocess.run(
+            ["docker", "compose", "-f", str(ROOT / "compose" / "docker-compose.yml"),
+             "--env-file", str(ENV_FILE), "--profile", "backbone", "up", "-d",
+             "zenoh-router-backbone"],
+            cwd=str(ROOT), capture_output=True, text=True, timeout=60, check=False,
+        )
+        output = (result.stdout + result.stderr).strip()
+        return {"ok": result.returncode == 0, "returncode": result.returncode, "output": output[-8000:]}
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "returncode": 124, "output": "backbone router start timed out"}
     except OSError as exc:
         return {"ok": False, "returncode": 127, "output": str(exc)}
 
@@ -1596,6 +1649,26 @@ class Handler(BaseHTTPRequestHandler):
             result = _recreate_container(unquote(match.group(1)))
             self._json(200 if result["ok"] else 409,
                        {**result, "container": match.group(1), "action": "recreate"})
+            return
+        if path == "/v1/containers/zenoh-router-backbone/start":
+            result = _start_backbone_router()
+            self._json(200 if result["ok"] else 409,
+                       {**result, "container": "zenoh-router-backbone", "action": "start"})
+            return
+        match = re.fullmatch(r"/v1/netbird/([a-z0-9-]+)/configure", path)
+        if match:
+            try:
+                body = self._body()
+                management_url = body.get("management_url")
+                setup_key = body.get("setup_key")
+                if not isinstance(management_url, str) or not isinstance(setup_key, str):
+                    raise ValueError("management_url and setup_key must be strings")
+            except (ValueError, json.JSONDecodeError) as exc:
+                self._json(400, {"detail": str(exc)})
+                return
+            result = _configure_netbird_instance(unquote(match.group(1)), management_url, setup_key)
+            self._json(200 if result["ok"] else 409,
+                       {**result, "instance": match.group(1), "action": "configure"})
             return
         match = re.fullmatch(r"/v1/services/([a-z0-9_-]+)/(start|stop|restart)", path)
         if not match:
