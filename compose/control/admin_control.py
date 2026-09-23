@@ -736,6 +736,38 @@ def _recreate_container(name: str) -> dict:
 _NETBIRD_INSTANCES = {"backbone"}
 
 
+def _netbird_instance_status(name: str) -> dict:
+    """Daemon-level connectivity only — Management/Signal both reporting
+    "connected" proves this instance logged in, not that its WireGuard
+    interface actually carries traffic (confirmed live: a colliding
+    --interface-name left the daemon reporting "Connected" for hours with
+    no working local interface at all — see netbird-instance.sh). Good
+    enough for the WebUI's own collapse-after-join affordance; not a
+    substitute for an end-to-end data-path check."""
+    if name not in _NETBIRD_INSTANCES:
+        return {"ok": False, "returncode": 400, "output": "unknown netbird instance"}
+    sock = f"unix:///var/run/netbird-{name}.sock"
+    try:
+        result = subprocess.run(
+            ["netbird", "status", "--daemon-addr", sock, "--json"],
+            capture_output=True, text=True, timeout=10, check=False,
+        )
+    except subprocess.TimeoutExpired:
+        return {"ok": True, "connected": False, "output": "status check timed out"}
+    except OSError as exc:
+        return {"ok": True, "connected": False, "output": str(exc)}
+    if result.returncode != 0:
+        # Not yet joined at all (no config, or daemon just started) — a
+        # normal, expected state, not an error worth a 4xx/5xx.
+        return {"ok": True, "connected": False, "output": (result.stdout + result.stderr).strip()[-2000:]}
+    try:
+        data = json.loads(result.stdout)
+    except ValueError:
+        return {"ok": True, "connected": False, "output": "could not parse netbird status output"}
+    connected = bool(data.get("management", {}).get("connected")) and bool(data.get("signal", {}).get("connected"))
+    return {"ok": True, "connected": connected, "netbird_ip": data.get("netbirdIp")}
+
+
 def _configure_netbird_instance(name: str, management_url: str, setup_key: str) -> dict:
     if name not in _NETBIRD_INSTANCES:
         return {"ok": False, "returncode": 400, "output": "unknown netbird instance"}
@@ -1554,6 +1586,10 @@ class Handler(BaseHTTPRequestHandler):
         if match and match.group(1) in SERVICE_NAMES:
             lines = _tail_lines(LOG_DIR / f"{match.group(1)}.log")
             self._json(200, {"name": match.group(1), "lines": lines})
+            return
+        match = re.fullmatch(r"/v1/netbird/([a-z0-9-]+)/status", path)
+        if match:
+            self._json(200, _netbird_instance_status(unquote(match.group(1))))
             return
         self._json(404, {"detail": "not found"})
 
