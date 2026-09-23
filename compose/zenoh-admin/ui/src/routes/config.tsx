@@ -153,6 +153,14 @@ function ConfigPage() {
   const [localFields, setLocalFields] = useState<ConfigFields>(EMPTY_FIELDS)
   const [endpointStatuses, setEndpointStatuses] = useState<Record<string, EndpointStatus>>({})
   const [fabricPresets, setFabricPresets] = useState<FabricPreset[]>([])
+  // Remembers each TLS profile's own endpoint list separately, keyed by
+  // fabric_tls_profile — so switching "EFDI LTU" -> "Backbone" -> back to
+  // "EFDI LTU" restores what was there before instead of the preset button
+  // wiping it (fabric_endpoints used to be one shared field every pill
+  // click fully replaced). Kept in sync by the effect below on every
+  // endpoint-list edit, not just pill clicks, so manual edits survive a
+  // round trip too.
+  const [endpointMemory, setEndpointMemory] = useState<Record<string, string[]>>({})
   const [tlsProfiles, setTlsProfiles] = useState<Record<string, string>>({})
   const [plaintextTlsProfiles, setPlaintextTlsProfiles] = useState<string[]>([])
   const [bootstrap, setBootstrap] = useState(false)
@@ -320,17 +328,38 @@ function ConfigPage() {
     setFields(f => ({ ...f, [key]: value }))
   }
 
+  // Mirrors the active profile's endpoint list into per-profile memory on
+  // every change (initial load, manual edits, and pill switches alike).
+  useEffect(() => {
+    setEndpointMemory(mem => ({ ...mem, [fields.fabric_tls_profile]: fields.fabric_endpoints }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fields.fabric_endpoints, fields.fabric_tls_profile])
+
+  // Switches to a preset's profile, restoring THAT profile's own
+  // last-known endpoint list if we've seen it before this session, instead
+  // of always snapping back to the preset's bare default.
+  function switchFabricTarget(profile: string, defaultEndpoints: string[]) {
+    setFields(f => {
+      const remembered = endpointMemory[profile]
+      const endpoints = remembered && remembered.length > 0 ? remembered : defaultEndpoints
+      return {
+        ...f,
+        fabric_endpoint: endpoints[0] ?? '',
+        fabric_endpoints: endpoints,
+        fabric_tls_profile: profile,
+        verify_name_on_connect: true,
+      }
+    })
+  }
+
   // Which one-click fabric target is currently selected — drives the active
   // highlight so switching networks reads as "pick the lit pill, then Save".
   const isRootTarget = fields.fabric_endpoints.length === 0 && !fields.fabric_endpoint
-  const isActivePreset = (p: { endpoints: string[]; profile: string }) => {
-    const current = fields.fabric_endpoints.length > 0
-      ? fields.fabric_endpoints
-      : fields.fabric_endpoint ? [fields.fabric_endpoint] : []
-    return current.length === p.endpoints.length
-      && current.every((endpoint, index) => endpoint === p.endpoints[index])
-      && fields.fabric_tls_profile === p.profile
-  }
+  // Active means "this profile is selected", not "endpoints match the
+  // preset's bare default" — with per-profile endpoint memory (see
+  // switchFabricTarget) the loaded list is often a remembered/edited one,
+  // not the preset's original default, and that's still correctly "active".
+  const isActivePreset = (p: { profile: string }) => !isRootTarget && fields.fabric_tls_profile === p.profile
   const pillCls = (active: boolean) =>
     `rounded-full border px-2.5 py-1 text-xs transition-colors disabled:opacity-50 ${
       active
@@ -550,13 +579,7 @@ function ConfigPage() {
                   </button>
                   {fabricPresets.map(p => (
                     <button key={p.label} type="button" disabled={!canWrite}
-                      onClick={() => setFields(f => ({
-                        ...f,
-                        fabric_endpoint: p.endpoints[0],
-                        fabric_endpoints: [...p.endpoints],
-                        fabric_tls_profile: p.profile,
-                        verify_name_on_connect: true,
-                      }))}
+                      onClick={() => switchFabricTarget(p.profile, p.endpoints)}
                       className={pillCls(isActivePreset(p))}>
                       {isActivePreset(p) ? '● ' : ''}{p.label}
                     </button>

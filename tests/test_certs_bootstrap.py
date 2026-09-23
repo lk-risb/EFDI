@@ -60,6 +60,58 @@ def _ca_and_leaf(tmp: str) -> tuple[bytes, bytes, bytes]:
     )
 
 
+def _ec_ca_and_ed25519_leaf(tmp: str) -> tuple[bytes, bytes, bytes]:
+    """An EC CA signing an Ed25519 leaf — the real shape of the EFDI Backbone
+    trial fabric's own certs (confirmed live: its client keys are Ed25519,
+    its root CA is EC). _load_identity()'s original public-key comparison
+    only handled RSA/EC (.public_numbers()), so this exact combination
+    crashed with a bare AttributeError instead of a clean 400/200."""
+    ca_key = os.path.join(tmp, "ec-ca-key.pem")
+    ca_cert = os.path.join(tmp, "ec-ca-cert.pem")
+    leaf_key = os.path.join(tmp, "ed25519-leaf-key.pem")
+    leaf_csr = os.path.join(tmp, "ed25519-leaf.csr")
+    leaf_cert = os.path.join(tmp, "ed25519-leaf-cert.pem")
+
+    subprocess.run(
+        ["openssl", "req", "-x509", "-newkey", "ec", "-pkeyopt", "ec_paramgen_curve:prime256v1",
+         "-nodes", "-keyout", ca_key, "-out", ca_cert, "-days", "1",
+         "-subj", "/O=Test/CN=Test EC Root CA"],
+        check=True, capture_output=True,
+    )
+    subprocess.run(
+        ["openssl", "req", "-newkey", "ed25519", "-nodes",
+         "-keyout", leaf_key, "-out", leaf_csr, "-subj", "/CN=test-ed25519-leaf"],
+        check=True, capture_output=True,
+    )
+    subprocess.run(
+        ["openssl", "x509", "-req", "-in", leaf_csr, "-CA", ca_cert, "-CAkey", ca_key,
+         "-CAcreateserial", "-out", leaf_cert, "-days", "1"],
+        check=True, capture_output=True,
+    )
+    return (
+        pathlib.Path(ca_cert).read_bytes(),
+        pathlib.Path(leaf_cert).read_bytes(),
+        pathlib.Path(leaf_key).read_bytes(),
+    )
+
+
+class LoadIdentityKeyTypeTests(unittest.TestCase):
+    def test_ec_ca_with_ed25519_leaf_does_not_crash(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ca_pem, cert_pem, key_pem = _ec_ca_and_ed25519_leaf(tmp)
+            # Raises nothing — this used to be an unhandled AttributeError.
+            certs_bootstrap._load_identity(ca_pem, cert_pem, key_pem)
+
+    def test_ed25519_leaf_key_mismatch_still_rejected_cleanly(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ca_pem, cert_pem, _ = _ec_ca_and_ed25519_leaf(tmp)
+            _, _, other_key_pem = _ec_ca_and_ed25519_leaf(tmp)
+            with self.assertRaises(HTTPException) as ctx:
+                certs_bootstrap._load_identity(ca_pem, cert_pem, other_key_pem)
+            self.assertEqual(ctx.exception.status_code, 400)
+            self.assertIn("do not match", ctx.exception.detail)
+
+
 class UploadBootstrapIdentityTests(unittest.TestCase):
     def test_unwritable_efdi_cert_dir_returns_clear_500_not_a_bare_crash(self):
         with tempfile.TemporaryDirectory() as tmp:
