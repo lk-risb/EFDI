@@ -170,21 +170,33 @@
         key_exprs: ["${NAMESPACE_ROOT}/**/@config/v1", "${NAMESPACE_ROOT}/**/@config/relay/v1", "${NAMESPACE_ROOT}/**/@config/status/v1", "${NAMESPACE_ROOT}/**/@topology"],
       },
       {
-        // Read-only visibility into whatever's on the EFDI Backbone trial
-        // fabric, for local-tcp bridges (backbone_bridge.py) and the admin
-        // GUI only — never granted to mtls-peer, which also covers remote
-        // fabric partners that have no business seeing trial-fabric traffic
-        // through this pod. zenoh-router-backbone (a peer of this router,
-        // connected via its own dedicated mTLS session against the real
-        // backbone) has no ACL of its own by design, so this rule is the
-        // only thing standing between "peered" and "actually readable by a
-        // local process." No write grant here: the backbone fabric's own
-        // wire-layer ACL only accepts writes under our assigned vendor
-        // prefix anyway (enforced by the remote side against our uploaded
-        // identity's cert), so a local write grant here would just be dead
-        // permission surface.
+        // Visibility into whatever's on the EFDI Backbone trial fabric, for
+        // local-tcp bridges (backbone_bridge.py) and the admin GUI only —
+        // never granted to mtls-peer, which also covers remote fabric
+        // partners that have no business seeing trial-fabric traffic through
+        // this pod. zenoh-router-backbone (a peer of this router, connected
+        // via its own dedicated mTLS session against the real backbone) has
+        // no ACL of its own by design, so this rule is the only thing
+        // standing between "peered" and "actually readable by a local
+        // process."
+        //
+        // "put" has to be here, not just "declare_subscriber" — confirmed
+        // live (zero samples delivered despite a healthy, established
+        // backbone session on both legs, until this was added).
+        // zenoh-router-backbone reaches this router over the SAME plain-tcp
+        // local port every bridge uses (${ZENOH_LOCAL_TCP_PORT}), so it is
+        // "local-tcp" too, not "mtls-peer" — every backbone sample crosses
+        // that link into this router as an ingress "put", and without "put"
+        // granted here that hop silently drops it regardless of what any
+        // subscriber elsewhere is allowed to declare. This does mean any
+        // local-tcp process can also publish under "**" locally, but
+        // local-tcp already carries that same blanket trust level for
+        // pod-firstparty/pod-inbound/pod-federation-config above — this
+        // isn't a new trust boundary, and the backbone fabric's own
+        // wire-layer ACL still rejects any outbound write that doesn't match
+        // our assigned vendor prefix regardless of what happens locally.
         id: "pod-backbone-read",
-        messages: ["declare_subscriber", "query", "reply"],
+        messages: ["put", "delete", "declare_subscriber", "query", "declare_queryable", "reply"],
         flows: ["egress", "ingress"],
         permission: "allow",
         key_exprs: ["**"],
