@@ -14,10 +14,32 @@ from admin_control import (  # noqa: E402
     CONFIG_VALIDATE_MAX_BYTES,
     LOG_TAIL_BYTES,
     _classify_sitaware_hq_nvg_health,
+    _start_backbone_router,
     _validate_router_config,
     _sign_csr,
     _tail_lines,
 )
+
+
+def test_start_backbone_router_force_recreates():
+    """A plain `up -d` on an already-running container is a no-op even
+    after backbone_bootstrap.py overwrites its config.json5/tls/*.pem —
+    those are bind-mounted file contents, not part of the compose service
+    definition Docker diffs against. Confirmed live: a rotate upload left
+    the OLD identity loaded in the running zenohd for hours. --force-recreate
+    must always be present so every upload actually restarts the process."""
+    captured = {}
+
+    def fake_run(args, **kwargs):
+        captured["args"] = args
+        return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+
+    with patch("admin_control.subprocess.run", side_effect=fake_run):
+        result = _start_backbone_router()
+
+    assert result["ok"] is True
+    assert "--force-recreate" in captured["args"]
+    assert "zenoh-router-backbone" in captured["args"]
 
 
 def nvg_health(

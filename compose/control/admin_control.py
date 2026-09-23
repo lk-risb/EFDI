@@ -778,7 +778,17 @@ def _start_backbone_router() -> dict:
         result = subprocess.run(
             ["docker", "compose", "-f", str(ROOT / "compose" / "docker-compose.yml"),
              "--env-file", str(ENV_FILE), "--profile", "backbone", "up", "-d",
-             "zenoh-router-backbone"],
+             # Confirmed live: a plain `up -d` on an already-running container
+             # is a no-op even after backbone_bootstrap.py just overwrote its
+             # config.json5/tls/*.pem — those are bind-mounted file CONTENTS,
+             # not part of the compose service definition Docker diffs against,
+             # so it never noticed anything changed. A rotate upload silently
+             # kept the OLD identity loaded in the running zenohd for hours.
+             # --force-recreate makes every upload (first bootstrap or a
+             # later rotation) actually restart the process onto the new
+             # material, matching the primary router's own apply_rendered_config
+             # behavior on this exact point.
+             "--force-recreate", "zenoh-router-backbone"],
             cwd=str(ROOT), capture_output=True, text=True, timeout=60, check=False,
         )
         output = (result.stdout + result.stderr).strip()
