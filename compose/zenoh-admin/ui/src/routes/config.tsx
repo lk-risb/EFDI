@@ -1,4 +1,4 @@
-import {createFileRoute, redirect} from '@tanstack/react-router'
+import {createFileRoute, redirect, useNavigate} from '@tanstack/react-router'
 import {useEffect, useRef, useState} from 'react'
 import {Layout} from '@/components/Layout'
 import {PageHeader} from '@/components/PageHeader'
@@ -142,6 +142,7 @@ function Toggle({ label, help, checked, disabled, onChange }: {
 
 function ConfigPage() {
   const { role } = useAuth()
+  const navigate = useNavigate()
   const [fields, setFields] = useState<ConfigFields>(EMPTY_FIELDS)
   const [path, setPath] = useState('')
   const [loading, setLoading] = useState(true)
@@ -339,6 +340,21 @@ function ConfigPage() {
   // last-known endpoint list if we've seen it before this session, instead
   // of always snapping back to the preset's bare default.
   function switchFabricTarget(profile: string, defaultEndpoints: string[]) {
+    // "backbone" is never a safe in-place swap for THIS router: it shares
+    // one TLS identity per session with zenoh1/zenoh2's own "efdi" profile,
+    // and the backbone profile's cert slot only has real material once
+    // something actually uploads it (api/backbone_bootstrap.py). Confirmed
+    // live: selecting it here and saving crash-looped the primary router
+    // ("router did not become healthy after restart") — caught by the
+    // last-known-good rollback that time, but a pill click on this page
+    // should never be able to take the production router down at all.
+    // Route to where the backbone router is actually configured instead of
+    // mutating this router's own fields.
+    if (profile === 'backbone') {
+      notify.error('Backbone runs as its own dedicated router — configure it on the Certificates page, not here.')
+      navigate({ to: '/certificates' })
+      return
+    }
     setFields(f => {
       const remembered = endpointMemory[profile]
       const endpoints = remembered && remembered.length > 0 ? remembered : defaultEndpoints
@@ -587,7 +603,17 @@ function ConfigPage() {
                 </div>
                 <Field label="Fabric mTLS identity" help="The selected certificate, private key, and trust roots are used for every TLS link in this router. Choose the profile that belongs to the selected federation endpoint.">
                   <select disabled={!canWrite} className={inputClass} value={fields.fabric_tls_profile}
-                    onChange={e => set('fabric_tls_profile', e.target.value)}>
+                    onChange={e => {
+                      // Same reasoning as switchFabricTarget above — this
+                      // dropdown is the other way to pick "backbone" and
+                      // must be blocked the same way, not just the pill.
+                      if (e.target.value === 'backbone') {
+                        notify.error('Backbone runs as its own dedicated router — configure it on the Certificates page, not here.')
+                        navigate({ to: '/certificates' })
+                        return
+                      }
+                      set('fabric_tls_profile', e.target.value)
+                    }}>
                     {Object.entries(tlsProfiles).map(([name, label]) => (
                       <option key={name} value={name}>{label}</option>
                     ))}

@@ -63,6 +63,33 @@ def test_atomic_write_handles_single_file_bind_mount(monkeypatch, tmp_path):
     assert list(tmp_path.iterdir()) == [target]
 
 
+def test_apply_rejects_backbone_profile_before_touching_the_router(monkeypatch, tmp_path):
+    """Confirmed live: applying the "backbone" TLS profile to this pod's
+    OWN primary router crash-loops it — zenoh1/zenoh2 need the "efdi"
+    identity, and this router can only hold one TLS identity per session.
+    The last-known-good rollback caught it that time, but this must be
+    rejected before any write/restart is even attempted, regardless of
+    whether the request came through the form or a raw "Load from file"
+    upload (both funnel through apply_rendered_config)."""
+    current = configure_state_paths(monkeypatch, tmp_path)
+    original_content = current.read_text()
+    restart_calls = []
+    monkeypatch.setattr(config, "restart_router_container", lambda: restart_calls.append(1) or (True, None))
+
+    backbone_fields = config.ConfigFields(
+        mtls_port=7447, local_tcp_port=7448, fabric_endpoint="", fabric_endpoints=[],
+        fabric_tls_profile="backbone", partner_namespace="hq", inbound_namespace="hq",
+        namespace_prefix="LTU/CISB", publish_prefix="LTU/CISB",
+        verify_name_on_connect=False, plugins_loading_enabled=True,
+    )
+    result = config.apply_rendered_config("new-config", backbone_fields, restart_native=True)
+
+    assert result["status"] == "rejected"
+    assert "backbone" in result["error"]
+    assert current.read_text() == original_content
+    assert restart_calls == []
+
+
 def test_safe_apply_activates_only_after_preflight_and_health(monkeypatch, tmp_path):
     current = configure_state_paths(monkeypatch, tmp_path)
     monkeypatch.setattr(config, "restart_router_container", lambda: (True, None))

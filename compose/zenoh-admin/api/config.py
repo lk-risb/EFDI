@@ -632,6 +632,31 @@ def apply_rendered_config(
     sent an invalid or non-starting candidate.
     """
     with _CONFIG_APPLY_LOCK:
+        # Confirmed live: an operator picking "backbone" here (either the
+        # Zenoh Config page's own pill/dropdown, or a raw "Load from
+        # file" upload that bypasses both) crash-loops this router —
+        # zenoh1/zenoh2 need the "efdi" identity, and Zenoh applies one TLS
+        # identity per session, so this profile can never coexist with that
+        # on THIS router regardless of whether its cert slot happens to be
+        # populated. The last-known-good rollback below caught it that
+        # time, but this should never reach a restart attempt on the
+        # primary router at all — the dedicated zenoh-router-backbone
+        # container (api/backbone_bootstrap.py) is the only place "backbone"
+        # is meant to run. UI-side guards exist too (config.tsx), but this
+        # is the one choke point both the form and the raw-file-load path
+        # share, so it's the actual enforcement point.
+        if fields.fabric_tls_profile == "backbone":
+            return {
+                "status": "rejected",
+                "restarted": False,
+                "rolled_back": False,
+                "error": "the \"backbone\" TLS profile cannot be applied to this pod's "
+                         "primary router — it needs its own EFDI identity for "
+                         "zenoh1/zenoh2. Configure the backbone connection on the "
+                         "Certificates page instead (dedicated router, separate identity).",
+                "native_process_restart_required": False,
+                "native_process_restart_failures": [],
+            }
         valid, validation_detail = validate_rendered_config(rendered)
         if not valid:
             return {
