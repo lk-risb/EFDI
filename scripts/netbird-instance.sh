@@ -39,9 +39,23 @@ if [ "$(id -u)" -ne 0 ]; then
   exit 1
 fi
 
+# Pure bash trim (no xargs/sed re-parsing — a setup key or URL could contain
+# characters those would treat specially). Strips leading/trailing
+# whitespace only. A trailing newline from a copy-paste (portal pages,
+# terminals, and clipboard managers all commonly add one) turns an otherwise
+# correct key into a literally different string — NetBird's server rejects
+# that as "setup key is invalid" with no hint that whitespace is the actual
+# cause, so it silently looks like a bad/burned key instead.
+trim() {
+  local s="$1"
+  s="${s#"${s%%[![:space:]]*}"}"
+  s="${s%"${s##*[![:space:]]}"}"
+  printf '%s' "$s"
+}
+
 NAME="${1:?usage: netbird-instance.sh <instance-name> <management-url> <setup-key>}"
-MANAGEMENT_URL="${2:?usage: netbird-instance.sh <instance-name> <management-url> <setup-key>}"
-SETUP_KEY="${3:?usage: netbird-instance.sh <instance-name> <management-url> <setup-key>}"
+MANAGEMENT_URL="$(trim "${2:?usage: netbird-instance.sh <instance-name> <management-url> <setup-key>}")"
+SETUP_KEY="$(trim "${3:?usage: netbird-instance.sh <instance-name> <management-url> <setup-key>}")"
 
 if ! [[ "$NAME" =~ ^[a-z0-9-]+$ ]]; then
   echo "instance-name must match [a-z0-9-]+ (used verbatim in a systemd unit name and file paths)" >&2
@@ -101,6 +115,15 @@ done
 # it with a new management-url/setup-key re-registers against the new
 # account. The setup key never touches disk here; it only ever exists as a
 # short-lived argv on this one command.
-netbird up --daemon-addr "$SOCK" --management-url "$MANAGEMENT_URL" --setup-key "$SETUP_KEY"
+#
+# Confirmed live: on a bad/burned setup key, `netbird up` does NOT fail fast
+# — it retries the login with growing backoff indefinitely, printing the
+# real error each time but never returning control. Left unwrapped, this
+# just blocks until admin_control.py's own 90s subprocess timeout kills it,
+# which then reports a bare "timed out" and throws away everything printed
+# here. 25s is enough for the real error (or success) to show up at least
+# once; `timeout`'s own 124 exit still trips `set -e` below, same as any
+# other failure.
+timeout 25s netbird up --daemon-addr "$SOCK" --management-url "$MANAGEMENT_URL" --setup-key "$SETUP_KEY"
 
 netbird status --daemon-addr "$SOCK"
