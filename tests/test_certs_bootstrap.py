@@ -13,6 +13,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "compose" / "zenoh-admin"))
@@ -94,6 +95,52 @@ class UploadBootstrapIdentityTests(unittest.TestCase):
             finally:
                 certs_bootstrap._ROUTER_TLS_DIR = orig_router_tls_dir
                 certs_bootstrap._OWN_CERT_DIR = orig_own_cert_dir
+
+
+class EnvUpdateOrderingTests(unittest.TestCase):
+    def test_env_update_happens_before_native_process_restart(self):
+        """Confirmed live on zenoh-gateway: when _control_env_update() ran
+        *after* apply_rendered_config(restart_native=True), native bridge/layer
+        scripts restarted reading the still-old PARTNER_NAMESPACE/
+        NAMESPACE_PREFIX from .env — they came back up "RUNNING" but silently
+        publishing/subscribing under the previous identity, so nothing
+        downstream ever saw data under the new one. env_update must run
+        first."""
+        with tempfile.TemporaryDirectory() as tmp:
+            ca_pem, cert_pem, key_pem = _ca_and_leaf(tmp)
+            certs_bootstrap._ROUTER_TLS_DIR = os.path.join(tmp, "router-tls")
+            certs_bootstrap._OWN_CERT_DIR = os.path.join(tmp, "own-certs")
+
+            calls: list[str] = []
+
+            def record_env_update(_values):
+                calls.append("env_update")
+                return {}
+
+            def record_apply(_rendered, _fields, **_kwargs):
+                calls.append("apply_rendered_config")
+                return {"status": "applied", "native_process_restart_required": True,
+                         "native_process_restart_failures": []}
+
+            actor = mock.Mock(id="actor-1")
+            db = mock.Mock()
+
+            with mock.patch.object(certs_bootstrap, "_control_env_update", side_effect=record_env_update), \
+                 mock.patch.object(certs_bootstrap, "_render_config", return_value="dummy-rendered-config"), \
+                 mock.patch.object(certs_bootstrap, "apply_rendered_config", side_effect=record_apply), \
+                 mock.patch.object(certs_bootstrap, "_control_recreate_self", return_value={}), \
+                 mock.patch.object(certs_bootstrap, "write_audit", new=mock.AsyncMock()):
+                asyncio.run(certs_bootstrap.upload_bootstrap_identity(
+                    ca_root=UploadFile(filename="ca.pem", file=io.BytesIO(ca_pem)),
+                    certificate=UploadFile(filename="cert.pem", file=io.BytesIO(cert_pem)),
+                    private_key=UploadFile(filename="key.pem", file=io.BytesIO(key_pem)),
+                    partner_namespace="zenoh_gateway",
+                    namespace_prefix="LTU/CISB",
+                    db=db,
+                    actor=actor,
+                ))
+
+            self.assertEqual(calls, ["env_update", "apply_rendered_config"])
 
 
 if __name__ == "__main__":
