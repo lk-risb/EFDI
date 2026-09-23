@@ -16,6 +16,8 @@ PYTHON="$ROOT/compose/venv/bin/python3"
 . "$ROOT/scripts/_ask.sh"
 # shellcheck source=scripts/reset_admin_password.sh
 . "$ROOT/scripts/reset_admin_password.sh"
+# shellcheck source=scripts/check_docker_disk_space.sh
+. "$ROOT/scripts/check_docker_disk_space.sh"
 
 [ -f "$ENV_FILE" ] || fail "compose/.env not found — run ./install.sh first"
 [ -d "$ROOT/.git" ] || fail "Not a git repo — clone via git, not a manual download"
@@ -72,6 +74,10 @@ _dump_compose_logs() {
 
 if [ "$deployed_commit" != "$git_commit" ]; then
     warn "Stale zenoh-admin image detected — rebuilding without cache"
+    # --no-cache discards every reusable layer, so it needs more free space
+    # than a normal cached build — check before attempting it rather than
+    # failing mid-build with a bare "no space left on device".
+    check_docker_disk_space
     export GIT_COMMIT="$git_commit"
     docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" build --no-cache zenoh-admin \
         || fail "Clean zenoh-admin rebuild failed"

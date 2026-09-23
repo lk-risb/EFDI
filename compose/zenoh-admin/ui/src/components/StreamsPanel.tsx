@@ -384,6 +384,7 @@ export function StreamsPanel() {
   const [streams, setStreams] = useState<StreamInfo[]>([])
   const [enlarged, setEnlarged] = useState<string | null>(null)
   const [settings, setSettings] = useState<MediamtxSettings>(DEFAULT_SETTINGS)
+  const [showSettings, setShowSettings] = useState(false)
 
   useEffect(() => {
     async function load() {
@@ -406,15 +407,26 @@ export function StreamsPanel() {
 
   return (
     <div>
-      <div className="mb-4 flex items-baseline gap-3">
-        <h2 className="hud-label text-sm text-zinc-700 dark:text-zinc-300">Video streams</h2>
-        <span className="hud-label text-xs text-zinc-500">{streams.length} active</span>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div className="flex items-baseline gap-3">
+          <h2 className="hud-label text-sm text-zinc-700 dark:text-zinc-300">Video streams</h2>
+          <span className="hud-label text-xs text-zinc-500">{streams.length} active</span>
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowSettings(v => !v)}
+          className="flex items-center gap-1.5 rounded-md border border-zinc-300 px-2.5 py-1 text-xs text-zinc-600 hover:bg-zinc-100 dark:border-white/15 dark:text-zinc-300 dark:hover:bg-zinc-800"
+        >
+          <Settings2 size={13} /> {showSettings ? 'Hide settings' : 'mediamtx settings'}
+        </button>
       </div>
-      <MediamtxSettingsPanel
-        settings={settings}
-        canWrite={role === 'superadmin'}
-        onSaved={setSettings}
-      />
+      {showSettings && (
+        <MediamtxSettingsPanel
+          settings={settings}
+          canWrite={role === 'superadmin'}
+          onSaved={setSettings}
+        />
+      )}
       {streams.length === 0 ? (
         <p className="text-sm text-zinc-500">
           No drone feeds connected. Point FreeFlight's RTMP URL at this router's mediamtx service to see it here.

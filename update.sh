@@ -15,6 +15,8 @@ PYTHON="$ROOT/compose/venv/bin/python3"
 . "$ROOT/scripts/scrub_admin_secret.sh"
 # shellcheck source=scripts/cleanup_stale_pycache.sh
 . "$ROOT/scripts/cleanup_stale_pycache.sh"
+# shellcheck source=scripts/check_docker_disk_space.sh
+. "$ROOT/scripts/check_docker_disk_space.sh"
 
 # ── Startup banner (ported from the INTCORE installer's ASCII splash) ──────
 echo -e "${C}"
@@ -220,26 +222,7 @@ case "$_db_data_fstype" in
         ;;
 esac
 
-min_free_mb="${EFDI_UPDATE_MIN_FREE_MB:-2048}"
-[[ "$min_free_mb" =~ ^[0-9]+$ ]] || fail "EFDI_UPDATE_MIN_FREE_MB must be a non-negative integer"
-docker_root="$(docker info --format '{{.DockerRootDir}}' 2>/dev/null || true)"
-docker_root="${docker_root:-/var/lib/docker}"
-[ -d "$docker_root" ] || docker_root=/
-free_mb="$(df -Pm "$docker_root" | awk 'NR == 2 {print $4}')"
-[[ "$free_mb" =~ ^[0-9]+$ ]] || fail "Could not determine Docker storage free space"
-if (( free_mb < min_free_mb )); then
-    # Build cache is pure rebuild-time savings, never data — safe to reclaim
-    # automatically instead of failing every update once it piles up.
-    warn "Only ${free_mb} MiB free on Docker storage; ${min_free_mb} MiB required. Reclaiming unused build cache..."
-    docker builder prune -af >/dev/null 2>&1 || true
-    free_mb="$(df -Pm "$docker_root" | awk 'NR == 2 {print $4}')"
-fi
-if (( free_mb < min_free_mb )); then
-    docker system df 2>/dev/null || true
-    warn "Reclaim images unused by containers: docker image prune -af"
-    fail "Only ${free_mb} MiB free on Docker storage even after reclaiming build cache; ${min_free_mb} MiB required"
-fi
-ok "Docker storage preflight: ${free_mb} MiB free"
+check_docker_disk_space
 section_done
 
 section "Python dependencies"
