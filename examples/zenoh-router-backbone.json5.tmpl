@@ -1,0 +1,76 @@
+// EFDI — dedicated second Zenoh router: bridges the pod's LOCAL router to the
+// EFDI Backbone trial fabric over mTLS with a SEPARATE identity (Desert Bread
+// CA, not EFDI's own root CA).
+//
+// Why a second router at all: Zenoh 1.x applies one TLS identity to the whole
+// router session (see compose/zenoh-admin/api/config.py's _TLS_PROFILES header
+// comment). The primary router's identity is EFDI's own CA, verified by
+// zenoh1/zenoh2 — it cannot also present a Desert-Bread-CA cert to the
+// backbone on the same session. This router carries ONLY the backbone
+// identity and has no ACL/storage/namespace machinery of its own: it is a
+// pure relay between two already-trusted links.
+//
+// Direction: THIS router dials OUT on both sides. It connects to the primary
+// router's existing local plaintext port (the same one native bridges/layers
+// already use — access_control's "local-tcp" subject in
+// examples/zenoh-router.json5.tmpl already grants full pod-firstparty +
+// pod-inbound to any plaintext-TCP local client, so no ACL change is needed
+// on the primary router for this to work), and it connects to the backbone
+// endpoint over mTLS with the uploaded vendor identity. Zenoh propagates
+// pub/sub routes across both links automatically once mode is "router" —
+// this is the same peering mechanism zenoh1/zenoh2 federation already uses,
+// just with a local plaintext hop swapped in for one leg.
+//
+// Rendered by compose/zenoh-admin/api/backbone_bootstrap.py, not
+// first-boot.sh — this router is optional and only exists once a backbone
+// identity has been uploaded via the WebUI.
+//
+// Placeholders:
+//   ${ZENOH_BACKBONE_CONNECT_ENDPOINTS}  JSON list with the primary router's
+//                                        local plaintext endpoint FIRST
+//                                        (e.g. tcp/127.0.0.1:7448), followed
+//                                        by the remote backbone endpoint(s)
+//                                        from EFDI_BACKBONE_FABRIC_ENDPOINTS —
+//                                        built in Python, not JSON5, since
+//                                        JSON5 has no array-concat operator.
+{
+  mode: "router",
+
+  // No inbound listener at all — this process only ever dials out on both
+  // legs, so nothing needs to reach it directly.
+  listen: {
+    endpoints: [],
+  },
+
+  connect: {
+    endpoints: ${ZENOH_BACKBONE_CONNECT_ENDPOINTS},
+  },
+
+  transport: {
+    link: {
+      tls: {
+        // Backbone vendor identity only — never the pod's own EFDI-CA cert.
+        // Uploaded via /api/certs/backbone/bootstrap; see backbone_bootstrap.py.
+        connect_certificate: "/etc/zenoh/tls/cert.pem",
+        connect_private_key: "/etc/zenoh/tls/key.pem",
+        root_ca_certificate: "/etc/zenoh/tls/ca-roots.pem",
+        enable_mtls: true,
+        // The backbone router cert's SAN binds its DNS name
+        // (zenoh.efdi.netbird.efdi-backbone.net) — safe to verify here,
+        // unlike the pod's own mesh cert which binds an IP.
+        verify_name_on_connect: true,
+        close_link_on_expiration: true,
+      },
+    },
+  },
+
+  plugins_loading: {
+    enabled: false,
+  },
+
+  // No access_control block: Zenoh's default is allow-all. Deliberate — the
+  // two links this process carries are already trust-bounded by their own
+  // TLS identities (the primary router's local-tcp ACL on one side, the
+  // backbone's own wide-open-read trial posture on the other); this relay
+  // process adds no additional trust boundary of its own.
+}

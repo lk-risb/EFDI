@@ -88,6 +88,32 @@ services:
       timeout: 5s
       retries: 12
 
+  zenoh-router-backbone:
+    # Dedicated second Zenoh router: relays between the primary router's local
+    # plaintext port and the EFDI Backbone trial fabric over mTLS with a
+    # SEPARATE identity (Desert Bread CA, not EFDI's own root). Zenoh 1.x
+    # applies one TLS identity per router session (config.py's _TLS_PROFILES
+    # header comment) — mixed-trust endpoints need separate router processes.
+    # Does not exist until a backbone identity is uploaded via the WebUI
+    # (api/backbone_bootstrap.py), which is what first brings this up.
+    image: eclipse/zenoh:1.9.0@sha256:157965d71e0bfd0a044d76a985ff0e5c306ad3968929168fb9678cd2a7fec23f
+    container_name: efdi-pod-zenoh-router-backbone
+    network_mode: host
+    restart: unless-stopped
+    profiles:
+      - backbone
+    environment:
+      - RUST_LOG=${ZENOH_LOG:-info}
+    volumes:
+      - ${POD_STATE_DIR:?set in .env}/zenoh-backbone/config.json5:/etc/zenoh/config.json5:ro
+      - ${POD_STATE_DIR}/zenoh-backbone/tls:/etc/zenoh/tls:ro
+    command: ["-c", "/etc/zenoh/config.json5"]
+    healthcheck:
+      # No listen endpoints on this router (see the template) — nothing to
+      # nc -z. Its two connect links are directly verifiable by subscribing
+      # to the pod's own prefix from the backbone side instead.
+      disable: true
+
   zenoh-admin-db:
     image: postgres:18@sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280
     container_name: efdi-pod-zenoh-admin-db
@@ -186,6 +212,8 @@ services:
       - ZENOH_LOCAL_ENDPOINT=${ZENOH_ADMIN_ZENOH_ENDPOINT:-tcp/127.0.0.1:7448}
       - ZENOH_CONFIG_PATH=/zenoh-config/config.json5
       - ZENOH_TEMPLATE_PATH=/zenoh-config-template/zenoh-router.json5.tmpl
+      - ZENOH_BACKBONE_CONFIG_PATH=/zenoh-config-backbone/config.json5
+      - ZENOH_BACKBONE_TEMPLATE_PATH=/zenoh-config-template/zenoh-router-backbone.json5.tmpl
       - ZENOH_ADMIN_DB_USER=${ZENOH_ADMIN_DB_USER:?set ZENOH_ADMIN_DB_USER in .env}
       - ZENOH_ADMIN_DB_PASSWORD=${ZENOH_ADMIN_DB_PASSWORD:?set ZENOH_ADMIN_DB_PASSWORD in .env}
       - ZENOH_ADMIN_DB_ADDRESS=127.0.0.1:${ZENOH_ADMIN_DB_PORT:-5433}
@@ -254,6 +282,8 @@ services:
       - ${EFDI_POLICY_SIGNER_KEY_PATH:-/dev/null}:/certs/policy-signer-key.pem:ro
       - ${POD_STATE_DIR}/zenoh:/zenoh-config
       - ../examples/zenoh-router.json5.tmpl:/zenoh-config-template/zenoh-router.json5.tmpl:ro
+      - ${POD_STATE_DIR}/zenoh-backbone:/zenoh-config-backbone
+      - ../examples/zenoh-router-backbone.json5.tmpl:/zenoh-config-template/zenoh-router-backbone.json5.tmpl:ro
       - ${POD_STATE_DIR}/zenoh-admin-data:/data
       - ${POD_STATE_DIR}/namespace-prefix:/namespace-prefix:rw
       - ${POD_STATE_DIR}/data-topic-prefix:/data-topic-prefix:rw
