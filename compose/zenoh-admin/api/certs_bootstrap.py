@@ -182,19 +182,38 @@ async def upload_bootstrap_identity(
     key_pem = await _read_pem(private_key, "private key")
     _load_identity(ca_pem, cert_pem, key_pem)
 
-    os.makedirs(_ROUTER_TLS_DIR, exist_ok=True)
-    os.makedirs(_OWN_CERT_DIR, exist_ok=True)
+    # _ROUTER_TLS_DIR is always a real bind-mount target inside this container
+    # (derived from CONFIG_PATH, which the app itself needs to boot). _OWN_CERT_DIR
+    # is operator-configurable (EFDI_CERT_DIR) and has been set to a *host* path
+    # by mistake before (mirroring BUNDLE_DIR, which correctly is one) — that
+    # doesn't exist inside this container's filesystem at all, so the mkdir
+    # fails with a plain PermissionError/OSError. Without this, that surfaced as
+    # a bare, content-free 500 with a raw traceback in the container logs and
+    # nothing useful in the WebUI toast — same class of gotcha as
+    # docs/11-troubleshooting.md's "unhandled exception in an API handler".
+    try:
+        os.makedirs(_ROUTER_TLS_DIR, exist_ok=True)
+        os.makedirs(_OWN_CERT_DIR, exist_ok=True)
 
-    # Router's own listen/connect identity (consumed by zenoh-router itself).
-    _write_pem(os.path.join(_ROUTER_TLS_DIR, "ca-roots.pem"), ca_pem, 0o644)
-    _write_pem(os.path.join(_ROUTER_TLS_DIR, "pod-cert.pem"), cert_pem, 0o644)
-    _write_pem(os.path.join(_ROUTER_TLS_DIR, "pod-key.pem"), key_pem, 0o600)
+        # Router's own listen/connect identity (consumed by zenoh-router itself).
+        _write_pem(os.path.join(_ROUTER_TLS_DIR, "ca-roots.pem"), ca_pem, 0o644)
+        _write_pem(os.path.join(_ROUTER_TLS_DIR, "pod-cert.pem"), cert_pem, 0o644)
+        _write_pem(os.path.join(_ROUTER_TLS_DIR, "pod-key.pem"), key_pem, 0o600)
 
-    # This container's own client identity, filename-keyed by namespace (see
-    # local_zenoh.py, federation.py, pki.py — all read EFDI_CERT_DIR this way).
-    _write_pem(os.path.join(_OWN_CERT_DIR, "efdi-ca-root.pem"), ca_pem, 0o644)
-    _write_pem(os.path.join(_OWN_CERT_DIR, f"{partner_namespace}-cert.pem"), cert_pem, 0o644)
-    _write_pem(os.path.join(_OWN_CERT_DIR, f"{partner_namespace}-key.pem"), key_pem, 0o600)
+        # This container's own client identity, filename-keyed by namespace (see
+        # local_zenoh.py, federation.py, pki.py — all read EFDI_CERT_DIR this way).
+        _write_pem(os.path.join(_OWN_CERT_DIR, "efdi-ca-root.pem"), ca_pem, 0o644)
+        _write_pem(os.path.join(_OWN_CERT_DIR, f"{partner_namespace}-cert.pem"), cert_pem, 0o644)
+        _write_pem(os.path.join(_OWN_CERT_DIR, f"{partner_namespace}-key.pem"), key_pem, 0o600)
+    except OSError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                f"Could not write certificate material to {exc.filename or _OWN_CERT_DIR!r}: {exc.strerror}. "
+                "EFDI_CERT_DIR must be the path *inside* this container (compose's own default is "
+                "/certs/efdi) — a host-side path (e.g. mirroring BUNDLE_DIR) will fail exactly like this."
+            ),
+        ) from exc
 
     fields = ConfigFields(
         mtls_port=int(os.environ.get("ZENOH_LISTEN_PORT", "7447")),
