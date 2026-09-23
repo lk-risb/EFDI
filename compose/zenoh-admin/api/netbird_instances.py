@@ -31,8 +31,14 @@ async def configure_netbird_instance(
     # The control agent restricts `name` to its own allowlist
     # (admin_control.py's _NETBIRD_INSTANCES) — no allowlist duplicated here,
     # a name outside it simply comes back as a 409 from the agent.
+    # admin_control.py's own subprocess timeout for this is 90s (systemd unit
+    # install + `netbird up` account negotiation genuinely takes longer than
+    # the 8s default) — this client-side timeout must exceed that, or the
+    # WebUI reports a false "control agent unavailable" for a join that may
+    # still succeed seconds later on the host.
     return _control(
         f"/v1/netbird/{name}/configure",
         method="POST",
         body={"management_url": body.management_url, "setup_key": body.setup_key},
+        timeout=100,
     )

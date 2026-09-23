@@ -34,7 +34,7 @@ class RuntimeSelectionRequest(BaseModel):
     selected_services: list[str] = Field(default_factory=list)
 
 
-def _control(path: str, method: str = "GET", body: dict | None = None) -> dict:
+def _control(path: str, method: str = "GET", body: dict | None = None, timeout: float = 8) -> dict:
     headers = {"Accept": "application/json"}
     if _CONTROL_TOKEN:
         headers["Authorization"] = f"Bearer {_CONTROL_TOKEN}"
@@ -44,7 +44,7 @@ def _control(path: str, method: str = "GET", body: dict | None = None) -> dict:
         headers["Content-Type"] = "application/json"
     request = urllib.request.Request(_CONTROL_URL + path, data=data, headers=headers, method=method)
     try:
-        with urllib.request.urlopen(request, timeout=8) as response:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
             return json.loads(response.read(2_000_000).decode("utf-8"))
     except urllib.error.HTTPError as exc:
         try:
