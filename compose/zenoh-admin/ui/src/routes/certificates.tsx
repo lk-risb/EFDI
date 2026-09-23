@@ -101,6 +101,8 @@ function CertificatesPage() {
   const [netbirdManagementUrl, setNetbirdManagementUrl] = useState('')
   const [netbirdSetupKey, setNetbirdSetupKey] = useState('')
   const [netbirdConfiguring, setNetbirdConfiguring] = useState(false)
+  const [netbirdStatus, setNetbirdStatus] = useState<{ connected: boolean } | null>(null)
+  const [showNetbirdJoin, setShowNetbirdJoin] = useState(false)
 
   async function load() {
     try {
@@ -126,6 +128,15 @@ function CertificatesPage() {
       }
     } catch (error) {
       notify.error(errorMessage(error))
+    }
+    // Isolated from the Promise.all above: this hits the host control agent
+    // (a subprocess call, not just a DB read), so a transient hiccup there
+    // shouldn't take down the rest of the page's status. Never joined yet is
+    // a normal, silent "not connected" result, not an error.
+    try {
+      setNetbirdStatus(await apiJson<{ connected: boolean }>('/api/netbird/backbone/status'))
+    } catch {
+      // leave netbirdStatus as-is — the join form stays expanded either way
     }
   }
 
@@ -232,10 +243,12 @@ function CertificatesPage() {
       if (!response.ok) throw new Error(errorDetail(body, response))
       notify.success('Backbone NetBird instance joined. DNS/routing for the backbone endpoint should resolve shortly.')
       setNetbirdSetupKey('')
+      setShowNetbirdJoin(false)
     } catch (error) {
       notify.error(errorMessage(error))
     } finally {
       setNetbirdConfiguring(false)
+      setTimeout(load, 4000)
     }
   }
 
@@ -360,38 +373,59 @@ function CertificatesPage() {
           </section>
         )}
 
-        <section className="hud-card hud-glass hud-frame relative mb-6 border border-zinc-200 p-4 dark:border-white/10">
-          <HudCorners />
-          <div className="mb-3 flex items-center gap-2">
-            <Wifi size={16} className="text-zinc-500" />
-            <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Backbone NetBird join</h2>
+        {netbirdStatus?.connected && (
+          <div className="mb-5 flex flex-wrap items-center gap-2 text-xs">
+            <span className="flex items-center gap-1">
+              <Wifi size={13} /> <StatusPill text="backbone netbird connected" tone="ok" />
+            </span>
+            {!showNetbirdJoin && (
+              <button onClick={() => setShowNetbirdJoin(true)}
+                className="flex items-center gap-1 rounded-md border border-zinc-300 px-2.5 py-1 text-zinc-600 hover:border-accent-ring hover:text-zinc-900 dark:border-white/10 dark:text-zinc-400 dark:hover:text-white">
+                <Wifi size={12} /> Rejoin / change key…
+              </button>
+            )}
           </div>
-          <p className="mb-4 text-xs text-zinc-500">
-            This pod's own NetBird instance and the EFDI Backbone trial fabric are separate NetBird
-            accounts — one daemon can only join one. This provisions a SECOND, independent netbird
-            service on this host (its own systemd unit, config dir, and control socket) purely to reach
-            the backbone, without touching the pod's existing NetBird connection. Required before the
-            backbone identity below can resolve or route anywhere. Get the management URL and a fresh
-            setup key from the backbone NetBird admin panel — each peer needs its own setup key.
-          </p>
-          <form onSubmit={configureBackboneNetbird} className="grid gap-3 sm:grid-cols-2">
-            <label className="text-xs text-zinc-500">
-              Management URL
-              <input className={`${inputClass} mt-1 font-mono`} value={netbirdManagementUrl}
-                onChange={event => setNetbirdManagementUrl(event.target.value)}
-                placeholder="https://netbird.efdi-backbone.net:443" required />
-            </label>
-            <label className="text-xs text-zinc-500">
-              Setup key
-              <input type="password" className={`${inputClass} mt-1 font-mono`} value={netbirdSetupKey}
-                onChange={event => setNetbirdSetupKey(event.target.value)}
-                placeholder="one-time join key" required />
-            </label>
-            <button disabled={netbirdConfiguring} className="sm:col-span-2 flex items-center justify-center gap-2 rounded-md bg-accent-fill px-4 py-2 text-sm text-accent-text disabled:opacity-50">
-              <Wifi size={14} /> {netbirdConfiguring ? 'Joining…' : 'Join backbone NetBird network'}
-            </button>
-          </form>
-        </section>
+        )}
+
+        {(!netbirdStatus?.connected || showNetbirdJoin) && (
+          <section className="hud-card hud-glass hud-frame relative mb-6 border border-zinc-200 p-4 dark:border-white/10">
+            <HudCorners />
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Wifi size={16} className="text-zinc-500" />
+                <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Backbone NetBird join</h2>
+              </div>
+              {netbirdStatus?.connected && (
+                <button onClick={() => setShowNetbirdJoin(false)} className="text-xs text-zinc-500 hover:text-zinc-900 dark:hover:text-white">Cancel</button>
+              )}
+            </div>
+            <p className="mb-4 text-xs text-zinc-500">
+              This pod's own NetBird instance and the EFDI Backbone trial fabric are separate NetBird
+              accounts — one daemon can only join one. This provisions a SECOND, independent netbird
+              service on this host (its own systemd unit, config dir, and control socket) purely to reach
+              the backbone, without touching the pod's existing NetBird connection. Required before the
+              backbone identity below can resolve or route anywhere. Get the management URL and a fresh
+              setup key from the backbone NetBird admin panel — each peer needs its own setup key.
+            </p>
+            <form onSubmit={configureBackboneNetbird} className="grid gap-3 sm:grid-cols-2">
+              <label className="text-xs text-zinc-500">
+                Management URL
+                <input className={`${inputClass} mt-1 font-mono`} value={netbirdManagementUrl}
+                  onChange={event => setNetbirdManagementUrl(event.target.value)}
+                  placeholder="https://netbird.efdi-backbone.net:443" required />
+              </label>
+              <label className="text-xs text-zinc-500">
+                Setup key
+                <input type="password" className={`${inputClass} mt-1 font-mono`} value={netbirdSetupKey}
+                  onChange={event => setNetbirdSetupKey(event.target.value)}
+                  placeholder="one-time join key" required />
+              </label>
+              <button disabled={netbirdConfiguring} className="sm:col-span-2 flex items-center justify-center gap-2 rounded-md bg-accent-fill px-4 py-2 text-sm text-accent-text disabled:opacity-50">
+                <Wifi size={14} /> {netbirdConfiguring ? 'Joining…' : 'Join backbone NetBird network'}
+              </button>
+            </form>
+          </section>
+        )}
 
         {backboneStatus?.identity_uploaded && (
           <div className="mb-5 flex flex-wrap items-center gap-2 text-xs">

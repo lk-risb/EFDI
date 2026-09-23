@@ -86,11 +86,23 @@ SERVICE_NAME="netbird-${NAME}"
 # resolved via the PRIMARY instance's table and went nowhere, even though
 # `netbird status` on the backbone daemon reported "Connected" with a real
 # IP the whole time — that status reflects successful control-plane login,
-# not a working local data-plane interface). Deriving both from NAME keeps
-# this deterministic without hardcoding a port per instance name.
+# not a working local data-plane interface).
+#
+# Interface name is self-descriptive ("wt-backbone", not "wt1") — reading
+# `ip link show` shouldn't require memorizing which number means what.
+# WireGuard port is an explicit table, same manual-curation style as
+# admin_control.py's _NETBIRD_INSTANCES allowlist: add one line per new
+# instance name, rather than deriving it — a derived value doesn't need to
+# exist yet for the one instance this actually has today, and an explicit
+# table is easier to read and to grep for a collision than a hash.
 IFACE_NAME="wt-${NAME}"
-PORT_OFFSET=$(( 0x$(printf '%s' "$NAME" | md5sum | cut -c1-4) % 1000 ))
-WIREGUARD_PORT=$(( 51900 + PORT_OFFSET ))
+case "$NAME" in
+  backbone) WIREGUARD_PORT=51821 ;;
+  *)
+    echo "no WireGuard port assigned for instance '$NAME' — add one to the case in netbird-instance.sh (pick anything unused, e.g. 51822)" >&2
+    exit 1
+    ;;
+esac
 
 mkdir -p "$CONFIG_DIR" "$LOG_DIR"
 chmod 700 "$CONFIG_DIR"

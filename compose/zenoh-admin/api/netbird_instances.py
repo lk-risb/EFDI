@@ -22,6 +22,14 @@ class NetbirdInstanceRequest(BaseModel):
     setup_key: str
 
 
+@router.get("/{name}/status")
+async def netbird_instance_status(
+    name: str,
+    _=Depends(require_role("admin", "superadmin")),
+):
+    return _control(f"/v1/netbird/{name}/status")
+
+
 @router.post("/{name}/configure")
 async def configure_netbird_instance(
     name: str,
