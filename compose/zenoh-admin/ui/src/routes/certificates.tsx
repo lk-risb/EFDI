@@ -21,7 +21,7 @@ export const Route = createFileRoute('/certificates')({
 })
 
 interface BootstrapStatus { bootstrap: boolean }
-interface BackboneStatus { identity_uploaded: boolean; endpoints_configured: boolean }
+interface BackboneStatus { identity_uploaded: boolean; configured: boolean }
 interface CertInfo { name: string; expires_at: string; days_remaining: number }
 interface PkiStatus {
   configured: boolean
@@ -91,6 +91,7 @@ function CertificatesPage() {
   const [backboneCaFile, setBackboneCaFile] = useState<File | null>(null)
   const [backboneCertFile, setBackboneCertFile] = useState<File | null>(null)
   const [backboneKeyFile, setBackboneKeyFile] = useState<File | null>(null)
+  const [backboneEndpoint, setBackboneEndpoint] = useState('tls/zenoh.efdi.netbird.efdi-backbone.net:7447')
   const [backboneUploading, setBackboneUploading] = useState(false)
 
   // Backbone NetBird join — a second, independent netbird daemon on this
@@ -186,8 +187,8 @@ function CertificatesPage() {
 
   async function uploadBackboneIdentity(event: React.FormEvent) {
     event.preventDefault()
-    if (!backboneCaFile || !backboneCertFile || !backboneKeyFile) {
-      notify.error('CA root, certificate, and private key are all required')
+    if (!backboneCaFile || !backboneCertFile || !backboneKeyFile || !backboneEndpoint) {
+      notify.error('CA root, certificate, private key, and the router endpoint are all required')
       return
     }
     setBackboneUploading(true)
@@ -196,6 +197,7 @@ function CertificatesPage() {
       form.append('ca_root', backboneCaFile)
       form.append('certificate', backboneCertFile)
       form.append('private_key', backboneKeyFile)
+      form.append('backbone_endpoint', backboneEndpoint)
       const response = await apiFetch('/api/certs/backbone/bootstrap', { method: 'POST', body: form })
       const body = await response.json().catch(() => ({ detail: response.statusText }))
       if (!response.ok) throw new Error(errorDetail(body, response))
@@ -405,10 +407,15 @@ function CertificatesPage() {
             Separate mTLS identity for the dedicated <code>zenoh-router-backbone</code> container that
             bridges this pod to the EFDI Backbone trial fabric. Distinct CA from this pod's own identity
             above — Zenoh applies one TLS identity per router session, so the backbone link runs as its
-            own router process. Set the endpoint under Integration Settings' Backbone fabric preset
-            first ({backboneStatus?.endpoints_configured ? 'configured' : 'not yet configured'}).
+            own router process.
           </p>
           <form onSubmit={uploadBackboneIdentity} className="grid gap-3 sm:grid-cols-2">
+            <label className="text-xs text-zinc-500 sm:col-span-2">
+              Backbone router endpoint
+              <input className={`${inputClass} mt-1 font-mono`} value={backboneEndpoint}
+                onChange={event => setBackboneEndpoint(event.target.value)}
+                placeholder="tls/zenoh.efdi.netbird.efdi-backbone.net:7447" required />
+            </label>
             <label className="text-xs text-zinc-500">
               CA root (.crt or .pem)
               <input type="file" required accept=".pem,.crt,.cer"
