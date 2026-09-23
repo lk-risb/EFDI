@@ -178,6 +178,16 @@ async def upload_backbone_identity(
             detail=f"Backbone router container did not start: {result.get('output')}",
         )
 
+    # Best-effort, like the env update above: backbone_bridge.py (reads
+    # backbone content off this pod's local router, republishes anything it
+    # recognizes into TOPIC_ROOT for tak_layer.py) is a visualization
+    # convenience, not the connection itself. A control-agent hiccup here
+    # must not fail an otherwise-successful identity upload.
+    try:
+        _control_start_backbone_bridge()
+    except Exception:  # noqa: BLE001
+        pass
+
     await write_audit(db, actor.id, "backbone_bootstrap_applied", "zenoh-router-backbone started")
     return {"status": "applied", "container_output": result.get("output", "")}
 
@@ -193,3 +203,8 @@ def _control_start_backbone_router() -> dict:
     # `docker compose up` may need to pull/build) — must exceed that or a
     # slow-but-succeeding start reports as a false failure client-side.
     return _control("/v1/containers/zenoh-router-backbone/start", method="POST", timeout=70)
+
+
+def _control_start_backbone_bridge() -> dict:
+    from .control import _control
+    return _control("/v1/services/backbone-bridge/start", method="POST", timeout=20)

@@ -169,6 +169,26 @@
         permission: "allow",
         key_exprs: ["${NAMESPACE_ROOT}/**/@config/v1", "${NAMESPACE_ROOT}/**/@config/relay/v1", "${NAMESPACE_ROOT}/**/@config/status/v1", "${NAMESPACE_ROOT}/**/@topology"],
       },
+      {
+        // Read-only visibility into whatever's on the EFDI Backbone trial
+        // fabric, for local-tcp bridges (backbone_bridge.py) and the admin
+        // GUI only — never granted to mtls-peer, which also covers remote
+        // fabric partners that have no business seeing trial-fabric traffic
+        // through this pod. zenoh-router-backbone (a peer of this router,
+        // connected via its own dedicated mTLS session against the real
+        // backbone) has no ACL of its own by design, so this rule is the
+        // only thing standing between "peered" and "actually readable by a
+        // local process." No write grant here: the backbone fabric's own
+        // wire-layer ACL only accepts writes under our assigned vendor
+        // prefix anyway (enforced by the remote side against our uploaded
+        // identity's cert), so a local write grant here would just be dead
+        // permission surface.
+        id: "pod-backbone-read",
+        messages: ["declare_subscriber", "query", "reply"],
+        flows: ["egress", "ingress"],
+        permission: "allow",
+        key_exprs: ["**"],
+      },
     ],
     subjects: [
       {
@@ -184,7 +204,7 @@
     ],
     policies: [
       { rules: ["pod-firstparty", "pod-inbound", "pod-admin-introspect", "pod-federation-config"], subjects: ["mtls-peer"] },
-      { rules: ["pod-firstparty", "pod-inbound", "pod-admin-introspect", "pod-federation-config"], subjects: ["local-tcp"] },
+      { rules: ["pod-firstparty", "pod-inbound", "pod-admin-introspect", "pod-federation-config", "pod-backbone-read"], subjects: ["local-tcp"] },
     ],
   },
 }
