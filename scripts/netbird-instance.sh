@@ -65,12 +65,32 @@ if [ "$NAME" = "netbird" ] || [ "$NAME" = "default" ]; then
   echo "refusing to use '$NAME' — reserved for the host's own default netbird instance" >&2
   exit 1
 fi
+# "wt-${NAME}" must fit Linux's IFNAMSIZ (16 bytes incl. NUL, so 15 usable
+# chars) — "wt-" takes 3, leaving 12 for NAME.
+if [ "${#NAME}" -gt 12 ]; then
+  echo "instance-name must be 12 characters or fewer (used in a 15-char WireGuard interface name)" >&2
+  exit 1
+fi
 
 CONFIG_DIR="/etc/netbird-${NAME}"
 LOG_DIR="/var/log/netbird-${NAME}"
 SOCK="unix:///var/run/netbird-${NAME}.sock"
 UNIT_PATH="/etc/systemd/system/netbird-${NAME}.service"
 SERVICE_NAME="netbird-${NAME}"
+# Confirmed live: `netbird up`'s --interface-name and --wireguard-port both
+# default to the SAME value ("wt0" / 51820) on every instance, including the
+# host's own default netbird.service. Two instances that never override
+# these silently collide on the interface name — the second one never gets
+# its own real WireGuard device, so its traffic falls through to whichever
+# instance actually holds "wt0" (confirmed: routes to backbone peer IPs
+# resolved via the PRIMARY instance's table and went nowhere, even though
+# `netbird status` on the backbone daemon reported "Connected" with a real
+# IP the whole time — that status reflects successful control-plane login,
+# not a working local data-plane interface). Deriving both from NAME keeps
+# this deterministic without hardcoding a port per instance name.
+IFACE_NAME="wt-${NAME}"
+PORT_OFFSET=$(( 0x$(printf '%s' "$NAME" | md5sum | cut -c1-4) % 1000 ))
+WIREGUARD_PORT=$(( 51900 + PORT_OFFSET ))
 
 mkdir -p "$CONFIG_DIR" "$LOG_DIR"
 chmod 700 "$CONFIG_DIR"
@@ -124,6 +144,7 @@ done
 # here. 25s is enough for the real error (or success) to show up at least
 # once; `timeout`'s own 124 exit still trips `set -e` below, same as any
 # other failure.
-timeout 25s netbird up --daemon-addr "$SOCK" --management-url "$MANAGEMENT_URL" --setup-key "$SETUP_KEY"
+timeout 25s netbird up --daemon-addr "$SOCK" --management-url "$MANAGEMENT_URL" --setup-key "$SETUP_KEY" \
+  --interface-name "$IFACE_NAME" --wireguard-port "$WIREGUARD_PORT"
 
 netbird status --daemon-addr "$SOCK"
