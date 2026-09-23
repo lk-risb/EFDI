@@ -93,6 +93,7 @@ function CertificatesPage() {
   const [backboneKeyFile, setBackboneKeyFile] = useState<File | null>(null)
   const [backboneEndpoint, setBackboneEndpoint] = useState('tls/zenoh.efdi.netbird.efdi-backbone.net:7447')
   const [backboneUploading, setBackboneUploading] = useState(false)
+  const [showBackboneRotate, setShowBackboneRotate] = useState(false)
 
   // Backbone NetBird join — a second, independent netbird daemon on this
   // host (efdi.ltu and the backbone are separate NetBird accounts; one
@@ -205,6 +206,7 @@ function CertificatesPage() {
       setBackboneCaFile(null)
       setBackboneCertFile(null)
       setBackboneKeyFile(null)
+      setShowBackboneRotate(false)
     } catch (error) {
       notify.error(errorMessage(error))
     } finally {
@@ -391,54 +393,69 @@ function CertificatesPage() {
           </form>
         </section>
 
-        <section className="hud-card hud-glass hud-frame relative mb-6 border border-zinc-200 p-4 dark:border-white/10">
-          <HudCorners />
-          <div className="mb-3 flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <Network size={16} className="text-zinc-500" />
-              <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Backbone identity</h2>
-            </div>
-            <StatusPill
-              text={backboneStatus?.identity_uploaded ? 'zenoh-router-backbone identity uploaded' : 'no backbone identity'}
-              tone={backboneStatus?.identity_uploaded ? 'ok' : 'neutral'}
-            />
+        {backboneStatus?.identity_uploaded && (
+          <div className="mb-5 flex flex-wrap items-center gap-2 text-xs">
+            <span className="flex items-center gap-1">
+              <Network size={13} /> <StatusPill text="backbone identity uploaded" tone="ok" />
+            </span>
+            {!showBackboneRotate && (
+              <button onClick={() => setShowBackboneRotate(true)}
+                className="flex items-center gap-1 rounded-md border border-zinc-300 px-2.5 py-1 text-zinc-600 hover:border-accent-ring hover:text-zinc-900 dark:border-white/10 dark:text-zinc-400 dark:hover:text-white">
+                <UploadCloud size={12} /> Rotate backbone identity…
+              </button>
+            )}
           </div>
-          <p className="mb-4 text-xs text-zinc-500">
-            Separate mTLS identity for the dedicated <code>zenoh-router-backbone</code> container that
-            bridges this pod to the EFDI Backbone trial fabric. Distinct CA from this pod's own identity
-            above — Zenoh applies one TLS identity per router session, so the backbone link runs as its
-            own router process.
-          </p>
-          <form onSubmit={uploadBackboneIdentity} className="grid gap-3 sm:grid-cols-2">
-            <label className="text-xs text-zinc-500 sm:col-span-2">
-              Backbone router endpoint
-              <input className={`${inputClass} mt-1 font-mono`} value={backboneEndpoint}
-                onChange={event => setBackboneEndpoint(event.target.value)}
-                placeholder="tls/zenoh.efdi.netbird.efdi-backbone.net:7447" required />
-            </label>
-            <label className="text-xs text-zinc-500">
-              CA root (.crt or .pem)
-              <input type="file" required accept=".pem,.crt,.cer"
-                onChange={event => setBackboneCaFile(event.target.files?.[0] ?? null)}
-                className="mt-1 block w-full text-xs text-zinc-500 file:mr-3 file:rounded-md file:border-0 file:bg-zinc-200 file:px-3 file:py-1.5 file:text-xs file:text-zinc-900 dark:file:bg-white/10 dark:file:text-white" />
-            </label>
-            <label className="text-xs text-zinc-500">
-              Certificate (.crt or .pem)
-              <input type="file" required accept=".pem,.crt,.cer"
-                onChange={event => setBackboneCertFile(event.target.files?.[0] ?? null)}
-                className="mt-1 block w-full text-xs text-zinc-500 file:mr-3 file:rounded-md file:border-0 file:bg-zinc-200 file:px-3 file:py-1.5 file:text-xs file:text-zinc-900 dark:file:bg-white/10 dark:file:text-white" />
-            </label>
-            <label className="text-xs text-zinc-500 sm:col-span-2">
-              Private key (.key or .pem)
-              <input type="file" required accept=".pem,.key"
-                onChange={event => setBackboneKeyFile(event.target.files?.[0] ?? null)}
-                className="mt-1 block w-full text-xs text-zinc-500 file:mr-3 file:rounded-md file:border-0 file:bg-zinc-200 file:px-3 file:py-1.5 file:text-xs file:text-zinc-900 dark:file:bg-white/10 dark:file:text-white" />
-            </label>
-            <button disabled={backboneUploading} className="sm:col-span-2 flex items-center justify-center gap-2 rounded-md bg-accent-fill px-4 py-2 text-sm text-accent-text disabled:opacity-50">
-              <UploadCloud size={14} /> {backboneUploading ? 'Applying…' : backboneStatus?.identity_uploaded ? 'Upload and rotate backbone identity' : 'Upload and start backbone router'}
-            </button>
-          </form>
-        </section>
+        )}
+
+        {(!backboneStatus?.identity_uploaded || showBackboneRotate) && (
+          <section className="hud-card hud-glass hud-frame relative mb-6 border border-zinc-200 p-4 dark:border-white/10">
+            <HudCorners />
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Network size={16} className="text-zinc-500" />
+                <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Backbone identity</h2>
+              </div>
+              {backboneStatus?.identity_uploaded && (
+                <button onClick={() => setShowBackboneRotate(false)} className="text-xs text-zinc-500 hover:text-zinc-900 dark:hover:text-white">Cancel</button>
+              )}
+            </div>
+            <p className="mb-4 text-xs text-zinc-500">
+              Separate mTLS identity for the dedicated <code>zenoh-router-backbone</code> container that
+              bridges this pod to the EFDI Backbone trial fabric. Distinct CA from this pod's own identity
+              above — Zenoh applies one TLS identity per router session, so the backbone link runs as its
+              own router process.
+            </p>
+            <form onSubmit={uploadBackboneIdentity} className="grid gap-3 sm:grid-cols-2">
+              <label className="text-xs text-zinc-500 sm:col-span-2">
+                Backbone router endpoint
+                <input className={`${inputClass} mt-1 font-mono`} value={backboneEndpoint}
+                  onChange={event => setBackboneEndpoint(event.target.value)}
+                  placeholder="tls/zenoh.efdi.netbird.efdi-backbone.net:7447" required />
+              </label>
+              <label className="text-xs text-zinc-500">
+                CA root (.crt or .pem)
+                <input type="file" required accept=".pem,.crt,.cer"
+                  onChange={event => setBackboneCaFile(event.target.files?.[0] ?? null)}
+                  className="mt-1 block w-full text-xs text-zinc-500 file:mr-3 file:rounded-md file:border-0 file:bg-zinc-200 file:px-3 file:py-1.5 file:text-xs file:text-zinc-900 dark:file:bg-white/10 dark:file:text-white" />
+              </label>
+              <label className="text-xs text-zinc-500">
+                Certificate (.crt or .pem)
+                <input type="file" required accept=".pem,.crt,.cer"
+                  onChange={event => setBackboneCertFile(event.target.files?.[0] ?? null)}
+                  className="mt-1 block w-full text-xs text-zinc-500 file:mr-3 file:rounded-md file:border-0 file:bg-zinc-200 file:px-3 file:py-1.5 file:text-xs file:text-zinc-900 dark:file:bg-white/10 dark:file:text-white" />
+              </label>
+              <label className="text-xs text-zinc-500 sm:col-span-2">
+                Private key (.key or .pem)
+                <input type="file" required accept=".pem,.key"
+                  onChange={event => setBackboneKeyFile(event.target.files?.[0] ?? null)}
+                  className="mt-1 block w-full text-xs text-zinc-500 file:mr-3 file:rounded-md file:border-0 file:bg-zinc-200 file:px-3 file:py-1.5 file:text-xs file:text-zinc-900 dark:file:bg-white/10 dark:file:text-white" />
+              </label>
+              <button disabled={backboneUploading} className="sm:col-span-2 flex items-center justify-center gap-2 rounded-md bg-accent-fill px-4 py-2 text-sm text-accent-text disabled:opacity-50">
+                <UploadCloud size={14} /> {backboneUploading ? 'Applying…' : backboneStatus?.identity_uploaded ? 'Upload and rotate backbone identity' : 'Upload and start backbone router'}
+              </button>
+            </form>
+          </section>
+        )}
 
         <div className="mb-5 flex flex-wrap items-center gap-2 text-xs">
           <span className="flex items-center gap-1">

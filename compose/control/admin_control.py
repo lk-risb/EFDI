@@ -751,8 +751,17 @@ def _configure_netbird_instance(name: str, management_url: str, setup_key: str) 
         # itself never writes it to disk (see the script's own comment).
         output = (result.stdout + result.stderr).replace(setup_key, "***").strip()
         return {"ok": result.returncode == 0, "returncode": result.returncode, "output": output[-8000:]}
-    except subprocess.TimeoutExpired:
-        return {"ok": False, "returncode": 124, "output": "netbird instance configure timed out"}
+    except subprocess.TimeoutExpired as exc:
+        # `netbird up` blocks and retries indefinitely on a bad key/URL
+        # rather than failing fast (confirmed live: continuous "setup key is
+        # invalid" retries with backoff until something kills it) — so this
+        # timeout is often not really "stuck", it's the real, already-logged
+        # error being discarded. TimeoutExpired carries whatever the child
+        # had written to stdout/stderr before being killed; surface that
+        # instead of a bare generic "timed out" that hides it.
+        partial = ((exc.stdout or "") + (exc.stderr or "")).replace(setup_key, "***").strip()
+        detail = partial[-4000:] if partial else "no output before the timeout"
+        return {"ok": False, "returncode": 124, "output": f"netbird instance configure timed out: {detail}"}
     except OSError as exc:
         return {"ok": False, "returncode": 127, "output": str(exc)}
 
