@@ -229,6 +229,26 @@ async def upload_bootstrap_identity(
         fabric_tls_profile=_BOOTSTRAP_TLS_PROFILE,
     )
     rendered = _render_config(fields)
+
+    # Must happen *before* apply_rendered_config's restart_native=True below —
+    # confirmed live on zenoh-gateway: native bridge/layer scripts (start.sh)
+    # read PARTNER_NAMESPACE/NAMESPACE_PREFIX fresh from .env at their own
+    # restart, so restarting them before .env is updated silently republishes
+    # them under the *old* identity. They come back up looking healthy
+    # ("RUNNING") while actually still on the stale namespace — nothing
+    # downstream (tak_layer, SitaWare, …) ever sees data under the new one.
+    # Previously this ran only after apply_rendered_config, best-effort — that
+    # ordering is exactly what reproduced the bug.
+    try:
+        _control_env_update({"PARTNER_NAMESPACE": partner_namespace, "NAMESPACE_PREFIX": namespace_prefix})
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Could not update PARTNER_NAMESPACE/NAMESPACE_PREFIX before restarting native "
+                    f"processes: {exc}. Not proceeding — restarting them against the old .env would "
+                    f"silently republish under the previous namespace.",
+        ) from exc
+
     # No existing remote management link to preserve on a bootstrap → mTLS
     # switch — there is nothing federated yet, so skip that health proof.
     result = apply_rendered_config(rendered, fields, restart_native=True, preserve_management=False)
@@ -244,14 +264,13 @@ async def upload_bootstrap_identity(
 
     await write_audit(db, actor.id, "certs_bootstrap_applied", f"namespace={partner_namespace}")
 
-    # PARTNER_NAMESPACE/NAMESPACE_PREFIX are baked into this container's own
-    # env and bind-mount paths at create time — write them to .env and recreate
-    # so this container itself picks up the new identity, not just the router.
-    # The recreate tears down the very container handling this request, so a
-    # failure here (including the connection simply dying mid-response) is
-    # expected, not fatal — the router-side switch above already succeeded.
+    # .env was already updated above (before the native-process restart). This
+    # container's own env/bind-mounts are still fixed at create time though,
+    # so it needs a recreate to pick up the new identity too — that tears
+    # down the very container handling this request, so a failure here
+    # (including the connection simply dying mid-response) is expected, not
+    # fatal — the router-side switch above already succeeded.
     try:
-        _control_env_update({"PARTNER_NAMESPACE": partner_namespace, "NAMESPACE_PREFIX": namespace_prefix})
         _control_recreate_self()
         admin_recreate = "requested"
     except Exception as exc:  # noqa: BLE001 — best-effort; see comment above
