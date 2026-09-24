@@ -117,7 +117,7 @@ SERVICES=(
     # Protocols
     nffi sapient stanag4586 stanag4609 stanag5516
     cap mqtt sparkplug sensor-health mission-route aartos
-    generic_json geojson
+    generic_json geojson camera_sites
     # Output layers
     tak_layer sitaware_layer tak_alert_layer intcore_layer
     # C2 inputs
@@ -215,6 +215,7 @@ declare -A SVC_CAT=(
     [backbone_layer]="Backbone"
     [generic_json]="Protocols"
     [geojson]="Protocols"
+    [camera_sites]="Protocols"
 )
 
 declare -A SVC_DESC=(
@@ -260,6 +261,7 @@ declare -A SVC_DESC=(
     [backbone_layer]="EFDI tracks → EFDI Backbone trial fabric"
     [generic_json]="Generic flat/nested JSON with a position → tracks"
     [geojson]="Embedded GeoJSON Point (any nesting) → tracks"
+    [camera_sites]="Backbone camera detection feeds → known-site sensor markers"
 )
 
 # ── Ready check — 0=can start, 1=missing config ───────────────────────────
@@ -305,7 +307,8 @@ svc_ready() {
         backbone-bridge) return 0 ;;  # always ready; reads over the pod's own already-configured local router connection, no-op until a backbone identity is uploaded
         backbone_layer) return 0 ;;  # always ready, same reasoning as backbone-bridge
         generic_json) return 0 ;;  # always ready; no-op until something publishes on its raw input topic
-        geojson) return 0 ;;  # same as json
+        geojson) return 0 ;;  # same as generic_json
+        camera_sites) return 0 ;;  # same as generic_json/geojson
         *)        return 0 ;;
     esac
 }
@@ -1099,6 +1102,10 @@ launch() {
 
         geojson)
             _start geojson protocols/random/geojson.py
+            ;;
+
+        camera_sites)
+            _start camera_sites protocols/random/camera_sites.py
             ;;
 
         track-fusion)
