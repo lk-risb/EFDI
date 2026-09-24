@@ -6,10 +6,17 @@ into this pod's own namespace so tak_layer.py renders them on the TAK map,
 the same as any other bridge's sensor tracks.
 
 Holds its OWN direct mTLS session to the real backbone router, using the
-same identity uploaded via /api/certs/backbone/bootstrap (dual-written into
-this pod's own primary-router TLS slot at
-${POD_STATE_DIR}/zenoh/tls/backbone/{cert,key,ca-roots}.pem — a host path,
+same identity uploaded via /api/certs/backbone/bootstrap — read from the
+dedicated zenoh-router-backbone container's own identity directory,
+${POD_STATE_DIR}/zenoh-backbone/tls/{cert,key,ca-roots}.pem (a host path,
 readable directly since this is a native host process, not a container).
+Confirmed live to be the one location reliably populated: the same upload
+also dual-writes into the primary router's own "backbone" TLS profile slot
+(certs_bootstrap.py's _ROUTER_TLS_DIR/backbone/, for the Zenoh Config
+page's "Backbone" preset pill), but that dual-write only runs on a NEW
+upload — the identity already on this pod predates that code, so that slot
+was empty while this one, written by the original bootstrap path at
+upload time, already had the real files.
 
 This does NOT go through zenoh-router-backbone's router-to-router relay.
 Confirmed live, with Zenoh's own debug logging: a subscription declared on
@@ -52,7 +59,7 @@ _AFFILIATION_SLOT = {
 }
 
 _POD_STATE_DIR = os.environ.get("POD_STATE_DIR", "/root/efdi-router/compose/state")
-_BACKBONE_TLS_DIR = os.path.join(_POD_STATE_DIR, "zenoh", "tls", "backbone")
+_BACKBONE_TLS_DIR = os.path.join(_POD_STATE_DIR, "zenoh-backbone", "tls")
 
 
 def _kind(device_type: str) -> str:
