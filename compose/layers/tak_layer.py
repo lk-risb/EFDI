@@ -166,7 +166,15 @@ def _sensor_alert_cot_type(track: dict) -> str:
     age = time.time() - float(ts)
     if age <= _SENSOR_ALERT_HOT_S:
         return "a-h-G-E-S"   # red — active
-    return "a-n-G-E-S"       # neutral — cooling down or reverted
+    if age <= _SENSOR_ALERT_WARM_S:
+        return "a-u-G-E-S"   # yellow — cooling down (bug: this branch was
+                              # missing entirely, so every sensor jumped
+                              # straight from red to green with no cooldown
+                              # color despite dronuradaras_bridge.py's own
+                              # decay-tick comment describing "red → yellow →
+                              # green"; _SENSOR_ALERT_WARM_S was defined but
+                              # never read anywhere until now)
+    return "a-n-G-E-S"       # neutral — reverted
 
 
 # Sources that must NOT reach ATAK directly — they must pass through
