@@ -5,13 +5,28 @@ Brings other participants' tracks on the shared EFDI Backbone trial fabric
 into this pod's own namespace so tak_layer.py renders them on the TAK map,
 the same as any other bridge's sensor tracks.
 
-Reaches the backbone through zenoh-router-backbone's own peering with this
-pod's primary router (tcp/127.0.0.1:7448, the same local connection every
-bridge already uses) — no separate backbone TLS identity needed here; that
-identity belongs to zenoh-router-backbone alone. The primary router's own
-ACL (examples/zenoh-router.json5.tmpl, "pod-backbone-read" rule) is what
-actually lets a local-tcp client like this one subscribe to backbone
-content at all.
+Holds its OWN direct mTLS session to the real backbone router, using the
+same identity uploaded via /api/certs/backbone/bootstrap (dual-written into
+this pod's own primary-router TLS slot at
+${POD_STATE_DIR}/zenoh/tls/backbone/{cert,key,ca-roots}.pem — a host path,
+readable directly since this is a native host process, not a container).
+
+This does NOT go through zenoh-router-backbone's router-to-router relay.
+Confirmed live, with Zenoh's own debug logging: a subscription declared on
+this pod's local router (tcp/127.0.0.1:7448) DOES get forwarded from the
+primary router into zenoh-router-backbone (visible in its own debug log at
+the exact right timestamp, registered internally) but zenoh-router-backbone
+then never transmits anything for it onward to the real backbone link —
+total silence on that link after its one-time connect-time declaration
+dump, with or without scouting/gossip multihop enabled. Every other
+integration in this codebase (dronuradaras_bridge.py, tak_layer.py,
+federation_apply.py, ...) already works this same way — one bridge process
+holding two independent zenoh sessions and explicitly relaying between them
+in application code — never by relying on automatic multi-hop router-to-
+router pub/sub propagation across more than one hop. zenoh-router-backbone
+peering primary <-> the real backbone directly (one hop each side) is
+proven reliable by the same debug-log evidence; going through it as a
+SECOND hop from an already-local subscription is what doesn't work.
 
 Only one schema is understood so far: the "catalyst" convention several
 trial-fabric participants publish (top-level "location": {"latitude",
@@ -24,6 +39,7 @@ guessed at up front.
 
 import argparse
 import json
+import os
 import time
 
 import zenoh
@@ -35,6 +51,9 @@ _AFFILIATION_SLOT = {
     "NEUTRAL": "neutral",
 }
 
+_POD_STATE_DIR = os.environ.get("POD_STATE_DIR", "/root/efdi-router/compose/state")
+_BACKBONE_TLS_DIR = os.path.join(_POD_STATE_DIR, "zenoh", "tls", "backbone")
+
 
 def _kind(device_type: str) -> str:
     device_type = device_type.lower()
@@ -43,10 +62,63 @@ def _kind(device_type: str) -> str:
     return "unit"
 
 
-def _handle(session, sample, verbose: bool):
+def _backbone_endpoints() -> list[str]:
+    """Same endpoint the WebUI's identity upload staged for display purposes
+    (backbone_bootstrap.py's _control_env_update) — read fresh from the
+    environment on every start (start.sh sources compose/.env before
+    launching any native process), not baked in like the zenoh-admin
+    container's own copy of this same variable."""
+    raw = os.environ.get("EFDI_BACKBONE_FABRIC_ENDPOINTS", "").strip()
+    if not raw:
+        return []
+    try:
+        parsed = json.loads(raw)
+    except ValueError:
+        return [raw]
+    if isinstance(parsed, list):
+        return [str(item) for item in parsed if item]
+    return [str(parsed)]
+
+
+def _open_backbone_session():
+    """Direct mTLS session to the real backbone fabric, bypassing
+    zenoh-router-backbone's router-to-router relay entirely (see module
+    docstring for why). Retries forever — the identity may not be uploaded
+    yet, or the fabric endpoint may be temporarily unreachable."""
+    cert = os.path.join(_BACKBONE_TLS_DIR, "cert.pem")
+    key = os.path.join(_BACKBONE_TLS_DIR, "key.pem")
+    ca = os.path.join(_BACKBONE_TLS_DIR, "ca-roots.pem")
+    while True:
+        endpoints = _backbone_endpoints()
+        missing = [p for p in (cert, key, ca) if not os.path.isfile(p)]
+        if not endpoints or missing:
+            print(
+                "backbone bridge: no backbone identity/endpoint configured yet "
+                "(missing {}) — upload one via the Certificates page. Retry in 15s"
+                .format(missing or "EFDI_BACKBONE_FABRIC_ENDPOINTS"),
+                flush=True,
+            )
+            time.sleep(15)
+            continue
+        conf = zenoh.Config()
+        conf.insert_json5("mode", '"client"')
+        conf.insert_json5("connect/endpoints", json.dumps(endpoints))
+        conf.insert_json5("transport/link/tls", json.dumps({
+            "root_ca_certificate": ca,
+            "connect_certificate": cert,
+            "connect_private_key": key,
+            "enable_mtls": True,
+            "verify_name_on_connect": True,
+        }))
+        try:
+            return zenoh.open(conf)
+        except Exception as exc:
+            print("backbone bridge: backbone connect failed: {} — retry in 15s".format(exc), flush=True)
+            time.sleep(15)
+
+
+def _handle(local_session, sample, verbose: bool):
     key = str(sample.key_expr)
-    if key.startswith(TOPIC_ROOT + "/"):
-        return  # our own re-published output, matched by the "**" subscription
     try:
         obj = payload_json(sample)
     except (ValueError, UnicodeDecodeError):
@@ -75,7 +147,7 @@ def _handle(session, sample, verbose: bool):
         callsign=obj.get("ci_name", uid),
     )
     topic = "{}/land/backbone/{}/{}/tracks/v1".format(TOPIC_ROOT, slot, kind)
-    session.put(topic, json.dumps(track).encode(), encoding=zenoh.Encoding.APPLICATION_JSON)
+    local_session.put(topic, json.dumps(track).encode(), encoding=zenoh.Encoding.APPLICATION_JSON)
     if verbose:
         print("backbone track {} -> {} ({:.5f},{:.5f})".format(uid, topic, lat, lon), flush=True)
 
@@ -87,14 +159,15 @@ def main():
 
     while True:
         try:
-            session = open_session()
+            local_session = open_session()
             break
         except Exception as exc:
-            print("backbone bridge Zenoh connect failed: {} — retry in 10s".format(exc), flush=True)
+            print("backbone bridge: local Zenoh connect failed: {} — retry in 10s".format(exc), flush=True)
             time.sleep(10)
 
+    backbone_session = _open_backbone_session()
     print("backbone bridge starting — watching backbone fabric for known track schemas", flush=True)
-    sub = subscribe(session, "**", lambda sample: _handle(session, sample, args.verbose))
+    sub = subscribe(backbone_session, "**", lambda sample: _handle(local_session, sample, args.verbose))
 
     try:
         while True:
@@ -103,7 +176,8 @@ def main():
         pass
     finally:
         sub.undeclare()
-        session.close()
+        backbone_session.close()
+        local_session.close()
 
 
 if __name__ == "__main__":
