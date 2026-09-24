@@ -1,22 +1,18 @@
 #!/usr/bin/env python3
-"""backbone_bridge.py — EFDI Backbone trial fabric -> Zenoh bridge.
+"""backbone_bridge.py — EFDI Backbone trial fabric -> Zenoh raw ingress.
 
-Brings other participants' tracks on the shared EFDI Backbone trial fabric
-into this pod's own namespace so tak_layer.py renders them on the TAK map,
-the same as any other bridge's sensor tracks.
+Thin raw relay, same role as any other "-raw" bridge (sapient-raw,
+stanag4586-raw, ...): move bytes off the external source onto a local raw
+topic, unmodified. Decoding happens downstream, in protocols/ — this file
+has no schema knowledge of its own on purpose, so a new participant's shape
+never requires touching this file, only adding (or already having) a
+normalizer that watches the raw topic.
 
 Holds its OWN direct mTLS session to the real backbone router, using the
 same identity uploaded via /api/certs/backbone/bootstrap — read from the
 dedicated zenoh-router-backbone container's own identity directory,
 ${POD_STATE_DIR}/zenoh-backbone/tls/{cert,key,ca-roots}.pem (a host path,
 readable directly since this is a native host process, not a container).
-Confirmed live to be the one location reliably populated: the same upload
-also dual-writes into the primary router's own "backbone" TLS profile slot
-(certs_bootstrap.py's _ROUTER_TLS_DIR/backbone/, for the Zenoh Config
-page's "Backbone" preset pill), but that dual-write only runs on a NEW
-upload — the identity already on this pod predates that code, so that slot
-was empty while this one, written by the original bootstrap path at
-upload time, already had the real files.
 
 This does NOT go through zenoh-router-backbone's router-to-router relay.
 Confirmed live, with Zenoh's own debug logging: a subscription declared on
@@ -25,48 +21,58 @@ primary router into zenoh-router-backbone (visible in its own debug log at
 the exact right timestamp, registered internally) but zenoh-router-backbone
 then never transmits anything for it onward to the real backbone link —
 total silence on that link after its one-time connect-time declaration
-dump, with or without scouting/gossip multihop enabled. Every other
-integration in this codebase (dronuradaras_bridge.py, tak_layer.py,
-federation_apply.py, ...) already works this same way — one bridge process
-holding two independent zenoh sessions and explicitly relaying between them
-in application code — never by relying on automatic multi-hop router-to-
-router pub/sub propagation across more than one hop. zenoh-router-backbone
-peering primary <-> the real backbone directly (one hop each side) is
-proven reliable by the same debug-log evidence; going through it as a
-SECOND hop from an already-local subscription is what doesn't work.
+dump. Every other integration in this codebase already works by holding two
+independent zenoh sessions and explicitly relaying between them in
+application code — never by relying on automatic multi-hop router-to-router
+pub/sub propagation across more than one hop.
 
-Only one schema is understood so far: the "catalyst" convention several
-trial-fabric participants publish (top-level "location": {"latitude",
-"longitude"}, "ci_uuid"/"ci_name", "metadata": {"affiliation"}, "device":
-{"type"}). Everything else on the fabric (raw protobuf, encrypted payloads,
-other JSON shapes) is silently skipped — there is no schema registry for
-this trial fabric, so new shapes get added here as they're identified, not
-guessed at up front.
+Every sample lands one of two places:
+  - A valid ASTERIX frame (category+length header checks out, same
+    validation bridges/asterix_bridge.py already does) -> republished to
+    TOPIC_ROOT/raw/asterix/cat<N> — the exact topic
+    protocols/vendors/asterix/cat.py's existing --zenoh-raw mode for that
+    category already reads from (confirmed live: category 34 and 48 frames
+    are actually present on this fabric right now, both already-default
+    categories). No ASTERIX parsing lives here; cat.py's own decoders do it.
+  - Everything else -> republished as-is to TOPIC_ROOT/raw/backbone/<key>,
+    for protocols/random/json.py and protocols/random/geojson.py (or any
+    future normalizer) to try against. Undecodable payloads (opaque
+    protobuf with no shared .proto, encrypted envelopes) just sit there
+    unclaimed — nothing crashes, nothing is lost, there's simply no decoder
+    for them yet.
 """
 
 import argparse
 import json
 import os
+import struct
 import time
 
 import zenoh
-from protocols.gateway import TOPIC_ROOT, base_record, open_session, payload_json, subscribe
-
-_AFFILIATION_SLOT = {
-    "FRIENDLY": "friendly",
-    "HOSTILE": "hostile",
-    "NEUTRAL": "neutral",
-}
+from protocols.gateway import TOPIC_ROOT, open_session, payload_bytes, subscribe
 
 _POD_STATE_DIR = os.environ.get("POD_STATE_DIR", "/root/efdi-router/compose/state")
 _BACKBONE_TLS_DIR = os.path.join(_POD_STATE_DIR, "zenoh-backbone", "tls")
 
+_RAW_BACKBONE_ROOT = TOPIC_ROOT + "/raw/backbone"
+_RAW_ASTERIX_ROOT = TOPIC_ROOT + "/raw/asterix/cat"
 
-def _kind(device_type: str) -> str:
-    device_type = device_type.lower()
-    if "vehicle" in device_type or "ugv" in device_type or "uav" in device_type:
-        return "vehicle"
-    return "unit"
+
+def _asterix_category(raw: bytes) -> int | None:
+    """Same header check as asterix_bridge.py's validate_frame: category byte
+    + declared 16-bit length must match the frame actually received. Cheap
+    and specific enough that opaque protobuf/encrypted bytes essentially
+    never pass it by accident (they'd need one of 256 category bytes to line
+    up with a length field that happens to equal the true frame length)."""
+    if len(raw) < 3:
+        return None
+    try:
+        category, declared_length = struct.unpack(">BH", raw[:3])
+    except struct.error:
+        return None
+    if declared_length != len(raw):
+        return None
+    return category
 
 
 def _backbone_endpoints() -> list[str]:
@@ -126,41 +132,24 @@ def _open_backbone_session():
 
 def _handle(local_session, sample, verbose: bool):
     key = str(sample.key_expr)
-    try:
-        obj = payload_json(sample)
-    except (ValueError, UnicodeDecodeError):
-        return
-    if not isinstance(obj, dict):
-        return
-    loc = obj.get("location")
-    if not isinstance(loc, dict):
-        return
-    try:
-        lat = float(loc["latitude"])
-        lon = float(loc["longitude"])
-    except (KeyError, TypeError, ValueError):
+    raw = payload_bytes(sample)
+
+    category = _asterix_category(raw)
+    if category is not None:
+        topic = "{}{}".format(_RAW_ASTERIX_ROOT, category)
+        local_session.put(topic, raw)
+        if verbose:
+            print("backbone ASTERIX cat{} {} -> {} ({}B)".format(category, key, topic, len(raw)), flush=True)
         return
 
-    uid = obj.get("ci_uuid") or obj.get("ci_name") or key
-    affiliation = str((obj.get("metadata") or {}).get("affiliation", "")).upper()
-    slot = _AFFILIATION_SLOT.get(affiliation, "unknown")
-    kind = _kind(str((obj.get("device") or {}).get("type", "")))
-
-    track = base_record(
-        "backbone:" + key.split("/", 1)[0],
-        "backbone-{}".format(uid),
-        lat_deg=round(lat, 6),
-        lon_deg=round(lon, 6),
-        callsign=obj.get("ci_name", uid),
-    )
-    topic = "{}/land/backbone/{}/{}/tracks/v1".format(TOPIC_ROOT, slot, kind)
-    local_session.put(topic, json.dumps(track).encode(), encoding=zenoh.Encoding.APPLICATION_JSON)
+    topic = "{}/{}".format(_RAW_BACKBONE_ROOT, key)
+    local_session.put(topic, raw)
     if verbose:
-        print("backbone track {} -> {} ({:.5f},{:.5f})".format(uid, topic, lat, lon), flush=True)
+        print("backbone raw {} -> {} ({}B)".format(key, topic, len(raw)), flush=True)
 
 
 def main():
-    ap = argparse.ArgumentParser(description="EFDI Backbone trial fabric -> Zenoh bridge")
+    ap = argparse.ArgumentParser(description="EFDI Backbone trial fabric -> Zenoh raw ingress")
     ap.add_argument("--verbose", "-v", action="store_true")
     args = ap.parse_args()
 
@@ -173,7 +162,11 @@ def main():
             time.sleep(10)
 
     backbone_session = _open_backbone_session()
-    print("backbone bridge starting — watching backbone fabric for known track schemas", flush=True)
+    print(
+        "backbone bridge starting — relaying backbone fabric to {} and {}<N>"
+        .format(_RAW_BACKBONE_ROOT, _RAW_ASTERIX_ROOT),
+        flush=True,
+    )
     sub = subscribe(backbone_session, "**", lambda sample: _handle(local_session, sample, args.verbose))
 
     try:

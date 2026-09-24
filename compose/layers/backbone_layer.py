@@ -109,8 +109,8 @@ def _open_backbone_session():
 def _handle(backbone_session, vendor_prefix: str, sample, verbose: bool):
     key = str(sample.key_expr)
     suffix = key[len(TOPIC_ROOT) + 1:] if key.startswith(TOPIC_ROOT + "/") else key
-    if suffix.startswith("land/backbone/") or "/@" in key:
-        return  # our own re-export of something we imported, or an internal control topic
+    if "/backbone/" in suffix or suffix.startswith("raw/") or "/@" in key:
+        return  # our own re-export of something we imported, an unclaimed raw sample, or an internal control topic
     try:
         obj = payload_json(sample)
     except (ValueError, UnicodeDecodeError):
