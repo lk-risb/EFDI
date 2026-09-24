@@ -97,20 +97,33 @@ else
 fi
 
 # ── Service registry ───────────────────────────────────────────────────────
+# Grouped by SVC_CAT below so the interactive menu never prints the same
+# category header twice — keep new entries in the block matching their own
+# SVC_CAT/SVC_DESC entry, not just appended at the end (that's exactly how
+# this scattered in the first place: Sensor bridges, Protocols, Output
+# layers, and C2 inputs each used to appear in two or three separate places).
 SERVICES=(
-    zenoh
-    admin-control
-    cert-renewer supervisor presence
+    # Infrastructure
+    zenoh admin-control cert-renewer supervisor presence
+    # Open-data bridges
     meteolt
+    # Sensor bridges (includes raw-ingress variants — SVC_CAT has no
+    # separate "Raw ingress" bucket the way admin_control.py's Python-side
+    # SERVICE_SPECS does; not unifying that here, out of scope for this pass)
     sitaware dronuradaras mainline_terminal mavlink-command asterix track-fusion
-    nffi sapient stanag4586 stanag4609 stanag5516
     sapient-raw stanag4586-raw stanag4609-raw stanag5516-raw
     mqtt-raw aartos-raw aartos-wifi-raw
-    cap mqtt sparkplug sensor-health mission-route aartos
-    tak_layer tak-bridge nffi-bridge sitaware_layer tak_alert_layer
-    intcore_layer intcore-bridge
     mediamtx
-    backbone-bridge backbone_layer json geojson
+    # Protocols
+    nffi sapient stanag4586 stanag4609 stanag5516
+    cap mqtt sparkplug sensor-health mission-route aartos
+    generic_json geojson
+    # Output layers
+    tak_layer sitaware_layer tak_alert_layer intcore_layer
+    # C2 inputs
+    tak-bridge nffi-bridge intcore-bridge
+    # Backbone
+    backbone-bridge backbone_layer
 )
 
 # Restore only non-secret launcher choices. Explicit compose/.env values win;
@@ -200,7 +213,7 @@ declare -A SVC_CAT=(
     [mediamtx]="Sensor bridges"
     [backbone-bridge]="Backbone"
     [backbone_layer]="Backbone"
-    [json]="Protocols"
+    [generic_json]="Protocols"
     [geojson]="Protocols"
 )
 
@@ -245,7 +258,7 @@ declare -A SVC_DESC=(
     [mediamtx]="RTMP video ingress (drone remote) → RTSP restream for TAK video feeds"
     [backbone-bridge]="EFDI Backbone trial fabric → EFDI tracks (feeds tak_layer + sitaware_layer)"
     [backbone_layer]="EFDI tracks → EFDI Backbone trial fabric"
-    [json]="Generic flat/nested JSON with a position → tracks"
+    [generic_json]="Generic flat/nested JSON with a position → tracks"
     [geojson]="Embedded GeoJSON Point (any nesting) → tracks"
 )
 
@@ -291,7 +304,7 @@ svc_ready() {
         mediamtx) return 0 ;;  # binds default RTMP :1935 / RTSP :8554, no config required
         backbone-bridge) return 0 ;;  # always ready; reads over the pod's own already-configured local router connection, no-op until a backbone identity is uploaded
         backbone_layer) return 0 ;;  # always ready, same reasoning as backbone-bridge
-        json) return 0 ;;  # always ready; no-op until something publishes on its raw input topic
+        generic_json) return 0 ;;  # always ready; no-op until something publishes on its raw input topic
         geojson) return 0 ;;  # same as json
         *)        return 0 ;;
     esac
@@ -1080,8 +1093,8 @@ launch() {
             _start backbone_layer layers/backbone_layer.py
             ;;
 
-        json)
-            _start json protocols/random/json.py
+        generic_json)
+            _start generic_json protocols/random/generic_json.py
             ;;
 
         geojson)
