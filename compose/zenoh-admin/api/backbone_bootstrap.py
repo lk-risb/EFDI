@@ -187,6 +187,10 @@ async def upload_backbone_identity(
         _control_start_backbone_bridge()
     except Exception:  # noqa: BLE001
         pass
+    try:
+        _control_start_backbone_layer()
+    except Exception:  # noqa: BLE001
+        pass
 
     await write_audit(db, actor.id, "backbone_bootstrap_applied", "zenoh-router-backbone started")
     return {"status": "applied", "container_output": result.get("output", "")}
@@ -208,3 +212,8 @@ def _control_start_backbone_router() -> dict:
 def _control_start_backbone_bridge() -> dict:
     from .control import _control
     return _control("/v1/services/backbone-bridge/start", method="POST", timeout=20)
+
+
+def _control_start_backbone_layer() -> dict:
+    from .control import _control
+    return _control("/v1/services/backbone_layer/start", method="POST", timeout=20)
