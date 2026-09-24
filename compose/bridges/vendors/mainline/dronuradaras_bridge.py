@@ -310,8 +310,15 @@ def run_detections(pub_dev: "zenoh.Publisher", verbose: bool):
         for dev_id in still_warm:
             with _device_lock:
                 last_ts = _last_detection.get(dev_id)
+                # Bug: this decay-tick republish never passed audio_url along,
+                # so the AUDIO: line in tak_layer.py's remarks only ever
+                # appeared for the single DETECT_POLL_S=3s cycle where the
+                # detection was first seen, then silently disappeared on
+                # every subsequent cooldown recolor even though the URL was
+                # still sitting in _last_detection_audio the whole time.
+                last_audio = _last_detection_audio.get(dev_id)
             if last_ts is not None:
-                _publish_sensor_alert(pub_dev, dev_id, last_ts)
+                _publish_sensor_alert(pub_dev, dev_id, last_ts, last_audio)
 
         time.sleep(DETECT_POLL_S)
 
