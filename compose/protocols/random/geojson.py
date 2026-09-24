@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """Embedded GeoJSON Point -> normalized tracks.
 
-Same raw topic as protocols/random/json.py (TOPIC_ROOT/raw/backbone/<key>),
-a different recognition strategy: some participants bury a standard GeoJSON
-Point Feature — {"type": "Feature", "geometry": {"type": "Point",
-"coordinates": [lon, lat, ...]}} — arbitrarily deep inside their own
-proprietary wrapper object rather than publishing flat lat/lon fields.
-json.py's flat/one-level-nested lookup never finds that; this file walks the
-whole payload looking for the GeoJSON shape specifically, regardless of what
-it's nested under.
+Same raw topic as protocols/random/generic_json.py
+(TOPIC_ROOT/raw/backbone/<key>), a different recognition strategy: some
+participants bury a standard GeoJSON Point Feature — {"type": "Feature",
+"geometry": {"type": "Point", "coordinates": [lon, lat, ...]}} — arbitrarily
+deep inside their own proprietary wrapper object rather than publishing
+flat lat/lon fields. generic_json.py's flat/one-level-nested lookup never
+finds that; this file walks the whole payload looking for the GeoJSON shape
+specifically, regardless of what it's nested under.
 
 Bounded recursion (depth and node count) — payload shape is untrusted trial-
 fabric input, not sized or structured by us.

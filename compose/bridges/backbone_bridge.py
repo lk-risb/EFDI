@@ -26,6 +26,19 @@ independent zenoh sessions and explicitly relaying between them in
 application code — never by relying on automatic multi-hop router-to-router
 pub/sub propagation across more than one hop.
 
+Excludes our own vendor prefix (this identity's cert CN, e.g.
+"f2121acad40b27c52728fa461b63a5d7") from what it relays in. Without this:
+layers/backbone_layer.py publishes our own tracks out under
+<our_prefix>/efdi/**; this bridge's own "**" subscription on the SAME
+remote router matches that too (the router doesn't know or care who
+published it), so our own outbound data would echo straight back in,
+get renamed by generic_json.py to look like a foreign track (mislabeled "_src":
+"backbone:json:<our_prefix>"), and show up as a duplicate phantom marker
+on the map. backbone_layer.py's own "don't re-export /backbone/-tagged
+topics" guard stops this from amplifying further, but doesn't stop the one
+initial duplicate — the fix belongs here, at the point data re-enters the
+pod, not downstream.
+
 Every sample lands one of two places:
   - A valid ASTERIX frame (category+length header checks out, same
     validation bridges/asterix_bridge.py already does) -> republished to
@@ -35,7 +48,7 @@ Every sample lands one of two places:
     are actually present on this fabric right now, both already-default
     categories). No ASTERIX parsing lives here; cat.py's own decoders do it.
   - Everything else -> republished as-is to TOPIC_ROOT/raw/backbone/<key>,
-    for protocols/random/json.py and protocols/random/geojson.py (or any
+    for protocols/random/generic_json.py and protocols/random/geojson.py (or any
     future normalizer) to try against. Undecodable payloads (opaque
     protobuf with no shared .proto, encrypted envelopes) just sit there
     unclaimed — nothing crashes, nothing is lost, there's simply no decoder
@@ -49,6 +62,8 @@ import struct
 import time
 
 import zenoh
+from cryptography import x509
+from cryptography.x509.oid import NameOID
 from protocols.gateway import TOPIC_ROOT, open_session, payload_bytes, subscribe
 
 _POD_STATE_DIR = os.environ.get("POD_STATE_DIR", "/root/efdi-router/compose/state")
@@ -93,22 +108,35 @@ def _backbone_endpoints() -> list[str]:
     return [str(parsed)]
 
 
+def _vendor_prefix(cert_path: str) -> str | None:
+    try:
+        with open(cert_path, "rb") as f:
+            cert = x509.load_pem_x509_certificate(f.read())
+        return cert.subject.get_attributes_for_oid(NameOID.COMMON_NAME)[0].value
+    except Exception:
+        return None
+
+
 def _open_backbone_session():
     """Direct mTLS session to the real backbone fabric, bypassing
     zenoh-router-backbone's router-to-router relay entirely (see module
     docstring for why). Retries forever — the identity may not be uploaded
-    yet, or the fabric endpoint may be temporarily unreachable."""
+    yet, or the fabric endpoint may be temporarily unreachable. Also returns
+    this identity's own vendor prefix (its cert's CN — see
+    layers/backbone_layer.py, which publishes our own tracks out under
+    exactly this prefix) so the caller can refuse to re-import them."""
     cert = os.path.join(_BACKBONE_TLS_DIR, "cert.pem")
     key = os.path.join(_BACKBONE_TLS_DIR, "key.pem")
     ca = os.path.join(_BACKBONE_TLS_DIR, "ca-roots.pem")
     while True:
         endpoints = _backbone_endpoints()
         missing = [p for p in (cert, key, ca) if not os.path.isfile(p)]
-        if not endpoints or missing:
+        vendor_prefix = None if missing else _vendor_prefix(cert)
+        if not endpoints or missing or not vendor_prefix:
             print(
                 "backbone bridge: no backbone identity/endpoint configured yet "
                 "(missing {}) — upload one via the Certificates page. Retry in 15s"
-                .format(missing or "EFDI_BACKBONE_FABRIC_ENDPOINTS"),
+                .format(missing or ("EFDI_BACKBONE_FABRIC_ENDPOINTS" if not endpoints else "a readable vendor CN")),
                 flush=True,
             )
             time.sleep(15)
@@ -124,14 +152,16 @@ def _open_backbone_session():
             "verify_name_on_connect": True,
         }))
         try:
-            return zenoh.open(conf)
+            return zenoh.open(conf), vendor_prefix
         except Exception as exc:
             print("backbone bridge: backbone connect failed: {} — retry in 15s".format(exc), flush=True)
             time.sleep(15)
 
 
-def _handle(local_session, sample, verbose: bool):
+def _handle(local_session, vendor_prefix: str, sample, verbose: bool):
     key = str(sample.key_expr)
+    if key == vendor_prefix or key.startswith(vendor_prefix + "/"):
+        return  # our own layers/backbone_layer.py output, echoed back by the fabric — not foreign data
     raw = payload_bytes(sample)
 
     category = _asterix_category(raw)
@@ -161,13 +191,13 @@ def main():
             print("backbone bridge: local Zenoh connect failed: {} — retry in 10s".format(exc), flush=True)
             time.sleep(10)
 
-    backbone_session = _open_backbone_session()
+    backbone_session, vendor_prefix = _open_backbone_session()
     print(
-        "backbone bridge starting — relaying backbone fabric to {} and {}<N>"
-        .format(_RAW_BACKBONE_ROOT, _RAW_ASTERIX_ROOT),
+        "backbone bridge starting — relaying backbone fabric (excluding our own {}/**) to {} and {}<N>"
+        .format(vendor_prefix, _RAW_BACKBONE_ROOT, _RAW_ASTERIX_ROOT),
         flush=True,
     )
-    sub = subscribe(backbone_session, "**", lambda sample: _handle(local_session, sample, args.verbose))
+    sub = subscribe(backbone_session, "**", lambda sample: _handle(local_session, vendor_prefix, sample, args.verbose))
 
     try:
         while True:
