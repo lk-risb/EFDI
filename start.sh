@@ -110,7 +110,7 @@ SERVICES=(
     tak_layer tak-bridge nffi-bridge sitaware_layer tak_alert_layer
     intcore_layer intcore-bridge
     mediamtx
-    backbone-bridge
+    backbone-bridge backbone_layer
 )
 
 # Restore only non-secret launcher choices. Explicit compose/.env values win;
@@ -199,6 +199,7 @@ declare -A SVC_CAT=(
     [track-fusion]="Sensor bridges"
     [mediamtx]="Sensor bridges"
     [backbone-bridge]="Backbone"
+    [backbone_layer]="Backbone"
 )
 
 declare -A SVC_DESC=(
@@ -241,6 +242,7 @@ declare -A SVC_DESC=(
     [track-fusion]="Radar/ADS-B track correlation"
     [mediamtx]="RTMP video ingress (drone remote) → RTSP restream for TAK video feeds"
     [backbone-bridge]="EFDI Backbone trial fabric → EFDI tracks (feeds tak_layer + sitaware_layer)"
+    [backbone_layer]="EFDI tracks → EFDI Backbone trial fabric"
 )
 
 # ── Ready check — 0=can start, 1=missing config ───────────────────────────
@@ -284,6 +286,7 @@ svc_ready() {
         intcore-bridge) return 0 ;;  # always ready; binds INTCORE_BRIDGE_PORT (default 8092)
         mediamtx) return 0 ;;  # binds default RTMP :1935 / RTSP :8554, no config required
         backbone-bridge) return 0 ;;  # always ready; reads over the pod's own already-configured local router connection, no-op until a backbone identity is uploaded
+        backbone_layer) return 0 ;;  # always ready, same reasoning as backbone-bridge
         *)        return 0 ;;
     esac
 }
@@ -1055,6 +1058,10 @@ launch() {
 
         backbone-bridge)
             _start backbone-bridge bridges/backbone_bridge.py
+            ;;
+
+        backbone_layer)
+            _start backbone_layer layers/backbone_layer.py
             ;;
 
         track-fusion)
