@@ -110,7 +110,7 @@ SERVICES=(
     tak_layer tak-bridge nffi-bridge sitaware_layer tak_alert_layer
     intcore_layer intcore-bridge
     mediamtx
-    backbone-bridge backbone_layer
+    backbone-bridge backbone_layer json geojson
 )
 
 # Restore only non-secret launcher choices. Explicit compose/.env values win;
@@ -200,6 +200,8 @@ declare -A SVC_CAT=(
     [mediamtx]="Sensor bridges"
     [backbone-bridge]="Backbone"
     [backbone_layer]="Backbone"
+    [json]="Protocols"
+    [geojson]="Protocols"
 )
 
 declare -A SVC_DESC=(
@@ -243,6 +245,8 @@ declare -A SVC_DESC=(
     [mediamtx]="RTMP video ingress (drone remote) → RTSP restream for TAK video feeds"
     [backbone-bridge]="EFDI Backbone trial fabric → EFDI tracks (feeds tak_layer + sitaware_layer)"
     [backbone_layer]="EFDI tracks → EFDI Backbone trial fabric"
+    [json]="Generic flat/nested JSON with a position → tracks"
+    [geojson]="Embedded GeoJSON Point (any nesting) → tracks"
 )
 
 # ── Ready check — 0=can start, 1=missing config ───────────────────────────
@@ -287,6 +291,8 @@ svc_ready() {
         mediamtx) return 0 ;;  # binds default RTMP :1935 / RTSP :8554, no config required
         backbone-bridge) return 0 ;;  # always ready; reads over the pod's own already-configured local router connection, no-op until a backbone identity is uploaded
         backbone_layer) return 0 ;;  # always ready, same reasoning as backbone-bridge
+        json) return 0 ;;  # always ready; no-op until something publishes on its raw input topic
+        geojson) return 0 ;;  # same as json
         *)        return 0 ;;
     esac
 }
@@ -549,8 +555,18 @@ _start_bin() {   # _start_bin <name> <rel-binary-path> [args…]
 
 asterix_category_uses_raw() {
     local wanted="$1" item
+    # A backbone identity also enables raw-ASTERIX mode: bridges/backbone_bridge.py
+    # republishes any valid ASTERIX frame it sees on the fabric onto exactly
+    # TOPIC_ROOT/raw/asterix/cat<N> (confirmed live: category 34 and 48
+    # frames, both already-default categories below), the same topic this
+    # function's --zenoh-raw categories already read from. Neither
+    # UDP_INGRESS_PORT/ASTERIX_PORT (a physical UDP/TCP source) nor
+    # ASTERIX_ZENOH_UPSTREAM_ENDPOINT (relaying from another EFDI pod) apply
+    # to this source, so without this check cat34/cat48 would never start
+    # for backbone-only ASTERIX traffic.
     [[ -n "${UDP_INGRESS_PORT:-${ASTERIX_PORT:-}}" ||
-       -n "${ASTERIX_ZENOH_UPSTREAM_ENDPOINT:-}" ]] || return 1
+       -n "${ASTERIX_ZENOH_UPSTREAM_ENDPOINT:-}" ||
+       -f "${POD_STATE_DIR}/zenoh-backbone/tls/cert.pem" ]] || return 1
     IFS=',' read -r -a _asterix_categories <<< "${ASTERIX_CATEGORIES:-34,48}"
     for item in "${_asterix_categories[@]}"; do
         item="${item//[[:space:]]/}"
@@ -1062,6 +1078,14 @@ launch() {
 
         backbone_layer)
             _start backbone_layer layers/backbone_layer.py
+            ;;
+
+        json)
+            _start json protocols/random/json.py
+            ;;
+
+        geojson)
+            _start geojson protocols/random/geojson.py
             ;;
 
         track-fusion)

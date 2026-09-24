@@ -178,19 +178,19 @@ async def upload_backbone_identity(
             detail=f"Backbone router container did not start: {result.get('output')}",
         )
 
-    # Best-effort, like the env update above: backbone_bridge.py (reads
-    # backbone content off this pod's local router, republishes anything it
-    # recognizes into TOPIC_ROOT for tak_layer.py) is a visualization
-    # convenience, not the connection itself. A control-agent hiccup here
-    # must not fail an otherwise-successful identity upload.
-    try:
-        _control_start_backbone_bridge()
-    except Exception:  # noqa: BLE001
-        pass
-    try:
-        _control_start_backbone_layer()
-    except Exception:  # noqa: BLE001
-        pass
+    # Best-effort, like the env update above: none of these are the
+    # connection itself, just what makes the data flowing across it useful —
+    # backbone-bridge/backbone_layer (raw ingress/egress to the fabric),
+    # json/geojson (the normalizers backbone-bridge's raw output feeds), and
+    # asterix (cat34/cat48's --zenoh-raw mode turns on once this identity
+    # file exists — see start.sh's asterix_category_uses_raw). A
+    # control-agent hiccup on any one of these must not fail an otherwise-
+    # successful identity upload.
+    for service in ("backbone-bridge", "backbone_layer", "json", "geojson", "asterix"):
+        try:
+            _control_start_service(service)
+        except Exception:  # noqa: BLE001
+            pass
 
     await write_audit(db, actor.id, "backbone_bootstrap_applied", "zenoh-router-backbone started")
     return {"status": "applied", "container_output": result.get("output", "")}
@@ -209,11 +209,6 @@ def _control_start_backbone_router() -> dict:
     return _control("/v1/containers/zenoh-router-backbone/start", method="POST", timeout=70)
 
 
-def _control_start_backbone_bridge() -> dict:
+def _control_start_service(name: str) -> dict:
     from .control import _control
-    return _control("/v1/services/backbone-bridge/start", method="POST", timeout=20)
-
-
-def _control_start_backbone_layer() -> dict:
-    from .control import _control
-    return _control("/v1/services/backbone_layer/start", method="POST", timeout=20)
+    return _control(f"/v1/services/{name}/start", method="POST", timeout=20)
