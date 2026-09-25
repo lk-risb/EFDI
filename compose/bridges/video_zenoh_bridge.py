@@ -105,7 +105,22 @@ def _gst_proc(config_path: str) -> "subprocess.Popen[bytes]":
         "zenohsrc", "key-expr={}".format(KEY_EXPR), "config={}".format(config_path),
         "receive-timeout-ms={}".format(_RECEIVE_TIMEOUT_MS),
         "!", "queue",
-        "!", "h264parse", "config-interval=-1",
+        # config-interval=1 (not -1): -1 means "SPS/PPS live only in the
+        # stream's codec_data, never repeated in-band", which sounds right
+        # for a steady stream but is wrong for this bridge's actual traffic
+        # pattern — the publish side is routinely a *new* gst-launch process
+        # each time (e.g. scripts/video-zenoh-publish-file.sh's loop
+        # restarting per playthrough, or a real drone's encoder restarting),
+        # each with its own fresh SPS/PPS, while THIS receive pipeline stays
+        # one long-lived process across all of them. -1 let h264parse's
+        # AVCDecoderConfigurationRecord accumulate every SPS/PPS variant it
+        # had ever seen instead of replacing them, until mediamtx rejected it
+        # outright ("unable to decode AVCC: NALU count (93) exceeds maximum
+        # allowed (50)") after enough publisher restarts. Repeating in-band
+        # every second means h264parse only ever needs to track the CURRENT
+        # SPS/PPS, matching a receive side that outlives many publish
+        # sessions.
+        "!", "h264parse", "config-interval=1",
         "!", "flvmux", "streamable=true",
         # Explicit host/port/application/stream, not `location=<url>` — some
         # distro builds of rtmp2sink (Debian trixie's gst-plugins-bad
@@ -118,8 +133,19 @@ def _gst_proc(config_path: str) -> "subprocess.Popen[bytes]":
         # MEDIAMTX_PATH becomes the app and "live" is a fixed stream key;
         # the video wall tile ends up named "<drone>/live" rather than a bare
         # "<drone>", which StreamsPanel doesn't care about either way.
+        #
+        # sync=false: without it, rtmp2sink (a real clock-syncing live sink,
+        # unlike fakesink/filesink) waits on the pipeline clock before
+        # rendering its first buffer and never gets there — zenohsrc's own
+        # "segment before caps" event-ordering bug (seen on every run) feeds
+        # it a bad running-time base, so it stalls until mediamtx's own
+        # inactivity timeout closes the idle connection ("i/o timeout") with
+        # zero bytes ever sent. sync=false renders as soon as a buffer
+        # arrives instead of waiting for a running time that never comes —
+        # this leg only ever has one live source anyway, so there's nothing
+        # to stay in sync with.
         "!", "rtmp2sink", "host={}".format(_RTMP_HOST), "port={}".format(_RTMP_PORT),
-        "application={}".format(_MEDIAMTX_PATH), "stream=live",
+        "application={}".format(_MEDIAMTX_PATH), "stream=live", "sync=false",
     ]
     return subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, env=_gst_env())
 
