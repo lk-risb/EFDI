@@ -169,7 +169,7 @@ SERVICE_SPECS = [
     ("kyber", "Protocols", "Kyber SAPIENT feed (backbone, reuses flex335.py) → tracks"),
     ("fpv", "Protocols", "FPV drone CRSF telemetry (backbone) → tracks"),
     ("ita_efdi", "Protocols", "ITA-EFDI drone + radar feeds (backbone) → tracks"),
-    ("video-zenoh-bridge", "Sensor bridges", "Zenoh-native video prototype: zenohsrc drone feed → mediamtx RTSP → video wall"),
+    ("video-zenoh-bridge", "Sensor bridges", "Zenoh-native video prototype: zenohsrc drone feed → mediamtx RTMP → video wall"),
 ]
 SERVICE_NAMES = {name for name, _, _ in SERVICE_SPECS}
 

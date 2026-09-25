@@ -6,25 +6,34 @@ instead of a separate RTMP/RTSP relay process on that leg.
 The publish side (the drone/GCS companion computer) runs its OWN GStreamer
 pipeline with zenohsink, publishing H.264 access units onto KEY_EXPR below —
 that side is partner/vendor hardware, not something this repo runs. For local
-testing without real drone hardware, see scripts/video-zenoh-publish-test.sh,
-which publishes a synthetic test pattern to the same key.
+testing without real drone hardware, see scripts/video-zenoh-publish-test.sh
+(synthetic pattern) or scripts/video-zenoh-publish-file.sh (a real video file,
+looped).
 
-This bridge only owns the RECEIVE leg, and deliberately still hands the result
-to mediamtx over RTSP (rtspclientsink -> mediamtx's RTSP publish port) rather
-than trying to get a browser to speak Zenoh directly — browsers have no Zenoh
-transport, so the WHEP leg StreamsPanel.tsx already does (mediamtx's own
-WebRTC egress) is still required downstream of this. What zenoh replaces here
-is the network leg from the drone to the gateway, not the leg from the
-gateway to the browser tile. Once this publishes into mediamtx under
-VIDEO_ZENOH_RTSP_PATH, it shows up in the existing "video wall" grid with
-zero changes to StreamsPanel.tsx — mediamtx doesn't know or care whether a
-path was populated over RTMP, RTSP, or (as here) an RTSP push fed by Zenoh.
+This bridge only owns the RECEIVE leg, and deliberately still hands the
+result to mediamtx over RTMP (flvmux ! rtmp2sink -> mediamtx's own RTMP
+ingest port) rather than trying to get a browser to speak Zenoh directly —
+browsers have no Zenoh transport, so the WHEP leg StreamsPanel.tsx already
+does (mediamtx's own WebRTC egress) is still required downstream of this.
+What zenoh replaces here is the network leg from the drone to the gateway,
+not the leg from the gateway to the browser tile. RTMP, not RTSP: this is
+the exact ingest mediamtx.yml already documents for a real drone's own RTMP
+push ("One drone push (RTMP, arbitrary operator-typed path...)") — reusing
+it here means zero new mediamtx config, and sidesteps gst-plugin-rsrtsp's
+rtspclientsink, which some distro builds (Arch's included) don't register at
+all (only rtspsrc2, the source side). Once this publishes into mediamtx
+under VIDEO_ZENOH_MEDIAMTX_PATH, it shows up in the existing "video wall"
+grid with zero changes to StreamsPanel.tsx — mediamtx doesn't know or care
+whether a path was populated over a drone's own RTMP push or (as here) an
+RTMP push fed by Zenoh.
 
 This wraps gst-launch-1.0 as a supervised subprocess (same pattern as
 bridges/4609_bridge.py's ffmpeg wrapper) rather than binding PyGObject —
 keeps this pod's Python dependency surface unchanged; the only new
 requirement is a GStreamer install with gst-plugin-zenoh's .so on
-GST_PLUGIN_PATH (see VIDEO_ZENOH_PLUGIN_PATH below).
+GST_PLUGIN_PATH (see VIDEO_ZENOH_PLUGIN_PATH below), plus gst-plugins-good's
+flvmux and gst-plugins-rs's rtmp2sink — both far more commonly packaged than
+gst-plugin-rsrtsp's sink side.
 
 That build is provisioned automatically: install.sh, update.sh, and
 health.sh each call scripts/ensure-gst-zenoh.sh, which installs GStreamer's
@@ -40,11 +49,11 @@ Config (compose/.env):
                                  # "<TOPIC_ROOT>/video/<VIDEO_ZENOH_DRONE>/h264")
   VIDEO_ZENOH_DRONE=drone1      # used to build the default key above and,
                                  # unless overridden, the mediamtx path name
-  VIDEO_ZENOH_RTSP_PATH         # mediamtx path this shows up under in the
+  VIDEO_ZENOH_MEDIAMTX_PATH     # mediamtx path this shows up under in the
                                  # video wall (default: VIDEO_ZENOH_DRONE)
   VIDEO_ZENOH_LOCAL_ENDPOINT=tcp/127.0.0.1:7448  # matches gateway.ENDPOINT
-  VIDEO_ZENOH_RTSP_URL          # override the full mediamtx RTSP URL instead
-                                 # of building it from RTSP_PATH
+  VIDEO_ZENOH_RTMP_URL          # override the full mediamtx RTMP URL instead
+                                 # of building it from MEDIAMTX_PATH
   VIDEO_ZENOH_RECEIVE_TIMEOUT_MS=2000
   VIDEO_ZENOH_GST_LAUNCH_BIN=gst-launch-1.0
   VIDEO_ZENOH_PLUGIN_PATH       # extra GST_PLUGIN_PATH entry for gst-plugin-zenoh's
@@ -65,13 +74,16 @@ import time
 
 from namespace_prefix import topic_root
 from bridges.gst_zenoh_config import render as render_zenoh_config
+from ecs_log import get_logger
+
+log = get_logger("video-zenoh-bridge")
 
 TOPIC_ROOT = topic_root()
 _DRONE = os.environ.get("VIDEO_ZENOH_DRONE", "drone1").strip() or "drone1"
 KEY_EXPR = os.environ.get("VIDEO_ZENOH_KEY", "").strip() or "{}/video/{}/h264".format(TOPIC_ROOT, _DRONE)
-_RTSP_PATH = os.environ.get("VIDEO_ZENOH_RTSP_PATH", "").strip() or _DRONE
+_MEDIAMTX_PATH = os.environ.get("VIDEO_ZENOH_MEDIAMTX_PATH", "").strip() or _DRONE
 _LOCAL_ENDPOINT = os.environ.get("VIDEO_ZENOH_LOCAL_ENDPOINT", "tcp/127.0.0.1:7448").strip()
-_RTSP_URL = os.environ.get("VIDEO_ZENOH_RTSP_URL", "").strip() or "rtsp://127.0.0.1:8554/{}".format(_RTSP_PATH)
+_RTMP_URL = os.environ.get("VIDEO_ZENOH_RTMP_URL", "").strip() or "rtmp://127.0.0.1:1935/{}".format(_MEDIAMTX_PATH)
 _RECEIVE_TIMEOUT_MS = os.environ.get("VIDEO_ZENOH_RECEIVE_TIMEOUT_MS", "2000").strip() or "2000"
 _GST_LAUNCH_BIN = os.environ.get("VIDEO_ZENOH_GST_LAUNCH_BIN", "gst-launch-1.0")
 _PLUGIN_PATH = os.environ.get("VIDEO_ZENOH_PLUGIN_PATH", "").strip()
@@ -93,7 +105,8 @@ def _gst_proc(config_path: str) -> "subprocess.Popen[bytes]":
         "receive-timeout-ms={}".format(_RECEIVE_TIMEOUT_MS),
         "!", "queue",
         "!", "h264parse", "config-interval=-1",
-        "!", "rtspclientsink", "location={}".format(_RTSP_URL), "latency=0",
+        "!", "flvmux", "streamable=true",
+        "!", "rtmp2sink", "location={}".format(_RTMP_URL),
     ]
     return subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, env=_gst_env())
 
@@ -104,13 +117,11 @@ def _stderr_pump(proc: "subprocess.Popen[bytes]") -> None:
     for raw in iter(proc.stderr.readline, b""):
         line = raw.decode("utf-8", "replace").rstrip()
         if line:
-            print("video-zenoh-bridge gst-launch: {}".format(line), flush=True)
+            log.info(line, extra={"source": "gst-launch"})
 
 
 def run(args: argparse.Namespace) -> None:
-    print("Zenoh-native video bridge started", flush=True)
-    print("  Key   : {}".format(KEY_EXPR), flush=True)
-    print("  RTSP  : {}".format(_RTSP_URL), flush=True)
+    log.info("Zenoh-native video bridge started", extra={"key_expr": KEY_EXPR, "rtmp_url": _RTMP_URL})
 
     while True:
         proc = None
@@ -120,13 +131,13 @@ def run(args: argparse.Namespace) -> None:
             proc = _gst_proc(config_path)
             stderr_thread = threading.Thread(target=_stderr_pump, args=(proc,), daemon=True)
             stderr_thread.start()
-            print("video-zenoh-bridge pipeline running (pid {})".format(proc.pid), flush=True)
+            log.info("pipeline running", extra={"pid": proc.pid})
             rc = proc.wait()
             raise RuntimeError("gst-launch-1.0 exited with code {}".format(rc))
         except KeyboardInterrupt:
             break
         except Exception as exc:
-            print("video-zenoh-bridge error: {} — retry in {}s".format(exc, _RECONNECT_S), flush=True)
+            log.error("pipeline error, retrying", extra={"error": str(exc), "retry_s": _RECONNECT_S})
             time.sleep(_RECONNECT_S)
         finally:
             if proc is not None and proc.poll() is None:
@@ -138,7 +149,7 @@ def run(args: argparse.Namespace) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Zenoh-native video prototype: zenohsrc -> mediamtx RTSP")
+    parser = argparse.ArgumentParser(description="Zenoh-native video prototype: zenohsrc -> mediamtx RTMP")
     parser.add_argument("--verbose", "-v", action="store_true")
     run(parser.parse_args())
 
