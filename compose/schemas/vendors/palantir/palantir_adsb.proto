@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+// Palantir's own schema for the EFDI Backbone trial fabric, topic
+// "<slot>/adsb/protobuf/v1" (protobuf:AdsbBatch, schema v1) — "ADS-B tracks
+// published from DORA (synthetic until readsb is fixed)" per the portal's own
+// topic description. Reconstructed verbatim from the portal's Schema viewer
+// (https://portal.efdi.netbird.efdi-backbone.net/schema.html) — see
+// compose/protocols/vendors/palantir/palantir.py for the decoder.
+// Package "efdi.adsb.v1" is this vendor's own choice, distinct from EFDI's
+// own "efdi.data.v2"/"efdi.protocols.v2" packages in compose/protocols/proto/
+// — no collision, kept exactly as uploaded.
+// SHA-256 of the uploaded FileDescriptorSet (v1, 2026-08-18):
+// 38e8012129385c7458b51e6a8f52b533f0fbc8178b2186dc094eda5f87686069
+
+package efdi.adsb.v1;
+
+message AdsbTrack {
+  string icao24 = 1;
+  string callsign = 2;
+  double lat = 3;
+  double lon = 4;
+  int32 alt_baro_ft = 5;
+  int32 ground_speed_kt = 6;
+  double track_deg = 7;
+  int32 squawk = 8;
+  int64 ts_us = 9;
+  string station_id = 10;
+}
+
+message AdsbBatch {
+  repeated AdsbTrack tracks = 1;
+  int64 batch_ts_us = 2;
+  string station_id = 3;
+}

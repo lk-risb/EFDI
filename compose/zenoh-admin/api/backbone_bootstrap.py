@@ -181,12 +181,12 @@ async def upload_backbone_identity(
     # Best-effort, like the env update above: none of these are the
     # connection itself, just what makes the data flowing across it useful —
     # backbone-bridge/backbone_layer (raw ingress/egress to the fabric),
-    # generic_json/geojson/camera_sites (the normalizers backbone-bridge's
-    # raw output feeds), and asterix (cat34/cat48's --zenoh-raw mode turns
-    # on once this identity file exists — see start.sh's
-    # asterix_category_uses_raw). A control-agent hiccup on any one of these
-    # must not fail an otherwise-successful identity upload.
-    for service in ("backbone-bridge", "backbone_layer", "generic_json", "geojson", "camera_sites", "asterix"):
+    # generic_json/geojson/camera_sites/socbx/palantir/tacvox (the normalizers
+    # backbone-bridge's raw output feeds), and asterix (cat34/cat48's
+    # --zenoh-raw mode turns on once this identity file exists — see
+    # start.sh's asterix_category_uses_raw). A control-agent hiccup on any
+    # one of these must not fail an otherwise-successful identity upload.
+    for service in ("backbone-bridge", "backbone_layer", "generic_json", "geojson", "camera_sites", "socbx", "palantir", "tacvox", "asterix"):
         try:
             _control_start_service(service)
         except Exception:  # noqa: BLE001

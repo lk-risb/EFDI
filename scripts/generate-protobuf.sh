@@ -48,7 +48,7 @@ trap 'rm -rf "$TMP_OUTPUT"' EXIT
 OUTPUT_LINK="$ROOT/compose/generated.link.$$"
 VENDOR_ROOT="$ROOT/compose/protocols/vendors/sapient"
 
-mapfile -t contracts < <(find "$ROOT/compose/protocols" -type f -name '*.proto' -not -path "$VENDOR_ROOT/sapient_msg/*" -print | sort)
+mapfile -t contracts < <(find "$ROOT/compose/protocols" "$ROOT/compose/schemas" -type f -name '*.proto' -not -path "$VENDOR_ROOT/sapient_msg/*" -print | sort)
 (( ${#contracts[@]} > 0 )) || { echo "No protobuf contracts found" >&2; exit 1; }
 contract_names=()
 for contract in "${contracts[@]}"; do
