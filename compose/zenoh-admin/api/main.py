@@ -134,16 +134,32 @@ class SPAStaticFiles(StaticFiles):
     otherwise a missing static file 404s as raw JSON instead of loading the app."""
 
     async def get_response(self, path: str, scope: Scope):
+        is_index = path in ("", "index.html")
         try:
-            return await super().get_response(path, scope)
+            response = await super().get_response(path, scope)
         except StarletteHTTPException as exc:
             # StaticFiles.get_response raises starlette.exceptions.HTTPException
             # directly — fastapi.HTTPException is a SUBCLASS of it, so catching
             # fastapi's version here never matches and every client-side route
             # (e.g. /config) 404s as raw JSON instead of falling back to the SPA.
             if exc.status_code == 404 and "." not in path.rsplit("/", 1)[-1]:
-                return await super().get_response("index.html", scope)
-            raise
+                is_index = True
+                response = await super().get_response("index.html", scope)
+            else:
+                raise
+        # index.html has to be revalidated on every load — it's the only thing
+        # naming which hashed asset/index-*.js is current. Without this,
+        # nothing here ever told the browser it COULDN'T just reuse its own
+        # heuristic cache of index.html indefinitely, so a redeploy could
+        # silently keep serving a stale page referencing old, still-present
+        # (but now-superseded) hashed assets — confirmed live: a shipped fix
+        # sat unreachable in exactly this way until a manual hard-refresh.
+        # Every other file here is content-hashed by Vite (a real code change
+        # always gets a new filename), so those are safe to cache forever.
+        response.headers["Cache-Control"] = (
+            "no-store" if is_index else "public, max-age=31536000, immutable"
+        )
+        return response
 
 
 STATIC_DIR = "/app/static"
