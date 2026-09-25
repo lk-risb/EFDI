@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import functools
 import json
 import hashlib
 import os
@@ -61,21 +63,38 @@ def _control(path: str, method: str = "GET", body: dict | None = None, timeout: 
         raise HTTPException(status_code=503, detail=f"Host control agent unavailable: {exc}") from exc
 
 
+async def _control_async(path: str, method: str = "GET", body: dict | None = None, timeout: float = 8) -> dict:
+    # _control() is a blocking urllib.request.urlopen call — every route below
+    # is async def, and this process runs uvicorn with no --workers (a single
+    # event loop for the whole admin API). Calling it directly here would
+    # stall that one event loop for the full request, serializing every OTHER
+    # concurrent request (auth, streams, config, anything) behind whatever
+    # this happens to be waiting on — worst case the 8s (or longer, for a
+    # service restart) default timeout. get_runtime() in particular is
+    # polled on an interval from the Runtime page, so this wasn't a
+    # theoretical risk, it was a recurring one. status.py's get_status() and
+    # shell.py's shell_ws() already dispatch their own blocking I/O through
+    # run_in_executor for exactly this reason — this matches that existing
+    # convention instead of introducing a third pattern.
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, functools.partial(_control, path, method=method, body=body, timeout=timeout))
+
+
 @router.get("/catalog")
 async def get_catalog(_=Depends(require_role("readonly", "admin", "superadmin"))):
-    return _control("/v1/catalog")
+    return await _control_async("/v1/catalog")
 
 
 @router.get("")
 async def get_runtime(_=Depends(require_role("readonly", "admin", "superadmin"))):
-    return _control("/v1/runtime")
+    return await _control_async("/v1/runtime")
 
 
 @router.get("/logs/{name}")
 async def get_runtime_logs(name: str, _=Depends(require_role("readonly", "admin", "superadmin"))):
     if not name or any(ch not in "abcdefghijklmnopqrstuvwxyz0123456789-_" for ch in name):
         raise HTTPException(status_code=400, detail="invalid service name")
-    return _control(f"/v1/logs/{name}")
+    return await _control_async(f"/v1/logs/{name}")
 
 
 @router.put("/config")
@@ -84,7 +103,7 @@ async def update_runtime_config(
     db: AsyncSession = Depends(get_db),
     actor=Depends(require_role("superadmin")),
 ):
-    result = _control("/v1/config", method="PUT", body={"values": body.values})
+    result = await _control_async("/v1/config", method="PUT", body={"values": body.values})
     await write_audit(db, actor.id, "update_runtime_config", ",".join(result.get("updated", [])))
     return result
 
@@ -100,7 +119,7 @@ async def service_action(
         raise HTTPException(status_code=400, detail="action must be start, stop, or restart")
     if not name or any(ch not in "abcdefghijklmnopqrstuvwxyz0123456789-_" for ch in name):
         raise HTTPException(status_code=400, detail="invalid service name")
-    result = _control(f"/v1/services/{name}/{action}", method="POST")
+    result = await _control_async(f"/v1/services/{name}/{action}", method="POST")
     await write_audit(db, actor.id, f"runtime_service_{action}", name)
     return result
 
@@ -111,6 +130,6 @@ async def update_selection(
     db: AsyncSession = Depends(get_db),
     actor=Depends(require_role("superadmin")),
 ):
-    result = _control("/v1/selection", method="PUT", body={"selected_services": body.selected_services})
+    result = await _control_async("/v1/selection", method="PUT", body={"selected_services": body.selected_services})
     await write_audit(db, actor.id, "update_runtime_selection", ",".join(result.get("selected_services", [])))
     return result

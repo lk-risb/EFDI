@@ -223,7 +223,23 @@ function EnlargedStream({name, retentionMinutes, onClose}: {
         className="min-h-0 flex-1 object-contain"
       />
       <div className="mt-4 flex items-center gap-3 text-white">
-        <span className="w-14 font-mono text-xs">{live ? 'LIVE' : `-${Math.round(scrubSeconds / 60)}m`}</span>
+        {/* Always reads "LIVE" (not the current scrub offset — the slider
+            thumb already shows that) so there's a fixed, always-visible
+            target to click back to live from anywhere in the scrub range;
+            it used to swap to "-Xm" the moment you scrubbed, which made the
+            one button that could get you back to live disappear exactly
+            when you needed it. */}
+        <button
+          type="button"
+          onClick={() => handleScrub(0)}
+          disabled={live}
+          className={cn(
+            'w-14 font-mono text-xs',
+            live ? 'cursor-default text-white' : 'text-zinc-400 hover:text-white'
+          )}
+        >
+          LIVE
+        </button>
         <input
           type="range"
           min={0}
