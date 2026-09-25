@@ -85,15 +85,21 @@ function whepUrlFor(name: string, encrypted: boolean): string {
   return `${scheme}//${window.location.hostname}:8889/${name}/whep`
 }
 
-function StreamTile({stream, webrtcEncrypted, onClick}: {
-  stream: StreamInfo; webrtcEncrypted: boolean; onClick: () => void
+function StreamTile({stream, webrtcEncrypted, isEnlarged, onClick}: {
+  stream: StreamInfo; webrtcEncrypted: boolean; isEnlarged: boolean; onClick: () => void
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const pcRef = useRef<RTCPeerConnection | null>(null)
 
   useEffect(() => {
     const video = videoRef.current
-    if (!stream.ready || !video) return
+    // The enlarged view (EnlargedStream) opens its own WHEP session for the
+    // same path — without this guard, this tile's own connection kept
+    // running underneath it, doubling the browser's decode load for the
+    // exact same stream (visible as mediamtx counting 2 readers from a
+    // single click). Closing this one while enlarged frees that up; the
+    // cleanup below re-opens it the moment isEnlarged flips back to false.
+    if (!stream.ready || !video || isEnlarged) return
     const controller = new AbortController()
     negotiateWhep(video, whepUrlFor(stream.name, webrtcEncrypted), controller.signal)
       .then(pc => { pcRef.current = pc })
@@ -103,7 +109,7 @@ function StreamTile({stream, webrtcEncrypted, onClick}: {
       pcRef.current?.close()
       pcRef.current = null
     }
-  }, [stream.name, stream.ready, webrtcEncrypted])
+  }, [stream.name, stream.ready, webrtcEncrypted, isEnlarged])
 
   return (
     <div
@@ -456,7 +462,13 @@ export function StreamsPanel() {
       ) : (
         <div className={cn('grid grid-cols-2 gap-4', 'lg:grid-cols-3 xl:grid-cols-4')}>
           {streams.map(s => (
-            <StreamTile key={s.name} stream={s} webrtcEncrypted={settings.webrtc_encryption} onClick={() => setEnlarged(s.name)} />
+            <StreamTile
+              key={s.name}
+              stream={s}
+              webrtcEncrypted={settings.webrtc_encryption}
+              isEnlarged={enlarged === s.name}
+              onClick={() => setEnlarged(s.name)}
+            />
           ))}
         </div>
       )}
