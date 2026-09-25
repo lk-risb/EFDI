@@ -194,10 +194,16 @@ async def update_mediamtx_settings(
         raise HTTPException(status_code=400, detail=f"log_level must be one of {sorted(_LOG_LEVELS)}")
     yaml, doc = _load_yaml_doc()
     _apply_settings_to_doc(doc, settings)
-    tmp_path = _MEDIAMTX_YML_PATH.with_suffix(".tmp")
-    with tmp_path.open("w", encoding="utf-8") as handle:
+    # Not a tmp-file + os.replace() swap — _MEDIAMTX_YML_PATH is a single-file
+    # bind mount (docker-compose.yml mounts mediamtx.yml itself, not its
+    # containing directory), and rename(2) onto a mount point fails with
+    # EBUSY ("Device or resource busy"): the kernel won't let you replace the
+    # dentry a mount is attached to, even though the destination is a plain
+    # file from inside this container's own view. Writing in place loses the
+    # tmp-swap's crash-atomicity, but that's the tradeoff for a config file
+    # that's bind-mounted as a single file rather than as a directory.
+    with _MEDIAMTX_YML_PATH.open("w", encoding="utf-8") as handle:
         yaml.dump(doc, handle)
-    os.replace(tmp_path, _MEDIAMTX_YML_PATH)
 
     # Same restart control.py's own /api/runtime/services/{name}/restart uses —
     # applied here directly so saving takes effect immediately, matching
