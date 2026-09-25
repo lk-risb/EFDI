@@ -81,7 +81,7 @@ err()     { echo -e "${RED}[✗]${NC} $*"; exit 1; }
 # "====\n[N/TOTAL] Title...\n====" style) instead of a bare underlined
 # heading — TOTAL_STEPS must match the number of section()/section_done()
 # pairs actually reachable in a single run (see the calls below).
-TOTAL_STEPS=12
+TOTAL_STEPS=13
 STEP=0
 SECTION_TITLE=""
 _SECTION_RULE="$(printf '=%.0s' $(seq 1 70))"
@@ -720,6 +720,16 @@ scrub_admin_bootstrap_secret "$ENV_FILE" \
 
 EFDI_NONINTERACTIVE=1 "$SCRIPT_DIR/start.sh" --restore
 ok "Infrastructure and saved native services started"
+section_done
+
+# ── Zenoh-native video prototype (optional) ─────────────────────────────────
+# gst-plugin-zenoh (zenohsrc/zenohsink) for video_zenoh_bridge.py. Best-effort
+# and never fatal to install — a failure here just leaves that one service
+# unavailable (see start.sh's video-zenoh-bridge svc_ready()); every other
+# service installed above is unaffected.
+section "Zenoh-native video prototype (optional)"
+bash "$SCRIPT_DIR/scripts/ensure-gst-zenoh.sh" \
+    || warn "gst-plugin-zenoh setup failed — video-zenoh-bridge unavailable for now. Re-run scripts/ensure-gst-zenoh.sh later, or ignore if this prototype is unused."
 section_done
 
 # ── Done (ported from the INTCORE installer's final completion banner) ─────
