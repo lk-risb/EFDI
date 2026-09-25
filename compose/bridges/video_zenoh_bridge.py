@@ -52,8 +52,8 @@ Config (compose/.env):
   VIDEO_ZENOH_MEDIAMTX_PATH     # mediamtx path this shows up under in the
                                  # video wall (default: VIDEO_ZENOH_DRONE)
   VIDEO_ZENOH_LOCAL_ENDPOINT=tcp/127.0.0.1:7448  # matches gateway.ENDPOINT
-  VIDEO_ZENOH_RTMP_URL          # override the full mediamtx RTMP URL instead
-                                 # of building it from MEDIAMTX_PATH
+  VIDEO_ZENOH_RTMP_HOST=127.0.0.1
+  VIDEO_ZENOH_RTMP_PORT=1935
   VIDEO_ZENOH_RECEIVE_TIMEOUT_MS=2000
   VIDEO_ZENOH_GST_LAUNCH_BIN=gst-launch-1.0
   VIDEO_ZENOH_PLUGIN_PATH       # extra GST_PLUGIN_PATH entry for gst-plugin-zenoh's
@@ -83,7 +83,8 @@ _DRONE = os.environ.get("VIDEO_ZENOH_DRONE", "drone1").strip() or "drone1"
 KEY_EXPR = os.environ.get("VIDEO_ZENOH_KEY", "").strip() or "{}/video/{}/h264".format(TOPIC_ROOT, _DRONE)
 _MEDIAMTX_PATH = os.environ.get("VIDEO_ZENOH_MEDIAMTX_PATH", "").strip() or _DRONE
 _LOCAL_ENDPOINT = os.environ.get("VIDEO_ZENOH_LOCAL_ENDPOINT", "tcp/127.0.0.1:7448").strip()
-_RTMP_URL = os.environ.get("VIDEO_ZENOH_RTMP_URL", "").strip() or "rtmp://127.0.0.1:1935/{}".format(_MEDIAMTX_PATH)
+_RTMP_HOST = os.environ.get("VIDEO_ZENOH_RTMP_HOST", "127.0.0.1").strip() or "127.0.0.1"
+_RTMP_PORT = os.environ.get("VIDEO_ZENOH_RTMP_PORT", "1935").strip() or "1935"
 _RECEIVE_TIMEOUT_MS = os.environ.get("VIDEO_ZENOH_RECEIVE_TIMEOUT_MS", "2000").strip() or "2000"
 _GST_LAUNCH_BIN = os.environ.get("VIDEO_ZENOH_GST_LAUNCH_BIN", "gst-launch-1.0")
 _PLUGIN_PATH = os.environ.get("VIDEO_ZENOH_PLUGIN_PATH", "").strip()
@@ -106,7 +107,19 @@ def _gst_proc(config_path: str) -> "subprocess.Popen[bytes]":
         "!", "queue",
         "!", "h264parse", "config-interval=-1",
         "!", "flvmux", "streamable=true",
-        "!", "rtmp2sink", "location={}".format(_RTMP_URL),
+        # Explicit host/port/application/stream, not `location=<url>` — some
+        # distro builds of rtmp2sink (Debian trixie's gst-plugins-bad
+        # included) fail the location URI's host parse with "Host is not
+        # set" even for a well-formed rtmp://host:port/path string, while the
+        # same build's own separate properties connect fine. mediamtx forms
+        # the registered path as "<application>/<stream>" — an empty
+        # application gets the RTMP publish rejected outright ("connection
+        # closed remotely") rather than falling back to just <stream>, so
+        # MEDIAMTX_PATH becomes the app and "live" is a fixed stream key;
+        # the video wall tile ends up named "<drone>/live" rather than a bare
+        # "<drone>", which StreamsPanel doesn't care about either way.
+        "!", "rtmp2sink", "host={}".format(_RTMP_HOST), "port={}".format(_RTMP_PORT),
+        "application={}".format(_MEDIAMTX_PATH), "stream=live",
     ]
     return subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, env=_gst_env())
 
@@ -121,7 +134,9 @@ def _stderr_pump(proc: "subprocess.Popen[bytes]") -> None:
 
 
 def run(args: argparse.Namespace) -> None:
-    log.info("Zenoh-native video bridge started", extra={"key_expr": KEY_EXPR, "rtmp_url": _RTMP_URL})
+    log.info("Zenoh-native video bridge started", extra={
+        "key_expr": KEY_EXPR, "rtmp_host": _RTMP_HOST, "rtmp_port": _RTMP_PORT, "mediamtx_path": _MEDIAMTX_PATH,
+    })
 
     while True:
         proc = None
