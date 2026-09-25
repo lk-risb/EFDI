@@ -25,4 +25,5 @@ jobs:
           cache-dependency-path: compose/zenoh-admin/ui/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
       - run: pnpm type-check
+      - run: pnpm lint
       - run: pnpm build

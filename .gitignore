@@ -30,9 +30,13 @@ compose/certs/**
 compose/state/
 logs/
 .pids/
-# MediaMTX itself (downloaded binary, not source) and its recorded segments
+# MediaMTX itself (downloaded binary, not source), its recorded segments,
+# and the self-signed cert/key its MoQ listener generates on first run
+# (host-specific, regenerated automatically if missing — never committed).
 compose/bridges/mediamtx/mediamtx
 compose/bridges/mediamtx/recordings/
+compose/bridges/mediamtx/auto.crt
+compose/bridges/mediamtx/auto.key
 # Throwaway AI-agent / developer verification scripts. Never part of the
 # product — see scratch/README.md.
 scratch/*

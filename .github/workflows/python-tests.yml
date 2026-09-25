@@ -44,6 +44,12 @@ jobs:
           python -m pytest -q tests
       - name: Compile bridge, layer, and admin modules
         run: python -m compileall -q compose/bridges compose/protocols compose/layers compose/zenoh-admin/api compose/control
+      - name: Type-check (advisory — reports only, does not fail the build)
+        # This codebase has no prior type-check history; see pyproject.toml's
+        # [tool.mypy] comment. `|| true` until an intentional pass brings the
+        # baseline (168 errors at introduction) down — flip this to a real
+        # gate once that happens, not before.
+        run: python -m pip install mypy && python -m mypy compose/bridges compose/protocols compose/layers compose/control || true
   zenoh-loopback:
     name: Zenoh identity and ACL loopback
     runs-on: ubuntu-latest

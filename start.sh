@@ -283,7 +283,7 @@ declare -A SVC_DESC=(
     [kyber]="Kyber SAPIENT feed (backbone, reuses flex335.py) → tracks"
     [fpv]="FPV drone CRSF telemetry (backbone) → tracks"
     [ita_efdi]="ITA-EFDI drone + radar feeds (backbone) → tracks"
-    [video-zenoh-bridge]="Zenoh-native video prototype: zenohsrc drone feed → mediamtx RTSP → video wall"
+    [video-zenoh-bridge]="Zenoh-native video prototype: zenohsrc drone feed → mediamtx RTMP → video wall"
 )
 
 # ── Ready check — 0=can start, 1=missing config ───────────────────────────

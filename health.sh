@@ -218,6 +218,20 @@ else
     _HEALTH_FAILED=1
 fi
 
+info "Frontend lint (ESLint)"
+if (cd "$UI" && "${PNPM[@]}" lint); then
+    ok "Frontend lint passed"
+else
+    warn "Frontend lint failed (see above)"
+    _HEALTH_FAILED=1
+fi
+# Prettier is intentionally NOT gated here: `pnpm format:check` currently
+# fails on ~38 pre-existing files this repo never ran a formatter against —
+# same reasoning as .pre-commit-config.yaml's Python formatter call: adding
+# one now would produce a first-run diff touching thousands of pre-existing
+# lines. Available to run by hand (`pnpm format:check`); wiring it into a
+# gate is a separate, deliberate decision for whoever wants to do that pass.
+
 info "Executable tests"
 while IFS= read -r test_script; do
     # Not `set -e`-fatal: tests/c2_preflight.sh exits 1 when a C2 leg is down,

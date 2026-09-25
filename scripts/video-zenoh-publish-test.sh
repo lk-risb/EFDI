@@ -19,9 +19,35 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COMPOSE_DIR="$SCRIPT_DIR/../compose"
+
+# Load compose/.env (same safe non-eval parsing as stop.sh) — needed so
+# TOPIC_ROOT below resolves to this pod's REAL namespace (POD_STATE_DIR,
+# PARTNER_NAMESPACE), not the interpreter's bare environment. Getting this
+# wrong means silently publishing under the wrong key: this pod's router ACL
+# is scoped to PARTNER_NAMESPACE/**, so a mismatched default here just gets
+# dropped with no error anywhere — exactly the bug this loader fixes.
+ENV_FILE="$COMPOSE_DIR/.env"
+if [[ -f "$ENV_FILE" ]]; then
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        line="${line%%$'\r'}"
+        [[ -z "$line" || "$line" == \#* ]] && continue
+        [[ "$line" != *=* ]] && continue
+        key="${line%%=*}"
+        val="${line#*=}"
+        [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
+        printf -v "$key" '%s' "$val"
+        # shellcheck disable=SC2163
+        export "$key"
+    done < "$ENV_FILE"
+fi
+
 DRONE="${1:-${VIDEO_ZENOH_DRONE:-drone1}}"
 ENDPOINT="${VIDEO_ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}"
-KEY_EXPR="${VIDEO_ZENOH_KEY:-EFDI/video/${DRONE}/h264}"
+# Same TOPIC_ROOT namespace_prefix.topic_root() computes for
+# video_zenoh_bridge.py's own default key — never hardcode "EFDI" here, that
+# only happens to be right on a pod whose namespace literally is "EFDI".
+TOPIC_ROOT="$(cd "$COMPOSE_DIR" && PYTHONPATH="$COMPOSE_DIR:$COMPOSE_DIR/control" python3 -c 'from namespace_prefix import topic_root; print(topic_root())')"
+KEY_EXPR="${VIDEO_ZENOH_KEY:-${TOPIC_ROOT}/video/${DRONE}/h264}"
 GST_LAUNCH_BIN="${VIDEO_ZENOH_GST_LAUNCH_BIN:-gst-launch-1.0}"
 
 if [[ -n "${VIDEO_ZENOH_PLUGIN_PATH:-}" ]]; then

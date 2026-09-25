@@ -1,0 +1,11 @@
+[tool.mypy]
+# Advisory only for now (see .github/workflows/python-tests.yml's mypy step:
+# it reports but does not fail the build) — this codebase has zero prior
+# type-check history, so start from what's actually true (no stub packages
+# installed, PEP 420 namespace packages under compose/bridges etc. with no
+# __init__.py) rather than a strict config that would just error out on
+# every import.
+mypy_path = "compose:compose/control"
+explicit_package_bases = true
+namespace_packages = true
+ignore_missing_imports = true
