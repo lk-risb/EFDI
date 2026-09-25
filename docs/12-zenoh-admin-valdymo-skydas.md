@@ -18,7 +18,7 @@ taisyklės, nereikia.
 
 ## Skydo apžvalga
 
-Skydas veikia adresu `http://127.0.0.1:8890` (arba pod'o adresu) ir valdo
+Skydas veikia adresu `http://127.0.0.1:9443` (arba pod'o adresu) ir valdo
 vieną konkretų EFDI pod'ą. Jei su juo susiduriate pirmą kartą, ši dalis
 padės susiorientuoti; gilesni poskyriai (*Runtime Control puslapis*,
 *Rolės*, *Config kortelės laukai*) seka toliau.
@@ -129,10 +129,10 @@ cd compose
 docker compose up -d zenoh-admin-db zenoh-admin zenoh-admin-proxy
 ```
 
-Tada naršyklėje atverkite `https://<pod-host>:8890`.
+Tada naršyklėje atverkite `https://<pod-host>:9443`.
 
 Pats skydas (`zenoh-admin`) klausosi tik `127.0.0.1:8895` — tiesiogiai iš
-išorės jo pasiekti negalima. Realų TLS ryšį adresu `:8890` užbaigia
+išorės jo pasiekti negalima. Realų TLS ryšį adresu `:9443` užbaigia
 priešais stovintis Caddy reverse proxy (`zenoh-admin-proxy`), naudodamas
 savo vidinę CA (`local_certs` + `tls internal`, be jokios išorinės
 ACME/CA priklausomybės); ši CA saugoma tome `zenoh_admin_caddy_data`, tad
@@ -229,7 +229,7 @@ Vaiko pusėje visas tris tapatybes sugeneruokite ir įregistruokite vietoje:
 
 ```bash
 scripts/pki/enroll-router.sh \
-  https://<tėvo-valdymo-host>:8890 \
+  https://<tėvo-valdymo-host>:9443 \
   <vaiko-vardų-sritis> \
   "${BUNDLE_DIR}/efdi" \
   "${POD_STATE_DIR}/pki"

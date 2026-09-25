@@ -110,7 +110,7 @@ SERVICES=(
     # Sensor bridges (includes raw-ingress variants — SVC_CAT has no
     # separate "Raw ingress" bucket the way admin_control.py's Python-side
     # SERVICE_SPECS does; not unifying that here, out of scope for this pass)
-    sitaware dronuradaras mainline_terminal mavlink-command asterix track-fusion
+    sitaware dronuradaras mainline_terminal mavlink-command mavlink-video asterix track-fusion
     sapient-raw stanag4586-raw stanag4609-raw stanag5516-raw
     mqtt-raw aartos-raw aartos-wifi-raw
     mediamtx
@@ -199,7 +199,7 @@ declare -A SVC_CAT=(
     [mqtt]="Protocols" [sparkplug]="Protocols"
     [nffi]="Protocols"
     [sitaware]="Sensor bridges" [dronuradaras]="Sensor bridges" [mainline_terminal]="Sensor bridges"
-    [mavlink-command]="Sensor bridges"
+    [mavlink-command]="Sensor bridges" [mavlink-video]="Sensor bridges"
     [sapient]="Protocols" [stanag4586]="Protocols" [stanag4609]="Protocols" [stanag5516]="Protocols"
     [tak-bridge]="C2 inputs" [nffi-bridge]="C2 inputs"
     [mqtt-raw]="Sensor bridges"
@@ -245,6 +245,7 @@ declare -A SVC_DESC=(
     [dronuradaras]="dronuradaras.lt drone detection network"
     [mainline_terminal]="mainline.inc TERMINAL drone-fleet C2 (WebSocket)"
     [mavlink-command]="Generic MAVLink drone command bridge (arm/takeoff/rtl/land/hold/goto)"
+    [mavlink-video]="MAVLink video-stream auto-discovery → MediaMTX pulled path (video wall)"
     [sapient]="SAPIENT / BSI Flex 335 sensor feed"
     [stanag4586]="STANAG 4586 UAV control (VSM)"
     [stanag4609]="STANAG 4609 KLV decoder (raw → tracks)"
@@ -315,6 +316,7 @@ svc_ready() {
         sitaware)     return 0 ;;  # always ready; prompts for server IP at launch if unset
         mainline_terminal) return 0 ;;  # always ready; prompts for credentials at launch if unset
         mavlink-command) return 0 ;;  # always ready; MAVLINK_ENDPOINT has a sensible default
+        mavlink-video) return 0 ;;  # always ready; same MAVLINK_ENDPOINT default as mavlink-command
         tak-bridge)   [[ "${TAK_HOST:-}" || "${TAK_HOST_FALLBACK:-}" || "${TAK_HOST_TAILSCALE:-}" ]] ;;
         sapient) return 0 ;;
         stanag4586) [[ "${STANAG4586_PROFILE:-}" == "legacy_ed3_approx" &&
@@ -997,6 +999,10 @@ launch() {
 
         mavlink-command)
             _start mavlink-command bridges/mavlink_command_bridge.py
+            ;;
+
+        mavlink-video)
+            _start mavlink-video bridges/mavlink_video_bridge.py
             ;;
 
 

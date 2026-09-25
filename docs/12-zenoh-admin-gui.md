@@ -6,7 +6,7 @@ The Dashboard's "Connected routers" panel lists every other zenoh instance (rout
 
 ## Panel walkthrough
 
-The panel runs at `http://127.0.0.1:8890` (or the pod's address) and manages one
+The panel runs at `http://127.0.0.1:9443` (or the pod's address) and manages one
 EFDI pod. If you are new to it, this is the orientation; the deeper subsections
 (*Runtime Control page*, *Roles*, *Config tab fields*) follow below.
 
@@ -94,9 +94,9 @@ cd compose
 docker compose up -d zenoh-admin-db zenoh-admin zenoh-admin-proxy
 ```
 
-Then open `https://<pod-host>:8890`.
+Then open `https://<pod-host>:9443`.
 
-The panel itself (`zenoh-admin`) binds `127.0.0.1:8895` only — not directly reachable. A Caddy reverse proxy (`zenoh-admin-proxy`) terminates real TLS on `:8890` using Caddy's own internal CA (`local_certs` + `tls internal`, no external ACME/CA dependency), persisted in the `zenoh_admin_caddy_data` volume so the CA survives restarts. Your browser will show a self-signed-certificate warning on first visit — trust Caddy's local CA (or accept the warning) to proceed; there is no public certificate here by design, since this panel isn't meant to be internet-facing.
+The panel itself (`zenoh-admin`) binds `127.0.0.1:8895` only — not directly reachable. A Caddy reverse proxy (`zenoh-admin-proxy`) terminates real TLS on `:9443` using Caddy's own internal CA (`local_certs` + `tls internal`, no external ACME/CA dependency), persisted in the `zenoh_admin_caddy_data` volume so the CA survives restarts. Your browser will show a self-signed-certificate warning on first visit — trust Caddy's local CA (or accept the warning) to proceed; there is no public certificate here by design, since this panel isn't meant to be internet-facing.
 
 ## Runtime Control page
 
@@ -175,7 +175,7 @@ On the child, generate and enroll all three identities locally:
 
 ```bash
 scripts/pki/enroll-router.sh \
-  https://<parent-management-host>:8890 \
+  https://<parent-management-host>:9443 \
   <child-namespace> \
   "${BUNDLE_DIR}/efdi" \
   "${POD_STATE_DIR}/pki"

@@ -182,14 +182,14 @@ sensor bridge).
 **Debian (ufw):**
 ```bash
 sudo apt install -y ufw   # not installed by default on Debian, unlike Ubuntu
-sudo ufw allow 8890/tcp comment 'EFDI admin GUI'
+sudo ufw allow 9443/tcp comment 'EFDI admin GUI'
 sudo ufw allow 50048/udp comment 'EFDI CAT-048 example — adjust to your sensors'
 # repeat for whichever UDP/TCP ports your integrations use, per the table below
 ```
 
 **RHEL/Rocky/AlmaLinux (firewalld):**
 ```bash
-sudo firewall-cmd --permanent --add-port=8890/tcp
+sudo firewall-cmd --permanent --add-port=9443/tcp
 sudo firewall-cmd --permanent --add-port=50048/udp
 sudo firewall-cmd --reload
 ```
@@ -238,7 +238,7 @@ here.
 | TCP `<TAK_PORT>` (mTLS, default 8089) | outbound | CoT delivery to TAK Server |
 | TCP 7448 | localhost | Local Zenoh router |
 | TCP 7447 TLS | outbound | Remote Zenoh router (requires NetBird) |
-| HTTPS 8890 | inbound | Zenoh admin GUI (Caddy-terminated, internal CA — see [Operations](05-launching-and-operations.md)) |
+| HTTPS 9443 | inbound | Zenoh admin GUI (Caddy-terminated, internal CA — see [Operations](05-launching-and-operations.md)) |
 | HTTPS | outbound | dronuradaras.lt APIs |
 
 ATAK/WinTAK clients receive tracks only through a TAK Server (`tak-layer` service); there is no direct multicast/unicast CoT delivery path.

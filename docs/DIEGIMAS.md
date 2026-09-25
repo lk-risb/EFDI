@@ -197,14 +197,14 @@ tiltų).
 **Debian (ufw):**
 ```bash
 sudo apt install -y ufw   # Debian, skirtingai nei Ubuntu, jo neįdiegia pagal nutylėjimą
-sudo ufw allow 8890/tcp comment 'EFDI admin GUI'
+sudo ufw allow 9443/tcp comment 'EFDI admin GUI'
 sudo ufw allow 50000/udp comment 'EFDI bendras ASTERIX/UDP įėjimo pavyzdys — pritaikykite savo jutikliams'
 # kartokite kiekvienam UDP/TCP prievadui, kurį naudoja jūsų integracijos, pagal lentelę žemiau
 ```
 
 **RHEL/Rocky/AlmaLinux (firewalld):**
 ```bash
-sudo firewall-cmd --permanent --add-port=8890/tcp
+sudo firewall-cmd --permanent --add-port=9443/tcp
 sudo firewall-cmd --permanent --add-port=50000/udp
 sudo firewall-cmd --reload
 ```
@@ -248,7 +248,7 @@ vėliau diegime negali ištaisyti čia trūkstamos priklausomybės.
 | TCP `<TAK_PORT>` (mTLS, numatytasis 8089) | iš serverio | CoT pristatymas į TAK serverį |
 | TCP 7448 | localhost | Vietinis Zenoh router |
 | TCP 7447 TLS | iš serverio | Nuotolinis Zenoh router (reikia NetBird) |
-| HTTPS 8890 | į serverį | Zenoh administravimo GUI (Caddy TLS, vidinis CA — žr. §10) |
+| HTTPS 9443 | į serverį | Zenoh administravimo GUI (Caddy TLS, vidinis CA — žr. §10) |
 | HTTPS | iš serverio | dronuradaras.lt API |
 
 ATAK/WinTAK klientai takelius gauna tik per TAK serverį (`tak-layer` paslauga); tiesioginio multicast/unicast CoT kelio nėra.
