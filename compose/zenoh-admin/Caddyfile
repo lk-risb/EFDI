@@ -3,14 +3,19 @@
 	# in the caddy_data volume so it survives container restarts (otherwise a new
 	# CA would be minted every restart, forcing operators to re-trust it each time).
 	local_certs
-	# This is an admin console reached directly on :8890, not a public site —
+	# This is an admin console reached directly on :9443, not a public site —
 	# no HTTP->HTTPS redirect is needed. Without this, Caddy still tries to
 	# bind :80 for that redirect and crash-loops if anything else on the host
 	# (network_mode: host, so it's the real host port) already holds it.
 	auto_https disable_redirects
 }
 
-:8890 {
+# NOT :8890 — that's SRT's real default port (compose/bridges/mediamtx/mediamtx.yml),
+# and Caddy auto-binds matching UDP :8890 for HTTP/3 alongside this TCP
+# listener, which crash-looped mediamtx's own SRT listener the instant SRT
+# got turned on. This console moved off :8890 instead of asking every SRT
+# source to use a non-default port.
+:9443 {
 	# on_demand: operators reach this by raw IP (no DNS name), so Caddy can't know which
 	# hostname/IP to pre-issue a cert for — mint one for whatever identifier connects.
 	# Safe here since the issuer is the internal CA (local_certs), not public ACME.

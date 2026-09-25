@@ -745,14 +745,14 @@ sensor bridge).
 **Debian (ufw):**
 ```bash
 sudo apt install -y ufw   # not installed by default on Debian, unlike Ubuntu
-sudo ufw allow 8890/tcp comment 'EFDI admin GUI'
+sudo ufw allow 9443/tcp comment 'EFDI admin GUI'
 sudo ufw allow 50048/udp comment 'EFDI CAT-048 example — adjust to your sensors'
 # repeat for whichever UDP/TCP ports your integrations use, per the table below
 ```
 
 **RHEL/Rocky/AlmaLinux (firewalld):**
 ```bash
-sudo firewall-cmd --permanent --add-port=8890/tcp
+sudo firewall-cmd --permanent --add-port=9443/tcp
 sudo firewall-cmd --permanent --add-port=50048/udp
 sudo firewall-cmd --reload
 ```
@@ -801,7 +801,7 @@ here.
 | TCP `<TAK_PORT>` (mTLS, default 8089) | outbound | CoT delivery to TAK Server |
 | TCP 7448 | localhost | Local Zenoh router |
 | TCP 7447 TLS | outbound | Remote Zenoh router (requires NetBird) |
-| HTTPS 8890 | inbound | Zenoh admin GUI (Caddy-terminated, internal CA — see [Operations](05-launching-and-operations.md)) |
+| HTTPS 9443 | inbound | Zenoh admin GUI (Caddy-terminated, internal CA — see [Operations](05-launching-and-operations.md)) |
 | HTTPS | outbound | dronuradaras.lt APIs |
 
 ATAK/WinTAK clients receive tracks only through a TAK Server (`tak-layer` service); there is no direct multicast/unicast CoT delivery path.
@@ -2797,7 +2797,7 @@ The Dashboard's "Connected routers" panel lists every other zenoh instance (rout
 
 ## Panel walkthrough
 
-The panel runs at `http://127.0.0.1:8890` (or the pod's address) and manages one
+The panel runs at `http://127.0.0.1:9443` (or the pod's address) and manages one
 EFDI pod. If you are new to it, this is the orientation; the deeper subsections
 (*Runtime Control page*, *Roles*, *Config tab fields*) follow below.
 
@@ -2885,9 +2885,9 @@ cd compose
 docker compose up -d zenoh-admin-db zenoh-admin zenoh-admin-proxy
 ```
 
-Then open `https://<pod-host>:8890`.
+Then open `https://<pod-host>:9443`.
 
-The panel itself (`zenoh-admin`) binds `127.0.0.1:8895` only — not directly reachable. A Caddy reverse proxy (`zenoh-admin-proxy`) terminates real TLS on `:8890` using Caddy's own internal CA (`local_certs` + `tls internal`, no external ACME/CA dependency), persisted in the `zenoh_admin_caddy_data` volume so the CA survives restarts. Your browser will show a self-signed-certificate warning on first visit — trust Caddy's local CA (or accept the warning) to proceed; there is no public certificate here by design, since this panel isn't meant to be internet-facing.
+The panel itself (`zenoh-admin`) binds `127.0.0.1:8895` only — not directly reachable. A Caddy reverse proxy (`zenoh-admin-proxy`) terminates real TLS on `:9443` using Caddy's own internal CA (`local_certs` + `tls internal`, no external ACME/CA dependency), persisted in the `zenoh_admin_caddy_data` volume so the CA survives restarts. Your browser will show a self-signed-certificate warning on first visit — trust Caddy's local CA (or accept the warning) to proceed; there is no public certificate here by design, since this panel isn't meant to be internet-facing.
 
 ## Runtime Control page
 
@@ -2966,7 +2966,7 @@ On the child, generate and enroll all three identities locally:
 
 ```bash
 scripts/pki/enroll-router.sh \
-  https://<parent-management-host>:8890 \
+  https://<parent-management-host>:9443 \
   <child-namespace> \
   "${BUNDLE_DIR}/efdi" \
   "${POD_STATE_DIR}/pki"
@@ -3390,7 +3390,7 @@ This catches syntax errors, TypeScript errors, and Dockerfile breakage before me
 | 2026-07-10 | Zenoh admin GUI: added a "Connected routers" panel — parses `router/transport/unicast/*` entries already present in the admin-space query used for the subscriber/queryable lists, no new ACL or query needed |
 | 2026-07-10 | Zenoh admin GUI: ported the TAK-hud visual language (`hud-card`, `hud-frame`/reticle corners, `hud-glass` sidebar, `hud-grid-bg` backdrop, accent-glow buttons, staggered fade-in) into `index.css`/`Layout.tsx`/dashboard |
 | 2026-07-11 | Zenoh admin GUI: full TAK port (not just style) — runtime branding via DB-backed store, theme toggle, notifications bell, username-change, all routes retrofitted with light/dark variants |
-| 2026-07-11 | Zenoh admin panel HTTPS: uvicorn now binds `127.0.0.1:8895` only; new `zenoh-admin-proxy` (Caddy) terminates real TLS on `:8890` via Caddy's internal CA, `on_demand` issuance (operators reach it by raw IP, no SNI) |
+| 2026-07-11 | Zenoh admin panel HTTPS: uvicorn now binds `127.0.0.1:8895` only; new `zenoh-admin-proxy` (Caddy) terminates real TLS on `:9443` via Caddy's internal CA, `on_demand` issuance (operators reach it by raw IP, no SNI) |
 | 2026-07-11 | `BUNDLE_DIR`/`POD_STATE_DIR` defaults moved from `$HOME/goat-bundle`/`$HOME/goat-moon` to `compose/certs/`/`compose/state/` (in-repo, gitignored) — scattered state across `$HOME` made cleanup unreliable |
 | 2026-07-11 | Added `dev.sh`: disposable local MariaDB + directly-run uvicorn for zenoh-admin UI preview only, bypassing zenoh-router/certs/fabric entirely |
 | 2026-07-11 | Removed the external "goat" vendor entirely: certs are now self-issued via `scripts/gen-certs.sh` (EFDI root CA, no portal/CBOR bundle), containers renamed `goat-moon-*` → `efdi-pod-*`, `GOAT_CERT_DIR` env var renamed `EFDI_CERT_DIR`, `../examples/first-boot.sh` rewritten to read `compose/.env` directly and drop the `goat-clientd` wrapper (NetBird is called natively — it was always EFDI's own asset, not vendor lock-in), `profiles/` directory removed (orphaned by the rewrite) |
