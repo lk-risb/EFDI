@@ -43,35 +43,6 @@ const DEFAULT_SETTINGS: MediamtxSettings = {
   record_retention_minutes: 10,
 }
 
-// WHEP (WebRTC-HTTP Egress Protocol): POST an SDP offer, get an SDP answer
-// back. MediaMTX exposes one WHEP endpoint per path on its own WebRTC port
-// (mediamtx.yml's webrtcAddress) — same host as this WebUI (network_mode:
-// host), different port — so this dials MediaMTX directly rather than
-// through this app's own API.
-async function negotiateWhep(video: HTMLVideoElement, whepUrl: string, signal: AbortSignal): Promise<RTCPeerConnection> {
-  const pc = new RTCPeerConnection()
-  pc.addTransceiver('video', {direction: 'recvonly'})
-  pc.addTransceiver('audio', {direction: 'recvonly'})
-  pc.ontrack = (event) => {
-    if (video.srcObject !== event.streams[0]) video.srcObject = event.streams[0]
-  }
-  const offer = await pc.createOffer()
-  await pc.setLocalDescription(offer)
-  const response = await fetch(whepUrl, {
-    method: 'POST',
-    headers: {'Content-Type': 'application/sdp'},
-    body: offer.sdp,
-    signal,
-  })
-  if (!response.ok) {
-    pc.close()
-    throw new Error(`WHEP negotiation failed (HTTP ${response.status})`)
-  }
-  const answer = await response.text()
-  await pc.setRemoteDescription({type: 'answer', sdp: answer})
-  return pc
-}
-
 // Proxied through THIS already-HTTPS-trusted origin (Caddyfile's
 // /mediamtx-whep/* handle_path -> 127.0.0.1:8889) rather than dialed
 // directly against MediaMTX's own port. MediaMTX's WebRTC listener is
@@ -91,31 +62,88 @@ function whepUrlFor(name: string): string {
   return `${window.location.protocol}//${window.location.host}/mediamtx-whep/${name}/whep`
 }
 
-function StreamTile({stream, isEnlarged, onClick}: {
-  stream: StreamInfo; isEnlarged: boolean; onClick: () => void
+// One WHEP session per stream name, shared by whichever <video> element(s)
+// currently want to show it (the grid tile, the enlarged view, or both at
+// once while the enlarge transition is in flight). Previously each of
+// StreamTile/EnlargedStream owned its own RTCPeerConnection and the tile
+// closed its connection the instant you opened the enlarged view — that
+// fixed mediamtx double-counting readers, but traded it for a visible
+// restart (new WHEP negotiation, new ICE handshake, wait for the next
+// keyframe) every time you maximized a tile. A MediaStream can be assigned
+// as srcObject on more than one <video> element simultaneously with no
+// extra network/WHEP cost — mediamtx still only sees one reader — so
+// sharing the connection here fixes both problems: no doubled reader count,
+// and maximizing just re-points an existing live MediaStream at a bigger
+// <video> instead of reconnecting.
+interface SharedConnection {
+  pc: RTCPeerConnection
+  stream: MediaStream | null
+  listeners: Set<(stream: MediaStream) => void>
+}
+const sharedConnections = new Map<string, SharedConnection>()
+
+function subscribeStream(name: string, onStream: (stream: MediaStream) => void): () => void {
+  let entry = sharedConnections.get(name)
+  if (!entry) {
+    const pc = new RTCPeerConnection()
+    entry = {pc, stream: null, listeners: new Set()}
+    sharedConnections.set(name, entry)
+    pc.addTransceiver('video', {direction: 'recvonly'})
+    pc.addTransceiver('audio', {direction: 'recvonly'})
+    pc.ontrack = (event) => {
+      const current = sharedConnections.get(name)
+      if (!current) return
+      current.stream = event.streams[0]
+      current.listeners.forEach(fn => fn(event.streams[0]))
+    }
+    ;(async () => {
+      try {
+        const offer = await pc.createOffer()
+        await pc.setLocalDescription(offer)
+        const response = await fetch(whepUrlFor(name), {
+          method: 'POST',
+          headers: {'Content-Type': 'application/sdp'},
+          body: offer.sdp,
+        })
+        if (!response.ok) throw new Error(`WHEP negotiation failed (HTTP ${response.status})`)
+        const answer = await response.text()
+        await pc.setRemoteDescription({type: 'answer', sdp: answer})
+      } catch {
+        closeStream(name)  // negotiation failed — drop it so the next subscriber retries fresh
+      }
+    })()
+  }
+  entry.listeners.add(onStream)
+  if (entry.stream) onStream(entry.stream)
+  return () => {
+    const current = sharedConnections.get(name)
+    if (!current) return
+    current.listeners.delete(onStream)
+    // Nothing left watching this stream (tile polled it away, enlarged view
+    // closed) — tear down the real connection instead of leaking it.
+    if (current.listeners.size === 0) closeStream(name)
+  }
+}
+
+function closeStream(name: string) {
+  const entry = sharedConnections.get(name)
+  if (!entry) return
+  entry.pc.close()
+  sharedConnections.delete(name)
+}
+
+function StreamTile({stream, onClick}: {
+  stream: StreamInfo; onClick: () => void
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
-  const pcRef = useRef<RTCPeerConnection | null>(null)
 
   useEffect(() => {
     const video = videoRef.current
-    // The enlarged view (EnlargedStream) opens its own WHEP session for the
-    // same path — without this guard, this tile's own connection kept
-    // running underneath it, doubling the browser's decode load for the
-    // exact same stream (visible as mediamtx counting 2 readers from a
-    // single click). Closing this one while enlarged frees that up; the
-    // cleanup below re-opens it the moment isEnlarged flips back to false.
-    if (!stream.ready || !video || isEnlarged) return
-    const controller = new AbortController()
-    negotiateWhep(video, whepUrlFor(stream.name), controller.signal)
-      .then(pc => { pcRef.current = pc })
-      .catch(() => { /* tile stays blank; next 5s poll re-triggers this effect if still ready */ })
-    return () => {
-      controller.abort()
-      pcRef.current?.close()
-      pcRef.current = null
-    }
-  }, [stream.name, stream.ready, isEnlarged])
+    if (!stream.ready || !video) return
+    return subscribeStream(stream.name, s => {
+      if (video.srcObject !== s) video.srcObject = s
+    })
+  }, [stream.name, stream.ready])
 
   return (
     <div
@@ -140,7 +168,6 @@ function EnlargedStream({name, retentionMinutes, onClose}: {
   name: string; retentionMinutes: number; onClose: () => void
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
-  const pcRef = useRef<RTCPeerConnection | null>(null)
   const [segments, setSegments] = useState<RecordingSegment[]>([])
   const [scrubSeconds, setScrubSeconds] = useState(0)
   const [live, setLive] = useState(true)
@@ -172,16 +199,13 @@ function EnlargedStream({name, retentionMinutes, onClose}: {
 
   useEffect(() => {
     const video = videoRef.current
+    // Joins the SAME shared connection the grid tile is already using (or
+    // starts one, if this path somehow isn't tiled anywhere) — no fresh
+    // negotiation, no reconnect flash, no wait for the next keyframe.
     if (!video || !live) return
-    const controller = new AbortController()
-    negotiateWhep(video, whepUrlFor(name), controller.signal)
-      .then(pc => { pcRef.current = pc })
-      .catch(e => notify.error(errorMessage(e)))
-    return () => {
-      controller.abort()
-      pcRef.current?.close()
-      pcRef.current = null
-    }
+    return subscribeStream(name, s => {
+      if (video.srcObject !== s) video.srcObject = s
+    })
   }, [name, live])
 
   function handleScrub(seconds: number) {
@@ -191,8 +215,6 @@ function EnlargedStream({name, retentionMinutes, onClose}: {
       return
     }
     setLive(false)
-    pcRef.current?.close()
-    pcRef.current = null
     const video = videoRef.current
     if (!video || segments.length === 0) return
     // Each segment file's mtime is roughly its END time (mediamtx names/
@@ -487,7 +509,6 @@ export function StreamsPanel() {
             <StreamTile
               key={s.name}
               stream={s}
-              isEnlarged={enlarged === s.name}
               onClick={() => setEnlarged(s.name)}
             />
           ))}
