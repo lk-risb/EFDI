@@ -55,6 +55,14 @@ else
     PNPM=(npx --yes pnpm@11.9.0)
 fi
 
+# gst-plugin-zenoh (zenohsrc/zenohsink) for video_zenoh_bridge.py — idempotent,
+# skips straight through once installed. Best-effort: never escalates
+# _HEALTH_FAILED, since this is a prototype-stage optional feature — a
+# missing/broken build just leaves that one service unavailable (see
+# start.sh's video-zenoh-bridge svc_ready()), not a health-check failure.
+bash "$ROOT/scripts/ensure-gst-zenoh.sh" \
+    || warn "gst-plugin-zenoh setup failed — video-zenoh-bridge unavailable for now. Re-run scripts/ensure-gst-zenoh.sh later."
+
 git_commit="$(git rev-parse HEAD)"
 admin_image="$(docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" images -q zenoh-admin 2>/dev/null)"
 deployed_commit=""

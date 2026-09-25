@@ -34,7 +34,7 @@ echo -e "${NC}"
 # Numbered, framed step banners (ported from the INTCORE installer's
 # "====\n[N/TOTAL] Title...\n====" style), overriding _spinner.sh's plain
 # underlined section() for this script only.
-TOTAL_STEPS=8
+TOTAL_STEPS=9
 STEP=0
 SECTION_TITLE=""
 _SECTION_RULE="$(printf '=%.0s' $(seq 1 70))"
@@ -127,6 +127,15 @@ if command -v apt-get >/dev/null 2>&1; then
 else
     warn "apt-get not found — skipping host OS package update (unsupported host OS)"
 fi
+section_done
+
+section "Zenoh-native video prototype (optional)"
+# gst-plugin-zenoh (zenohsrc/zenohsink) for video_zenoh_bridge.py — idempotent,
+# skips straight through once installed. Best-effort: a failure here never
+# fails the update, it just leaves that one service unavailable (see
+# start.sh's video-zenoh-bridge svc_ready()).
+bash "$ROOT/scripts/ensure-gst-zenoh.sh" \
+    || warn "gst-plugin-zenoh setup failed — video-zenoh-bridge unavailable for now. Re-run scripts/ensure-gst-zenoh.sh later."
 section_done
 
 section "Pulling latest changes"

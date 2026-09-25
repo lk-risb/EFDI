@@ -124,6 +124,8 @@ SERVICES=(
     tak-bridge nffi-bridge intcore-bridge
     # Backbone
     backbone-bridge backbone_layer
+    # Video prototype
+    video-zenoh-bridge
 )
 
 # Restore only non-secret launcher choices. Explicit compose/.env values win;
@@ -225,6 +227,7 @@ declare -A SVC_CAT=(
     [kyber]="Protocols"
     [fpv]="Protocols"
     [ita_efdi]="Protocols"
+    [video-zenoh-bridge]="Sensor bridges"
 )
 
 declare -A SVC_DESC=(
@@ -280,6 +283,7 @@ declare -A SVC_DESC=(
     [kyber]="Kyber SAPIENT feed (backbone, reuses flex335.py) → tracks"
     [fpv]="FPV drone CRSF telemetry (backbone) → tracks"
     [ita_efdi]="ITA-EFDI drone + radar feeds (backbone) → tracks"
+    [video-zenoh-bridge]="Zenoh-native video prototype: zenohsrc drone feed → mediamtx RTSP → video wall"
 )
 
 # ── Ready check — 0=can start, 1=missing config ───────────────────────────
@@ -336,6 +340,16 @@ svc_ready() {
         kyber) return 0 ;;  # same as generic_json/geojson
         fpv) return 0 ;;  # same as generic_json/geojson
         ita_efdi) return 0 ;;  # same as generic_json/geojson
+        video-zenoh-bridge)
+            # install.sh/update.sh/health.sh each run scripts/ensure-gst-zenoh.sh
+            # to provision this automatically (GStreamer + a built
+            # gst-plugin-zenoh) — best-effort, so a host where that hasn't
+            # completed yet (or failed) just reports not-ready here instead
+            # of start.sh crashing trying to launch it.
+            command -v "${VIDEO_ZENOH_GST_LAUNCH_BIN:-gst-launch-1.0}" >/dev/null 2>&1 || return 1
+            GST_PLUGIN_PATH="${VIDEO_ZENOH_PLUGIN_PATH:-}${VIDEO_ZENOH_PLUGIN_PATH:+:}${GST_PLUGIN_PATH:-}" \
+                gst-inspect-1.0 zenohsrc >/dev/null 2>&1
+            ;;
         *)        return 0 ;;
     esac
 }
@@ -1169,6 +1183,10 @@ launch() {
 
         ita_efdi)
             _start ita_efdi protocols/vendors/ita_efdi/ita_efdi.py
+            ;;
+
+        video-zenoh-bridge)
+            _start video-zenoh-bridge bridges/video_zenoh_bridge.py
             ;;
 
         track-fusion)

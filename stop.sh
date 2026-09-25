@@ -112,7 +112,7 @@ case "$MODE" in
         ;;
     *)
         case "$MODE" in
-            admin-control|cert-renewer|supervisor|presence|meteolt|dronuradaras|sitaware|mainline_terminal|mavlink-command|tak-bridge|asterix|asterix-bridge|udp-ingress|track-fusion|asterix-cat10|asterix-cat20|asterix-cat21|asterix-cat34|asterix-cat48|asterix-cat62|asterix-cat10-raw|asterix-cat20-raw|asterix-cat21-raw|asterix-cat34-raw|asterix-cat48-raw|asterix-cat62-raw|sapient|nffi|nffi-bridge|stanag4586|stanag4609|stanag5516|sapient-raw|stanag4586-raw|stanag4609-raw|stanag5516-raw|mqtt-raw|aartos-raw|aartos-wifi-raw|cap|mqtt|sparkplug|sensor-health|mission-route|aartos|tak_layer|sitaware_layer|tak_alert_layer|mediamtx|backbone-bridge|backbone_layer|generic_json|geojson|camera_sites|socbx|palantir|tacvox|tytan|usareur|skylord|kyber|fpv|ita_efdi)
+            admin-control|cert-renewer|supervisor|presence|meteolt|dronuradaras|sitaware|mainline_terminal|mavlink-command|tak-bridge|asterix|asterix-bridge|udp-ingress|track-fusion|asterix-cat10|asterix-cat20|asterix-cat21|asterix-cat34|asterix-cat48|asterix-cat62|asterix-cat10-raw|asterix-cat20-raw|asterix-cat21-raw|asterix-cat34-raw|asterix-cat48-raw|asterix-cat62-raw|sapient|nffi|nffi-bridge|stanag4586|stanag4609|stanag5516|sapient-raw|stanag4586-raw|stanag4609-raw|stanag5516-raw|mqtt-raw|aartos-raw|aartos-wifi-raw|cap|mqtt|sparkplug|sensor-health|mission-route|aartos|tak_layer|sitaware_layer|tak_alert_layer|mediamtx|backbone-bridge|backbone_layer|generic_json|geojson|camera_sites|socbx|palantir|tacvox|tytan|usareur|skylord|kyber|fpv|ita_efdi|video-zenoh-bridge)
                 echo "=== Stopping $MODE ==="
                 stop_scripts "$MODE"
                 echo "Done."
