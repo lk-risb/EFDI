@@ -72,11 +72,22 @@ async function negotiateWhep(video: HTMLVideoElement, whepUrl: string, signal: A
   return pc
 }
 
-function whepUrlFor(name: string): string {
-  return `${window.location.protocol}//${window.location.hostname}:8889/${name}/whep`
+// MediaMTX's WebRTC listener has its OWN scheme, independent of whatever
+// this admin console itself is served over (mediamtx.yml's webrtcEncryption
+// — off by default here: "plaintext HTTP is fine: only reachable over the
+// NetBird overlay"). Blindly reusing window.location.protocol broke the
+// instant the console moved behind HTTPS (Caddy's internal CA) while
+// mediamtx's WHEP endpoint stayed plain HTTP: the browser refused the TLS
+// handshake against a port that never spoke TLS, surfacing as a bare
+// "NetworkError when attempting to fetch resource" with no useful detail.
+function whepUrlFor(name: string, encrypted: boolean): string {
+  const scheme = encrypted ? 'https:' : 'http:'
+  return `${scheme}//${window.location.hostname}:8889/${name}/whep`
 }
 
-function StreamTile({stream, onClick}: {stream: StreamInfo; onClick: () => void}) {
+function StreamTile({stream, webrtcEncrypted, onClick}: {
+  stream: StreamInfo; webrtcEncrypted: boolean; onClick: () => void
+}) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const pcRef = useRef<RTCPeerConnection | null>(null)
 
@@ -84,7 +95,7 @@ function StreamTile({stream, onClick}: {stream: StreamInfo; onClick: () => void}
     const video = videoRef.current
     if (!stream.ready || !video) return
     const controller = new AbortController()
-    negotiateWhep(video, whepUrlFor(stream.name), controller.signal)
+    negotiateWhep(video, whepUrlFor(stream.name, webrtcEncrypted), controller.signal)
       .then(pc => { pcRef.current = pc })
       .catch(() => { /* tile stays blank; next 5s poll re-triggers this effect if still ready */ })
     return () => {
@@ -92,7 +103,7 @@ function StreamTile({stream, onClick}: {stream: StreamInfo; onClick: () => void}
       pcRef.current?.close()
       pcRef.current = null
     }
-  }, [stream.name, stream.ready])
+  }, [stream.name, stream.ready, webrtcEncrypted])
 
   return (
     <div
@@ -113,8 +124,8 @@ function StreamTile({stream, onClick}: {stream: StreamInfo; onClick: () => void}
   )
 }
 
-function EnlargedStream({name, retentionMinutes, onClose}: {
-  name: string; retentionMinutes: number; onClose: () => void
+function EnlargedStream({name, retentionMinutes, webrtcEncrypted, onClose}: {
+  name: string; retentionMinutes: number; webrtcEncrypted: boolean; onClose: () => void
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const pcRef = useRef<RTCPeerConnection | null>(null)
@@ -151,7 +162,7 @@ function EnlargedStream({name, retentionMinutes, onClose}: {
     const video = videoRef.current
     if (!video || !live) return
     const controller = new AbortController()
-    negotiateWhep(video, whepUrlFor(name), controller.signal)
+    negotiateWhep(video, whepUrlFor(name, webrtcEncrypted), controller.signal)
       .then(pc => { pcRef.current = pc })
       .catch(e => notify.error(errorMessage(e)))
     return () => {
@@ -159,7 +170,7 @@ function EnlargedStream({name, retentionMinutes, onClose}: {
       pcRef.current?.close()
       pcRef.current = null
     }
-  }, [name, live])
+  }, [name, live, webrtcEncrypted])
 
   function handleScrub(seconds: number) {
     setScrubSeconds(seconds)
@@ -445,7 +456,7 @@ export function StreamsPanel() {
       ) : (
         <div className={cn('grid grid-cols-2 gap-4', 'lg:grid-cols-3 xl:grid-cols-4')}>
           {streams.map(s => (
-            <StreamTile key={s.name} stream={s} onClick={() => setEnlarged(s.name)} />
+            <StreamTile key={s.name} stream={s} webrtcEncrypted={settings.webrtc_encryption} onClick={() => setEnlarged(s.name)} />
           ))}
         </div>
       )}
@@ -453,6 +464,7 @@ export function StreamsPanel() {
         <EnlargedStream
           name={enlarged}
           retentionMinutes={settings.record_retention_minutes}
+          webrtcEncrypted={settings.webrtc_encryption}
           onClose={() => setEnlarged(null)}
         />
       )}
