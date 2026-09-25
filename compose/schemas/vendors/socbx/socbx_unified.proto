@@ -1,0 +1,563 @@
+syntax = "proto3";
+
+// 2T Security's own schema for the EFDI Backbone trial fabric, topic
+// "<slot>/soc-bx/unified/raw/v1" (protobuf:UnifiedSchema, schema v4).
+// Reconstructed verbatim from the portal's Schema viewer
+// (https://portal.efdi.netbird.efdi-backbone.net/schema.html) — see
+// compose/protocols/vendors/socbx/socbx.py for the decoder that reads this.
+// SHA-256 of the uploaded FileDescriptorSet (v4, 2026-09-22):
+// 2d294292eafdda3746e9057e7fc1186147b35b403f6f993cbff0a1ed5e146ad4
+
+package unifiedschema.v1;
+
+import "google/protobuf/struct.proto";
+
+message DoubleList {
+  repeated double values = 1;
+}
+
+message Provenance {
+  optional string source_id = 1;
+  optional string source_type = 2;
+  optional string source_name = 3;
+  optional string vendor = 4;
+  optional string parent_id = 5;
+  optional google.protobuf.Value derived_from = 6;
+  optional string status_page = 7;
+  optional string algorithm = 8;
+  optional string algorithm_version = 9;
+  optional string model_name = 10;
+  optional string model_version = 11;
+  optional double observed_at = 12;
+  optional double received_at = 13;
+  optional double processed_at = 14;
+  optional double ingested_at = 15;
+  optional double reported_at = 16;
+  optional double stale_at = 17;
+  optional double sequence_number = 18;
+  optional string source_node = 19;
+  optional string source_site = 20;
+  optional string source_network = 21;
+  optional string source_sensor = 22;
+  optional string source_organization = 23;
+  optional string generation_method = 24;
+  optional string correlation_id = 25;
+}
+
+message Alert {
+  optional string alert_id = 1;
+  optional string type = 2;
+  optional string status = 3;
+  optional string property = 4;
+  optional string reason = 5;
+}
+
+message MissionContext {
+  optional string operation = 1;
+  optional string exercise = 2;
+  optional string force = 3;
+  optional string unit = 4;
+  optional string phase = 5;
+  optional string objective = 6;
+  optional string formation = 7;
+}
+
+message Location {
+  optional double longitude = 1;
+  optional double latitude = 2;
+  optional double location_range = 3;
+  optional double x = 4;
+  optional double y = 5;
+  optional double z = 6;
+  optional double x_error = 7;
+  optional double y_error = 8;
+  optional double z_error = 9;
+  optional string coord_system = 10;
+  optional double east_rate = 11;
+  optional double north_rate = 12;
+  optional double up_rate = 13;
+  optional string speed_units = 14;
+  optional string country = 15;
+  optional string region = 16;
+  optional string city = 17;
+  optional double location_resolution = 18;
+  optional double altitude = 19;
+  optional double barometric_altitude = 20;
+  optional double geometric_altitude = 21;
+  optional string altitude_relative = 22;
+  optional double height = 23;
+  optional double depth = 24;
+  optional google.protobuf.Value trajectory = 25;
+}
+
+message Geometry {
+  optional string geometry_type = 1;
+  repeated DoubleList polygon = 2;
+  repeated DoubleList polyline = 3;
+  repeated double bounding_box = 4;
+  optional double radius = 5;
+  optional double width = 6;
+  optional double height = 7;
+  optional double length = 8;
+  optional string coordinate_reference_system = 9;
+}
+
+message GeoJSON {
+  optional string type = 1;
+  repeated google.protobuf.Value coordinates = 2;
+  optional google.protobuf.Struct geometry = 3;
+  optional google.protobuf.Struct properties = 4;
+  repeated google.protobuf.Struct features = 5;
+  repeated google.protobuf.Struct geometries = 6;
+  repeated double bbox = 7;
+  optional google.protobuf.Value id = 8;
+}
+
+message ImageRegion {
+  optional double x = 1;
+  optional double y = 2;
+  optional double width = 3;
+  optional double height = 4;
+  repeated DoubleList polygon = 5;
+  optional string coordinate_space = 6;
+}
+
+message Kinematics {
+  optional double speed = 1;
+  optional double ground_speed = 2;
+  optional double horizontal_speed = 3;
+  optional double vertical_speed = 4;
+  optional double velocity_x = 5;
+  optional double velocity_y = 6;
+  optional double velocity_z = 7;
+  optional double acceleration = 8;
+  optional double acceleration_x = 9;
+  optional double acceleration_y = 10;
+  optional double acceleration_z = 11;
+  optional double heading = 12;
+  optional double course = 13;
+  optional double pitch = 14;
+  optional double pitch_rate = 15;
+  optional double roll = 16;
+  optional double yaw = 17;
+  optional double yaw_rate = 18;
+  optional double angular_velocity = 19;
+  optional string speed_unit = 20;
+  optional double linear_error = 21;
+  optional double circular_error = 22;
+}
+
+message RangeBearing {
+  optional double range = 1;
+  optional double bearing = 2;
+  optional double azimuth = 3;
+  optional double elevation = 4;
+  optional double elevation_error = 5;
+  optional double azimuth_error = 6;
+}
+
+message Quality {
+  optional double confidence = 1;
+  optional double accuracy = 2;
+  optional double precision = 3;
+  optional double resolution = 4;
+  optional double error = 5;
+  optional double error_upper = 6;
+  optional double error_lower = 7;
+  optional double variance = 8;
+  optional google.protobuf.Value covariance = 9;
+  optional bool stale = 10;
+  optional bool estimated = 11;
+  optional bool interpolated = 12;
+  optional bool extrapolated = 13;
+  optional bool synthetic = 14;
+}
+
+message Prediction {
+  optional google.protobuf.Value predicted_value = 1;
+  optional string predicted_type = 2;
+  optional double confidence = 3;
+  optional double probability = 4;
+  optional google.protobuf.Value error = 5;
+}
+
+message Measurement {
+  optional double value = 1;
+  optional string unit = 2;
+  optional string source_unit = 3;
+  optional string dimension = 4;
+  optional double uncertainty = 5;
+}
+
+message Observation {
+  optional string observation_id = 1;
+  optional string observer_id = 2;
+  optional string subject_id = 3;
+  optional string observation_type = 4;
+  optional google.protobuf.Value value = 5;
+  optional string unit = 6;
+  optional double observed_at = 7;
+  optional double confidence = 8;
+  optional Quality quality = 9;
+  optional Provenance provenance = 10;
+}
+
+message Identity {
+  optional string object_id = 1;
+  optional string track_id = 2;
+  optional string external_id = 3;
+  optional string name = 4;
+  optional string name_short = 5;
+  optional string callsign = 6;
+  optional string serial = 7;
+  optional string registration = 8;
+  optional string transponder_code = 9;
+  optional string object_type = 10;
+  optional string object_subtype = 11;
+  optional string platform_type = 12;
+  optional string affiliation = 13;
+  optional string classification = 14;
+  optional string label = 15;
+  optional double confidence = 16;
+  optional string domain = 17;
+  optional string description = 18;
+  optional string vehicle_type = 19;
+  optional string manufacturer = 20;
+  optional string model = 21;
+}
+
+message Lifecycle {
+  optional double created_at = 1;
+  optional double updated_at = 2;
+  optional double first_seen = 3;
+  optional double last_seen = 4;
+  optional double deleted_at = 5;
+  optional double age = 6;
+  optional double ttl = 7;
+  optional double expires_at = 8;
+  optional string state = 9;
+  optional string previous_state = 10;
+  optional bool is_active = 11;
+  optional bool is_deleted = 12;
+  optional bool is_stale = 13;
+}
+
+message Registration {
+  optional string definition = 1;
+  optional string name = 2;
+  optional string short_name = 3;
+  optional google.protobuf.Value capabilities = 4;
+  optional google.protobuf.Value reporting_region = 5;
+  optional google.protobuf.Value config = 6;
+  optional string type = 7;
+  optional google.protobuf.Value coverage = 8;
+  optional google.protobuf.Value units = 9;
+  optional Location location = 10;
+  optional double maximum_latency = 11;
+  optional string tracking_type = 12;
+  optional google.protobuf.Value task = 13;
+  optional string scan_type = 14;
+  optional google.protobuf.Value reporting = 15;
+  repeated string event_types = 16;
+}
+
+message Sensor {
+  optional string sensor_id = 1;
+  optional string sensor_type = 2;
+  optional string mode = 3;
+  optional double frequency = 4;
+  optional double wavelength = 5;
+  optional double min_range = 6;
+  optional double max_range = 7;
+  optional double horizontal_fov = 8;
+  optional double vertical_fov = 9;
+  optional double sampling_rate = 10;
+  optional double update_rate = 11;
+  optional double resolution = 12;
+  optional double sensitivity = 13;
+  optional string spectral_band = 14;
+  optional double focal_length = 15;
+  optional double exposure = 16;
+}
+
+message Control {
+  optional double throttle = 1;
+  optional double steer = 2;
+  optional bool armed = 3;
+  optional bool throttled = 4;
+}
+
+message Signal {
+  optional double amplitude = 1;
+  optional double frequency = 2;
+  optional double start_frequency = 3;
+  optional double stop_frequency = 4;
+  optional double resolution_bandwidth = 5;
+  optional double power_dbm = 6;
+  optional double strength = 7;
+  optional double attenuation = 8;
+  optional double snr = 9;
+  optional bool normalise = 10;
+  optional double power = 11;
+  optional double bandwidth = 12;
+  optional string modulation = 13;
+  optional string waveform = 14;
+  optional string channel = 15;
+  optional string band = 16;
+  optional string polarisation = 17;
+  optional double cycle = 18;
+}
+
+message Environment {
+  optional double temperature = 1;
+  optional double pressure = 2;
+  optional double humidity = 3;
+  optional double illumination = 4;
+  optional double wind_speed = 5;
+  optional double wind_direction = 6;
+  optional double visibility = 7;
+  optional double precipitation = 8;
+  optional double cloud_cover = 9;
+  optional string terrain_type = 10;
+}
+
+message Physical {
+  optional double mass = 1;
+  optional double length = 2;
+  optional double width = 3;
+  optional double height = 4;
+  optional string colour = 5;
+  optional string shape = 6;
+  optional double volume = 7;
+  optional string material = 8;
+  optional double temperature = 9;
+  optional double battery = 10;
+  optional google.protobuf.Value payload = 11;
+  optional double capacity = 12;
+  optional double occupancy = 13;
+}
+
+message Endpoint {
+  optional string ip_address = 1;
+  optional string mac_address = 2;
+  optional string url = 3;
+  optional google.protobuf.Value identity = 4;
+  optional string status = 5;
+  optional string description = 6;
+  optional string name = 7;
+  optional string source_host = 8;
+  optional double source_port = 9;
+  optional string dest_host = 10;
+  optional double dest_port = 11;
+  optional string device_id = 12;
+  optional string band = 13;
+  optional double capacity = 14;
+  optional string protocol = 15;
+  optional string service = 16;
+  optional string serial_number = 17;
+  optional bool available = 18;
+  optional google.protobuf.Value options = 19;
+  optional bool ack = 20;
+  optional bool fin = 21;
+  optional string slot = 22;
+  optional string socket = 23;
+  optional string vlan = 24;
+  optional string ssid = 25;
+  optional string bssid = 26;
+  optional string interface_name = 27;
+  optional string interface_type = 28;
+  optional string build = 29;
+}
+
+message Media {
+  optional bool audio_available = 1;
+  optional bool video_available = 2;
+  optional bool image_available = 3;
+}
+
+message Communication {
+  optional double latency = 1;
+  optional string source = 2;
+  optional string destination = 3;
+  optional google.protobuf.Value routing = 4;
+  optional string slot = 5;
+  optional string topic = 6;
+  optional double bandwidth = 7;
+  optional double bitrate = 8;
+  optional double message_size = 9;
+  optional double jitter = 10;
+  optional double packet_loss = 11;
+  optional string protocol = 12;
+  optional string channel = 13;
+  optional string nonce = 14;
+  optional double frames_forwarded = 15;
+  optional double frames_dropped = 16;
+  optional double out_of_order_frames_dropped = 17;
+}
+
+message File {
+  optional string url = 1;
+  optional google.protobuf.Value payload = 2;
+  optional string hash = 3;
+  optional string hash_algorithm = 4;
+  optional string path = 5;
+  optional string extension = 6;
+  optional double size = 7;
+  optional string type = 8;
+  optional string name = 9;
+}
+
+message Event {
+  optional string event_id = 1;
+  optional string event_type = 2;
+  optional string actor_id = 3;
+  optional string target_id = 4;
+  optional double start_time = 5;
+  optional double end_time = 6;
+  optional Location location = 7;
+  optional string severity = 8;
+  optional double confidence = 9;
+  optional string description = 10;
+}
+
+message Validity {
+  optional double valid_from = 1;
+  optional double valid_until = 2;
+  optional bool expired = 3;
+  optional google.protobuf.Value permissions = 4;
+  optional string user_group = 5;
+}
+
+message Restriction {
+  optional double upper_limit = 1;
+  optional double lower_limit = 2;
+  optional double max_length = 3;
+}
+
+message Metric {
+  optional string type = 1;
+  optional double value = 2;
+  optional string unit = 3;
+  optional double load = 4;
+  optional double error = 5;
+  optional double default = 6;
+  optional double upper_limit = 7;
+  optional double lower_limit = 8;
+  optional double threshold = 9;
+  optional Signal signal = 10;
+}
+
+message Time {
+  optional double time = 1;
+  optional double uptime = 2;
+  optional double duration = 3;
+  optional double start_time = 4;
+  optional double end_time = 5;
+}
+
+message Status {
+  optional string report_id = 1;
+  optional string system = 2;
+  optional google.protobuf.Value info = 3;
+  optional string current_task = 4;
+  optional google.protobuf.Value result = 5;
+  optional string result_feed_status = 6;
+  optional string reason = 7;
+  optional double observation_count = 8;
+  optional bool read_error = 9;
+  optional bool write_error = 10;
+  optional double power = 11;
+  optional Location location = 12;
+  optional google.protobuf.Value field_of_view = 13;
+  optional google.protobuf.Value coverage = 14;
+  optional string system_status = 15;
+  optional bool success = 16;
+  optional double confidence = 17;
+  optional string priority = 18;
+  optional bool duplicate = 19;
+  optional google.protobuf.Value heartbeat = 20;
+  optional double last_heartbeat = 21;
+  optional bool online = 22;
+  optional bool new_device = 23;
+  optional string error_code = 24;
+  optional string error_message = 25;
+  optional string link = 26;
+  optional double event_count = 27;
+  optional double update_count = 28;
+  optional string version = 29;
+  optional string classification = 30;
+  optional string owner = 31;
+  optional string originator = 32;
+  optional string signature = 33;
+  optional bool encrypted = 34;
+  optional double deadline = 35;
+  optional string producer = 36;
+  optional string consumer = 37;
+  optional string effector = 38;
+  optional string decider = 39;
+}
+
+message MappingError {
+  optional string message = 1;
+  optional string validation_error = 2;
+  optional google.protobuf.Value value = 3;
+}
+
+message Metadata {
+  optional string schema_id = 1;
+  optional string log_source = 2;
+  optional string topic = 3;
+  optional string uuid = 4;
+  optional double ingest_time = 5;
+  optional string vendor = 6;
+  optional double process_time = 7;
+  optional google.protobuf.Value original_data = 8;
+  map<string, MappingError> mapping_errors = 10;
+}
+
+message ObjectFeatures {
+  optional Location location = 1;
+  optional Geometry geometry = 2;
+  optional GeoJSON geojson = 3;
+  optional Media media = 4;
+  optional ImageRegion image_region = 5;
+  optional Identity identity = 6;
+  optional Lifecycle lifecycle = 7;
+  optional Kinematics kinematics = 8;
+  optional Control control = 9;
+  optional RangeBearing range_bearing = 10;
+  optional Physical physical = 11;
+  optional Sensor sensor = 12;
+  optional Signal signal = 13;
+  optional Environment environment = 14;
+  optional Endpoint endpoint = 15;
+  optional Communication communication = 16;
+  optional File file = 17;
+  optional Metric metric = 18;
+  optional Time time = 19;
+  optional Status status = 20;
+  optional Validity validity = 21;
+  optional Restriction restriction = 22;
+  optional Prediction prediction = 23;
+  optional Registration registration = 24;
+  optional MissionContext mission = 25;
+  optional Provenance provenance = 26;
+  optional Quality quality = 27;
+  repeated Alert alerts = 28;
+  repeated google.protobuf.Value components = 29;
+  repeated google.protobuf.Value children = 30;
+}
+
+message EncounterTypes {
+  optional ObjectFeatures features = 1;
+  repeated Observation observations = 2;
+  repeated Event events = 3;
+  repeated google.protobuf.Value relationships = 4;
+  repeated google.protobuf.Value tasks = 5;
+}
+
+message UnifiedSchema {
+  optional string node_id = 1;
+  map<string, EncounterTypes> objects = 2;
+  optional Metadata metadata = 3;
+}

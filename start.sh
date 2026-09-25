@@ -117,7 +117,7 @@ SERVICES=(
     # Protocols
     nffi sapient stanag4586 stanag4609 stanag5516
     cap mqtt sparkplug sensor-health mission-route aartos
-    generic_json geojson camera_sites
+    generic_json geojson camera_sites socbx palantir tacvox
     # Output layers
     tak_layer sitaware_layer tak_alert_layer intcore_layer
     # C2 inputs
@@ -216,6 +216,9 @@ declare -A SVC_CAT=(
     [generic_json]="Protocols"
     [geojson]="Protocols"
     [camera_sites]="Protocols"
+    [socbx]="Protocols"
+    [palantir]="Protocols"
+    [tacvox]="Protocols"
 )
 
 declare -A SVC_DESC=(
@@ -262,6 +265,9 @@ declare -A SVC_DESC=(
     [generic_json]="Generic flat/nested JSON with a position → tracks"
     [geojson]="Embedded GeoJSON Point (any nesting) → tracks"
     [camera_sites]="Backbone camera detection feeds → known-site sensor markers"
+    [socbx]="2T Security soc-bx protobuf schema (backbone) → tracks + sensor alerts"
+    [palantir]="Palantir ADS-B protobuf + test CoT XML (backbone) → tracks"
+    [tacvox]="tacvox voice-net ingest batch (backbone) → tracks"
 )
 
 # ── Ready check — 0=can start, 1=missing config ───────────────────────────
@@ -309,6 +315,9 @@ svc_ready() {
         generic_json) return 0 ;;  # always ready; no-op until something publishes on its raw input topic
         geojson) return 0 ;;  # same as generic_json
         camera_sites) return 0 ;;  # same as generic_json/geojson
+        socbx) return 0 ;;  # same as generic_json/geojson
+        palantir) return 0 ;;  # same as generic_json/geojson
+        tacvox) return 0 ;;  # same as generic_json/geojson
         *)        return 0 ;;
     esac
 }
@@ -1106,6 +1115,18 @@ launch() {
 
         camera_sites)
             _start camera_sites protocols/random/camera_sites.py
+            ;;
+
+        socbx)
+            _start socbx protocols/vendors/socbx/socbx.py
+            ;;
+
+        palantir)
+            _start palantir protocols/vendors/palantir/palantir.py
+            ;;
+
+        tacvox)
+            _start tacvox protocols/vendors/tacvox/tacvox.py
             ;;
 
         track-fusion)

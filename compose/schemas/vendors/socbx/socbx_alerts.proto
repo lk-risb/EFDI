@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+// 2T Security's schema for topic "<slot>/soc-bx/alerts/v1" (protobuf:Alert,
+// schema v1) — SIEM alerts generated from normalised/aggregated logs.
+// Reconstructed verbatim from the portal's Schema viewer.
+// Package renamed from the portal's "unifiedschema.v1" to "socbx.alerts.v1":
+// this Alert message is a DIFFERENT wire schema than the "Alert" nested
+// inside socbx_unified.proto (compare fields) despite the portal showing
+// both under the same package name for their respective topics — compiling
+// them together under one shared package would collide two distinct
+// messages onto one fully-qualified name.
+// SHA-256 of the uploaded FileDescriptorSet (v1, 2026-09-21):
+// 6df053d2617eb21fa98174ae290e667e1f2c7489d55a93d8ff263195f090c0f0
+
+package socbx.alerts.v1;
+
+message Alert {
+  string id = 1;
+  string external_id = 2;
+  string node_id = 3;
+  string title = 4;
+  string description = 5;
+  string severity = 6;
+  int64 latitude = 7;
+  int64 longitude = 8;
+  string country = 9;
+  string source = 10;
+  string vendor = 11;
+  string category = 12;
+  string status = 13;
+  string acknowledged = 14;
+  string acknowledged_at = 15;
+  string acknowledged_by = 16;
+  string first_seen = 17;
+  string last_seen = 18;
+  int64 event_count = 19;
+  string created_at = 20;
+  string updated_at = 21;
+  string file_path = 22;
+}

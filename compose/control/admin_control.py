@@ -160,6 +160,9 @@ SERVICE_SPECS = [
     ("generic_json", "Protocols", "Generic flat/nested JSON with a position → tracks"),
     ("geojson", "Protocols", "Embedded GeoJSON Point (any nesting) → tracks"),
     ("camera_sites", "Protocols", "Backbone camera detection feeds → known-site sensor markers"),
+    ("socbx", "Protocols", "2T Security soc-bx protobuf schema (backbone) → tracks + sensor alerts"),
+    ("palantir", "Protocols", "Palantir ADS-B protobuf + test CoT XML (backbone) → tracks"),
+    ("tacvox", "Protocols", "tacvox voice-net ingest batch (backbone) → tracks"),
 ]
 SERVICE_NAMES = {name for name, _, _ in SERVICE_SPECS}
 
@@ -210,6 +213,9 @@ SERVICE_SOURCES = {
     "generic_json": "protocols/random/generic_json.py",
     "geojson": "protocols/random/geojson.py",
     "camera_sites": "protocols/random/camera_sites.py",
+    "socbx": "protocols/vendors/socbx/socbx.py",
+    "palantir": "protocols/vendors/palantir/palantir.py",
+    "tacvox": "protocols/vendors/tacvox/tacvox.py",
 }
 
 
