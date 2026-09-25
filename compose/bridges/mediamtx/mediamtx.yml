@@ -41,8 +41,13 @@ webrtcLocalUDPAddress: :8189   # ICE candidate gathering for the browser tiles
 
 hls: false   # not needed — WebRTC covers live tiles, recorded segments cover scrub-back
 
-srt: false           # alternate ingest with built-in packet-loss ARQ; off until a source asks for it
-srtAddress: :8890
+srt: true            # alternate ingest with built-in packet-loss ARQ — always on so any source protocol reaches the wall
+# NOT :8890 (mediamtx's own default) — the zenoh-admin-proxy Caddy console
+# is served on :8890 (see Caddyfile) and auto-binds matching UDP :8890 for
+# HTTP/3, so mediamtx's SRT listener collided with it and crash-looped
+# ("listen udp :8890: bind: address already in use") the instant SRT was
+# turned on.
+srtAddress: :8891
 
 paths:
   # Drone paths are operator-typed and arbitrary (no fixed registry — see
