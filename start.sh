@@ -117,7 +117,7 @@ SERVICES=(
     # Protocols
     nffi sapient stanag4586 stanag4609 stanag5516
     cap mqtt sparkplug sensor-health mission-route aartos
-    generic_json geojson camera_sites socbx palantir tacvox
+    generic_json geojson camera_sites socbx palantir tacvox tytan usareur skylord kyber fpv ita_efdi
     # Output layers
     tak_layer sitaware_layer tak_alert_layer intcore_layer
     # C2 inputs
@@ -219,6 +219,12 @@ declare -A SVC_CAT=(
     [socbx]="Protocols"
     [palantir]="Protocols"
     [tacvox]="Protocols"
+    [tytan]="Protocols"
+    [usareur]="Protocols"
+    [skylord]="Protocols"
+    [kyber]="Protocols"
+    [fpv]="Protocols"
+    [ita_efdi]="Protocols"
 )
 
 declare -A SVC_DESC=(
@@ -268,6 +274,12 @@ declare -A SVC_DESC=(
     [socbx]="2T Security soc-bx protobuf schema (backbone) → tracks + sensor alerts"
     [palantir]="Palantir ADS-B protobuf + test CoT XML (backbone) → tracks"
     [tacvox]="tacvox voice-net ingest batch (backbone) → tracks"
+    [tytan]="tytan/synaps interceptor status protobuf (backbone) → tracks"
+    [usareur]="USAREUR ADS-B snapshot protobuf (backbone) → tracks"
+    [skylord]="SkyLord CoT-XML feeds (ADS-B, Anduril Heimdall) (backbone) → tracks"
+    [kyber]="Kyber SAPIENT feed (backbone, reuses flex335.py) → tracks"
+    [fpv]="FPV drone CRSF telemetry (backbone) → tracks"
+    [ita_efdi]="ITA-EFDI drone + radar feeds (backbone) → tracks"
 )
 
 # ── Ready check — 0=can start, 1=missing config ───────────────────────────
@@ -318,6 +330,12 @@ svc_ready() {
         socbx) return 0 ;;  # same as generic_json/geojson
         palantir) return 0 ;;  # same as generic_json/geojson
         tacvox) return 0 ;;  # same as generic_json/geojson
+        tytan) return 0 ;;  # same as generic_json/geojson
+        usareur) return 0 ;;  # same as generic_json/geojson
+        skylord) return 0 ;;  # same as generic_json/geojson
+        kyber) return 0 ;;  # same as generic_json/geojson
+        fpv) return 0 ;;  # same as generic_json/geojson
+        ita_efdi) return 0 ;;  # same as generic_json/geojson
         *)        return 0 ;;
     esac
 }
@@ -1127,6 +1145,30 @@ launch() {
 
         tacvox)
             _start tacvox protocols/vendors/tacvox/tacvox.py
+            ;;
+
+        tytan)
+            _start tytan protocols/vendors/tytan/tytan.py
+            ;;
+
+        usareur)
+            _start usareur protocols/vendors/usareur/usareur.py
+            ;;
+
+        skylord)
+            _start skylord protocols/vendors/skylord/skylord.py
+            ;;
+
+        kyber)
+            _start kyber protocols/vendors/kyber/kyber.py
+            ;;
+
+        fpv)
+            _start fpv protocols/vendors/fpv/fpv.py
+            ;;
+
+        ita_efdi)
+            _start ita_efdi protocols/vendors/ita_efdi/ita_efdi.py
             ;;
 
         track-fusion)

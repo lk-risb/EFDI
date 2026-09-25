@@ -1,0 +1,66 @@
+syntax = "proto3";
+
+// tytan/synaps's schema for the EFDI Backbone trial fabric, topic
+// "<slot>/neura/effector/status/v1/*" (protobuf:tytan.synaps.c2.v1.
+// InterceptorStatus, schema v1) — a counter-UAS/kinetic interceptor status
+// feed: WGS84 location, ENU velocity, attitude, and a full engagement state
+// machine (ARMED -> LIFTOFF -> LOITER -> ONBOARD -> DETONATION/TERMINATION).
+// Reconstructed verbatim from the portal's Schema viewer — see
+// compose/protocols/vendors/tytan/tytan.py for the decoder.
+// SHA-256 of the uploaded FileDescriptorSet (v1, 2026-09-18):
+// a8801829e2d5dce87be1638a85383979c025bfbb90fa641adbe4f73a0d745c8e
+
+package tytan.synaps.c2.v1;
+
+import "google/protobuf/timestamp.proto";
+
+enum InterceptorState {
+  INTERCEPTOR_STATE_ERROR = 0;
+  INTERCEPTOR_STATE_NONE = 1;
+  INTERCEPTOR_STATE_INITIAL = 2;
+  INTERCEPTOR_STATE_SWITCH_OFFBOARD = 3;
+  INTERCEPTOR_STATE_DISARMED = 4;
+  INTERCEPTOR_STATE_READY = 5;
+  INTERCEPTOR_STATE_ARMING = 6;
+  INTERCEPTOR_STATE_DISARMING = 7;
+  INTERCEPTOR_STATE_ARMED = 8;
+  INTERCEPTOR_STATE_LIFTOFF = 9;
+  INTERCEPTOR_STATE_LOITER = 10;
+  INTERCEPTOR_STATE_EXTERNAL = 11;
+  INTERCEPTOR_STATE_INTERNAL = 12;
+  INTERCEPTOR_STATE_VISUAL = 13;
+  INTERCEPTOR_STATE_ONBOARD = 14;
+  INTERCEPTOR_STATE_DETONATION = 15;
+  INTERCEPTOR_STATE_TERMINATION = 16;
+  INTERCEPTOR_STATE_UNKNOWN = 100;
+}
+
+message WGS84 {
+  float latitude_deg = 1;
+  float longitude_deg = 2;
+  float altitude_msl_m = 3;
+}
+
+message ENU {
+  float east = 1;
+  float north = 2;
+  float up = 3;
+}
+
+message InterceptorStatus {
+  reserved 15 to 20;
+  string interceptor_id = 1;
+  string engagement_id = 2;
+  InterceptorState state = 3;
+  WGS84 location = 4;
+  ENU velocity_m_s = 5;
+  uint32 distance_to_target_m = 6;
+  sint32 roll = 7;
+  sint32 pitch = 8;
+  sint32 yaw = 9;
+  uint32 course_degree = 10;
+  uint32 ground_speed_m_s = 11;
+  uint32 remaining_energy_percentage = 12;
+  uint64 warning_flags = 13;
+  google.protobuf.Timestamp last_updated = 14;
+}

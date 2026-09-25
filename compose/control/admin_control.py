@@ -163,6 +163,12 @@ SERVICE_SPECS = [
     ("socbx", "Protocols", "2T Security soc-bx protobuf schema (backbone) → tracks + sensor alerts"),
     ("palantir", "Protocols", "Palantir ADS-B protobuf + test CoT XML (backbone) → tracks"),
     ("tacvox", "Protocols", "tacvox voice-net ingest batch (backbone) → tracks"),
+    ("tytan", "Protocols", "tytan/synaps interceptor status protobuf (backbone) → tracks"),
+    ("usareur", "Protocols", "USAREUR ADS-B snapshot protobuf (backbone) → tracks"),
+    ("skylord", "Protocols", "SkyLord CoT-XML feeds (ADS-B, Anduril Heimdall) (backbone) → tracks"),
+    ("kyber", "Protocols", "Kyber SAPIENT feed (backbone, reuses flex335.py) → tracks"),
+    ("fpv", "Protocols", "FPV drone CRSF telemetry (backbone) → tracks"),
+    ("ita_efdi", "Protocols", "ITA-EFDI drone + radar feeds (backbone) → tracks"),
 ]
 SERVICE_NAMES = {name for name, _, _ in SERVICE_SPECS}
 
@@ -216,6 +222,12 @@ SERVICE_SOURCES = {
     "socbx": "protocols/vendors/socbx/socbx.py",
     "palantir": "protocols/vendors/palantir/palantir.py",
     "tacvox": "protocols/vendors/tacvox/tacvox.py",
+    "tytan": "protocols/vendors/tytan/tytan.py",
+    "usareur": "protocols/vendors/usareur/usareur.py",
+    "skylord": "protocols/vendors/skylord/skylord.py",
+    "kyber": "protocols/vendors/kyber/kyber.py",
+    "fpv": "protocols/vendors/fpv/fpv.py",
+    "ita_efdi": "protocols/vendors/ita_efdi/ita_efdi.py",
 }
 
 

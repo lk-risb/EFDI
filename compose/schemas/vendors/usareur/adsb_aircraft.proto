@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+// USAREUR's schema for the EFDI Backbone trial fabric, topic
+// "<slot>/adsb/aircraft/snapshot/v1" (protobuf:AircraftBatch, schema v1) —
+// real ADS-B tracks sourced from the airplanes.live v2 REST API and
+// republished onto the fabric. Reconstructed verbatim from the portal's
+// Schema viewer — see compose/protocols/vendors/usareur/usareur.py for the
+// decoder.
+// SHA-256 of the uploaded FileDescriptorSet (v1, 2026-06-15):
+// 49db499e4e1719cbf45c573f299f495935ffdc52031b139e1a916fc507407a08
+
+package usareur.adsb.v1;
+
+message Aircraft {
+  string icao_hex = 1;
+  string callsign = 2;
+  double lat = 3;
+  double lon = 4;
+  int32 alt_baro_ft = 5;
+  int32 alt_geom_ft = 6;
+  double ground_kt = 7;
+  double track_deg = 8;
+  int32 baro_rate = 9;
+  string squawk = 10;
+  string category = 11;
+  string emergency = 12;
+  string registration = 13;
+  string ac_type = 14;
+  double seen_pos_s = 15;
+  double rssi = 16;
+  double source_unix = 17;
+  string source = 18;
+}
+
+message AircraftBatch {
+  double now_unix = 1;
+  int32 count = 2;
+  repeated Aircraft aircraft = 3;
+}

@@ -1,0 +1,149 @@
+syntax = "proto3";
+
+// tytan/synaps's full bidirectional C2 protocol for the EFDI Backbone trial
+// fabric, topic "<slot>/synaps/c2/client/v1/1" (protobuf:tytan.synaps.c2.v1.
+// ClientMessage, schema v1) — a different, richer schema than
+// interceptor_status.proto (uploaded by a different slot): carries the
+// target being engaged (TargetTrack, with a TargetType enum: FPV/Shahed/
+// rocket/scout/bird) and the interceptor's own live position
+// (InterceptorTrack), plus the full engagement request/response/report and
+// time-sync/heartbeat link-management messages.
+// Reconstructed verbatim from the portal's Schema viewer — see
+// compose/protocols/vendors/tytan/tytan.py for the decoder.
+// SHA-256 of the uploaded FileDescriptorSet (v1, 2026-09-18):
+// b698b60ab47f170fe806d6fd7fffa93bbf49d61e510fa1ed653321661078887c
+//
+// WGS84/ENU/InterceptorState/InterceptorStatus are byte-identical to the
+// ones in interceptor_status.proto (same vendor, same package) — imported
+// from there rather than redefined, since protoc would otherwise collide on
+// two messages sharing one fully-qualified name in the same build.
+
+package tytan.synaps.c2.v1;
+
+import "google/protobuf/timestamp.proto";
+import "schemas/vendors/tytan/interceptor_status.proto";
+
+enum EngagementStatus {
+  ENGAGEMENT_STATUS_REQUESTED = 0;
+  ENGAGEMENT_STATUS_ACCEPTED = 1;
+  ENGAGEMENT_STATUS_ACTIVE = 2;
+  ENGAGEMENT_STATUS_COMPLETED = 3;
+  ENGAGEMENT_STATUS_ABORTED = 4;
+  ENGAGEMENT_STATUS_FAILED = 5;
+  ENGAGEMENT_STATUS_REJECTED = 6;
+}
+
+enum TargetType {
+  TARGET_TYPE_UNKNOWN = 0;
+  TARGET_TYPE_FPV = 1;
+  TARGET_TYPE_SHAHED = 2;
+  TARGET_TYPE_ROCKET = 3;
+  TARGET_TYPE_SCOUT = 4;
+  TARGET_TYPE_BIRD = 5;
+}
+
+message ClientMessage {
+  oneof payload {
+    TimeSyncRequest time_sync_request = 10;
+    TimeSyncResponse time_sync_response = 11;
+    TerminateInterceptorRequest terminate_interceptor_request = 20;
+    EngagementRequest engagement_request = 30;
+    AbortEngagementRequest abort_engagement_request = 31;
+    TargetTrack target_track = 40;
+    InterceptorTrack interceptor_track = 41;
+    Heartbeat heartbeat = 50;
+  }
+  Header header = 1;
+}
+
+message ServerMessage {
+  oneof payload {
+    TimeSyncRequest time_sync_request = 10;
+    TimeSyncResponse time_sync_response = 11;
+    InterceptorStatus interceptor_status = 20;
+    TerminateInterceptorResponse terminate_interceptor_response = 21;
+    EngagementResponse engagement_response = 30;
+    EngagementReport engagement_report = 31;
+    AbortEngagementResponse abort_engagement_response = 32;
+  }
+  Header header = 1;
+}
+
+message Header {
+  uint32 message_counter = 1;
+  google.protobuf.Timestamp timestamp = 2;
+}
+
+message Heartbeat {
+}
+
+message TimeSyncRequest {
+  google.protobuf.Timestamp originator = 1;
+}
+
+message TimeSyncResponse {
+  google.protobuf.Timestamp originator = 1;
+  google.protobuf.Timestamp responder = 2;
+}
+
+message TerminateInterceptorRequest {
+  string interceptor_id = 1;
+}
+
+message TerminateInterceptorResponse {
+  string interceptor_id = 1;
+  uint32 request_message_counter = 2;
+  bool is_success = 3;
+  optional string error = 4;
+}
+
+message EngagementRequest {
+  string engagement_id = 1;
+  string target_id = 2;
+  optional string recommended_effector_id = 3;
+}
+
+message EngagementResponse {
+  string engagement_id = 1;
+  string target_id = 2;
+  optional string effector_id = 3;
+  EngagementStatus status = 4;
+  optional string error = 5;
+}
+
+message AbortEngagementRequest {
+  string engagement_id = 1;
+}
+
+message AbortEngagementResponse {
+  string engagement_id = 1;
+  uint32 request_message_counter = 2;
+  bool is_success = 3;
+  optional string error = 4;
+}
+
+message EngagementReport {
+  string engagement_id = 1;
+  string target_id = 2;
+  string effector_id = 3;
+  EngagementStatus status = 4;
+  google.protobuf.Timestamp last_updated = 5;
+}
+
+message InterceptorTrack {
+  string interceptor_id = 1;
+  WGS84 location = 3;
+  ENU velocity_m_s = 4;
+  google.protobuf.Timestamp detection_timestamp = 5;
+}
+
+message TargetTrack {
+  string target_id = 1;
+  TargetType type = 2;
+  WGS84 location = 3;
+  ENU velocity_m_s = 4;
+  google.protobuf.Timestamp detection_timestamp = 5;
+  bool manual_engagement_allowed = 6;
+  bool auto_engage = 7;
+  optional string recommended_effector_id = 8;
+}
