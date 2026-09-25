@@ -580,6 +580,31 @@ _prompt_secret() {
 }
 
 # ── Launch helpers ─────────────────────────────────────────────────────────
+# Nearly every registered service opens a Zenoh session within its first few
+# lines (protocols.gateway.open_session()) and, until this existed, each one
+# discovered a not-yet-ready router the hard way: a failed connect, then its
+# own internal "retry in 10s" loop, logged as an alarming-looking error. The
+# launcher's own `zenoh)` case already waits up to 20s for the router's
+# Docker healthcheck before this function is ever reached *when start.sh
+# drives the whole startup sequence itself* — but at least one other,
+# unidentified mechanism also launches these same services at boot (found
+# live: every native service already running within a minute of a VM
+# reboot, with nothing in systemd/cron/rc.local/cloud-init/qemu-guest-agent
+# hooks to explain it), and that path does not share this ordering. Rather
+# than chase an unknown caller, every spawn path converges here — so this
+# is where the wait belongs, regardless of who's asking. Cheap when the
+# router's already up (one instant TCP connect); only actually waits during
+# the exact startup race this is for.
+_wait_for_zenoh() {
+    local host="127.0.0.1" port="${ZENOH_LOCAL_TCP_PORT:-7448}" waited=0
+    while (( waited < 15 )); do
+        (exec 3<>"/dev/tcp/$host/$port") 2>/dev/null && { exec 3>&-; return 0; }
+        sleep 0.5
+        waited=$((waited + 1))
+    done
+    return 1  # Give up quietly — the service's own reconnect loop is still the backstop.
+}
+
 _start() {   # _start <name> <rel-script-path> [args…]
     local name="$1"; shift
     local script="$1"; shift
@@ -589,6 +614,7 @@ _start() {   # _start <name> <rel-script-path> [args…]
         return
     fi
     rm -f "$pid_file"
+    _wait_for_zenoh
     ( exec setsid "$PYTHON" "$COMPOSE_DIR/$script" "$@" >> "$LOG_DIR/$name.log" 2>&1 ) &
     echo $! > "$pid_file"
     printf "  ${GREEN}[start]${R} %-16s pid %s\n" "$name" "$!"
@@ -607,6 +633,7 @@ _start_bin() {   # _start_bin <name> <rel-binary-path> [args…]
         return
     fi
     rm -f "$pid_file"
+    _wait_for_zenoh
     ( cd "$(dirname "$COMPOSE_DIR/$script")" && exec setsid "$COMPOSE_DIR/$script" "$@" >> "$LOG_DIR/$name.log" 2>&1 ) &
     echo $! > "$pid_file"
     printf "  ${GREEN}[start]${R} %-16s pid %s\n" "$name" "$!"
