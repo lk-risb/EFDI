@@ -123,6 +123,17 @@ function EnlargedStream({name, retentionMinutes, onClose}: {
   const [live, setLive] = useState(true)
   const windowSeconds = retentionMinutes * 60
 
+  // Escape as a guaranteed way out — the X button alone was the only exit,
+  // and nothing here reflects into the URL/history, so a missed click left
+  // no way back short of a hard page reload.
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [onClose])
+
   useEffect(() => {
     async function loadSegments() {
       try {
