@@ -1,17 +1,21 @@
 #!/bin/sh
 set -e
 
-# /data, /zenoh-config, and /zenoh-config-backbone are host bind mounts (see
-# docker-compose.yml), owned by whatever user ran host/first-boot.sh —
-# usually root, or plain root:root when Docker auto-creates a source dir
-# that's never been staged by any setup script (confirmed live:
-# /zenoh-config-backbone, being new, had no pre-creation step at all, so
-# api/backbone_bootstrap.py's own write into it failed with a bare
-# "Permission denied" once this process was no longer root). Chown them to
-# the app user here, as root, before dropping to it, so uvicorn can still
-# write to them once it's no longer root. /certs is read-only and already
-# group-readable by this user's GID (scripts/gen-certs.sh chgrp's it).
-for d in /data /zenoh-config /zenoh-config-backbone; do
+# /data, /zenoh-config, /zenoh-config-backbone, and /mediamtx-config are host
+# bind mounts (see docker-compose.yml), owned by whatever user ran
+# host/first-boot.sh — usually root, or plain root:root when Docker
+# auto-creates a source dir that's never been staged by any setup script
+# (confirmed live: /zenoh-config-backbone, being new, had no pre-creation step
+# at all, so api/backbone_bootstrap.py's own write into it failed with a bare
+# "Permission denied" once this process was no longer root; /mediamtx-config
+# hit the same thing — only mediamtx.yml itself is bind-mounted, so Docker
+# auto-creates the containing directory as root:root, and streams.py's
+# save-settings atomic write, which needs to create a sibling .tmp file
+# there, got EACCES). Chown them to the app user here, as root, before
+# dropping to it, so uvicorn can still write to them once it's no longer
+# root. /certs is read-only and already group-readable by this user's GID
+# (scripts/gen-certs.sh chgrp's it).
+for d in /data /zenoh-config /zenoh-config-backbone /mediamtx-config; do
   [ -d "$d" ] && chown -R zenohadmin:zenohadmin "$d"
 done
 [ -f /namespace-prefix ] && chown zenohadmin:zenohadmin /namespace-prefix

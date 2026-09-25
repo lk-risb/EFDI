@@ -114,7 +114,7 @@ class MediamtxSettings(BaseModel):
     rtsp_tcp_only: bool = True
     webrtc_enabled: bool = True
     webrtc_encryption: bool = False
-    srt_enabled: bool = False
+    srt_enabled: bool = True
     record_segment_minutes: int = Field(1, ge=1, le=60)
     record_retention_minutes: int = Field(10, ge=1, le=1440)
 
