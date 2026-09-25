@@ -37,7 +37,6 @@ from .trust_api import router as trust_router
 from .topics import router as topics_router, start_topic_observer
 from .sitaware_targets import router as sitaware_targets_router
 from .streams import router as streams_router
-from .terminal import router as terminal_router, start_terminal_observer, start_system_health_poller
 from .deps import SECRET_KEY
 
 
@@ -53,16 +52,9 @@ async def lifespan(app: FastAPI):
     _, federation_relay_task = start_relay_subscriber(loop)
     topology_session, topology_task = start_topology(loop)
     topic_session = start_topic_observer()
-    terminal_session = start_terminal_observer()
-    health_poll_task = start_system_health_poller(loop)
 
     yield
 
-    health_poll_task.cancel()
-    try:
-        await health_poll_task
-    except asyncio.CancelledError:
-        pass
     if topology_task is not None:
         topology_task.cancel()
         try:
@@ -82,8 +74,6 @@ async def lifespan(app: FastAPI):
         topology_session.close()
     if topic_session is not None:
         topic_session.close()
-    if terminal_session is not None:
-        terminal_session.close()
 
 
 app = FastAPI(title="Zenoh Admin API", version="1.0.0", lifespan=lifespan)
@@ -136,7 +126,6 @@ app.include_router(trust_router)
 app.include_router(topics_router)
 app.include_router(sitaware_targets_router)
 app.include_router(streams_router)
-app.include_router(terminal_router)
 
 
 class SPAStaticFiles(StaticFiles):
