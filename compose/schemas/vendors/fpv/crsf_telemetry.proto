@@ -1,0 +1,68 @@
+syntax = "proto3";
+
+// FPV drone CRSF telemetry on the EFDI Backbone trial fabric, topic
+// "<slot>/fpv/telemetry/v1" (protobuf:TelemetryMessage, schema v1) — a
+// CRSF-derived telemetry stream: GPS, battery, link stats, attitude, flight
+// mode, and raw CRSF frames, one message at a time via a oneof. Only the
+// gps variant carries a position. Reconstructed verbatim from the portal's
+// Schema viewer — see compose/protocols/vendors/fpv/fpv.py for the decoder.
+// SHA-256 of the uploaded FileDescriptorSet (v1, 2026-07-29):
+// 1d65cf4d17c19a29c602fe30952a09cc256705be11468b09743ba4bafb9ab015
+
+package fpv.telemetry.v1;
+
+message TelemetryMessage {
+  oneof payload {
+    Gps gps = 10;
+    Battery battery = 11;
+    LinkStats link = 12;
+    Attitude attitude = 13;
+    FlightMode flight_mode = 14;
+    RawFrame raw = 15;
+  }
+  uint64 timestamp_ms = 1;
+  string source_id = 2;
+}
+
+message Gps {
+  double latitude_deg = 1;
+  double longitude_deg = 2;
+  float groundspeed_kmh = 3;
+  float heading_deg = 4;
+  int32 altitude_m = 5;
+  uint32 satellites = 6;
+}
+
+message Battery {
+  float voltage_v = 1;
+  float current_a = 2;
+  uint32 used_mah = 3;
+  uint32 remaining_pct = 4;
+}
+
+message LinkStats {
+  int32 up_rssi_dbm = 1;
+  uint32 up_link_quality = 2;
+  int32 up_snr_db = 3;
+  int32 down_rssi_dbm = 4;
+  uint32 down_link_quality = 5;
+  int32 down_snr_db = 6;
+  uint32 tx_power_mw = 7;
+  uint32 rf_mode = 8;
+}
+
+message Attitude {
+  float pitch_rad = 1;
+  float roll_rad = 2;
+  float yaw_rad = 3;
+}
+
+message FlightMode {
+  string mode = 1;
+}
+
+message RawFrame {
+  uint32 address = 1;
+  uint32 frame_type = 2;
+  bytes frame = 3;
+}
