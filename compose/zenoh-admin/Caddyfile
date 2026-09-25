@@ -22,5 +22,27 @@
 	tls internal {
 		on_demand
 	}
+
+	# WHEP (video tile playback) must be fetched from THIS already-trusted
+	# HTTPS origin, not dialed directly against MediaMTX's own :8889 —
+	# MediaMTX's WebRTC listener is plain HTTP by default (mediamtx.yml's
+	# webrtcEncryption), and a plain http:// fetch from this HTTPS page gets
+	# blocked outright by the browser's own mixed-content policy (a bare
+	# "NetworkError when attempting to fetch resource", no further detail) —
+	# independent of whether MediaMTX's port can actually serve the
+	# request. Enabling webrtcEncryption instead just trades that failure
+	# for a second self-signed cert operators have to manually trust on a
+	# raw video port, AND resets to false (breaking video again) every time
+	# mediamtx.yml's checked-in default gets pulled from git — proxying the
+	# signaling call through Caddy (server-to-server, not browser-to-server,
+	# so mixed-content rules don't apply) sidesteps the whole class of
+	# problem for good, independent of that toggle. WebRTC's actual media
+	# (ICE/UDP on webrtcLocalUDPAddress :8189) still flows directly between
+	# the browser and MediaMTX either way — only the HTTP signaling request
+	# is proxied here.
+	handle_path /mediamtx-whep/* {
+		reverse_proxy 127.0.0.1:8889
+	}
+
 	reverse_proxy 127.0.0.1:8895
 }

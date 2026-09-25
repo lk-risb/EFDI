@@ -72,21 +72,27 @@ async function negotiateWhep(video: HTMLVideoElement, whepUrl: string, signal: A
   return pc
 }
 
-// MediaMTX's WebRTC listener has its OWN scheme, independent of whatever
-// this admin console itself is served over (mediamtx.yml's webrtcEncryption
-// — off by default here: "plaintext HTTP is fine: only reachable over the
-// NetBird overlay"). Blindly reusing window.location.protocol broke the
-// instant the console moved behind HTTPS (Caddy's internal CA) while
-// mediamtx's WHEP endpoint stayed plain HTTP: the browser refused the TLS
-// handshake against a port that never spoke TLS, surfacing as a bare
-// "NetworkError when attempting to fetch resource" with no useful detail.
-function whepUrlFor(name: string, encrypted: boolean): string {
-  const scheme = encrypted ? 'https:' : 'http:'
-  return `${scheme}//${window.location.hostname}:8889/${name}/whep`
+// Proxied through THIS already-HTTPS-trusted origin (Caddyfile's
+// /mediamtx-whep/* handle_path -> 127.0.0.1:8889) rather than dialed
+// directly against MediaMTX's own port. MediaMTX's WebRTC listener is
+// plain HTTP by default (mediamtx.yml's webrtcEncryption) — a direct fetch
+// from this HTTPS page against a plain-HTTP port gets blocked outright by
+// the browser's own mixed-content policy (a bare "NetworkError when
+// attempting to fetch resource", no further detail), independent of
+// whether that port could actually serve the request. Proxying is a
+// server-to-server hop from Caddy's point of view, so mixed-content rules
+// don't apply, and it works regardless of MediaMTX's own encryption
+// setting — no second self-signed cert for operators to trust, and no
+// breakage every time that setting's checked-in default gets pulled from
+// git. WebRTC's actual media (ICE/UDP on webrtcLocalUDPAddress :8189)
+// still flows directly between the browser and MediaMTX either way — only
+// the HTTP signaling request is proxied.
+function whepUrlFor(name: string): string {
+  return `${window.location.protocol}//${window.location.host}/mediamtx-whep/${name}/whep`
 }
 
-function StreamTile({stream, webrtcEncrypted, isEnlarged, onClick}: {
-  stream: StreamInfo; webrtcEncrypted: boolean; isEnlarged: boolean; onClick: () => void
+function StreamTile({stream, isEnlarged, onClick}: {
+  stream: StreamInfo; isEnlarged: boolean; onClick: () => void
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const pcRef = useRef<RTCPeerConnection | null>(null)
@@ -101,7 +107,7 @@ function StreamTile({stream, webrtcEncrypted, isEnlarged, onClick}: {
     // cleanup below re-opens it the moment isEnlarged flips back to false.
     if (!stream.ready || !video || isEnlarged) return
     const controller = new AbortController()
-    negotiateWhep(video, whepUrlFor(stream.name, webrtcEncrypted), controller.signal)
+    negotiateWhep(video, whepUrlFor(stream.name), controller.signal)
       .then(pc => { pcRef.current = pc })
       .catch(() => { /* tile stays blank; next 5s poll re-triggers this effect if still ready */ })
     return () => {
@@ -109,7 +115,7 @@ function StreamTile({stream, webrtcEncrypted, isEnlarged, onClick}: {
       pcRef.current?.close()
       pcRef.current = null
     }
-  }, [stream.name, stream.ready, webrtcEncrypted, isEnlarged])
+  }, [stream.name, stream.ready, isEnlarged])
 
   return (
     <div
@@ -130,8 +136,8 @@ function StreamTile({stream, webrtcEncrypted, isEnlarged, onClick}: {
   )
 }
 
-function EnlargedStream({name, retentionMinutes, webrtcEncrypted, onClose}: {
-  name: string; retentionMinutes: number; webrtcEncrypted: boolean; onClose: () => void
+function EnlargedStream({name, retentionMinutes, onClose}: {
+  name: string; retentionMinutes: number; onClose: () => void
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const pcRef = useRef<RTCPeerConnection | null>(null)
@@ -168,7 +174,7 @@ function EnlargedStream({name, retentionMinutes, webrtcEncrypted, onClose}: {
     const video = videoRef.current
     if (!video || !live) return
     const controller = new AbortController()
-    negotiateWhep(video, whepUrlFor(name, webrtcEncrypted), controller.signal)
+    negotiateWhep(video, whepUrlFor(name), controller.signal)
       .then(pc => { pcRef.current = pc })
       .catch(e => notify.error(errorMessage(e)))
     return () => {
@@ -176,7 +182,7 @@ function EnlargedStream({name, retentionMinutes, webrtcEncrypted, onClose}: {
       pcRef.current?.close()
       pcRef.current = null
     }
-  }, [name, live, webrtcEncrypted])
+  }, [name, live])
 
   function handleScrub(seconds: number) {
     setScrubSeconds(seconds)
@@ -465,7 +471,6 @@ export function StreamsPanel() {
             <StreamTile
               key={s.name}
               stream={s}
-              webrtcEncrypted={settings.webrtc_encryption}
               isEnlarged={enlarged === s.name}
               onClick={() => setEnlarged(s.name)}
             />
@@ -476,7 +481,6 @@ export function StreamsPanel() {
         <EnlargedStream
           name={enlarged}
           retentionMinutes={settings.record_retention_minutes}
-          webrtcEncrypted={settings.webrtc_encryption}
           onClose={() => setEnlarged(null)}
         />
       )}
