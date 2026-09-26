@@ -339,7 +339,7 @@ function ConfigPage() {
   // every change (initial load, manual edits, and pill switches alike).
   useEffect(() => {
     setEndpointMemory(mem => ({ ...mem, [fields.fabric_tls_profile]: fields.fabric_endpoints }))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [fields.fabric_endpoints, fields.fabric_tls_profile])
 
   // Switches to a preset's profile, restoring THAT profile's own
@@ -480,7 +480,7 @@ function ConfigPage() {
 
   return (
     <Layout>
-      <div className="max-w-5xl p-6">
+      <div className="p-6">
         <PageHeader
           title="Zenoh Config"
           actions={

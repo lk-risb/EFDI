@@ -18,7 +18,7 @@ export const Route = createFileRoute('/terminal')({
 function TerminalPage() {
   return (
     <Layout>
-      <div className="mx-auto max-w-7xl px-6 py-4">
+      <div className="p-6">
         <PageHeader title="Terminal" eyebrow="VIDEO WALL" />
         <div className="mt-4">
           <StreamsPanel />

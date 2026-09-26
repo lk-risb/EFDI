@@ -153,7 +153,7 @@ function UiSettingsPage() {
 
   return (
     <Layout>
-      <div className="p-6 max-w-5xl">
+      <div className="p-6">
         <PageHeader
           title="WebUI Settings"
           actions={(

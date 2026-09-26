@@ -135,6 +135,7 @@ function TopicsPage() {
 
   return (
     <Layout>
+      <div className="p-6">
       <PageHeader
         title="Topic Registry"
         count={data?.topics.length ?? 0}
@@ -326,6 +327,7 @@ function TopicsPage() {
           </div>
         )}
       </section>
+      </div>
     </Layout>
   )
 }
