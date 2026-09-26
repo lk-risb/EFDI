@@ -3,7 +3,7 @@
 ## Launching the Stack
 
 ```bash
-./start.sh
+./scripts/start.sh
 ```
 
 The interactive launcher displays all services with their readiness state. Toggle by number, then press **Enter** to launch selected services.
@@ -86,8 +86,8 @@ After a successful launch, `start.sh` remembers the selected services and the la
 ### Stopping services
 
 ```bash
-./stop.sh              # Stop all bridge processes
-./stop.sh layers       # Stop output layers only (tak-layer, track-fusion)
+./scripts/stop.sh              # Stop all bridge processes
+./scripts/stop.sh layers       # Stop output layers only (tak-layer, track-fusion)
 ```
 
 ### Log monitoring
@@ -108,7 +108,7 @@ kill -0 $(cat $POD_STATE_DIR/.pids/asterix.pid) && echo ok        # Check specif
 ### `health.sh` — self-heal, self-test, and interactive troubleshooting
 
 ```bash
-./health.sh
+./scripts/health.sh
 ```
 
 Run this any time, standalone — it doesn't pull or fetch anything (that's
@@ -144,7 +144,7 @@ It does three things in order:
 ### `update.sh` — pull, rebuild, and re-verify
 
 ```bash
-./update.sh
+./scripts/update.sh
 ```
 
 Updates the host OS packages, pulls the latest commit, rebuilds anything
@@ -156,7 +156,7 @@ update rather than silently leaving a half-upgraded pod running.
 ### `reinstall.sh` — full teardown and rebuild
 
 ```bash
-./reinstall.sh
+./scripts/reinstall.sh
 ```
 
 Tears down containers and local images, then rebuilds from the current

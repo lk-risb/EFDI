@@ -1,6 +1,6 @@
 # TAK / CoT sources
 
-`../../../compose/layers/tak_layer.py` (Zenoh → CoT XML → TAK Server/ATAK)
+`../../../compose/layers/vendors/tak/tak_layer.py` (Zenoh → CoT XML → TAK Server/ATAK)
 is an egress translator, not a decoder of an inbound wire format the way
 `cat.py`/`flex335.py`/`stanag.py` are — the risk profile here is "does the
 *symbology and schema* match what the standard actually defines," not "did
@@ -70,7 +70,7 @@ mapped straight onto the identically-named (`relto`→`rel_to`) XML
 attribute. Only `access`/`caveat` are wired here, since those are the two
 that map onto data this project currently decodes (classification level,
 handling/dissemination marking); `qos`/`opex`/`relto` are left unset rather
-than guessed at. `protocols/random/nffi.py` is the first, and currently
+than guessed at. `protocols/vendors/nffi/nffi.py` is the first, and currently
 only, producer of these two keys — see `../nffi/NFFI.md` and
 `../mip/MIP.md` for where the underlying values come from. Mirrored to
 EFDI-Allies' `tak_layer.py`. Covered by

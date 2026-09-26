@@ -114,7 +114,7 @@ launcher scripts rather than creating one container per integration. Set
 and the local control process. Restart an affected service after saving a
 setting so it reads the new environment.
 
-For `./dev.sh up`, the disposable control agent automatically moves to port
+For `./scripts/dev.sh up`, the disposable control agent automatically moves to port
 18896 when the development/default 8896 is already occupied, and the dev API is
 pointed at that selected port.
 
@@ -162,8 +162,8 @@ EFDI_ROUTER_CA_CHAIN_PATH=/absolute/runtime/pki/router-ca-chain.pem
 EFDI_POLICY_SIGNER_CERT_PATH=/absolute/runtime/pki/policy-signer-cert.pem
 EFDI_POLICY_SIGNER_KEY_PATH=/absolute/runtime/pki/policy-signer-key.pem
 EFDI_STEP_CA_STATE_PATH=/absolute/runtime/pki/step-ca
-./stop.sh admin-control
-./start.sh --service admin-control
+./scripts/stop.sh admin-control
+./scripts/start.sh --service admin-control
 ```
 
 In **Certificate Authority**, create a single-use invitation for the child
@@ -177,7 +177,7 @@ On the child, generate and enroll all three identities locally:
 scripts/pki/enroll-router.sh \
   https://<parent-management-host>:9443 \
   <child-namespace> \
-  "${BUNDLE_DIR}/efdi" \
+  "${BUNDLE_DIR}/local" \
   "${POD_STATE_DIR}/pki"
 ```
 

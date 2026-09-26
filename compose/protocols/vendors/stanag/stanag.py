@@ -30,11 +30,11 @@ import sys
 import threading
 import time
 from namespace_prefix import topic_root
-from protocols.proto.stanag_pb2 import (
+from protocols.vendors.random.proto.stanag_pb2 import (
     Stanag4586Track, Stanag4607Track, Stanag4609Track, Stanag5516Track)
 
-from protocols.gateway import ZError, open_session, publish_dual, publish_native, subscribe
-from protocols.track_views import native_topic, semantic_topic
+from protocols.vendors.random.gateway import ZError, open_session, publish_dual, publish_native, subscribe
+from protocols.vendors.random.track_views import native_topic, semantic_topic
 
 # ============================================================================
 # STANAG 4586 — UAS VSM/CUCS telemetry
@@ -784,7 +784,7 @@ def _4607_main():
 # ============================================================================
 # STANAG 4609 — MISB KLV video metadata
 #
-# Subscribes to the raw MISB KLV packets that bridges/4609_bridge.py ingests
+# Subscribes to the raw MISB KLV packets that bridges/vendors/milspec/4609_bridge.py ingests
 # from the SRT/MPEG-TS transport, decodes a small, safe subset of common MISB
 # ST 0601 fields, and publishes positioned frames as canonical tracks
 # (SAPIENT / JSON / protobuf views). SRT/ffmpeg ingest is the bridge's job;

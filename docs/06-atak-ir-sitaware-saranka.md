@@ -144,7 +144,7 @@ SITAWARE_HQ_NVG_MAX_TRACKS=10000
 > teikia duomenis. Žr.
 > [Problemų sprendimas → „Takeliai sublyksi / dingsta ir vėl atsiranda fiksuotu ciklu"](11-dazniausios-problemos.md).
 
-Paleiskite `sitaware-hq-nvg` per `./start.sh` arba `./run.sh all`. HQ Windows serveryje pirmą ryšį patikrinkite nespausdindami operacinių duomenų:
+Paleiskite `sitaware-hq-nvg` per `./scripts/start.sh` arba `./scripts/run.sh all`. HQ Windows serveryje pirmą ryšį patikrinkite nespausdindami operacinių duomenų:
 
 ```powershell
 curl.exe -k -u "<srauto-vartotojas>:<srauto-slaptažodis>" -sS -o NUL `

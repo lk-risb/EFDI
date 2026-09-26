@@ -19,9 +19,9 @@ import json  # noqa: E402
 
 import zenoh  # noqa: E402
 
-from protocols.track_views import dual_topic  # noqa: E402
-from protocols.proto.raw_envelope_pb2 import RawEnvelope  # noqa: E402
-from protocols.proto.flex335_pb2 import SapientFlex335Track  # noqa: E402
+from protocols.vendors.random.track_views import dual_topic  # noqa: E402
+from protocols.vendors.random.proto.raw_envelope_pb2 import RawEnvelope  # noqa: E402
+from protocols.vendors.random.proto.flex335_pb2 import SapientFlex335Track  # noqa: E402
 
 from protocols.vendors.sapient.flex335 import (  # noqa: E402
     SapientDecoder,
@@ -297,10 +297,14 @@ class NativeProtobufEgressTests(unittest.TestCase):
         by_topic = {topic: (payload, encoding) for topic, payload, encoding in session.puts}
         self.assertGreaterEqual(len(by_topic), 3)
         json_topic = next(t for t in by_topic
-                          if by_topic[t][1] == zenoh.Encoding.APPLICATION_JSON)
+                          if str(by_topic[t][1]).startswith("application/json"))
 
         json_payload, json_encoding = by_topic[json_topic]
-        self.assertEqual(json_encoding, zenoh.Encoding.APPLICATION_JSON)
+        # Schema-tagged with the message's own descriptor name (see
+        # track_views.py's publish_dual()) rather than a fixed value — this
+        # test only cares that it IS the JSON leg, not which descriptor name
+        # it carries (test_protobuf_dual_publish.py covers the tag itself).
+        self.assertTrue(str(json_encoding).startswith("application/json"))
         self.assertAlmostEqual(
             json.loads(json_payload.decode("utf-8"))["lat_deg"], 54.6872, places=4
         )

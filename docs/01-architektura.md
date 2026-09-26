@@ -377,8 +377,8 @@ atsigauna savaime, be rankinio įsikišimo.
 
 ### Paleisti viską ir palaikyti veikiantį
 ```bash
-./start.sh                 # interaktyvus meniu, arba:
-./start.sh --service presence   # paleisti vieną konkrečią paslaugą neinteraktyviai
+./scripts/start.sh                 # interaktyvus meniu, arba:
+./scripts/start.sh --service presence   # paleisti vieną konkrečią paslaugą neinteraktyviai
 ```
 Prižiūrėtojo procesas rūpinasi, kad sukonfigūruotos paslaugos liktų
 veikiančios; `presence` jas paskelbia kitiems.

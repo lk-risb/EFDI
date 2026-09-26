@@ -29,7 +29,7 @@ skriptas.
 
 Jei jūsų jutiklis praneša judantį objektą — poziciją, pasirinktinai
 greitį/kursą/aukštį/identitetą — jis beveik tikrai tinka esamai bendrai
-`NormalizedTrack` schemai (`../compose/protocols/proto/normalized_track.proto`)
+`NormalizedTrack` schemai (`../compose/protocols/vendors/random/proto/normalized_track.proto`)
 ir jums **visai nereikia naujo protobuf darbo**. Praleiskite iki 2 žingsnio.
 
 Naują `.proto` pranešimą apibrėžkite tik tada, kai jūsų duomenys turi
@@ -37,7 +37,7 @@ struktūrinius laukus, kurių `NormalizedTrack` iš tikrųjų negali išreikšti
 (pvz., daugiataškė zona/plotas, arba domenui specifinė sudėtinė reikšmė).
 Jei taip:
 
-1. Pridėkite naują `.proto` failą po `compose/protocols/proto/` — kiekviena
+1. Pridėkite naują `.proto` failą po `compose/protocols/vendors/random/proto/` — kiekviena
    EFDI-autorystės schema gyvena ten, nepriklausomai nuo to, kuris vertėjas
    ją valdo (tikra vendoruota/licencijuota trečiosios šalies schema, kaip
    SAPIENT ar Sparkplug B laidiniai kontraktai, yra vienintelė išimtis ir
@@ -107,7 +107,7 @@ abiejose be jokio papildomo kodo.
 
 **Konfigūracija — nieko fiksuoto kode.** Bet koks serveris, prievadas, URL ar
 kredencialas, kurio reikia jūsų skriptui, ateina iš aplinkos kintamojo,
-niekada iš tiesioginio kodo įrašo (`compose/bridges/sitaware_bridge.py` yra
+niekada iš tiesioginio kodo įrašo (`compose/bridges/vendors/sitaware/sitaware_bridge.py` yra
 geras visiškai env-valdomo tilto pavyzdys). Pridėkite kiekvieną naują
 kintamąjį į `compose/.env.example` su vienos eilutės komentaru,
 paaiškinančiu, kam jis skirtas — tas failas yra vienintelis tiesos šaltinis,
@@ -140,7 +140,7 @@ Keturi maži pakeitimai `start.sh`, sekant esamu `cap` įrašu kaip šablonu
 ## 10.4 Patikrinkite nuo galo iki galo
 
 ```bash
-./start.sh --service your-service-name
+./scripts/start.sh --service your-service-name
 ```
 Tada patvirtinkite, kad duomenys iš tikrųjų teka — prenumeruokite savo temą
 bet kokiu Zenoh klientu (repo `clients/examples/` turi paruoštus prenumeravimo
@@ -152,7 +152,7 @@ kad magistralės sutartis buvo teisingai laikomasi.
 ## 10.5 Reikia naujo CoT simbolio? (tik TAK išvesčiai)
 
 Jei jūsų jutiklio priklausomybės/objekto derinys dar neatvaizduoja į esamą
-CoT tipą, pridėkite jį į `_TOPIC_COT` faile `compose/layers/tak_layer.py`:
+CoT tipą, pridėkite jį į `_TOPIC_COT` faile `compose/layers/vendors/tak/tak_layer.py`:
 ```python
 "air/**/hostile/uav/**":      ("a-h-A-M-F-Q", AIR_STALE_S),
 "land/**/neutral/sensor/**":  ("a-n-G-E-S",   LAND_STALE_S * 2),

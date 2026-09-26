@@ -15,7 +15,8 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "compose"))
 sys.path.insert(0, str(ROOT / "compose" / "control"))
 sys.path.insert(0, str(ROOT / "compose" / "bridges"))
-sys.path.insert(0, str(ROOT / "compose" / "layers"))
+sys.path.insert(0, str(ROOT / "compose" / "layers" / "vendors" / "tak" / "systematic"))
+sys.path.insert(0, str(ROOT / "compose" / "layers" / "vendors" / "tak"))
 
 # sitaware_layer writes the fabric OUT to SitaWare, so it is the C2 egress.
 # SitaWare polling it is a transport detail, not a direction change. SitaWare

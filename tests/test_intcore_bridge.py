@@ -17,7 +17,7 @@ from unittest import mock
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "compose"))
 sys.path.insert(0, str(ROOT / "compose" / "control"))
-sys.path.insert(0, str(ROOT / "compose" / "bridges"))
+sys.path.insert(0, str(ROOT / "compose" / "bridges" / "vendors" / "intcore"))
 sys.path.insert(0, str(ROOT / "compose" / "layers"))
 
 import intcore_bridge  # noqa: E402
@@ -118,17 +118,20 @@ class NvgParseTests(unittest.TestCase):
 
 
 class HandleDisseminationTests(unittest.TestCase):
+    # assert_called() not assert_called_once(): publish_dual() (this session's
+    # SAPIENT-view fix) makes a real forward 3 puts (SAPIENT/JSON/proto), not
+    # 1 — these tests care that forwarding happened, not the exact fan-out.
     def setUp(self):
         self.session = mock.Mock()
 
     def test_forwards_a_raw_nvg_xml_body(self):
         intcore_bridge._handle_dissemination(self.session, NVG_XML.encode(), verbose=False)
-        self.session.put.assert_called_once()
+        self.session.put.assert_called()
 
     def test_forwards_the_real_vendor_payload_byte_for_byte(self):
         intcore_bridge._handle_dissemination(
             self.session, REAL_VENDOR_NVG_XML.encode("utf-8"), verbose=False)
-        self.session.put.assert_called_once()
+        self.session.put.assert_called()
 
     def test_drops_non_xml_body(self):
         intcore_bridge._handle_dissemination(self.session, b"plain text, not xml",
@@ -185,7 +188,7 @@ class HttpHandlerTests(unittest.TestCase):
                                       NVG_XML.encode(), token="secret")
         handler.do_POST()
         self.assertEqual(handler.responses, [204])
-        self.session.put.assert_called_once()
+        self.session.put.assert_called()
 
     def test_oversized_body_rejected(self):
         headers = {"Content-Length": str(intcore_bridge.MAX_BODY + 1)}

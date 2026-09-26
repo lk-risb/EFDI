@@ -11,7 +11,7 @@ sys.path.insert(0, str(COMPOSE / "control"))
 
 spec = importlib.util.spec_from_file_location(
     "nffi_bridge",
-    COMPOSE / "bridges" / "nffi_bridge.py",
+    COMPOSE / "bridges" / "vendors" / "nffi" / "nffi_bridge.py",
 )
 bridge = importlib.util.module_from_spec(spec)
 assert spec.loader is not None

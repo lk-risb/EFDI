@@ -4,7 +4,7 @@
 Two known topics on this slot, both wire format "xml:event" against the
 standard MITRE/TAK CoT schema (not a custom dialect — confirmed against the
 portal's uploaded takcot.xsd, a consolidated copy of the same public schema
-bridges/tak_bridge.py already parses):
+bridges/vendors/tak/tak_bridge.py already parses):
 
   <slot>/skylord/ads-b/rtl-sdr-01/tracks/cot  — their own RTL-SDR ADS-B
     receiver, republished as CoT.
@@ -14,7 +14,7 @@ bridges/tak_bridge.py already parses):
 Both share one topic suffix ("/tracks/cot"), so one decoder covers both. Real
 data (unlike Palantir's "tak/test/cot" topic) — no cot_test tag here.
 
-Reuses bridges/tak_bridge.py's existing inbound CoT decoder instead of
+Reuses bridges/vendors/tak/tak_bridge.py's existing inbound CoT decoder instead of
 writing a second one, same as protocols/vendors/palantir/palantir.py. Same
 _ingress fix applies here too: _normalize_event() tags every record
 "_ingress": "tak_server", which is tak_layer.py's echo guard for tracks that
@@ -28,7 +28,7 @@ import json
 import time
 
 import bridges.tak_bridge as tak_bridge
-from protocols.gateway import TOPIC_ROOT, open_session, payload_bytes, subscribe
+from protocols.vendors.random.gateway import TOPIC_ROOT, open_session, payload_bytes, subscribe
 
 _TOPIC_SUFFIX = "/tracks/cot"
 _SUB_FEED_MARKER = "/skylord/"

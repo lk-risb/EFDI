@@ -7,7 +7,7 @@ big batch document per cycle at "<slot>/tacvox/ingest/v1". The wire format is
 plain JSON (schema uploaded to the portal for documentation/compatibility
 checking only, not encoding) — but it's a batch envelope (IngestBatch) with
 several nested arrays, not the single flat/one-level-nested record
-protocols/random/generic_json.py's guesser expects, so it needs its own
+protocols/vendors/random/generic_json.py's guesser expects, so it needs its own
 normalizer. Schema reference: portal Schema viewer, topic
 "<slot>/tacvox/ingest/v1", schema v1, SHA-256
 95d9d533171ad140df2ed869eeeb196d319289f86bc7cbd5500b0869cd9b8cd4.
@@ -34,7 +34,7 @@ from __future__ import annotations
 import json
 import time
 
-from protocols.gateway import TOPIC_ROOT, open_session, payload_bytes, subscribe
+from protocols.vendors.random.gateway import TOPIC_ROOT, open_session, payload_bytes, subscribe
 
 _INGEST_SUFFIX = "/tacvox/ingest/v1"
 INPUT_TOPIC = TOPIC_ROOT + "/raw/backbone/**"

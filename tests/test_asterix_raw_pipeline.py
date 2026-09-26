@@ -10,7 +10,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "compose"))
 sys.path.insert(0, str(ROOT / "compose" / "control"))
-sys.path.insert(0, str(ROOT / "compose" / "bridges"))
+sys.path.insert(0, str(ROOT / "compose" / "bridges" / "vendors" / "random"))
 sys.path.insert(0, str(ROOT / "compose" / "protocols"))
 sys.path.insert(0, str(ROOT / "tools"))
 

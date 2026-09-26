@@ -1,6 +1,6 @@
 # NFFI sources
 
-`../../../compose/protocols/random/nffi.py` decodes NATO Friendly Force
+`../../../compose/protocols/vendors/nffi/nffi.py` decodes NATO Friendly Force
 Information (NFFI) XML — the Friendly Force Tracking exchange defined by
 ADatP-36 / STANAG 5527 — into normalized friendly-force tracks. `nffi.py`
 itself is protocol-agnostic about who publishes the raw XML: output goes
@@ -17,7 +17,7 @@ instance has a dedicated "NFFI and FFI Manager" (Coalition Gateway
 section) that can run as either an NFFI/FFI Client or Server, across
 several transport variants (IP1, IP1 Classic, IP2, SIP3) — confirmed by
 direct screenshot of a live instance, not documentation. See "Added
-2026-09-06: bridges/nffi_bridge.py" below.
+2026-09-06: bridges/vendors/nffi/nffi_bridge.py" below.
 
 ## Corrected 2026-09-06: a real primary source exists, and the old code didn't match it
 
@@ -224,7 +224,7 @@ only — that repo has no NFFI decoder). Test fixture updated with a
 `tests/test_sitaware_hq_nvg_feed.py` covering the CoT and NVG egress paths
 directly. All tests pass.
 
-## Added 2026-09-06: `bridges/nffi_bridge.py` — the missing ingest side
+## Added 2026-09-06: `bridges/vendors/nffi/nffi_bridge.py` — the missing ingest side
 
 `nffi.py` owns no source socket by design (see its own docstring) — it has
 always expected something else to land raw NFFI XML onto
@@ -238,7 +238,7 @@ target is a SitaWare Headquarters "NFFI and FFI Manager" server instance
 (IP1/IP1 Classic/IP2/SIP3 — see the correction above), but that instance
 is being reinstalled and its real connection details (host, port, which
 profile, TLS) aren't available yet. The bridge's TCP-dial-and-frame
-pattern is copied from `bridges/tak_bridge.py`'s own proven ingress path
+pattern is copied from `bridges/vendors/tak/tak_bridge.py`'s own proven ingress path
 (same codebase, already working for CoT), not from any confirmed NFFI wire
 documentation — the file's own docstring lists exactly what's reused-and-
 proven versus guessed-and-unverified (transport, framing, direction of

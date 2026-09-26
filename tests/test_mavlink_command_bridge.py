@@ -12,7 +12,7 @@ sys.path.insert(0, str(COMPOSE / "control"))
 
 spec = importlib.util.spec_from_file_location(
     "mavlink_command_bridge",
-    COMPOSE / "bridges" / "mavlink_command_bridge.py",
+    COMPOSE / "bridges" / "vendors" / "mavlink" / "mavlink_command_bridge.py",
 )
 bridge = importlib.util.module_from_spec(spec)
 assert spec.loader is not None

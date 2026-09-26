@@ -272,10 +272,10 @@ services:
     volumes:
       # Least-privilege identity mount: never expose efdi-ca-root-key.pem (or a
       # router-CA key) to the WebUI container — that file simply never lives
-      # under BUNDLE_DIR/efdi. rw (not ro) so the Certificates page can write
+      # under BUNDLE_DIR/local. rw (not ro) so the Certificates page can write
       # this pod's own uploaded identity directly (api/certs_bootstrap.py)
       # without a host-side helper handling private key material.
-      - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}/efdi:/certs/efdi:rw
+      - ${BUNDLE_DIR:?set BUNDLE_DIR in .env}/local:/certs/efdi:rw
       - ${ZENOH_ADMIN_TRUSTED_PARENT_HOST_CERT_PATH:-/dev/null}:/certs/trusted-parent.pem:ro
       - ${EFDI_ROUTER_CA_CERT_PATH:-/dev/null}:/certs/router-ca-cert.pem:ro
       - ${EFDI_POLICY_SIGNER_CERT_PATH:-/dev/null}:/certs/policy-signer-cert.pem:ro

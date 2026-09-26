@@ -91,12 +91,12 @@ validate_runtime_identity() {
 
 # --- [1/4] Lay this pod's Zenoh mTLS certs --------------------------------------------------------
 echo "==> [1/4] laying Zenoh mTLS certs (profile: ${EFDI_ROUTER_TLS_PROFILE})"
-CERT_BUNDLE_DIR="${BUNDLE_DIR}/efdi"
+CERT_BUNDLE_DIR="${BUNDLE_DIR}/local"
 CERT_PATH="${CERT_BUNDLE_DIR}/${PARTNER_NAMESPACE}-cert.pem"
 KEY_PATH="${CERT_BUNDLE_DIR}/${PARTNER_NAMESPACE}-key.pem"
 CA_PATH="${CERT_BUNDLE_DIR}/efdi-ca-root.pem"
 # Accept pre-folder-layout bundles during migration; new material is always
-# generated under compose/certs/efdi by scripts/gen-certs.sh.
+# generated under compose/certs/local by scripts/gen-certs.sh.
 if [ ! -f "$CERT_PATH" ] || [ ! -f "$KEY_PATH" ] || [ ! -f "$CA_PATH" ]; then
   CERT_BUNDLE_DIR="$BUNDLE_DIR"
   CERT_PATH="${CERT_BUNDLE_DIR}/${PARTNER_NAMESPACE}-cert.pem"

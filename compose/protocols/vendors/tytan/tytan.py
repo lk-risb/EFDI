@@ -12,7 +12,7 @@ the portal's shared "notional.tracks_demo.v1.Entity" schema seen on other
 slots, this one is not demo/notional data.
 
 The trailing "/*" in the topic means one sub-topic per interceptor id (e.g.
-".../v1/interceptor_123"); bridges/backbone_bridge.py relays the full
+".../v1/interceptor_123"); bridges/vendors/random/backbone_bridge.py relays the full
 original key unchanged, so this matches by substring rather than a fixed
 topic suffix — see socbx.py/palantir.py for the fixed-suffix version of the
 same pattern.
@@ -50,9 +50,9 @@ import math
 import time
 
 from google.protobuf.message import DecodeError
-from protocols.gateway import TOPIC_ROOT, open_session, payload_bytes, subscribe
-from schemas.vendors.tytan.c2_pb2 import ClientMessage, TargetType
-from schemas.vendors.tytan.interceptor_status_pb2 import InterceptorState, InterceptorStatus
+from protocols.vendors.random.gateway import TOPIC_ROOT, open_session, payload_bytes, subscribe
+from schemas.vendors.tytan.proto.c2_pb2 import ClientMessage, TargetType
+from schemas.vendors.tytan.proto.interceptor_status_pb2 import InterceptorState, InterceptorStatus
 
 _STATUS_TOPIC_MARKER = "/neura/effector/status/v1/"
 _C2_TOPIC_MARKER = "/synaps/c2/client/v1/"

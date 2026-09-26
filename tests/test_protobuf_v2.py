@@ -6,8 +6,8 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "compose"))
 sys.path.insert(0, str(ROOT / "compose" / "control"))
 
-from protocols.proto.normalized_track_pb2 import NormalizedTrack  # noqa: E402
-from protocols.track_views import (  # noqa: E402
+from protocols.vendors.random.proto.normalized_track_pb2 import NormalizedTrack  # noqa: E402
+from protocols.vendors.random.track_views import (  # noqa: E402
     normalized_track_message,
     source_message_to_track,
     source_track_to_message,

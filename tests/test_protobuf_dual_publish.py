@@ -22,15 +22,15 @@ sys.path.insert(0, os.fspath(ROOT / "compose" / "control"))
 
 import zenoh  # noqa: E402
 
-from protocols.proto.normalized_track_pb2 import NormalizedTrack  # noqa: E402
-from protocols.proto.nffi_pb2 import NffiTrack  # noqa: E402
-from protocols.proto.raw_envelope_pb2 import RawEnvelope  # noqa: E402
+from protocols.vendors.random.proto.normalized_track_pb2 import NormalizedTrack  # noqa: E402
+from protocols.vendors.random.proto.nffi_pb2 import NffiTrack  # noqa: E402
+from protocols.vendors.random.proto.raw_envelope_pb2 import RawEnvelope  # noqa: E402
 from protocols.vendors.sapient.flex335 import (  # noqa: E402
     publish_sapient,
     track_to_sapient,
 )
 from sapient_msg.bsi_flex_335_v2_0.sapient_message_pb2 import SapientMessage  # noqa: E402
-from protocols.track_views import (  # noqa: E402
+from protocols.vendors.random.track_views import (  # noqa: E402
     asterix_data_block,
     dual_topic,
     native_topic,
@@ -89,7 +89,7 @@ class WrappedTrackMessageTests(unittest.TestCase):
         raised out of the builder, and publish_dual's guard then dropped the
         ENTIRE protobuf sample — one list field silently cost the whole /v2
         message, not just that field."""
-        from protocols.proto.flex335_pb2 import SapientFlex335Track
+        from protocols.vendors.random.proto.flex335_pb2 import SapientFlex335Track
 
         track = dict(TRACK, sapient_node_types=["acoustic", "radar"], sensor_id="S1")
         message = wrapped_track_message(SapientFlex335Track, track)
@@ -102,7 +102,7 @@ class WrappedTrackMessageTests(unittest.TestCase):
     def test_scalar_string_is_not_treated_as_a_repeated_sequence(self):
         """A str is iterable — extending a repeated field with one would splay
         it into characters, so scalars must never take the repeated path."""
-        from protocols.proto.flex335_pb2 import SapientFlex335Track
+        from protocols.vendors.random.proto.flex335_pb2 import SapientFlex335Track
 
         message = wrapped_track_message(
             SapientFlex335Track, dict(TRACK, sapient_node_types="acoustic")
@@ -125,13 +125,18 @@ class PublishDualTests(unittest.TestCase):
         # root/air/nffi/unknown/uav-1/tracks/v1  (json, canonical)
         # root/air/nffi/unknown/uav-1/proto/tracks/v1  (per-protocol)
         json_topic = next(k for k, (p, e) in by_topic.items()
-                          if e == zenoh.Encoding.APPLICATION_JSON)
+                          if str(e).startswith("application/json"))
         pb_topic = dual_topic(json_topic)
         self.assertTrue(json_topic.startswith("root/air/nffi/unknown/uav-1"))
         self.assertTrue(json_topic.endswith("/tracks/v1"))
         json_payload, json_encoding = by_topic[json_topic]
         pb_payload, pb_encoding = by_topic[pb_topic]
-        self.assertEqual(json_encoding, zenoh.Encoding.APPLICATION_JSON)
+        # Tagged with the message's own descriptor name (see track_views.py's
+        # publish_dual()), not the bare encoding — the JSON leg mirrors
+        # whatever protobuf type this caller passed, which differs per
+        # producer, so it can't share one fixed schema name.
+        self.assertEqual(json_encoding, zenoh.Encoding.APPLICATION_JSON.with_schema(
+            "json:" + NffiTrack.DESCRIPTOR.full_name))
         self.assertEqual(pb_encoding, zenoh.Encoding.APPLICATION_PROTOBUF.with_schema(
             NffiTrack.DESCRIPTOR.full_name))
 

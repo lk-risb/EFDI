@@ -171,7 +171,7 @@ for humans and for consumers that cannot link a protobuf runtime.
   length prefix already stripped.
 - STANAG 4609 — the raw MISB KLV packet.
 
-The `RawEnvelope` (`../compose/protocols/proto/raw_envelope.proto`) carries
+The `RawEnvelope` (`../compose/protocols/vendors/random/proto/raw_envelope.proto`) carries
 `protocol`, `profile` (e.g. `cat048`, `misb-st0601`), `content_type`, and the
 `payload` bytes.
 
@@ -221,7 +221,7 @@ ownership and copyright of BSI Flex 335, with publication rights held by BSI
 Standards Ltd.
 
 It lives under `compose/protocols/vendors/sapient/` rather than directly under
-`compose/protocols/proto/` because that directory holds EFDI's *own*
+`compose/protocols/vendors/random/proto/` because that directory holds EFDI's *own*
 contracts, while this is someone else's — it carries its own package
 (`sapient_msg.bsi_flex_335_v2_0`) and internal import paths of the form
 `sapient_msg/bsi_flex_335_v2_0/<file>.proto` that only resolve if this
@@ -288,17 +288,17 @@ not silently enable the reverse path.
 #### TAK Server
 
 For Zenoh → TAK, configure `TAK_HOST/TAK_PORT` and select `tak_layer`
-(`layers/tak_layer.py`). It subscribes to normalized Zenoh topics and emits CoT
+(`layers/vendors/tak/tak_layer.py`). It subscribes to normalized Zenoh topics and emits CoT
 two ways: UDP multicast to `239.2.3.1:6969` for LAN ATAK clients, and TCP/mTLS to
 a TAK Server. TAK-issued client credentials are required when `TAK_TLS=1`. For
-TAK → Zenoh, select `tak-bridge` (`bridges/tak_bridge.py`), which normalizes an
+TAK → Zenoh, select `tak-bridge` (`bridges/vendors/tak/tak_bridge.py`), which normalizes an
 inbound CoT stream back onto the fabric. Prefer a stable DNS `TAK_HOST`; if the
 TAK server certificate has a different legacy DNS SAN, set
 `TAK_TLS_SERVER_NAME` to that SAN so hostname verification remains enabled.
 
 #### SitaWare
 
-For Zenoh → SitaWare HQ, select `sitaware_layer` (`layers/sitaware_layer.py`) and configure
+For Zenoh → SitaWare HQ, select `sitaware_layer` (`layers/vendors/tak/systematic/sitaware_layer.py`) and configure
 an HQ NVG Import Subscription to poll the authenticated NVG 2.0.2 feed it serves.
 
 For SitaWare HQ → Zenoh, obtain the real REST resource from the deployment ICD:
@@ -339,7 +339,7 @@ INT-CORE is a hub, not an endpoint — it relays data between whatever C2
 systems are connected to it, EFDI included. EFDI is one spoke: it does not
 know or need to know what else is on the other side.
 
-For Zenoh → INT-CORE, select `intcore_layer` (`layers/intcore_layer.py`). It
+For Zenoh → INT-CORE, select `intcore_layer` (`layers/vendors/tak/random/intcore_layer.py`). It
 subscribes to the same track topics `sitaware_layer.py` does, builds an NVG
 2.0.2 document per track (reusing `sitaware_layer.py`'s own encoder), and
 POSTs it to a pre-provisioned INT-CORE Topic:
@@ -351,7 +351,7 @@ INTCORE_TOPIC_ID=<GUID of an NVG-2.0-schema-validated Topic>
 INTCORE_DATA_SOURCE_ID=efdi
 ```
 
-For INT-CORE → Zenoh, select `intcore-bridge` (`bridges/intcore_bridge.py`).
+For INT-CORE → Zenoh, select `intcore-bridge` (`bridges/vendors/intcore/intcore_bridge.py`).
 It runs a small HTTP server that INT-CORE's own Dissemination service POSTs
 to — configure a Subscription bound to the Topic above, a Dissemination, and
 an HTTP Post ADT targeting `http://<this-host>:INTCORE_BRIDGE_PORT/INTCORE_BRIDGE_PATH`

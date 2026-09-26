@@ -1,7 +1,7 @@
 # Sparkplug B sources
 
 `../../../compose/protocols/vendors/sparkplug/sparkplug.py` decodes Eclipse
-Sparkplug B protobuf payloads received via `bridges/mqtt_bridge.py`, using
+Sparkplug B protobuf payloads received via `bridges/vendors/random/mqtt_bridge.py`, using
 the schema vendored at
 `compose/protocols/vendors/sparkplug/sparkplug_b.proto`.
 

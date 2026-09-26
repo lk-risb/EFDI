@@ -1,8 +1,8 @@
 """CRUD for independent SitaWare HQ endpoints — both directions.
 
 Ingress: EFDI polls one or more SitaWare HQ instances over REST
-(bridges/sitaware_bridge.py). Egress: one or more SitaWare HQ instances poll
-EFDI's NVG 2.0.2 feed (layers/sitaware_layer.py). Each enabled row of either
+(bridges/vendors/sitaware/sitaware_bridge.py). Egress: one or more SitaWare HQ instances poll
+EFDI's NVG 2.0.2 feed (layers/vendors/tak/systematic/sitaware_layer.py). Each enabled row of either
 kind gets its own independent host process, reconciled by admin_control.py —
 this module is the only writer of the (up to) four files that hand
 configuration off to it:

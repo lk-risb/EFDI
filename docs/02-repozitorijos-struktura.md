@@ -9,19 +9,11 @@ pagal paskirtį ir turėtų būti.
 
 | Kelias | Kas tai |
 | --- | --- |
-| `install.sh` | Diegyklė — nuo tuščio serverio iki veikiančio pod'o viena komanda. Žr. [03](03-diegimas-ir-paruosimas.md). |
-| `start.sh` | Interaktyvus paslaugų paleidiklis — leidžia pasirinkti, kurie tiltai/sluoksniai veiks, sutvarko prievadus ir juos paleidžia. |
-| `stop.sh` | Sustabdo viską, ką paleido `start.sh` arba `run.sh`. |
-| `run.sh` | Paleidžia EFDI tiltus kaip foninius procesus be Docker (pats Zenoh maršrutizatorius vis tiek lieka Docker konteineryje). |
-| `update.sh` | Greitas atnaujinimas su talpyklos patikra ir automatiniu atsigavimu, jei kas nepavyksta. |
-| `reinstall.sh` | Pašalina vietinius atvaizdus ir konteinerius, bet palieka sertifikatus bei duomenis nepaliestus — švarus perstatymas be tapatybės praradimo. |
-| `health.sh` | Pirmiausia bando savaime pataisyti diegimą, tada paleidžia visą repozitorijos testų ir statinių patikrų rinkinį. |
-| `dev.sh` | Vienkartinė vietinė PostgreSQL aplinka zenoh-admin skydo pakeitimams peržiūrėti — pakelia tik administravimo skydą, be viso fabric. |
 | `compose/` | Pats pod'as: tiltai, sluoksniai, protokolų vertėjai, administravimo skydas, Docker Compose apibrėžimai. |
 | `clients/` | Prisijungimo SDK ir pavyzdžiai, kuriais remiasi partneriai. |
 | `examples/` | Savarankiški vykdomi pavyzdžiai (pirmas leidėjas/prenumeratorius, gyvybingumo patikra, atsparus prenumeratorius ir t.t.) bei `first-boot.sh`. |
 | `host/` | Hosto lygio Zenoh maršrutizatoriaus konfigūracijos šablonas. |
-| `scripts/` | Vienkartiniai eksploataciniai scenarijai: sertifikatų generavimas, protobuf kodo generavimas, radaro UDP fiksavimas/persiuntimas, hosto aptikimas. |
+| `scripts/` | Diegyklė ir pagrindiniai gyvavimo ciklo scenarijai: `install.sh` (`curl \| bash` greitosios pradžios taikinys, žr. [03](03-diegimas-ir-paruosimas.md)), `start.sh` (interaktyvus paleidiklis), `run.sh` (paleidžia be Docker), `stop.sh` (sustabdo), `update.sh` (atnaujina), `reinstall.sh` (švarus perstatymas), `health.sh` (savaiminis pataisymas/testai), `dev.sh` (vienkartinė vietinė aplinka admin skydo peržiūrai) — bei vienkartiniai eksploataciniai scenarijai: sertifikatų generavimas, protobuf kodo generavimas, radaro UDP fiksavimas/persiuntimas, hosto aptikimas. |
 | `tools/` | ASTERIX zondavimo ir persiuntimo įrankiai gyvo srauto derinimui. |
 | `tests/` | Pilnas testų rinkinys — vieneto testai, dūmų testai, saugumo patikros, CI atvaizdų-viešumo patikros. |
 | `docs/` | Viskas, ką dabar skaitote; pilną žemėlapį rasite [00](00-pradekite-cia.md). |

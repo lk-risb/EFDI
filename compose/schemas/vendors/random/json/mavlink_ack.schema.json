@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://efdi.ltu/schemas/json/mavlink_ack.schema.json",
+  "title": "MAVLink command acknowledgement",
+  "description": "Published BY bridges/mavlink_command_bridge.py to {TOPIC_ROOT}/air/mavlink/ack/{entity_id} in reply to a command on the matching .../cmd/{entity_id} topic. See mavlink_command.schema.json for the request.",
+  "x-efdi-topic": "{TOPIC_ROOT}/air/mavlink/ack/{entity_id}",
+  "x-efdi-producer": "bridges/mavlink_command_bridge.py",
+  "x-efdi-consumer": "external (C2/UI)",
+  "type": "object",
+  "required": ["cmd", "result", "_ts"],
+  "properties": {
+    "cmd": {
+      "type": ["string", "null"],
+      "description": "Echo of the request's cmd field. null only when the request itself wasn't valid JSON."
+    },
+    "result": {
+      "type": "string",
+      "description": "One of MAVLink's own MAV_RESULT enum names (e.g. ACCEPTED, DENIED, FAILED) on a real ack, or one of this bridge's own out-of-band results: REJECTED (bad JSON or unknown/invalid command, never reached the vehicle) or TIMEOUT (no COMMAND_ACK within 5s)."
+    },
+    "detail": {
+      "type": "string",
+      "description": "Present only on result=REJECTED — human-readable reason."
+    },
+    "_ts": {
+      "type": "number",
+      "description": "Unix epoch seconds, set by the bridge at publish time."
+    }
+  },
+  "additionalProperties": false
+}

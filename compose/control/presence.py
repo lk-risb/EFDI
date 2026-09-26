@@ -22,7 +22,7 @@ from __future__ import annotations
 import os
 import time
 
-from protocols.gateway import open_session
+from protocols.vendors.random.gateway import open_session
 
 SLOT = os.environ.get("PARTNER_NAMESPACE", "")
 PID_DIR = os.path.join(os.environ.get("POD_STATE_DIR", os.path.join(os.path.dirname(__file__), "state")), ".pids")

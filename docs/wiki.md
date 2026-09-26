@@ -416,8 +416,8 @@ supervisor is always running; a crashed feed comes back on its own.
 
 ### Start everything and keep it running
 ```bash
-./start.sh                 # interactive menu, or:
-./start.sh --service presence   # start one service non-interactively
+./scripts/start.sh                 # interactive menu, or:
+./scripts/start.sh --service presence   # start one service non-interactively
 ```
 The supervisor keeps configured services alive; `presence` announces them.
 
@@ -570,9 +570,9 @@ translator, plus `smoke/` (end-to-end round-trip), `security/`
 On Debian 13 or RHEL/Rocky/AlmaLinux 9/10, the only thing you install by
 hand is `curl` (usually already present) — everything else is one command:
 ```bash
-curl -fsSL https://raw.githubusercontent.com/lk-risb/EFDI/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/lk-risb/EFDI/main/scripts/install.sh | bash
 ```
-`./install.sh` updates the OS (`apt`/`dnf` upgrade) and auto-installs git,
+`./scripts/install.sh` updates the OS (`apt`/`dnf` upgrade) and auto-installs git,
 Python 3.10+, Docker Engine + the Compose plugin (from Docker's official
 repository, not a distro-bundled package), openssl, and gettext itself on
 both Debian (apt) and RHEL/Rocky/Alma (dnf) hosts if any are missing — a
@@ -723,7 +723,7 @@ no separate apt/dnf setup:
 curl -fsSL https://pkgs.netbird.io/install.sh | sh
 ```
 Do **not** join a network yet — the setup key comes from whoever
-administers your organization's account, and `./install.sh` itself prompts
+administers your organization's account, and `./scripts/install.sh` itself prompts
 for it and joins during the [Installation](#installation) section below (this is exactly what its
 automated Networking step does). Verify only that the binary installed:
 ```bash
@@ -732,7 +732,7 @@ netbird version
 
 #### Open firewall ports
 
-`./install.sh` does **not** do this step for you — which ports to open
+`./scripts/install.sh` does **not** do this step for you — which ports to open
 depends on which sensor bridges you enable, and that's a post-install,
 WebUI-driven choice (see [Configuration](04-configuration.md)), not something the installer
 can decide up front. Open only what this host needs inbound; everything
@@ -810,11 +810,11 @@ ATAK/WinTAK clients receive tracks only through a TAK Server (`tak-layer` servic
 
 For a standalone/development pod, Zenoh mTLS certs can be self-issued without
 an external vendor bundle. `scripts/gen-certs.sh <namespace>` generates (once)
-an EFDI development root CA under `compose/certs/efdi/`, then signs a leaf
+an EFDI development root CA under `compose/certs/local/`, then signs a leaf
 cert+key for the given namespace. Do not distribute that development root key
 to managed routers.
 
-The generated material (`efdi-ca-root.pem`, `<NAMESPACE>-cert.pem`, `<NAMESPACE>-key.pem`) lives at `compose/certs/efdi/` — gitignored, never committed. The ignored bundle directory also keeps `tak/`, `sitaware/`, `efdi-backbone/` (goat backbone, Desert Bread CA), and `efdi-ltu/` (LTU sandbox) identities separate — see the certificate profile legend in [§3.2 below](#32-generate-certificates). Default path is set by `start.sh`; override with `BUNDLE_DIR` in `compose/.env` if you'd rather keep it outside the repo entirely. Managed deployments use the delegated-CA workflow in the [Operations](05-launching-and-operations.md) section and keep CA private keys under a separate mode-700 runtime directory.
+The generated material (`efdi-ca-root.pem`, `<NAMESPACE>-cert.pem`, `<NAMESPACE>-key.pem`) lives at `compose/certs/local/` — gitignored, never committed. The ignored bundle directory also keeps `tak/`, `sitaware/`, `efdi-backbone/` (goat backbone, Desert Bread CA), and `efdi-ltu/` (LTU sandbox) identities separate — see the certificate profile legend in [§3.2 below](#32-generate-certificates). Default path is set by `start.sh`; override with `BUNDLE_DIR` in `compose/.env` if you'd rather keep it outside the repo entirely. Managed deployments use the delegated-CA workflow in the [Operations](05-launching-and-operations.md) section and keep CA private keys under a separate mode-700 runtime directory.
 
 ---
 
@@ -826,7 +826,7 @@ On a fresh host with nothing installed yet, one command clones the repo and
 runs the installer, which auto-installs every prerequisite from the [Prerequisites](#prerequisites) section itself:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/lk-risb/EFDI/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/lk-risb/EFDI/main/scripts/install.sh | bash
 ```
 
 Equivalent to cloning first, then running the same script locally:
@@ -834,7 +834,7 @@ Equivalent to cloning first, then running the same script locally:
 ```bash
 git clone <repo-url> EFDI
 cd EFDI
-./install.sh
+./scripts/install.sh
 ```
 
 ### 3.2 Generate certificates
@@ -912,8 +912,8 @@ endpoint atomically.
 
 ```bash
 # Verify
-ls compose/certs/efdi/*.pem
-chmod 600 compose/certs/efdi/*-key.pem
+ls compose/certs/local/*.pem
+chmod 600 compose/certs/local/*-key.pem
 ```
 
 ### 3.3 Create the Python virtual environment
@@ -1069,7 +1069,7 @@ SITAWARE_HQ_NVG_TLS_KEY=
 ## Launching the Stack
 
 ```bash
-./start.sh
+./scripts/start.sh
 ```
 
 The interactive launcher displays all services with their readiness state. Toggle by number, then press **Enter** to launch selected services.
@@ -1152,8 +1152,8 @@ After a successful launch, `start.sh` remembers the selected services and the la
 ### Stopping services
 
 ```bash
-./stop.sh              # Stop all bridge processes
-./stop.sh layers       # Stop output layers only (tak-layer, track-fusion)
+./scripts/stop.sh              # Stop all bridge processes
+./scripts/stop.sh layers       # Stop output layers only (tak-layer, track-fusion)
 ```
 
 ### Log monitoring
@@ -1264,7 +1264,7 @@ SITAWARE_HQ_NVG_STALE_S=120
 SITAWARE_HQ_NVG_MAX_TRACKS=10000
 ```
 
-Start `sitaware-hq-nvg` from `./start.sh`, or use `./run.sh all`. Test from the HQ Windows host without printing operational data:
+Start `sitaware-hq-nvg` from `./scripts/start.sh`, or use `./scripts/run.sh all`. Test from the HQ Windows host without printing operational data:
 
 ```powershell
 curl.exe -k -u "<feed-user>:<feed-password>" -sS -o NUL `
@@ -1348,8 +1348,8 @@ Do not clear a shared operational layer to work around this limitation.
 | --- | --- | --- | --- |
 | `asterix` | `protocols/vendors/asterix/cat.py` | `…/raw/asterix/catNN` and category-specific normalized ASTERIX topics | ASTERIX vendor's CAT protocol bundle: mixed UDP ingress plus per-category translators |
 | `dronuradaras` | `bridges/vendors/mainline/dronuradaras_bridge.py` | `…/land/mainline_dronuradaras/acoustic/neutral/sensor/{type}/{id}/sapient` | 60 s online-only device poll with offline eviction / 10 s detection poll |
-| `sitaware` | `bridges/sitaware_bridge.py` | `…/land/sitaware/c2/friendly/unit/{type}/{id}/sapient` | Configurable REST poll |
-| `nffi` | `protocols/random/nffi.py` | `…/land/nato/c2/friendly/unit/{type}/{id}/sapient` | Complete XML documents under `…/raw/nffi/*` in Zenoh |
+| `sitaware` | `bridges/vendors/sitaware/sitaware_bridge.py` | `…/land/sitaware/c2/friendly/unit/{type}/{id}/sapient` | Configurable REST poll |
+| `nffi` | `protocols/vendors/nffi/nffi.py` | `…/land/nato/c2/friendly/unit/{type}/{id}/sapient` | Complete XML documents under `…/raw/nffi/*` in Zenoh |
 | `stanag` | `protocols/vendors/stanag/stanag.py --proto {4586,4607,4609,5516}` | `…/raw/stanag_4609/klv`, `…/air/stanag_4609/camera/unknown/uav`, STANAG 4586 track topics, and `…/{air,sea,land}/stanag_5516/c2/**` | Launcher starts each configured `--proto` directly |
 | `sapient-raw`, `stanag4586-raw`, `stanag5516-raw` | `bridges/*_bridge.py` | `…/raw/<protocol>/<source>` | Optional socket ingress; matching protocol runs with `*_ZENOH_RAW=1` |
 | `cap` | `protocols/random/cap.py` | `…/land/cap/c2/neutral/sensor/{type}/{id}/sapient` | Complete CAP 1.2 XML on `…/raw/cap/**` |
@@ -1358,9 +1358,9 @@ Do not clear a shared operational layer to work around this limitation.
 | `sensorthings` | `protocols/random/sensorthings.py` | `…/land/sensorthings/iot/neutral/sensor/{type}/{id}/sapient` | Observations on `…/raw/sensorthings/**` |
 | `sparkplug` | `protocols/vendors/sparkplug/sparkplug.py` | `…/land/sparkplug/iot/unknown/sensor/{type}/{id}/sapient` | Sparkplug B protobuf on `…/raw/mqtt/spBv1.0/**` |
 | `spectrum` / `sensor-health` / `mission-route` | Matching `protocols/random/*.py` | `…/land/spectrum/**`, `…/land/health/**`, `…/air/mission/**` | JSON on their `…/raw/**` topics |
-| `tak_layer` | `layers/tak_layer.py` | Subscriber — all topics | Event-driven |
-| `tak-bridge` | `bridges/tak_bridge.py` | Subscriber — all topics | TAK-visible CoT ingress |
-| `sitaware-hq-nvg` | `layers/sitaware_layer.py` | Subscriber — all track topics | Pull-based NVG snapshot |
+| `tak_layer` | `layers/vendors/tak/tak_layer.py` | Subscriber — all topics | Event-driven |
+| `tak-bridge` | `bridges/vendors/tak/tak_bridge.py` | Subscriber — all topics | TAK-visible CoT ingress |
+| `sitaware-hq-nvg` | `layers/vendors/tak/systematic/sitaware_layer.py` | Subscriber — all track topics | Pull-based NVG snapshot |
 | `track-fusion` | `protocols/fusion.py` | CAT-48 + CAT-21 subscriber | Event-driven |
 
 ### TAK users and external CoT sources
@@ -1418,7 +1418,7 @@ exactly the lossy-link case that already causes the relayed-NetBird RTMP
 issue in the troubleshooting doc. Not needed until a real source actually
 asks for it.
 
-**STANAG 4609 video, not just drone RTMP.** `bridges/4609_bridge.py` owns
+**STANAG 4609 video, not just drone RTMP.** `bridges/vendors/milspec/4609_bridge.py` owns
 the SRT connection carrying STANAG 4609 MPEG-TS+KLV as its *listener* (the
 sensor/GCS connects in) purely to extract KLV metadata — mediamtx cannot
 also bind that port, and routing the feed through mediamtx first isn't an
@@ -1726,17 +1726,17 @@ not silently enable the reverse path.
 #### TAK Server
 
 For Zenoh → TAK, configure `TAK_HOST/TAK_PORT` and select `tak_layer`
-(`layers/tak_layer.py`). It subscribes to normalized Zenoh topics and emits CoT
+(`layers/vendors/tak/tak_layer.py`). It subscribes to normalized Zenoh topics and emits CoT
 two ways: UDP multicast to `239.2.3.1:6969` for LAN ATAK clients, and TCP/mTLS to
 a TAK Server. TAK-issued client credentials are required when `TAK_TLS=1`. For
-TAK → Zenoh, select `tak-bridge` (`bridges/tak_bridge.py`), which normalizes an
+TAK → Zenoh, select `tak-bridge` (`bridges/vendors/tak/tak_bridge.py`), which normalizes an
 inbound CoT stream back onto the fabric. Prefer a stable DNS `TAK_HOST`; if the
 TAK server certificate has a different legacy DNS SAN, set
 `TAK_TLS_SERVER_NAME` to that SAN so hostname verification remains enabled.
 
 #### SitaWare
 
-For Zenoh → SitaWare HQ, select `sitaware_layer` (`layers/sitaware_layer.py`) and configure
+For Zenoh → SitaWare HQ, select `sitaware_layer` (`layers/vendors/tak/systematic/sitaware_layer.py`) and configure
 an HQ NVG Import Subscription to poll the authenticated NVG 2.0.2 feed it serves.
 
 For SitaWare HQ → Zenoh, obtain the real REST resource from the deployment ICD:
@@ -2143,7 +2143,7 @@ translator must reject or quarantine the feed rather than silently guess.
 # 09 — C2 ↔ Zenoh Bidirectional Runbook
 
 The directions are independent. Complete only the paths exposed and licensed
-by the actual deployment, then select their services in `./start.sh`.
+by the actual deployment, then select their services in `./scripts/start.sh`.
 
 ## 9.1 Verify the common Zenoh side
 
@@ -2197,7 +2197,7 @@ On the TAK Server side:
    operations in its [official API](https://docs.tak.gov/api/takserver); exact
    buttons differ between file-user, LDAP and external-identity deployments.
 5. Place the PEM files in a runtime-only directory on the EFDI host, enter their
-   paths above, select `tak-layer` in `./start.sh`, and confirm the identity appears
+   paths above, select `tak-layer` in `./scripts/start.sh`, and confirm the identity appears
    as connected in TAK Server.
 
 ## 9.3 TAK Server → Zenoh
@@ -2445,7 +2445,7 @@ don't have real affiliation data, and what the object is (`vehicle`,
 
 **Configuration — nothing hardcoded.** Any host, port, URL, or credential your
 script needs comes from an environment variable, never a literal in the code
-(`compose/bridges/sitaware_bridge.py` is a good example of an all-env-driven
+(`compose/bridges/vendors/sitaware/sitaware_bridge.py` is a good example of an all-env-driven
 bridge). Add each new variable to `compose/.env.example` with a one-line
 comment explaining what it's for — that file is the single source of truth
 for what a deployment can configure, and it's what the next administrator
@@ -2476,7 +2476,7 @@ template (search for `geojson` in `start.sh` to see all four at once):
 ## 10.4 Verify end-to-end
 
 ```bash
-./start.sh --service your-service-name
+./scripts/start.sh --service your-service-name
 ```
 Then confirm data is actually flowing — subscribe to your topic with any
 Zenoh client (the repo's `clients/examples/` has ready-made subscribe
@@ -2488,7 +2488,7 @@ correctly.
 ## 10.5 New CoT symbol needed? (TAK output only)
 
 If your sensor's affiliation/entity combination doesn't already map to a CoT
-type, add it to `_TOPIC_COT` in `compose/layers/tak_layer.py`:
+type, add it to `_TOPIC_COT` in `compose/layers/vendors/tak/tak_layer.py`:
 ```python
 "air/**/hostile/uav/**":      ("a-h-A-M-F-Q", AIR_STALE_S),
 "land/**/neutral/sensor/**":  ("a-n-G-E-S",   LAND_STALE_S * 2),
@@ -2545,7 +2545,7 @@ echo $ZENOH_LOCAL_ENDPOINT   # expected: tcp/127.0.0.1:7448
 ls $EFDI_CERT_DIR/*.pem
 ```
 
-If `compose/.env` was loaded with bare `source compose/.env`, variables are not exported to child processes. Use `./start.sh` (which handles this), or:
+If `compose/.env` was loaded with bare `source compose/.env`, variables are not exported to child processes. Use `./scripts/start.sh` (which handles this), or:
 
 ```bash
 set -a && source compose/.env && set +a
@@ -2655,7 +2655,7 @@ Caused by running `start.sh` twice without stopping:
 ```bash
 pkill -f "_bridge\.py\|tak_layer\|track_fusion"
 rm -f $POD_STATE_DIR/.pids/*.pid
-./start.sh
+./scripts/start.sh
 ```
 
 ### Radar icon disappearing from ATAK
@@ -2905,7 +2905,7 @@ launcher scripts rather than creating one container per integration. Set
 and the local control process. Restart an affected service after saving a
 setting so it reads the new environment.
 
-For `./dev.sh up`, the disposable control agent automatically moves to port
+For `./scripts/dev.sh up`, the disposable control agent automatically moves to port
 18896 when the development/default 8896 is already occupied, and the dev API is
 pointed at that selected port.
 
@@ -2953,8 +2953,8 @@ EFDI_ROUTER_CA_CHAIN_PATH=/absolute/runtime/pki/router-ca-chain.pem
 EFDI_POLICY_SIGNER_CERT_PATH=/absolute/runtime/pki/policy-signer-cert.pem
 EFDI_POLICY_SIGNER_KEY_PATH=/absolute/runtime/pki/policy-signer-key.pem
 EFDI_STEP_CA_STATE_PATH=/absolute/runtime/pki/step-ca
-./stop.sh admin-control
-./start.sh --service admin-control
+./scripts/stop.sh admin-control
+./scripts/start.sh --service admin-control
 ```
 
 In **Certificate Authority**, create a single-use invitation for the child
@@ -2968,7 +2968,7 @@ On the child, generate and enroll all three identities locally:
 scripts/pki/enroll-router.sh \
   https://<parent-management-host>:9443 \
   <child-namespace> \
-  "${BUNDLE_DIR}/efdi" \
+  "${BUNDLE_DIR}/local" \
   "${POD_STATE_DIR}/pki"
 ```
 
@@ -3401,7 +3401,7 @@ This catches syntax errors, TypeScript errors, and Dockerfile breakage before me
 | 2026-07-18 | Added TAK-style Runtime Control for native bridge/protocol/layer lifecycle, bounded logs, endpoint/topic/port editing, write-only credentials, a localhost admin-control agent, and a live Vite dev stack with aligned API/proxy ports |
 | 2026-08-02 | Merged `HOST_SETUP.md`, `INTEGRATIONS.md`, `C2_RUNBOOK.md`, `ADDING_A_SENSOR.md`, `TROUBLESHOOTING.md`, and `GOTCHAS.md` into this document ([Bootstrap and Install](03-bootstrap-and-install.md) §1; [Integrations](08-integrations.md), [C2 ↔ Zenoh Runbook](09-c2-zenoh-runbook.md), [Adding a Sensor](10-adding-a-sensor.md) §§7-9; [Troubleshooting](11-troubleshooting.md) §11) — one deployment guide instead of eight; [ZENOH_ADMIN.md](12-zenoh-admin-gui.md) stays separate |
 | 2026-08-02 | Added BDS 1,0/1,7 (Data Link Capability / Common Usage GICB Capability) decoding to the 7 ASTERIX categories that already reuse BDS 3,0/4,0/5,0/6,0 GICB-extraction helpers (CAT-010/011/018/020/021/048/062), sourced from pyModeS |
-| 2026-08-02 | Renamed `layers/cot_layer.py` → `layers/tak_layer.py` and `layers/nvg_layer.py` → `layers/sitaware_layer.py` (vendor-named egress, matching `tak_bridge.py`/`sitaware_bridge.py`'s ingress naming); removed the unused `cot-udp`/`cot-udp-tak` UDP multicast/unicast launcher entries and the `nvg_bridge.py` NVG-XML ingress bridge (SitaWare ingress is REST-only now) |
+| 2026-08-02 | Renamed `layers/cot_layer.py` → `layers/vendors/tak/tak_layer.py` and `layers/nvg_layer.py` → `layers/vendors/tak/systematic/sitaware_layer.py` (vendor-named egress, matching `tak_bridge.py`/`sitaware_bridge.py`'s ingress naming); removed the unused `cot-udp`/`cot-udp-tak` UDP multicast/unicast launcher entries and the `nvg_bridge.py` NVG-XML ingress bridge (SitaWare ingress is REST-only now) |
 | 2026-08-02 | Consolidated every EFDI-authored `.proto` schema under `compose/protocols/proto/` (was split across `compose/protocols/random/`, `compose/protocols/vendors/proto/`, and `compose/protocols/vendors/sparkplug/`); vendored third-party schemas (SAPIENT `sapient_msg/`, Sparkplug B) stay under their own `vendors/<name>/` directory |
 | 2026-08-28 | `zenoh-admin`'s backing store switched from MariaDB to PostgreSQL 18 (its own container, port `ZENOH_ADMIN_DB_PORT` default `5433`); new `EFDI_DB_DATA_DIR` variable pins the datadir to local disk, kept deliberately outside `POD_STATE_DIR` now that the latter can live on a JuiceFS mount. `scripts/migrate_mariadb_to_postgres.py` carries existing accounts/audit log/PKI data across for deployments installed before this date. |
 

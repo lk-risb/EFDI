@@ -14,7 +14,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "compose"))
 sys.path.insert(0, str(ROOT / "compose" / "control"))
 sys.path.insert(0, str(ROOT / "compose" / "bridges"))
-sys.path.insert(0, str(ROOT / "compose" / "layers"))
+sys.path.insert(0, str(ROOT / "compose" / "layers" / "vendors" / "tak"))
 
 import tak_alert_layer  # noqa: E402
 

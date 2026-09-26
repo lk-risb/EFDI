@@ -12,7 +12,7 @@ sys.path.insert(0, str(ROOT / "compose"))
 sys.path.insert(0, str(ROOT / "compose" / "control"))
 sys.path.insert(0, str(ROOT / "compose" / "protocols"))
 
-from protocols.random.nffi import (  # noqa: E402
+from protocols.vendors.nffi.nffi import (  # noqa: E402
     MAX_NFFI_XML,
     OUTPUT_TOPICS,
     _echelon,

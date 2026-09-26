@@ -11,9 +11,9 @@ sys.path.insert(0, str(ROOT / "compose"))
 sys.path.insert(0, str(ROOT / "compose" / "control"))
 sys.path.insert(0, str(ROOT / "compose" / "protocols"))
 
-from protocols.random.cap import parse_cap  # noqa: E402
-from protocols.random.mission_route import normalize as normalize_route  # noqa: E402
-from protocols.random.sensor_health import normalize as normalize_health  # noqa: E402
+from protocols.vendors.random.cap import parse_cap  # noqa: E402
+from protocols.vendors.random.mission_route import normalize as normalize_route  # noqa: E402
+from protocols.vendors.random.sensor_health import normalize as normalize_health  # noqa: E402
 
 
 class TranslationLayerTests(unittest.TestCase):

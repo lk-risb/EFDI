@@ -31,7 +31,7 @@ import urllib.request
 from http_json import read_json_response
 from namespace_prefix import topic_root
 import zenoh
-from protocols.gateway import open_session
+from protocols.vendors.random.gateway import open_session
 
 TOPIC_ROOT = topic_root()
 
@@ -182,7 +182,7 @@ def run_devices(pub: "zenoh.Publisher", verbose: bool):
                     published_online += 1
 
                 pub.put(json.dumps(payload).encode(),
-                        encoding=zenoh.Encoding.APPLICATION_JSON)
+                        encoding=zenoh.Encoding.APPLICATION_JSON.with_schema("efdi:dronuradaras_device_status"))
                 if verbose:
                     print("DEV", payload["sensor_name"],
                           "online={}".format(payload["is_online"]),
@@ -203,7 +203,7 @@ def run_devices(pub: "zenoh.Publisher", verbose: bool):
                     "_delete":     True,
                 }
                 pub.put(json.dumps(payload).encode(),
-                        encoding=zenoh.Encoding.APPLICATION_JSON)
+                        encoding=zenoh.Encoding.APPLICATION_JSON.with_schema("efdi:dronuradaras_device_status"))
                 removed_offline += 1
 
             print("Devices: {} online published, {} newly offline removed ({} total registered)".format(
@@ -243,7 +243,7 @@ def _publish_sensor_alert(pub_dev: "zenoh.Publisher", dev_id: str, last_detectio
     }
     if audio_url:
         payload["last_detection_audio_url"] = audio_url
-    pub_dev.put(json.dumps(payload).encode(), encoding=zenoh.Encoding.APPLICATION_JSON)
+    pub_dev.put(json.dumps(payload).encode(), encoding=zenoh.Encoding.APPLICATION_JSON.with_schema("efdi:dronuradaras_device_status"))
 
 
 def run_detections(pub_dev: "zenoh.Publisher", verbose: bool):

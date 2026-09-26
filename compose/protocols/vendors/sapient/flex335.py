@@ -26,12 +26,12 @@ from typing import Iterator
 import uuid
 
 from namespace_prefix import topic_root
-from protocols.gateway import ZError, open_session, publish_dual, publish_native, subscribe
-from protocols.track_views import (
+from protocols.vendors.random.gateway import ZError, open_session, publish_dual, publish_native, subscribe
+from protocols.vendors.random.track_views import (
     native_topic,
     semantic_topic,
 )
-from protocols.proto.flex335_pb2 import SapientFlex335Track
+from protocols.vendors.random.proto.flex335_pb2 import SapientFlex335Track
 
 # Outbound (EFDI -> SAPIENT) encoders live in this same file, alongside the
 # inbound decoder above — one file per protocol, both directions. Encoding
@@ -1216,7 +1216,7 @@ def sapient_topic(topic: str) -> str:
     the key always knows what the bytes are — and versioned like every other
     view so the goat boundary admits it.
     """
-    from protocols.track_views import view_key
+    from protocols.vendors.random.track_views import view_key
     return view_key(topic, "sapient")
 
 
@@ -1231,8 +1231,8 @@ def publish_sapient(session, topic: str, track: dict, zenoh, node_id: str = "") 
     except Exception as exc:  # noqa: BLE001 — never break the other tiers
         print("sapient encode failed for {}: {}".format(topic, exc), flush=True)
         return
-    from protocols.data_stats import record_out
-    from protocols.track_views import proto_encoding
+    from protocols.vendors.random.data_stats import record_out
+    from protocols.vendors.random.track_views import proto_encoding
     session.put(sapient_topic(topic), payload, encoding=proto_encoding(message, zenoh))
     record_out("egress-sapient", len(payload))
 

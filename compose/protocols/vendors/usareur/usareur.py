@@ -15,8 +15,8 @@ import json
 import time
 
 from google.protobuf.message import DecodeError
-from protocols.gateway import TOPIC_ROOT, open_session, payload_bytes, subscribe
-from schemas.vendors.usareur.adsb_aircraft_pb2 import AircraftBatch
+from protocols.vendors.random.gateway import TOPIC_ROOT, open_session, payload_bytes, subscribe
+from schemas.vendors.usareur.proto.adsb_aircraft_pb2 import AircraftBatch
 
 _TOPIC_SUFFIX = "/adsb/aircraft/snapshot/v1"
 INPUT_TOPIC = TOPIC_ROOT + "/raw/backbone/**"

@@ -329,8 +329,8 @@ supervisor is always running; a crashed feed comes back on its own.
 
 ### Start everything and keep it running
 ```bash
-./start.sh                 # interactive menu, or:
-./start.sh --service presence   # start one service non-interactively
+./scripts/start.sh                 # interactive menu, or:
+./scripts/start.sh --service presence   # start one service non-interactively
 ```
 The supervisor keeps configured services alive; `presence` announces them.
 

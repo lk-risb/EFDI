@@ -145,7 +145,7 @@ SITAWARE_HQ_NVG_MAX_TRACKS=10000
 > out on every HQ poll even though the source is still reporting. See
 > [Troubleshooting → tracks flash / disappear and reappear on a fixed cycle](11-troubleshooting.md#tracks-flash--disappear-and-reappear-on-a-fixed-cycle).
 
-Start `sitaware-hq-nvg` from `./start.sh`, or use `./run.sh all`. Test from the HQ Windows host without printing operational data:
+Start `sitaware-hq-nvg` from `./scripts/start.sh`, or use `./scripts/run.sh all`. Test from the HQ Windows host without printing operational data:
 
 ```powershell
 curl.exe -k -u "<feed-user>:<feed-password>" -sS -o NUL `
