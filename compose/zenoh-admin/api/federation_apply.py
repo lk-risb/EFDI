@@ -4,6 +4,7 @@ import os
 import time
 
 import zenoh
+import zenoh.ext
 
 from .config import CONFIG_PATH, _extract_fields, apply_rendered_config, atomic_write
 from .db import SessionLocal
@@ -85,8 +86,11 @@ def _open_local_session() -> "zenoh.Session":
     """Open a client session to this pod's own local router. Same connection
     config as start_federation_subscriber()'s long-lived session — factored
     out so a post-restart status publish can use a FRESH one (see
-    _publish_status_fresh)."""
-    return open_local_session()
+    _publish_status_fresh). timestamping=True: required for
+    zenoh.ext.declare_advanced_publisher (see _status_publisher_for) —
+    confirmed live it refuses to declare without it. Both callers of this
+    function get it; harmless where the advanced publisher isn't used."""
+    return open_local_session(timestamping=True)
 
 
 def _federated_candidate_error(fields) -> str | None:
@@ -137,11 +141,37 @@ def _status_payload(version: int, health: str, error: str | None) -> bytes:
     return json.dumps({"payload": body, "signature": signature}, separators=(",", ":")).encode()
 
 
+# One goat.ext.AdvancedPublisher per shared session, keyed by session identity
+# and declared lazily on first use — see _status_publisher_for. Config-apply
+# status is the textbook "must-land" case: applies are infrequent (hours or
+# days apart), so a subscriber (the parent's own monitor, panoscope) has no
+# way to tell "no news" apart from "this pod's federation subscriber died"
+# from a plain put(). The heartbeat answers that; the cache lets a
+# late-joining or just-reconnected subscriber pull the current status
+# instead of waiting for the next config apply to see anything at all.
+_status_publishers: "dict[int, zenoh.ext.AdvancedPublisher]" = {}
+
+
+def _status_publisher_for(session: "zenoh.Session") -> "zenoh.ext.AdvancedPublisher":
+    key = id(session)
+    publisher = _status_publishers.get(key)
+    if publisher is None:
+        publisher = zenoh.ext.declare_advanced_publisher(
+            session,
+            _status_topic(),
+            cache=zenoh.ext.CacheConfig(max_samples=10),
+            sample_miss_detection=zenoh.ext.MissDetectionConfig(heartbeat=30.0),
+            publisher_detection=True,
+        )
+        _status_publishers[key] = publisher
+    return publisher
+
+
 def _publish_status(session: "zenoh.Session", version: int, health: str, error: str | None = None):
     """Publish status on the shared subscriber session — only safe BEFORE a
     router restart (the link is still up). Post-restart, use
     _publish_status_fresh instead."""
-    session.put(_status_topic(), _status_payload(version, health, error))
+    _status_publisher_for(session).put(_status_payload(version, health, error))
 
 
 def _publish_status_fresh(version: int, health: str, error: str | None = None):
@@ -320,10 +350,12 @@ async def _watch_federation_session(loop: asyncio.AbstractEventLoop):
             _federation_session = replacement
             fingerprint = new_fingerprint
             if old_session is not None:
+                _status_publishers.pop(id(old_session), None)
                 old_session.close()
             print("[federation] reloaded local session after config change", flush=True)
     finally:
         if _federation_session is not None:
+            _status_publishers.pop(id(_federation_session), None)
             _federation_session.close()
             _federation_session = None
 

@@ -5,12 +5,15 @@
 //
 // Placeholders (all supplied by first-boot.sh from compose/.env + scripts/gen-certs.sh output):
 //   ${ZENOH_LOCAL_TCP_PORT}   plaintext TCP listen port for local-only clients (bridges, zenoh-admin GUI)
-//   ${ZENOH_LISTEN_ENDPOINTS} JSON array of the two listen endpoints — mesh-facing port first
+//   ${ZENOH_LISTEN_ENDPOINTS} JSON array of the listen endpoints — mesh-facing port first
 //                             (tls:// normally, tcp:// only for the plaintext EFDI LTU SANDBOX
 //                             profile — see config.py's _TLS_PROFILES "plaintext" flag), then
-//                             the local-only tcp:// loopback port. Pre-built as a whole array so
-//                             the mesh-facing entry's scheme can vary by profile without a
-//                             templating conditional (envsubst/str.replace have none).
+//                             the local-only tcp:// loopback port, then OPTIONALLY a third
+//                             quic:// entry when "Enable QUIC listener" is on in the admin UI
+//                             (skipped on the plaintext profile — no cert material to hand it).
+//                             Pre-built as a whole array so the mesh-facing entry's scheme (and
+//                             the optional QUIC entry) can vary without a templating conditional
+//                             (envsubst/str.replace have none).
 //   ${ZENOH_CONNECT_ENDPOINTS} JSON list containing the explicitly configured remote endpoints
 //                              this pod dials OUT, or [] when this pod is the fabric root
 //   ${PARTNER_NAMESPACE}      the pod's first-party write/read prefix (its slot, or release/<partner>)
@@ -201,12 +204,50 @@
         permission: "allow",
         key_exprs: ["**"],
       },
+      {
+        // zenoh.ext's advanced pub/sub (declare_advanced_subscriber /
+        // declare_advanced_publisher — history, recovery, cache,
+        // sample-miss heartbeat) puts its own protocol traffic under
+        // "<topic>/@adv/pub" and "<topic>/@adv/sub/<zid>/..." NESTED under
+        // whatever topic it's extending. Confirmed live 2026-09-26 against a
+        // throwaway zenohd 1.9.0: even pod-backbone-read's own bare "**"
+        // above does NOT cover these — Zenoh's "**" never matches a chunk
+        // starting with "@", full stop, not just across a prefix boundary
+        // (the "@config/..." federation topics are the OTHER instance of
+        // this same rule in this file; this is the first time it bites
+        // NESTED under a topic rather than at the top of one). Without this,
+        // an advanced subscriber/publisher declares without error but its
+        // history/cache/recovery machinery is silently ACL-denied — it
+        // just behaves like a plain subscriber/publisher with no visible
+        // failure. Scoped to local-tcp only (matching where this is
+        // actually used today: tak_layer.py's advanced subscriber,
+        // federation_apply.py's advanced publisher, both native local-tcp
+        // clients) rather than broadened onto mtls-peer, which has no
+        // current user of this feature.
+        id: "pod-advanced-pubsub-internals",
+        messages: ["put", "delete", "declare_subscriber", "query", "declare_queryable", "reply"],
+        flows: ["egress", "ingress"],
+        permission: "allow",
+        key_exprs: ["**/@adv/**"],
+      },
     ],
     subjects: [
       {
         // Any mTLS peer rooted in the EFDI root CA (pod-local clients + remote fabric peers).
+        //
+        // "quic" is for the optional QUIC listener (Connection policy -> "Enable
+        // QUIC listener" in the admin UI; see _render_config in config.py) —
+        // confirmed live 2026-09-26 against a throwaway zenohd 1.9.0 (matching
+        // this repo's pin) with this exact rules/subjects/policies shape: a
+        // publisher connecting over quic:// was admitted with link_protocols:
+        // ["tls", "quic"] and denied (logged "did not match any configured ACL
+        // subject... Default permission Deny") with link_protocols: ["tls"]
+        // alone, publisher and subscriber on separate sessions in both cases
+        // (a same-session pub/sub short-circuits locally and never touches this
+        // ACL at all — the first test attempt got this wrong and showed a false
+        // "admitted" for both configurations before the sessions were split).
         id: "mtls-peer",
-        link_protocols: ["tls"],
+        link_protocols: ["tls", "quic"],
       },
       {
         // Local plaintext TCP clients (bridges + local tooling on the pod's own host).
@@ -216,7 +257,7 @@
     ],
     policies: [
       { rules: ["pod-firstparty", "pod-inbound", "pod-admin-introspect", "pod-federation-config"], subjects: ["mtls-peer"] },
-      { rules: ["pod-firstparty", "pod-inbound", "pod-admin-introspect", "pod-federation-config", "pod-backbone-read"], subjects: ["local-tcp"] },
+      { rules: ["pod-firstparty", "pod-inbound", "pod-admin-introspect", "pod-federation-config", "pod-backbone-read", "pod-advanced-pubsub-internals"], subjects: ["local-tcp"] },
     ],
   },
 }

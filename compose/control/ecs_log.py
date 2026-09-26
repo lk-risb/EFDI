@@ -39,7 +39,7 @@ class _ECSFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         doc = {
             "@timestamp": datetime.datetime.fromtimestamp(
-                record.created, tz=datetime.timezone.utc
+                record.created, tz=datetime.UTC
             ).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z",
             "ecs.version": _ECS_VERSION,
             "log.level": record.levelname.lower(),

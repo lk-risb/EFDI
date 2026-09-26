@@ -50,13 +50,20 @@ def local_connection_details() -> tuple[str, bool]:
     return _endpoint(fields), bool(fields.verify_name_on_connect) if fields is not None else True
 
 
-def open_local_session() -> "zenoh.Session":
+def open_local_session(*, timestamping: bool = False) -> "zenoh.Session":
     fields = _fields()
     endpoint = _endpoint(fields)
     conf = zenoh.Config()
     conf.insert_json5("mode", '"client"')
     conf.insert_json5("connect/endpoints", json.dumps([endpoint]))
     apply_zenoh_auth(conf)
+    if timestamping:
+        # zenoh.ext.declare_advanced_publisher refuses to declare at all
+        # without this — confirmed live against zenohd 1.9.0: "Cannot create
+        # AdvancedPublisher ... with Sequencing::Timestamp: the 'timestamping'
+        # setting must be enabled". Off by default here since every other
+        # caller of this session helper has no use for it.
+        conf.insert_json5("timestamping/enabled", "true")
 
     # Host-native processes normally use the plaintext loopback listener below.
     # If an installation selects a TLS loopback endpoint, keep using the pod's

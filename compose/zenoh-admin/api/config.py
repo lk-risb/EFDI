@@ -193,6 +193,14 @@ class ConfigFields(BaseModel):
     # clients. New clients may submit several explicitly configured links.
     fabric_endpoints: list[str] = Field(default_factory=list)
     fabric_tls_profile: str = "efdi"
+    # Additional QUIC listener alongside the mesh-facing TLS one, same mTLS
+    # cert/key/CA (QUIC reuses the TLS 1.3 handshake — see _render_config).
+    # Off by default: this fabric's ACL was written and confirmed live
+    # against TLS/TCP peers only, so a QUIC peer's link_protocols match is
+    # unverified until checked against a running router (see the template's
+    # "unverified" comment on the mtls-peer subject).
+    enable_quic: bool = False
+    quic_port: int = 7449
 
     @field_validator("partner_namespace", "inbound_namespace", "namespace_prefix")
     @classmethod
@@ -237,7 +245,7 @@ class ConfigFields(BaseModel):
             raise ValueError(f"unknown fabric TLS profile: {v}")
         return v
 
-    @field_validator("mtls_port", "local_tcp_port")
+    @field_validator("mtls_port", "local_tcp_port", "quic_port")
     @classmethod
     def _check_port(cls, v: int) -> int:
         if not (1 <= v <= 65535):
@@ -319,6 +327,8 @@ def _extract_fields(raw: str) -> ConfigFields:
     # from the always-tcp:// local-only loopback endpoint.
     mtls_port = None
     local_tcp_port = None
+    enable_quic = False
+    quic_port = 7449
     for ep in data["listen"]["endpoints"]:
         m = re.match(r"(?:tls|tcp)/0\.0\.0\.0:(\d+)$", ep)
         if m:
@@ -326,6 +336,10 @@ def _extract_fields(raw: str) -> ConfigFields:
         m = re.match(r"tcp/127\.0\.0\.1:(\d+)$", ep)
         if m:
             local_tcp_port = int(m.group(1))
+        m = re.match(r"quic/0\.0\.0\.0:(\d+)$", ep)
+        if m:
+            enable_quic = True
+            quic_port = int(m.group(1))
 
     connect_endpoints = data["connect"]["endpoints"]
     if not isinstance(connect_endpoints, list):
@@ -396,6 +410,8 @@ def _extract_fields(raw: str) -> ConfigFields:
         plugins_loading_enabled=plugins_loading_enabled,
         fabric_endpoints=connect_endpoints,
         fabric_tls_profile=fabric_tls_profile,
+        enable_quic=enable_quic,
+        quic_port=quic_port,
     )
 
 
@@ -413,10 +429,18 @@ def _render_config(fields: ConfigFields) -> str:
     # mesh-facing listener binds tcp:// instead of tls://. Every other
     # profile keeps the mTLS scheme unchanged.
     mesh_scheme = "tcp" if tls_profile.get("plaintext") else "tls"
-    listen_endpoints = json5.dumps([
+    listen_endpoints_list = [
         "{}/0.0.0.0:{}".format(mesh_scheme, fields.mtls_port),
         "tcp/127.0.0.1:{}".format(fields.local_tcp_port),
-    ])
+    ]
+    # QUIC reuses the same transport.link.tls cert/key/CA as the mesh-facing
+    # TLS listener (same TLS 1.3 handshake underneath) — nothing else to
+    # configure for it. Meaningless on the plaintext sandbox profile (no cert
+    # material to hand QUIC), so silently skipped there rather than emitting
+    # a listener that can never actually negotiate.
+    if fields.enable_quic and not tls_profile.get("plaintext"):
+        listen_endpoints_list.append("quic/0.0.0.0:{}".format(fields.quic_port))
+    listen_endpoints = json5.dumps(listen_endpoints_list)
     subs = {
         "ZENOH_LISTEN_ENDPOINTS": listen_endpoints,
         "ZENOH_LOCAL_TCP_PORT": str(fields.local_tcp_port),

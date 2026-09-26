@@ -31,6 +31,8 @@ interface ConfigFields {
   plugins_loading_enabled: boolean
   fabric_endpoints: string[]
   fabric_tls_profile: string
+  enable_quic: boolean
+  quic_port: number
 }
 
 interface FabricPreset {
@@ -51,6 +53,8 @@ const EMPTY_FIELDS: ConfigFields = {
   plugins_loading_enabled: true,
   fabric_endpoints: [],
   fabric_tls_profile: 'efdi',
+  enable_quic: false,
+  quic_port: 7449,
 }
 
 interface FederatedChild {
@@ -223,6 +227,8 @@ function ConfigPage() {
         fabric_endpoints: data.fields.fabric_endpoints ?? (data.fields.fabric_endpoint ? [data.fields.fabric_endpoint] : []),
         fabric_tls_profile: data.fields.fabric_tls_profile ?? 'efdi',
         publish_prefix: data.fields.publish_prefix ?? data.fields.namespace_prefix ?? '',
+        enable_quic: data.fields.enable_quic ?? false,
+        quic_port: data.fields.quic_port ?? 7449,
       }
       setLocalFields(normalized)
       if (target === 'local') setFields(normalized)
@@ -585,6 +591,15 @@ function ConfigPage() {
                     value={fields.local_tcp_port} onChange={e => set('local_tcp_port', Number(e.target.value))} />
                 </Field>
               </div>
+              <Toggle label="Enable QUIC listener" disabled={!canWrite}
+                help="Additional listener on the port below, alongside the mesh-facing TLS one — same mTLS cert/key/CA, no separate setup. Better than TLS/TCP under lossy or mobile links (no head-of-line blocking, survives an IP change); TLS stays the default and there's no need to switch unless a specific peer benefits. Has no effect on the plaintext EFDI LTU SANDBOX profile (no cert material to hand it). Off by default — enable per deployment as needed."
+                checked={fields.enable_quic} onChange={v => set('enable_quic', v)} />
+              {fields.enable_quic && (
+                <Field label="QUIC port" help="UDP port for the QUIC listener (default 7449). Must differ from the mTLS and local TCP ports above.">
+                  <input type="number" min={1} max={65535} disabled={!canWrite} className={inputClass}
+                    value={fields.quic_port} onChange={e => set('quic_port', Number(e.target.value))} />
+                </Field>
+              )}
               <Field label="Fabric endpoints" help="Explicit Zenoh peers this pod dials over mTLS. Use two or more for redundant uplinks or same-level links.">
                 <div className="mb-2 flex flex-wrap items-center gap-2">
                   <span className="text-xs text-zinc-500">Switch fabric:</span>
