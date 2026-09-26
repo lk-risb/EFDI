@@ -194,7 +194,7 @@ function NetworkPage() {
 
   return (
     <Layout>
-      <div className="mx-auto max-w-7xl p-6">
+      <div className="p-6">
         <PageHeader
           title="Managed Router Network"
           count={topology.length}
@@ -329,6 +329,27 @@ function NetworkPage() {
 
         {canManage && (
           <>
+            <h2 className="mb-3 mt-6 text-sm font-semibold text-zinc-900 dark:text-zinc-100">Upstream authority</h2>
+            <div className="grid gap-3 md:grid-cols-2">
+              {(() => {
+                const ancestors = trust?.authorities.filter(a => a.relationship === 'ancestor') ?? []
+                return ancestors.length === 0 ? (
+                  <div className="hud-card hud-glass border border-zinc-200 dark:border-white/10 p-4 md:col-span-2">
+                    <p className="text-sm text-zinc-500">No parent configured — this pod is a fabric root.</p>
+                  </div>
+                ) : ancestors.map(a => (
+                  <div key={a.id} className="hud-frame relative hud-card hud-glass border border-zinc-200 dark:border-white/10 p-4">
+                    <HudCorners />
+                    <p className="text-sm font-medium text-zinc-800 dark:text-zinc-200">{a.namespace_scope}</p>
+                    <p className="text-xs font-mono break-all text-zinc-500">{a.identity_uri}</p>
+                    <p className="mt-1 text-[11px] text-zinc-500">
+                      trust: {a.state} · expires {new Date(a.not_after).toLocaleDateString()} · max delegation depth {a.max_delegation_depth}
+                    </p>
+                  </div>
+                ))
+              })()}
+            </div>
+
             <h2 className="mb-3 mt-6 text-sm font-semibold text-zinc-900 dark:text-zinc-100">Direct management relationships</h2>
             <div className="grid gap-3 md:grid-cols-2">
               {children.length === 0 ? (

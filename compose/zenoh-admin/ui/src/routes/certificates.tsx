@@ -293,7 +293,7 @@ function CertificatesPage() {
 
   return (
     <Layout>
-      <div className="mx-auto max-w-7xl p-6">
+      <div className="p-6">
         <PageHeader eyebrow="SECURITY / CERTIFICATES" title="Certificate Authority" count={certs?.length} countLabel="local identities" />
 
         {bootstrapStatus?.bootstrap === false && (

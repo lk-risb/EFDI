@@ -217,7 +217,7 @@ function RuntimePage() {
 
   return (
     <Layout>
-      <div className="p-6 max-w-7xl">
+      <div className="p-6">
         <PageHeader title="Runtime Control" actions={<button onClick={load} disabled={loading} className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-zinc-600 hover:bg-zinc-200/50 disabled:opacity-50 dark:text-zinc-400 dark:hover:bg-white/[0.05]"><RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Reload</button>} />
         {!canWrite && <div className="mb-5 rounded-md border border-yellow-500/30 bg-yellow-500/10 px-4 py-3 text-xs text-yellow-700 dark:text-yellow-300">Read-only view. A superadmin is required to change settings or control processes.</div>}
 
