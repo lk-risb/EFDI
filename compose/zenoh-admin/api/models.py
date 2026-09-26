@@ -300,7 +300,7 @@ class LinkCredential(Base):
 
 class SitawareIngressTarget(Base):
     """One independent SitaWare HQ ingress source (EFDI polls HQ over REST via
-    bridges/sitaware_bridge.py). Each enabled row gets its own bridge process,
+    bridges/vendors/sitaware/sitaware_bridge.py). Each enabled row gets its own bridge process,
     reconciled by admin_control.py — see control/admin_control.py's
     _reconcile_sitaware_targets() and api/sitaware_targets.py for the
     manifest/secrets hand-off. Live running/pid status is reported by
@@ -322,7 +322,7 @@ class SitawareIngressTarget(Base):
 
 class SitawareEgressTarget(Base):
     """One independent SitaWare HQ egress feed (HQ polls EFDI's NVG 2.0.2 feed
-    via layers/sitaware_layer.py). Symmetric to SitawareIngressTarget above —
+    via layers/vendors/tak/systematic/sitaware_layer.py). Symmetric to SitawareIngressTarget above —
     each enabled row gets its own feed-server process on its own bind/port,
     reconciled by admin_control.py. Shared settings that don't vary per target
     (TLS cert/key, staleness threshold, max tracks, anonymous/insecure-http

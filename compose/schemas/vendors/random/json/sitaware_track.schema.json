@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://efdi.ltu/schemas/json/sitaware_track.schema.json",
+  "title": "SitaWare-ingested track",
+  "description": "Published BY bridges/sitaware_bridge.py via protocols.gateway.publish_dual() to {TOPIC_ROOT}/{domain}/{entity}/c2/{aff}/{entity}/{id}/tracks/v1 (domain/aff/entity slugged from the unit's own SIDC by sidc_to_topic()), plus sibling .../proto/tracks/v1 (NormalizedTrack protobuf) and .../sapient/tracks/v1 (BSI Flex 335) views. This schema documents the JSON leg. Consumed by layers/tak_layer.py and layers/sitaware_layer.py, which only forward samples whose key ends /tracks/v1.",
+  "x-efdi-topic": "{TOPIC_ROOT}/{domain}/sitaware/c2/{aff}/{entity_type}/{id}/tracks/v1",
+  "x-efdi-producer": "bridges/sitaware_bridge.py",
+  "x-efdi-consumer": "layers/tak_layer.py, layers/sitaware_layer.py",
+  "type": "object",
+  "required": ["_ts", "_src", "uid", "callsign", "lat_deg", "lon_deg", "sidc"],
+  "properties": {
+    "_ts": {"type": "number", "description": "Unix epoch seconds."},
+    "_src": {"type": "string", "description": "Fixed source tag identifying this bridge."},
+    "uid": {"type": "string", "description": "Unit identifier from the SitaWare record (uid/id/unitId/uuid, first present)."},
+    "callsign": {"type": "string", "description": "Falls back to uid's own name/label if no distinct callsign field was present."},
+    "lat_deg": {"type": "number", "minimum": -90, "maximum": 90},
+    "lon_deg": {"type": "number", "minimum": -180, "maximum": 180},
+    "sidc": {"type": "string", "description": "MIL-STD-2525/APP-6 symbol ID code; drives sidc_to_topic()'s domain/affiliation/entity-type routing and 2525 map symbology. May be empty for an unrecognized symbol."},
+    "target_type": {"type": "string", "description": "Derived from the SAME SIDC via entity_type_for_sidc() (aircraft/unit/vessel/satellite) — feeds flex335.py's _classification_for() for the SAPIENT view, which has no notion of SIDC. Deliberately kept alongside sidc rather than replacing it: two different consumers (2525 symbology vs SAPIENT classification), no shared guideline yet on picking one identification scheme, so both exist."},
+    "alt_m": {"type": "number", "description": "Omitted (not null) when the source altitude was missing or non-finite."},
+    "speed_ms": {"type": "number", "minimum": 0, "description": "Omitted when the source speed was missing, negative, or non-finite."},
+    "heading_deg": {"type": "number", "minimum": 0, "maximum": 360, "description": "Normalized into [0, 360). Omitted when the source heading was missing or non-finite."}
+  },
+  "additionalProperties": false
+}

@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "compose"))
 sys.path.insert(0, str(ROOT / "compose" / "control"))
 sys.path.insert(0, str(ROOT / "compose" / "protocols"))
-sys.path.insert(0, str(ROOT / "compose" / "layers"))
+sys.path.insert(0, str(ROOT / "compose" / "layers" / "vendors" / "tak"))
 
 import tak_layer  # noqa: E402
 

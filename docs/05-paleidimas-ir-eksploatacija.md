@@ -3,7 +3,7 @@
 ## Steko paleidimas
 
 ```bash
-./start.sh
+./scripts/start.sh
 ```
 
 Interaktyvus paleidiklis rodo visas paslaugas su jų parengties būsena. Įjunkite/išjunkite numeriu, tada paspauskite **Enter** pasirinktoms paslaugoms paleisti.
@@ -88,8 +88,8 @@ Po sėkmingo paleidimo `start.sh` išsaugo pasirinktų paslaugų sąrašą ir pa
 ### Paslaugų stabdymas
 
 ```bash
-./stop.sh              # Stabdo visus bridge procesus
-./stop.sh layers       # Stabdo tik išvesties sluoksnius (tak-layer, track-fusion)
+./scripts/stop.sh              # Stabdo visus bridge procesus
+./scripts/stop.sh layers       # Stabdo tik išvesties sluoksnius (tak-layer, track-fusion)
 ```
 
 ### Žurnalų stebėjimas
@@ -110,7 +110,7 @@ kill -0 $(cat $POD_STATE_DIR/.pids/asterix.pid) && echo ok        # Konkretaus p
 ### `health.sh` — savaiminis pataisymas, savitestas ir interaktyvus problemų sprendimas
 
 ```bash
-./health.sh
+./scripts/health.sh
 ```
 
 Paleiskite bet kada, savarankiškai — jis nieko netraukia/nesisiunčia (tai
@@ -147,7 +147,7 @@ Jis daro tris dalykus iš eilės:
 ### `update.sh` — atsisiuntimas, perstatymas ir pakartotinis patikrinimas
 
 ```bash
-./update.sh
+./scripts/update.sh
 ```
 
 Atnaujina hosto OS paketus, atsisiunčia naujausią commit'ą, perstato viską,
@@ -160,7 +160,7 @@ pod'as veikti.
 ### `reinstall.sh` — pilnas išardymas ir perstatymas
 
 ```bash
-./reinstall.sh
+./scripts/reinstall.sh
 ```
 
 Išardo konteinerius ir vietinius atvaizdus, tada perstato iš dabartinės

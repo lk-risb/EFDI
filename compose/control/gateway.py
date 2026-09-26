@@ -5,4 +5,4 @@ modules import `gateway` as a top-level module because they are also
 executable as standalone scripts from compose/protocols/.
 """
 
-from protocols.gateway import *  # noqa: F401,F403
+from protocols.vendors.random.gateway import *  # noqa: F401,F403

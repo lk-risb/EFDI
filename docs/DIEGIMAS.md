@@ -19,9 +19,9 @@ tada per vietinę Zenoh magistralę pateikia juos TAK ir SitaWare klientams.
 Debian 13 arba RHEL/Rocky/AlmaLinux 9/10 sistemoje rankiniu būdu įdiegiate
 tik `curl` (paprastai jau yra) — visa kita yra viena komanda:
 ```bash
-curl -fsSL https://raw.githubusercontent.com/lk-risb/EFDI/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/lk-risb/EFDI/main/scripts/install.sh | bash
 ```
-`./install.sh` atnaujina OS (`apt`/`dnf` upgrade) ir savaime įdiegia git,
+`./scripts/install.sh` atnaujina OS (`apt`/`dnf` upgrade) ir savaime įdiegia git,
 Python 3.10+, Docker Engine + Compose papildinį (iš oficialios Docker
 saugyklos, ne distributyvo paketą), openssl ir gettext tiek Debian (apt),
 tiek RHEL/Rocky/Alma (dnf) sistemose, jei jų trūksta — visiškai tuščiame
@@ -72,7 +72,7 @@ sudo apt update && sudo apt upgrade -y
 sudo dnf upgrade -y
 ```
 
-Jei buvo atnaujintas branduolys, perkraukite (`sudo reboot`). `./install.sh` šį žingsnį atlieka automatiškai — čia jis pateiktas kaip rankinio/offline diegimo nuoroda.
+Jei buvo atnaujintas branduolys, perkraukite (`sudo reboot`). `./scripts/install.sh` šį žingsnį atlieka automatiškai — čia jis pateiktas kaip rankinio/offline diegimo nuoroda.
 
 #### Įdiekite git ir bazinius įrankius
 
@@ -174,7 +174,7 @@ atskiro apt/dnf nustatymo nereikia:
 curl -fsSL https://pkgs.netbird.io/install.sh | sh
 ```
 Dar **neprisijunkite** prie tinklo — setup raktą duoda jūsų organizacijos
-paskyros administratorius, o `./install.sh` pats to paklaus ir prisijungs
+paskyros administratorius, o `./scripts/install.sh` pats to paklaus ir prisijungs
 **§2 Diegimas** žemiau (būtent tai daro jo automatinis Tinklo žingsnis).
 Patikrinkite tik, ar dvejetainis failas įdiegtas:
 ```bash
@@ -183,7 +183,7 @@ netbird version
 
 #### Atidarykite ugniasienės prievadus
 
-Skirtingai nei visa kita šiame poskyryje, `./install.sh` **neatlieka** šio
+Skirtingai nei visa kita šiame poskyryje, `./scripts/install.sh` **neatlieka** šio
 žingsnio už jus — kuriuos prievadus atidaryti priklauso nuo to, kuriuos
 jutiklių tiltus įjungsite, o tai yra po-diegimo, WebUI valdomas pasirinkimas
 (žr. **§3 Konfigūracija**), o ne kažkas, ką diegyklė gali nuspręsti iš anksto.
@@ -255,9 +255,9 @@ ATAK/WinTAK klientai takelius gauna tik per TAK serverį (`tak-layer` paslauga);
 
 ### Sertifikatai
 
-Zenoh mTLS sertifikatai išduodami savarankiškai — jokio išorinio CA ar vendor bundle. `scripts/gen-certs.sh <namespace>` sugeneruoja (vieną kartą) EFDI root CA kataloge `compose/certs/efdi/`, tada pasirašo lapo sertifikatą+raktą nurodytam namespace; tas pats root CA naudojamas visiems vėlesniems namespace'ams.
+Zenoh mTLS sertifikatai išduodami savarankiškai — jokio išorinio CA ar vendor bundle. `scripts/gen-certs.sh <namespace>` sugeneruoja (vieną kartą) EFDI root CA kataloge `compose/certs/local/`, tada pasirašo lapo sertifikatą+raktą nurodytam namespace; tas pats root CA naudojamas visiems vėlesniems namespace'ams.
 
-Sugeneruota medžiaga (`efdi-ca-root.pem`, `<NAMESPACE>-cert.pem`, `<NAMESPACE>-key.pem`) saugoma `compose/certs/efdi/` — įtraukta į `.gitignore`, niekada nekomituojama. Kataloge taip pat atskirai laikomi `tak/`, `sitaware/`, `efdi-backbone/` (goat backbone, Desert Bread CA) ir `efdi-ltu/` (LTU sandbox) identitetai — žr. `docs/INSTALL.md` §2.2 (anglų k.). Numatytasis kelias nustatomas `start.sh`; jei norite laikyti jį visai už repozitorijos ribų, perrašykite per `BUNDLE_DIR` faile `compose/.env`.
+Sugeneruota medžiaga (`efdi-ca-root.pem`, `<NAMESPACE>-cert.pem`, `<NAMESPACE>-key.pem`) saugoma `compose/certs/local/` — įtraukta į `.gitignore`, niekada nekomituojama. Kataloge taip pat atskirai laikomi `tak/`, `sitaware/`, `efdi-backbone/` (goat backbone, Desert Bread CA) ir `efdi-ltu/` (LTU sandbox) identitetai — žr. `docs/INSTALL.md` §2.2 (anglų k.). Numatytasis kelias nustatomas `start.sh`; jei norite laikyti jį visai už repozitorijos ribų, perrašykite per `BUNDLE_DIR` faile `compose/.env`.
 
 ---
 
@@ -270,7 +270,7 @@ repozitoriją ir paleidžia diegyklę, kuri pati įdiegia visus 1 skyriaus
 reikalavimus:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/lk-risb/EFDI/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/lk-risb/EFDI/main/scripts/install.sh | bash
 ```
 
 Tas pats, tik pirma nuklonavus rankiniu būdu:
@@ -278,7 +278,7 @@ Tas pats, tik pirma nuklonavus rankiniu būdu:
 ```bash
 git clone <repo-url> EFDI
 cd EFDI
-./install.sh
+./scripts/install.sh
 ```
 
 ### 2.2 Sertifikatų generavimas
@@ -314,8 +314,8 @@ nustatymo, todėl negali tiesiogiai naudoti užšifruoto šaltinio rakto.
 
 ```bash
 # Patikrinimas
-ls compose/certs/efdi/*.pem
-chmod 600 compose/certs/efdi/*-key.pem
+ls compose/certs/local/*.pem
+chmod 600 compose/certs/local/*-key.pem
 ```
 
 ### 2.3 Python virtualios aplinkos kūrimas
@@ -339,7 +339,7 @@ apėjus klaidą „greituoju" būdu, tos paslaugos liktų veikti kitoje Python
 aplinkoje nei ta, kurią ką tik pakeitėte.
 
 `install.sh` taip pat sutvarko keleto pavienių bind-mount'intų būsenos failų
-ir katalogų (`namespace-prefix`, `data-topic-prefix`, `$BUNDLE_DIR/efdi`,
+ir katalogų (`namespace-prefix`, `data-topic-prefix`, `$BUNDLE_DIR/local`,
 `$POD_STATE_DIR/integrations/tak`) grupę ir teises (`chgrp`/`chmod`), kad
 `zenoh-admin` konteineris — jis visada veikia fiksuotu ne-root uid `10001` —
 galėtų juos rašyti. Jei *vėliau* WebUI išsaugojimas (konfigūracija, TAK/
@@ -462,7 +462,7 @@ SITAWARE_HQ_NVG_TLS_KEY=
 ## 4. Steko paleidimas
 
 ```bash
-./start.sh
+./scripts/start.sh
 ```
 
 Interaktyvus paleidiklis rodo visas paslaugas su jų parengties būsena. Įjunkite/išjunkite numeriu, tada paspauskite **Enter** pasirinktoms paslaugoms paleisti.
@@ -546,7 +546,7 @@ Po sėkmingo paleidimo `start.sh` išsaugo pasirinktų paslaugų sąrašą ir pa
 
 Nustatykite `TAK_HOST` ir `TAK_PORT` faile `.env`, tada paleidiklyje pasirinkite `tak-layer`. ATAK/WinTAK klientai takelius gauna tik per TAK serverį — tiesioginio multicast/unicast CoT kelio nėra.
 
-Akustinio jutiklio (dronuradaras.lt) aptiktą droną atskiru GeoChat pranešimu visiems prisijungusiems TAK klientams praneša atskira paslauga `tak_alert_layer` (`layers/tak_alert_layer.py`) — naudoja tą pačią TAK jungtį kaip `tak-layer`, bet pasirenkama paleidiklyje atskirai ir pagal nutylėjimą išjungta. Kol ji neįjungta, aptikimas vis tiek matomas paties jutiklio žymeklio spalvos pasikeitime ir CoT pastabose (remarks) — tiesiog be atskiro iššokančio pranešimo.
+Akustinio jutiklio (dronuradaras.lt) aptiktą droną atskiru GeoChat pranešimu visiems prisijungusiems TAK klientams praneša atskira paslauga `tak_alert_layer` (`layers/vendors/tak/tak_alert_layer.py`) — naudoja tą pačią TAK jungtį kaip `tak-layer`, bet pasirenkama paleidiklyje atskirai ir pagal nutylėjimą išjungta. Kol ji neįjungta, aptikimas vis tiek matomas paties jutiklio žymeklio spalvos pasikeitime ir CoT pastabose (remarks) — tiesiog be atskiro iššokančio pranešimo.
 
 ### SitaWare HQ REST sekimas (pasirinktinis gaunamas adapteris)
 
@@ -590,7 +590,7 @@ Bridge'as nuskaito MIL-STD-2525B SIDC kodus iš SitaWare ir nukreipia kiekvieną
 
 `nffi` prenumeruoja pilnus NFFI XML dokumentus, kuriuos partnerio imtuvas ar aptikimo sistema jau paskelbė Zenoh temoje `…/raw/nffi/{source-id}`. Kiekvienas vienetas išverčiamas į `…/land/nato/c2/friendly/unit/{type}/{id}/sapient`. Modulis pats neturi TCP kliento, klausyklės, galinio taško ar kadravimo logikos — tai sąmoningai atskirta nuo konkretaus produkto ryšio.
 
-Gaunamąją pusę teikia `nffi-bridge` (`bridges/nffi_bridge.py`): jis prisijungia prie partnerio NFFI/FFI serverio (pvz. SitaWare Headquarters „NFFI and FFI Manager"), išskiria pilnus `NFFIMessage`/`track` XML dokumentus iš TCP srauto ir publikuoja neapdorotus baitus į `…/raw/nffi/{source-id}`, kur juos nepakeistus perima `nffi`. Prisijungimo/kadravimo/pakartotinio bandymo struktūra perimta iš pasitvirtinusio `tak_bridge.py` modelio, bet reali NFFI/FFI serverio elgsena (transportas, kuri pusė prisijungia, tikslus kadravimas, numatytasis prievadas) dar nepatvirtinta prieš tikrą galinį tašką — žr. modulio paties docstring, kuriame atskirai nurodyta, kas yra pasitvirtinęs modelis, o kas — nepatikrinta prielaida. Paleidiklyje pasirinkite `nffi-bridge`; jis paklaus `NFFI_HOST`/`NFFI_PORT`.
+Gaunamąją pusę teikia `nffi-bridge` (`bridges/vendors/nffi/nffi_bridge.py`): jis prisijungia prie partnerio NFFI/FFI serverio (pvz. SitaWare Headquarters „NFFI and FFI Manager"), išskiria pilnus `NFFIMessage`/`track` XML dokumentus iš TCP srauto ir publikuoja neapdorotus baitus į `…/raw/nffi/{source-id}`, kur juos nepakeistus perima `nffi`. Prisijungimo/kadravimo/pakartotinio bandymo struktūra perimta iš pasitvirtinusio `tak_bridge.py` modelio, bet reali NFFI/FFI serverio elgsena (transportas, kuri pusė prisijungia, tikslus kadravimas, numatytasis prievadas) dar nepatvirtinta prieš tikrą galinį tašką — žr. modulio paties docstring, kuriame atskirai nurodyta, kas yra pasitvirtinęs modelis, o kas — nepatikrinta prielaida. Paleidiklyje pasirinkite `nffi-bridge`; jis paklaus `NFFI_HOST`/`NFFI_PORT`.
 
 NFFI draugiškų pajėgų sąveiką aprašo ADatP-36 / STANAG 5527. STANAG 4677 yra atskira išlaipinto kario sistemų sąveikos šeima; 4677 JDSSDM-per-NFFI profiliui reikėtų atskiro, konkrečiam profiliui skirto įgyvendinimo.
 
@@ -631,7 +631,7 @@ SITAWARE_HQ_NVG_STALE_S=120
 SITAWARE_HQ_NVG_MAX_TRACKS=10000
 ```
 
-Paleiskite `sitaware-hq-nvg` per `./start.sh` arba `./run.sh all`. HQ Windows serveryje pirmą ryšį patikrinkite nespausdindami operacinių duomenų:
+Paleiskite `sitaware-hq-nvg` per `./scripts/start.sh` arba `./scripts/run.sh all`. HQ Windows serveryje pirmą ryšį patikrinkite nespausdindami operacinių duomenų:
 
 ```powershell
 curl.exe -k -u "<srauto-vartotojas>:<srauto-slaptažodis>" -sS -o NUL `
@@ -686,21 +686,21 @@ Adresas priima tik GET/HEAD, pagal nutylėjimą reikalauja Basic autentifikavimo
 
 | Paslauga | Scenarijus | Zenoh tema (sutrumpinta) | Suaktyvinimas |
 | --- | --- | --- | --- |
-| `udp-ingress` | `bridges/udp_ingress_bridge.py` | `…/raw/udp/ingress` ir atpažintas `…/raw/asterix/catNN` | Bendras UDP 50000 srautas |
+| `udp-ingress` | `bridges/vendors/random/udp_ingress_bridge.py` | `…/raw/udp/ingress` ir atpažintas `…/raw/asterix/catNN` | Bendras UDP 50000 srautas |
 | `asterix-cat10/20/21/34/48/62` | `protocols/vendors/asterix/cat.py --category NN` | ASTERIX kategorijai skirta normali tema | Tiesioginis UDP/TCP arba viena neapdorota Zenoh kategorijos tema procesui |
 | `dronuradaras` | `bridges/vendors/mainline/dronuradaras_bridge.py` | `…/land/mainline_dronuradaras/acoustic/neutral/sensor/{type}/{id}/sapient` | Tik prisijungusių įrenginių apklausa 60 s ir atsijungusių pašalinimas / aptikimų apklausa 10 s |
-| `sitaware` | `bridges/sitaware_bridge.py` | `…/land/sitaware/c2/friendly/unit/{type}/{id}/sapient` | Konfigūruojama REST apklausa |
-| `nffi` | `protocols/random/nffi.py` | `…/land/nato/c2/friendly/unit/{type}/{id}/sapient` | Pilni XML dokumentai Zenoh temoje `…/raw/nffi/*` |
-| `nffi-bridge` | `bridges/nffi_bridge.py` | `…/raw/nffi/{source-id}` | Prisijungimas prie partnerio NFFI/FFI serverio (TCP) |
-| `tak-layer` | `layers/tak_layer.py` | Prenumeratorius — visos temos | Įvykio valdomas |
-| `tak-bridge` | `bridges/tak_bridge.py` | Prenumeratorius — visos temos | TAK matomo CoT srauto priėmimas |
-| `tak_alert_layer` | `layers/tak_alert_layer.py` | Prenumeratorius — `…/land/**` | Įvykio valdomas; pasirenkama atskirai, pagal nutylėjimą išjungta |
+| `sitaware` | `bridges/vendors/sitaware/sitaware_bridge.py` | `…/land/sitaware/c2/friendly/unit/{type}/{id}/sapient` | Konfigūruojama REST apklausa |
+| `nffi` | `protocols/vendors/nffi/nffi.py` | `…/land/nato/c2/friendly/unit/{type}/{id}/sapient` | Pilni XML dokumentai Zenoh temoje `…/raw/nffi/*` |
+| `nffi-bridge` | `bridges/vendors/nffi/nffi_bridge.py` | `…/raw/nffi/{source-id}` | Prisijungimas prie partnerio NFFI/FFI serverio (TCP) |
+| `tak-layer` | `layers/vendors/tak/tak_layer.py` | Prenumeratorius — visos temos | Įvykio valdomas |
+| `tak-bridge` | `bridges/vendors/tak/tak_bridge.py` | Prenumeratorius — visos temos | TAK matomo CoT srauto priėmimas |
+| `tak_alert_layer` | `layers/vendors/tak/tak_alert_layer.py` | Prenumeratorius — `…/land/**` | Įvykio valdomas; pasirenkama atskirai, pagal nutylėjimą išjungta |
 | `sitaware-hq-nvg` | `layers/sitaware_hq_nvg_feed.py` | Prenumeratorius — visos takelių temos | HQ periodiškai ima NVG būseną |
 | `track-fusion` | `protocols/fusion.py` | CAT-48 + CAT-21 prenumeratorius | Įvykio valdomas |
 
 ### TAK naudotojai ir SitaWare HQ technika
 
-Aktyvus CoT kelias yra `layers/tak_layer.py`: jis prenumeruoja normalizuotas
+Aktyvus CoT kelias yra `layers/vendors/tak/tak_layer.py`: jis prenumeruoja normalizuotas
 Zenoh temas ir siunčia CoT į `tak_layer` paskirties TAK Server. Naudokite TAK
 išduotą kliento sertifikatą, kai įjungtas `TAK_TLS=1`. Dabartiniame EFDI
 runtime nėra atskiro TAK arba SitaWare CoT priėmimo tilto. Jei konkretus
@@ -718,7 +718,7 @@ fMP4 įrašais peržiūros slankikliui. Nustatymai redaguojami tiesiogiai iš
 WebUI "Streams" skirtuko.
 
 STANAG 4609 MPEG-TS+KLV vaizdo srautas KLV metaduomenis išgauna
-`bridges/4609_bridge.py`, veikiantis kaip SRT jungties klausytojas (sensorius
+`bridges/vendors/milspec/4609_bridge.py`, veikiantis kaip SRT jungties klausytojas (sensorius
 prisijungia į jį). Nustačius `STANAG4609_VIDEO_RELAY_ENABLE=1`, tas pats
 vertėjas papildomai persiunčia vaizdo/garso srautą į mediamtx (be
 transkodavimo), todėl jis atsiranda tame pačiame "Streams" skirtuke — KLV
@@ -1033,10 +1033,10 @@ Išvestis ir įvestis yra atskiros paslaugos. TAK ar SitaWare išvesties
 #### TAK Server
 
 Zenoh → TAK kryptimi sukonfigūruokite `TAK_HOST/TAK_PORT` ir pasirinkite
-`tak_layer` (`layers/tak_layer.py`). Jis prenumeruoja normalizuotas Zenoh
+`tak_layer` (`layers/vendors/tak/tak_layer.py`). Jis prenumeruoja normalizuotas Zenoh
 temas ir siunčia CoT per TCP/mTLS į TAK Server. TAK išduoti kliento
 kredencialai reikalingi, kai `TAK_TLS=1`. TAK → Zenoh kryptimi pasirinkite
-`tak-bridge` (`bridges/tak_bridge.py`), kuris normalizuoja gaunamą CoT srautą
+`tak-bridge` (`bridges/vendors/tak/tak_bridge.py`), kuris normalizuoja gaunamą CoT srautą
 atgal į magistralę. Pirmenybę teikite stabiliam DNS `TAK_HOST`; jei TAK
 serverio sertifikatas turi kitokį paveldėtą DNS SAN, nustatykite
 `TAK_TLS_SERVER_NAME` į tą SAN, kad vardo tikrinimas liktų įjungtas.
@@ -1044,7 +1044,7 @@ serverio sertifikatas turi kitokį paveldėtą DNS SAN, nustatykite
 #### SitaWare
 
 Zenoh → SitaWare HQ kryptimi pasirinkite `sitaware_layer`
-(`layers/sitaware_layer.py`) ir sukonfigūruokite HQ NVG Import Subscription
+(`layers/vendors/tak/systematic/sitaware_layer.py`) ir sukonfigūruokite HQ NVG Import Subscription
 apklausti autentifikuotą NVG 2.0.2 srautą, kurį jis teikia.
 
 SitaWare HQ → Zenoh kryptimi gaukite tikrą REST resursą iš diegimo ICD:
@@ -1462,7 +1462,7 @@ vertėjas turi atmesti ar karantinuoti srautą, o ne tyliai spėti.
 ## 8. C2 ↔ Zenoh abikryptė prijungimo instrukcija
 
 Kryptys yra nepriklausomos. Užbaikite tik tuos kelius, kurie atskleisti ir
-licencijuoti konkretaus diegimo, tada pasirinkite jų paslaugas `./start.sh`.
+licencijuoti konkretaus diegimo, tada pasirinkite jų paslaugas `./scripts/start.sh`.
 
 ### 8.1 Patikrinkite bendrą Zenoh pusę
 
@@ -1519,7 +1519,7 @@ TAK Server pusėje:
    [oficialiame API](https://docs.tak.gov/api/takserver); tikslūs mygtukai
    skiriasi tarp file-user, LDAP ir external-identity diegimų.
 5. Įdėkite PEM failus vykdymo-tik kataloge EFDI serveryje, įveskite jų
-   kelius aukščiau, pasirinkite `tak-layer` `./start.sh` ir patvirtinkite,
+   kelius aukščiau, pasirinkite `tak-layer` `./scripts/start.sh` ir patvirtinkite,
    kad identitetas rodomas prisijungęs TAK Server.
 
 ### 8.3 TAK Server → Zenoh
@@ -1770,7 +1770,7 @@ abiejose be jokio papildomo kodo.
 
 **Konfigūracija — nieko fiksuoto kode.** Bet koks serveris, prievadas, URL ar
 kredencialas, kurio reikia jūsų skriptui, ateina iš aplinkos kintamojo,
-niekada iš tiesioginio kodo įrašo (`compose/bridges/sitaware_bridge.py` yra
+niekada iš tiesioginio kodo įrašo (`compose/bridges/vendors/sitaware/sitaware_bridge.py` yra
 geras visiškai env-valdomo tilto pavyzdys). Pridėkite kiekvieną naują
 kintamąjį į `compose/.env.example` su vienos eilutės komentaru,
 paaiškinančiu, kam jis skirtas — tas failas yra vienintelis tiesos šaltinis,
@@ -1803,7 +1803,7 @@ Keturi maži pakeitimai `start.sh`, sekant esamu `cap` įrašu kaip šablonu
 ### 9.4 Patikrinkite nuo galo iki galo
 
 ```bash
-./start.sh --service your-service-name
+./scripts/start.sh --service your-service-name
 ```
 Tada patvirtinkite, kad duomenys iš tikrųjų teka — prenumeruokite savo temą
 bet kokiu Zenoh klientu (repo `clients/examples/` turi paruoštus prenumeravimo
@@ -1815,7 +1815,7 @@ kad magistralės sutartis buvo teisingai laikomasi.
 ### 9.5 Reikia naujo CoT simbolio? (tik TAK išvesčiai)
 
 Jei jūsų jutiklio priklausomybės/objekto derinys dar neatvaizduoja į esamą
-CoT tipą, pridėkite jį į `_TOPIC_COT` faile `compose/layers/tak_layer.py`:
+CoT tipą, pridėkite jį į `_TOPIC_COT` faile `compose/layers/vendors/tak/tak_layer.py`:
 ```python
 "air/**/hostile/uav/**":      ("a-h-A-M-F-Q", AIR_STALE_S),
 "land/**/neutral/sensor/**":  ("a-n-G-E-S",   LAND_STALE_S * 2),
@@ -1849,8 +1849,8 @@ spėliojimo patirtį, kurią suteikė šis dokumentas jums.
 ### Paslaugų stabdymas
 
 ```bash
-./stop.sh              # Stabdo visus bridge procesus
-./stop.sh layers       # Stabdo tik išvesties sluoksnius (tak-layer, track-fusion)
+./scripts/stop.sh              # Stabdo visus bridge procesus
+./scripts/stop.sh layers       # Stabdo tik išvesties sluoksnius (tak-layer, track-fusion)
 ```
 
 ### Žurnalų stebėjimas
@@ -1871,7 +1871,7 @@ kill -0 $(cat $POD_STATE_DIR/.pids/asterix.pid) && echo ok        # Konkretaus p
 ### `health.sh` — savaiminis pataisymas, savitestavimas ir interaktyvus problemų sprendimas
 
 ```bash
-./health.sh
+./scripts/health.sh
 ```
 
 Šį scenarijų galima paleisti bet kada, savarankiškai — jis nieko netraukia
@@ -1911,7 +1911,7 @@ iš eilės:
 ### `update.sh` — atsisiuntimas, perstatymas ir pakartotinis patikrinimas
 
 ```bash
-./update.sh
+./scripts/update.sh
 ```
 
 Atnaujina hosto OS paketus, atsisiunčia naujausią commit'ą, perstato viską,
@@ -1924,7 +1924,7 @@ paliekamas pusiau atnaujintas podas veikti toliau.
 ### `reinstall.sh` — pilnas išardymas ir perstatymas
 
 ```bash
-./reinstall.sh
+./scripts/reinstall.sh
 ```
 
 Išardo konteinerius ir vietinius atvaizdus, tada perstato juos iš dabartinio
@@ -1961,7 +1961,7 @@ ls $EFDI_CERT_DIR/*.pem
 ```
 
 Jei `compose/.env` buvo įkeltas paprastu `source compose/.env`, kintamieji
-neeksportuojami vaikiniams procesams. Naudokite `./start.sh` (kuris tai
+neeksportuojami vaikiniams procesams. Naudokite `./scripts/start.sh` (kuris tai
 sutvarko), arba:
 
 ```bash
@@ -2084,7 +2084,7 @@ Sukelia dukart paleistas `start.sh` be sustabdymo:
 ```bash
 pkill -f "_bridge\.py\|tak_layer\|track_fusion"
 rm -f $POD_STATE_DIR/.pids/*.pid
-./start.sh
+./scripts/start.sh
 ```
 
 #### Radaro ikona dingsta iš ATAK
@@ -2315,7 +2315,7 @@ Tai pagauna sintaksės klaidas, TypeScript klaidas ir Dockerfile lūžimus prie�
 | 2026-07-18 | Pridėtas TAK stiliaus Runtime Control: host bridge/protokolų/sluoksnių lifecycle veiksmai, apriboti log'ai, endpoint/temų/portų redagavimas, write-only kredencialai, localhost admin-control agent ir veikiantis Vite dev stack su suderintais API/Vite portais |
 | 2026-08-02 | Sujungti `PARUOSIMAS.md`, `INTEGRATIONS.md`, `C2_RUNBOOK.md`, `ADDING_A_SENSOR.md`, `TROUBLESHOOTING.md` ir `GOTCHAS.md` (visi pilnai išversti į lietuvių kalbą) į šį dokumentą (§§1, 7-9, 11) — vienas diegimo vadovas vietoj aštuonių; `ZENOH_ADMIN.md` lieka atskirai |
 | 2026-08-02 | Pridėtas BDS 1,0/1,7 (Data Link Capability / Common Usage GICB Capability) dekodavimas 7 ASTERIX kategorijoms, kurios jau naudoja BDS 3,0/4,0/5,0/6,0 GICB-ištraukimo pagalbininkus (CAT-010/011/018/020/021/048/062), pagal pyModeS |
-| 2026-08-02 | Pervadinti `layers/cot_layer.py` → `layers/tak_layer.py` ir `layers/nvg_layer.py` → `layers/sitaware_layer.py` (tiekėjo pavadintas išvestinis sluoksnis, atitinkantis `tak_bridge.py`/`sitaware_bridge.py` gaunamųjų pavadinimus); pašalinti nenaudojami `cot-udp`/`cot-udp-tak` UDP multicast/unicast paleidiklio įrašai ir `nvg_bridge.py` NVG-XML gaunamasis tiltas (SitaWare įėjimas dabar tik REST) |
+| 2026-08-02 | Pervadinti `layers/cot_layer.py` → `layers/vendors/tak/tak_layer.py` ir `layers/nvg_layer.py` → `layers/vendors/tak/systematic/sitaware_layer.py` (tiekėjo pavadintas išvestinis sluoksnis, atitinkantis `tak_bridge.py`/`sitaware_bridge.py` gaunamųjų pavadinimus); pašalinti nenaudojami `cot-udp`/`cot-udp-tak` UDP multicast/unicast paleidiklio įrašai ir `nvg_bridge.py` NVG-XML gaunamasis tiltas (SitaWare įėjimas dabar tik REST) |
 | 2026-08-02 | Sujungtos visos EFDI-autorystės `.proto` schemos po `compose/protocols/proto/` (anksčiau paskirstyta tarp `compose/protocols/random/`, `compose/protocols/vendors/proto/` ir `compose/protocols/vendors/sparkplug/`); vendoruotos trečiųjų šalių schemos (SAPIENT `sapient_msg/`, Sparkplug B) lieka savo `vendors/<name>/` kataloge |
 | 2026-08-28 | Pašalinti 2026-07-17 pridėti GeoJSON/OGC Features ir RF spektro stebėjimo vertėjai (tas duomenų kelias dabar yra slaptas) bei visiškai pašalintas SensorThings; CAP, MQTT, Sparkplug B, jutiklių būklės ir misijų maršrutų vertėjai nepakito |
 | 2026-08-28 | Pašalinti 2026-07-17 pridėti CAT-010/020/021/034/048/062 determinuoti dedikuoto prievado susitarimai — šio diegimo radaras/šliuzas siunčia kiekvieną kategoriją sumaišytą viename UDP dump'e per `UDP_INGRESS_PORT` (50000); `CATNN_PORT` lieka prieinamas `vendors/asterix/cat.py` viduje gamintojui, kuris tikrai naudoja dedikuotą prievadą |

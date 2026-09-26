@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Aaronia AARTOS drone-tracking JSON on Zenoh -> normalized track records.
 
-bridges/aartos_bridge.py lands raw HTTP-stream samples, verbatim, under
+bridges/vendors/aaronia/aartos_bridge.py lands raw HTTP-stream samples, verbatim, under
 ``.../raw/aartos/<host>``. This translator decodes the vendor's documented
 schema (Aaronia's "Drone Tracking JSON Format": Sample -> TrackState ->
 trackings[]) into one canonical EFDI track record per currently-tracked
@@ -26,9 +26,9 @@ import math
 import os
 import time
 
-from protocols.gateway import TOPIC_ROOT, open_session, payload_bytes, publish_dual, subscribe
-from protocols.proto.aartos_json_pb2 import AartosTrack
-from protocols.track_views import add_version, semantic_topic
+from protocols.vendors.random.gateway import TOPIC_ROOT, open_session, payload_bytes, publish_dual, subscribe
+from protocols.vendors.random.proto.aartos_json_pb2 import AartosTrack
+from protocols.vendors.random.track_views import add_version, semantic_topic
 
 INPUT_TOPIC = os.environ.get("AARTOS_INPUT_TOPIC") or TOPIC_ROOT + "/raw/aartos/**"
 RAW_PREFIX = TOPIC_ROOT + "/raw/aartos/"
@@ -324,7 +324,8 @@ def run() -> None:
             site["sensor_id"] = stable_uid
             site["uid"] = stable_uid
             antenna_positions.append((site["lat_deg"], site["lon_deg"]))
-            session.put(site_topic(site), json.dumps(site).encode(), encoding="application/json")
+            session.put(site_topic(site), json.dumps(site).encode(),
+                        encoding="application/json;efdi:radar_sensor_site")
 
         last_topic = _last_topic.setdefault(host, {})
 
@@ -406,7 +407,7 @@ def run() -> None:
             default_topic = "{}/land/aartos/passive_rf/unknown/unit".format(TOPIC_ROOT) if cls == "unit" \
                 else "{}/air/aartos/passive_rf/unknown/uav".format(TOPIC_ROOT)
             topic = last_topic.pop(cls, default_topic)
-            session.put(topic, json.dumps(tombstone).encode(), encoding="application/json")
+            session.put(topic, json.dumps(tombstone).encode(), encoding="application/json;efdi:aartos_tombstone")
 
     subscriber = subscribe(session, INPUT_TOPIC, on_sample)
     print("AARTOS translator: {} -> {}/air/aartos/passive_rf/*/uav".format(INPUT_TOPIC, TOPIC_ROOT), flush=True)

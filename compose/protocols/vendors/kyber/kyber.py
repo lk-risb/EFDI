@@ -29,9 +29,9 @@ from __future__ import annotations
 
 import time
 
-from protocols.gateway import TOPIC_ROOT, open_session, payload_bytes, publish_dual, publish_native, subscribe
-from protocols.proto.flex335_pb2 import SapientFlex335Track
-from protocols.track_views import native_topic, semantic_topic
+from protocols.vendors.random.gateway import TOPIC_ROOT, open_session, payload_bytes, publish_dual, publish_native, subscribe
+from protocols.vendors.random.proto.flex335_pb2 import SapientFlex335Track
+from protocols.vendors.random.track_views import native_topic, semantic_topic
 from protocols.vendors.sapient.flex335 import SapientDecoder, topic_for_track
 
 _TOPIC_MARKER = "/kyber/"

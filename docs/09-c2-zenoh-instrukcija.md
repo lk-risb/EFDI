@@ -1,7 +1,7 @@
 # 09 — C2 ↔ Zenoh abikryptė prijungimo instrukcija
 
 Kryptys yra nepriklausomos. Užbaikite tik tuos kelius, kurie atskleisti ir
-licencijuoti konkretaus diegimo, tada pasirinkite jų paslaugas `./start.sh`.
+licencijuoti konkretaus diegimo, tada pasirinkite jų paslaugas `./scripts/start.sh`.
 
 ## 9.1 Patikrinkite bendrą Zenoh pusę
 
@@ -58,7 +58,7 @@ TAK serverio pusėje:
    [oficialiame API](https://docs.tak.gov/api/takserver); tikslūs mygtukai
    skiriasi tarp file-user, LDAP ir external-identity diegimų.
 5. Įdėkite PEM failus vykdymo-tik kataloge EFDI serveryje, įveskite jų
-   kelius aukščiau, pasirinkite `tak-layer` `./start.sh` ir patvirtinkite,
+   kelius aukščiau, pasirinkite `tak-layer` `./scripts/start.sh` ir patvirtinkite,
    kad identitetas rodomas prisijungęs TAK Server.
 
 ## 9.3 TAK Server → Zenoh

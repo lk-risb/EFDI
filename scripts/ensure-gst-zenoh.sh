@@ -9,7 +9,7 @@
 # exits immediately once zenohsrc/zenohsink actually load.
 #
 # Best-effort, never fatal to the caller: this is a prototype-stage,
-# optional feature (see compose/bridges/video_zenoh_bridge.py). On failure
+# optional feature (see compose/bridges/vendors/random/video_zenoh_bridge.py). On failure
 # this script exits 1 and start.sh's video-zenoh-bridge svc_ready() simply
 # leaves that one service unavailable until it's fixed — nothing else in
 # the stack depends on it.

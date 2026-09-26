@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://efdi.ltu/schemas/json/dronuradaras_device_status.schema.json",
+  "title": "dronuradaras.lt acoustic sensor status",
+  "description": "Published BY bridges/vendors/mainline/dronuradaras_bridge.py to '{TOPIC_ROOT}/land/mainline_dronuradaras/acoustic/neutral/sensor/{sensor_id}/tracks/v1' — one record per registered acoustic sensor, republished on every device poll (online/offline) and again with a fresh last_detection_ts whenever that sensor reports a detection (recolors its own marker rather than spawning a separate icon).",
+  "x-efdi-topic": "{TOPIC_ROOT}/land/mainline_dronuradaras/acoustic/neutral/sensor/{sensor_id}/tracks/v1",
+  "x-efdi-producer": "bridges/vendors/mainline/dronuradaras_bridge.py",
+  "x-efdi-consumer": "layers/tak_layer.py",
+  "type": "object",
+  "required": ["_src", "_ts", "sensor_type", "sensor_id", "sensor_name", "lat_deg", "lon_deg", "is_online"],
+  "properties": {
+    "_src": {"type": "string", "const": "dronuradaras.lt"},
+    "_ts": {"type": "number"},
+    "sensor_type": {"type": "string", "const": "acoustic"},
+    "sensor_id": {"type": "string", "description": "'MAINLINE-DRONU-{first 8 chars of the device id}'."},
+    "sensor_name": {"type": "string"},
+    "lat_deg": {"type": "number", "minimum": -90, "maximum": 90},
+    "lon_deg": {"type": "number", "minimum": -180, "maximum": 180},
+    "is_online": {"type": "boolean"},
+    "last_detection_ts": {"type": "number", "description": "Present only on a detection-refresh publish (_publish_sensor_alert), never on a plain online/offline device-poll publish."},
+    "last_detection_audio_url": {"type": "string", "description": "Present only when the detection carried an audio clip URL."},
+    "_delete": {"type": "boolean", "const": true, "description": "Present only on the offline-tombstone variant (a device that disappeared from the registry while still marked online)."}
+  },
+  "additionalProperties": false
+}

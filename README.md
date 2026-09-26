@@ -200,9 +200,15 @@ EFDI/
 │   ├── bridges/                 source/socket + C2-ingress bridge scripts
 │   ├── protocols/               protocol translators and .proto contracts
 │   └── layers/                  C2-egress output layers (tak_layer, sitaware_layer)
-├── start.sh                     interactive service launcher
-├── stop.sh                      service teardown
-└── dev.sh                       disposable local PostgreSQL + API for admin UI preview
+└── scripts/
+    ├── install.sh               one-shot setup — the curl|bash quickstart target
+    ├── start.sh                 interactive service launcher
+    ├── run.sh                   native (non-interactive) service launcher
+    ├── stop.sh                  service teardown
+    ├── health.sh                self-heal, self-test, troubleshooting
+    ├── update.sh                pull, rebuild, re-verify
+    ├── reinstall.sh             full teardown and rebuild
+    └── dev.sh                   disposable local PostgreSQL + API for admin UI preview
 ```
 
 ---
@@ -212,7 +218,7 @@ EFDI/
 On a fresh Debian 13 (or RHEL/Rocky/Alma) host:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/lk-risb/EFDI/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/lk-risb/EFDI/main/scripts/install.sh | bash
 ```
 
 `install.sh` auto-installs every prerequisite (git, Python 3.10+, Docker Engine + Compose, openssl, gettext) if missing, then walks through certs and configuration interactively.
@@ -229,11 +235,11 @@ New to the admin panel? **[12 — Zenoh Admin GUI](docs/12-zenoh-admin-gui.md)**
 plain-language, page-by-page walkthrough of every tab.
 
 ```bash
-./start.sh                            # interactive launcher — pick services, prompts for missing config
-./start.sh --check-all                # pre-flight: which services are ready vs blocked (run before a demo)
+./scripts/start.sh                            # interactive launcher — pick services, prompts for missing config
+./scripts/start.sh --check-all                # pre-flight: which services are ready vs blocked (run before a demo)
 ./tests/c2_preflight.sh               # one-glance C2 readiness — all three TAK/SitaWare legs green
-./stop.sh                             # tear down running services
-./dev.sh up                           # live zenoh-admin preview — disposable PostgreSQL + API + Vite UI
+./scripts/stop.sh                             # tear down running services
+./scripts/dev.sh up                           # live zenoh-admin preview — disposable PostgreSQL + API + Vite UI
 docker compose logs -f zenoh-router   # follow the router's logs
 ```
 

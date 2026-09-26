@@ -164,7 +164,7 @@ nustatykite `EFDI_CONTROL_TOKEN` — tai bearer žetonas ryšiui tarp admin
 API ir vietinio valdymo proceso. Išsaugoję nustatymą, persileiskite
 paveiktą paslaugą, kad ji perskaitytų naują aplinką.
 
-Naudojant `./dev.sh up`, vienkartinis vystymo valdymo agentas pats
+Naudojant `./scripts/dev.sh up`, vienkartinis vystymo valdymo agentas pats
 persikelia į 18896 prievadą, jei vystymui skirtas numatytasis 8896 jau
 užimtas — dev API tiesiog nukreipiamas į tą pasirinktą prievadą.
 
@@ -215,8 +215,8 @@ EFDI_ROUTER_CA_CHAIN_PATH=/absoliutus/vykdymo/pki/router-ca-chain.pem
 EFDI_POLICY_SIGNER_CERT_PATH=/absoliutus/vykdymo/pki/policy-signer-cert.pem
 EFDI_POLICY_SIGNER_KEY_PATH=/absoliutus/vykdymo/pki/policy-signer-key.pem
 EFDI_STEP_CA_STATE_PATH=/absoliutus/vykdymo/pki/step-ca
-./stop.sh admin-control
-./start.sh --service admin-control
+./scripts/stop.sh admin-control
+./scripts/start.sh --service admin-control
 ```
 
 Skiltyje **Certificate Authority** sukurkite vienkartinį kvietimą vaiko
@@ -231,7 +231,7 @@ Vaiko pusėje visas tris tapatybes sugeneruokite ir įregistruokite vietoje:
 scripts/pki/enroll-router.sh \
   https://<tėvo-valdymo-host>:9443 \
   <vaiko-vardų-sritis> \
-  "${BUNDLE_DIR}/efdi" \
+  "${BUNDLE_DIR}/local" \
   "${POD_STATE_DIR}/pki"
 ```
 

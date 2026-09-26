@@ -7,9 +7,9 @@
 On Debian 13 or RHEL/Rocky/AlmaLinux 9/10, the only thing you install by
 hand is `curl` (usually already present) — everything else is one command:
 ```bash
-curl -fsSL https://raw.githubusercontent.com/lk-risb/EFDI/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/lk-risb/EFDI/main/scripts/install.sh | bash
 ```
-`./install.sh` updates the OS (`apt`/`dnf` upgrade) and auto-installs git,
+`./scripts/install.sh` updates the OS (`apt`/`dnf` upgrade) and auto-installs git,
 Python 3.10+, Docker Engine + the Compose plugin (from Docker's official
 repository, not a distro-bundled package), openssl, and gettext itself on
 both Debian (apt) and RHEL/Rocky/Alma (dnf) hosts if any are missing — a
@@ -160,7 +160,7 @@ no separate apt/dnf setup:
 curl -fsSL https://pkgs.netbird.io/install.sh | sh
 ```
 Do **not** join a network yet — the setup key comes from whoever
-administers your organization's account, and `./install.sh` itself prompts
+administers your organization's account, and `./scripts/install.sh` itself prompts
 for it and joins during the [Installation](#installation) section below (this is exactly what its
 automated Networking step does). Verify only that the binary installed:
 ```bash
@@ -169,7 +169,7 @@ netbird version
 
 #### Open firewall ports
 
-`./install.sh` does **not** do this step for you — which ports to open
+`./scripts/install.sh` does **not** do this step for you — which ports to open
 depends on which sensor bridges you enable, and that's a post-install,
 WebUI-driven choice (see [Configuration](04-configuration.md)), not something the installer
 can decide up front. Open only what this host needs inbound; everything
@@ -247,11 +247,11 @@ ATAK/WinTAK clients receive tracks only through a TAK Server (`tak-layer` servic
 
 For a standalone/development pod, Zenoh mTLS certs can be self-issued without
 an external vendor bundle. `scripts/gen-certs.sh <namespace>` generates (once)
-an EFDI development root CA under `compose/certs/efdi/`, then signs a leaf
+an EFDI development root CA under `compose/certs/local/`, then signs a leaf
 cert+key for the given namespace. Do not distribute that development root key
 to managed routers.
 
-The generated material (`efdi-ca-root.pem`, `<NAMESPACE>-cert.pem`, `<NAMESPACE>-key.pem`) lives at `compose/certs/efdi/` — gitignored, never committed. The ignored bundle directory also keeps `tak/`, `sitaware/`, `efdi-backbone/` (goat backbone, Desert Bread CA), and `efdi-ltu/` (LTU sandbox) identities separate — see the certificate profile legend in [§3.2 below](#32-generate-certificates). Default path is set by `start.sh`; override with `BUNDLE_DIR` in `compose/.env` if you'd rather keep it outside the repo entirely. Managed deployments use the delegated-CA workflow in the [Operations](05-launching-and-operations.md) section and keep CA private keys under a separate mode-700 runtime directory.
+The generated material (`efdi-ca-root.pem`, `<NAMESPACE>-cert.pem`, `<NAMESPACE>-key.pem`) lives at `compose/certs/local/` — gitignored, never committed. The ignored bundle directory also keeps `tak/`, `sitaware/`, `efdi-backbone/` (goat backbone, Desert Bread CA), and `efdi-ltu/` (LTU sandbox) identities separate — see the certificate profile legend in [§3.2 below](#32-generate-certificates). Default path is set by `start.sh`; override with `BUNDLE_DIR` in `compose/.env` if you'd rather keep it outside the repo entirely. Managed deployments use the delegated-CA workflow in the [Operations](05-launching-and-operations.md) section and keep CA private keys under a separate mode-700 runtime directory.
 
 ---
 
@@ -263,7 +263,7 @@ On a fresh host with nothing installed yet, one command clones the repo and
 runs the installer, which auto-installs every prerequisite from the [Prerequisites](#prerequisites) section itself:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/lk-risb/EFDI/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/lk-risb/EFDI/main/scripts/install.sh | bash
 ```
 
 Equivalent to cloning first, then running the same script locally:
@@ -271,7 +271,7 @@ Equivalent to cloning first, then running the same script locally:
 ```bash
 git clone <repo-url> EFDI
 cd EFDI
-./install.sh
+./scripts/install.sh
 ```
 
 ### 3.1a Choose Production or Testing mode
@@ -387,8 +387,8 @@ endpoint atomically.
 
 ```bash
 # Verify
-ls compose/certs/efdi/*.pem
-chmod 600 compose/certs/efdi/*-key.pem
+ls compose/certs/local/*.pem
+chmod 600 compose/certs/local/*-key.pem
 ```
 
 ### 3.3 Create the Python virtual environment
@@ -413,7 +413,7 @@ different Python environment than the one you just modified.
 
 `install.sh` also `chgrp`s/`chmod`s a handful of individually bind-mounted
 state files and directories (`namespace-prefix`, `data-topic-prefix`,
-`$BUNDLE_DIR/efdi`, `$POD_STATE_DIR/integrations/tak`) so the `zenoh-admin`
+`$BUNDLE_DIR/local`, `$POD_STATE_DIR/integrations/tak`) so the `zenoh-admin`
 container — which always runs as a fixed non-root uid `10001` — can write to
 them. If a *later* WebUI save (config, TAK/SitaWare credentials) fails with
 `Permission denied` on one of these paths, `health.sh`'s interactive menu

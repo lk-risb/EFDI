@@ -22,7 +22,7 @@ ls $EFDI_CERT_DIR/*.pem
 ```
 
 Paprastas `source compose/.env` neeksportuoja kintamųjų vaikiniams procesams.
-Naudokite `./start.sh` (jis tuo pasirūpina), arba:
+Naudokite `./scripts/start.sh` (jis tuo pasirūpina), arba:
 
 ```bash
 set -a && source compose/.env && set +a
@@ -145,7 +145,7 @@ Sukelia dukart paleistas `start.sh` be sustabdymo:
 ```bash
 pkill -f "_bridge\.py\|tak_layer\|track_fusion"
 rm -f $POD_STATE_DIR/.pids/*.pid
-./start.sh
+./scripts/start.sh
 ```
 
 ### Radaro ikona dingsta iš ATAK
@@ -272,7 +272,7 @@ paprasčiausiai teisių klaida, ne pervadinimas per mount tašką.
 **Priežastis:** `zenoh-admin` visada veikia fiksuotu ne-root uid/gid
 (`10001`). Keli būsenos keliai — atskirai per bind-mount prijungti failai ar
 katalogai (`namespace-prefix`, `data-topic-prefix`, `integrations/tak`,
-`$BUNDLE_DIR/efdi`) — sukurti **hosto** pusėje to naudotojo, kuris paleido
+`$BUNDLE_DIR/local`) — sukurti **hosto** pusėje to naudotojo, kuris paleido
 `install.sh`/`reinstall.sh` (dažniausiai root). Root sukurtas failas su
 teisėmis `644` rašomas tik savininko (root); uid 10001 neturi nei savininko
 bito, nei (nebent grupė jau būtų 10001) grupės rašymo bito, todėl kiekvienas
@@ -286,8 +286,8 @@ paleiskite `reinstall.sh` iš naujo, arba ištaisykite tiesiogiai:
 ```bash
 chgrp 10001 "$POD_STATE_DIR/namespace-prefix" "$POD_STATE_DIR/data-topic-prefix"
 chmod 664   "$POD_STATE_DIR/namespace-prefix" "$POD_STATE_DIR/data-topic-prefix"
-chgrp 10001 "$POD_STATE_DIR/integrations/tak" "$BUNDLE_DIR/efdi"
-chmod 775   "$POD_STATE_DIR/integrations/tak" "$BUNDLE_DIR/efdi"
+chgrp 10001 "$POD_STATE_DIR/integrations/tak" "$BUNDLE_DIR/local"
+chmod 775   "$POD_STATE_DIR/integrations/tak" "$BUNDLE_DIR/local"
 ```
 
 `health.sh` interaktyvus meniu (3 punktas — „patikrinti trūkstamus/blogai

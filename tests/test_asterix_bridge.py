@@ -11,7 +11,7 @@ sys.path.insert(0, str(COMPOSE / "control"))
 
 spec = importlib.util.spec_from_file_location(
     "asterix_bridge",
-    COMPOSE / "bridges" / "asterix_bridge.py",
+    COMPOSE / "bridges" / "vendors" / "asterix" / "asterix_bridge.py",
 )
 bridge = importlib.util.module_from_spec(spec)
 assert spec.loader is not None

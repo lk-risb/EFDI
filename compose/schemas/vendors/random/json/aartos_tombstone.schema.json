@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://efdi.ltu/schemas/json/aartos_tombstone.schema.json",
+  "title": "AARTOS track tombstone",
+  "description": "Published BY protocols/vendors/aartos/aartos_json.py when a previously-tracked identity stops being reported (an aircraft/unit's classification disappears from the AARTOS feed) — a delete marker on that object's last known topic, not a track update.",
+  "x-efdi-topic": "last known {TOPIC_ROOT}/{domain}/aartos/passive_rf/{aff}/{entity}/{uid}/tracks/v1 for that identity, or the unknown/unit|uav fallback if it never published a real position",
+  "x-efdi-producer": "protocols/vendors/aartos/aartos_json.py",
+  "x-efdi-consumer": "layers/tak_layer.py, layers/sitaware_layer.py",
+  "type": "object",
+  "required": ["uid", "_ts", "_delete"],
+  "properties": {
+    "uid": {"type": "string"},
+    "_ts": {"type": "number"},
+    "_delete": {"type": "boolean", "const": true}
+  },
+  "additionalProperties": false
+}

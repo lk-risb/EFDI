@@ -16,7 +16,7 @@ of those):
 
   <slot>/raw/gaia/tak/test/cot  (xml, no schema needed) — CoT XML, explicitly
     named as test data by its own topic path ("tak/test/cot"). Rather than
-    write a second CoT parser, this reuses bridges/tak_bridge.py's existing
+    write a second CoT parser, this reuses bridges/vendors/tak/tak_bridge.py's existing
     inbound CoT decoder (_parse_event_xml/_normalize_event) — that file
     already does exactly this for EFDI's real TAK Server ingress, and CoT is
     CoT regardless of transport. Only the topic naming and _src tag are
@@ -31,8 +31,8 @@ import time
 
 import bridges.tak_bridge as tak_bridge
 from google.protobuf.message import DecodeError
-from protocols.gateway import TOPIC_ROOT, open_session, payload_bytes, subscribe
-from schemas.vendors.palantir.palantir_adsb_pb2 import AdsbBatch
+from protocols.vendors.random.gateway import TOPIC_ROOT, open_session, payload_bytes, subscribe
+from schemas.vendors.palantir.proto.palantir_adsb_pb2 import AdsbBatch
 
 _ADSB_SUFFIX = "/adsb/protobuf/v1"
 _COT_SUFFIX = "/raw/gaia/tak/test/cot"

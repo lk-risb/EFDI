@@ -3,7 +3,7 @@
 `compose/protocols/vendors/aartos/aartos_json.py` decodes the Aaronia
 AARTOS drone-tracking JSON format exposed by RTSA-Suite PRO's HTTP Server
 block (Sample -> TrackState -> `trackings[]`/`antennas[]`), landed locally
-by `compose/bridges/aartos_bridge.py`.
+by `compose/bridges/vendors/aaronia/aartos_bridge.py`.
 
 ## Source
 
@@ -159,7 +159,7 @@ research, not an extension of the existing decoder.
   (`land/**/friendly|hostile|neutral|unknown/unit/**`, all four), so once a
   real WiFi/operator tracking entry flows through, it renders on TAK as a
   ground unit with zero additional code — checked directly in
-  compose/layers/tak_layer.py, not assumed. What remains genuinely
+  compose/layers/vendors/tak/tak_layer.py, not assumed. What remains genuinely
   unverified: the actual JSON *shape* of such a tracking entry, since no
   operator/WiFi tracking has been observed in a real payload yet (the
   2026-09-16 rewiring above got the WIFI/SPECTRAN blocks to `state: 5` in

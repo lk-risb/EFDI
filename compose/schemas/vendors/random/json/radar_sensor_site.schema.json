@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://efdi.ltu/schemas/json/radar_sensor_site.schema.json",
+  "title": "Radar/RF sensor site marker",
+  "description": "Shared, loosely-typed convention for a fixed sensor site marker, deliberately not one fixed producer's schema: protocols/vendors/asterix/cat.py's CAT-34 handler and protocols/vendors/aartos/aartos_json.py's antenna_to_site() both publish this shape (with different optional fields) to '{TOPIC_ROOT}/land/*/radar/neutral/radar/**', which layers/tak_layer.py's dedicated radar-status subscriber renders generically (reading only the plain JSON view either way). A new sensor integration matching these field names renders with zero tak_layer.py changes. NOT a shared rule on the dual-view question: cat.py's CAT-34 site marker also goes through publish_dual() (SAPIENT+protobuf, same as every other CAT-34 message) — this schema documents its JSON leg. aartos_json.py's site marker is the one that deliberately skips publish_dual entirely (its own comment: 'no dual protobuf view for this one... there is no per-vendor schema for this') and is bare-JSON-only, unlike its own main per-track record which does go through publish_dual.",
+  "x-efdi-topic": "{TOPIC_ROOT}/land/{sensor_id}/radar/neutral/radar/{sensor_id}/tracks/v1 (aartos), {TOPIC_ROOT}/land/{aff}/radar/neutral/radar/{id}/tracks/v1 (CAT-34)",
+  "x-efdi-producer": "protocols/vendors/asterix/cat.py (CAT-34), protocols/vendors/aartos/aartos_json.py",
+  "x-efdi-consumer": "layers/tak_layer.py (radar-status wildcard subscriber)",
+  "type": "object",
+  "required": ["_ts", "_src", "sensor_id", "sensor_name", "lat_deg", "lon_deg"],
+  "properties": {
+    "_ts": {"type": "number"},
+    "_src": {"type": "string", "description": "e.g. 'ASTERIX CAT-34 Ed.1.29' or 'AARTOS'."},
+    "uid": {"type": "string", "description": "Object id; falls back to sensor_id when absent (track_views' object_id() checks uid first)."},
+    "sensor_id": {"type": "string"},
+    "sensor_name": {"type": "string"},
+    "sensor_type": {"type": "string", "description": "Present on CAT-34 ('radar'); absent on AARTOS."},
+    "lat_deg": {"type": "number", "minimum": -90, "maximum": 90},
+    "lon_deg": {"type": "number", "minimum": -180, "maximum": 180},
+    "geo_alt_m": {"type": "number"},
+    "passive": {"type": "boolean", "description": "true for a receive-only system (VERA-NG, AARTOS IsoLOG) — rendered with the Direction Finding icon, not the emitting-radar one."},
+    "online_since": {"type": "number", "description": "CAT-34 only."},
+    "radar_range_m": {"type": "number", "description": "CAT-34 only."},
+    "radar_range_source": {"type": "string", "description": "CAT-34 only."},
+    "radar_clock_s": {"type": "number", "description": "CAT-34 only (from the ASTERIX record's own tod_s)."},
+    "speed_ms": {"type": "number", "description": "CAT-34 only — the site's own platform speed, when mobile."},
+    "heading_deg": {"type": "number", "description": "CAT-34 only."}
+  },
+  "additionalProperties": true
+}

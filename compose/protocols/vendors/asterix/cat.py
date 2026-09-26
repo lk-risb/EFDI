@@ -20,7 +20,7 @@ import os
 import sys
 
 from namespace_prefix import topic_root
-from protocols.gateway import (
+from protocols.vendors.random.gateway import (
     open_session,
     publish_dual,
     publish_collection,
@@ -30,10 +30,10 @@ from protocols.gateway import (
     subscribe,
     ZError,
 )
-from protocols.track_views import native_topic, semantic_topic, asterix_data_block
-from protocols.data_stats import record_in
-from protocols.process_bundle import run_bundle
-from protocols.proto.cat_pb2 import (
+from protocols.vendors.random.track_views import native_topic, semantic_topic, asterix_data_block
+from protocols.vendors.random.data_stats import record_in
+from protocols.vendors.random.process_bundle import run_bundle
+from protocols.vendors.random.proto.cat_pb2 import (
     AsterixCat1Track,
     AsterixCat2Status,
     AsterixCat4Alert,
@@ -110,7 +110,7 @@ import threading
 import time
 
 from namespace_prefix import topic_root
-from protocols.data_stats import record_in
+from protocols.vendors.random.data_stats import record_in
 
 _cat1_TOPIC_ROOT = topic_root()
 
@@ -2890,7 +2890,7 @@ import threading
 import time
 
 from namespace_prefix import topic_root
-from protocols.data_stats import record_in
+from protocols.vendors.random.data_stats import record_in
 
 
 
@@ -6645,7 +6645,7 @@ import threading
 import time
 
 from namespace_prefix import topic_root
-from protocols.data_stats import record_in
+from protocols.vendors.random.data_stats import record_in
 
 
 
@@ -7254,7 +7254,7 @@ import threading
 import time
 
 from namespace_prefix import topic_root
-from protocols.data_stats import record_in
+from protocols.vendors.random.data_stats import record_in
 
 
 
@@ -9493,7 +9493,7 @@ import threading
 import time
 
 from namespace_prefix import topic_root
-from protocols.data_stats import record_in
+from protocols.vendors.random.data_stats import record_in
 
 
 
@@ -10364,7 +10364,7 @@ import threading
 import time
 
 from namespace_prefix import topic_root
-from protocols.data_stats import record_in
+from protocols.vendors.random.data_stats import record_in
 
 
 
@@ -13104,14 +13104,14 @@ def _bundle_main() -> None:
     if os.environ.get("ASTERIX_ZENOH_UPSTREAM_ENDPOINT", "").strip():
         children.append((
             "asterix-bridge",
-            "bridges/asterix_bridge.py",
+            "bridges/vendors/asterix/asterix_bridge.py",
             [],
         ))
     if (
         os.environ.get("UDP_INGRESS_PORT", "").strip()
         or os.environ.get("ASTERIX_PORT", "").strip()
     ):
-        children.append(("udp-ingress", "bridges/udp_ingress_bridge.py", []))
+        children.append(("udp-ingress", "bridges/vendors/random/udp_ingress_bridge.py", []))
 
     for category in (1, 2, 4, 7, 8, 9, 10, 11, 15, 16, 17, 18, 19, 20, 21, 23, 25, 32, 34, 48, 63, 65, 150, 205, 240, 247):
         port = os.environ.get(f"CAT{category}_PORT", "").strip()

@@ -26,7 +26,7 @@ that's what a JSON producer built against that schema actually emits.
     only decodes the two with map value: TrackList (a live track list — the
     same radar-site pattern tak_layer.py already renders for CAT-34) and
     RadarSensor (the site's own fixed antenna position, decoded once as a
-    static sensor marker like protocols/random/camera_sites.py does).
+    static sensor marker like protocols/vendors/random/camera_sites.py does).
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ from __future__ import annotations
 import json
 import time
 
-from protocols.gateway import TOPIC_ROOT, open_session, payload_bytes, subscribe
+from protocols.vendors.random.gateway import TOPIC_ROOT, open_session, payload_bytes, subscribe
 
 _DRONE01_SUFFIX = "/ITA-EFDI/DRONE-01/v1"
 _DRONE02_SUFFIX = "/ITA-EFDI/DRONE-02/v1"

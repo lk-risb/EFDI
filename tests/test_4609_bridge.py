@@ -14,7 +14,7 @@ def _load_bridge(monkeypatch, **env):
         monkeypatch.setenv(key, value)
     spec = importlib.util.spec_from_file_location(
         "bridge_4609_{}".format(id(env)),
-        COMPOSE / "bridges" / "4609_bridge.py",
+        COMPOSE / "bridges" / "vendors" / "milspec" / "4609_bridge.py",
     )
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None

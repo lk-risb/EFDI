@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # video-zenoh-publish-test.sh — local test publisher for the zenoh-native
-# video prototype (see compose/bridges/video_zenoh_bridge.py).
+# video prototype (see compose/bridges/vendors/random/video_zenoh_bridge.py).
 #
 # Publishes a synthetic test pattern over Zenoh via GStreamer's zenohsink
 # element, standing in for a real drone/GCS companion computer's own

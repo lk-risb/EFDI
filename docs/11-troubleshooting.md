@@ -21,7 +21,7 @@ echo $ZENOH_LOCAL_ENDPOINT   # expected: tcp/127.0.0.1:7448
 ls $EFDI_CERT_DIR/*.pem
 ```
 
-If `compose/.env` was loaded with bare `source compose/.env`, variables are not exported to child processes. Use `./start.sh` (which handles this), or:
+If `compose/.env` was loaded with bare `source compose/.env`, variables are not exported to child processes. Use `./scripts/start.sh` (which handles this), or:
 
 ```bash
 set -a && source compose/.env && set +a
@@ -131,7 +131,7 @@ Caused by running `start.sh` twice without stopping:
 ```bash
 pkill -f "_bridge\.py\|tak_layer\|track_fusion"
 rm -f $POD_STATE_DIR/.pids/*.pid
-./start.sh
+./scripts/start.sh
 ```
 
 ### Radar icon disappearing from ATAK
@@ -184,8 +184,8 @@ reconnect on its own:
 ```bash
 kill $(pgrep -f aartos_bridge.py)
 rm -f $POD_STATE_DIR/.pids/aartos-raw.pid $POD_STATE_DIR/.pids/aartos-wifi-raw.pid
-./start.sh --service aartos-raw
-./start.sh --service aartos-wifi-raw
+./scripts/start.sh --service aartos-raw
+./scripts/start.sh --service aartos-wifi-raw
 ```
 
 (Note: `stop.sh` has no case for `aartos`/`aartos-raw`/`aartos-wifi-raw` —
@@ -333,7 +333,7 @@ rename-over-mountpoint error.
 **Cause:** `zenoh-admin` always runs as a fixed non-root uid/gid (`10001`).
 Several state paths are individually bind-mounted files or directories
 (`namespace-prefix`, `data-topic-prefix`, `integrations/tak`,
-`$BUNDLE_DIR/efdi`) created on the **host** side by whichever user ran
+`$BUNDLE_DIR/local`) created on the **host** side by whichever user ran
 `install.sh`/`reinstall.sh` — typically root. A file created by root at mode
 `644` is owner-writable only by root; uid 10001 has neither the owner bit nor
 (unless the group happens to already be 10001) the group-write bit, so every
@@ -347,8 +347,8 @@ either re-run `reinstall.sh`, or fix it directly:
 ```bash
 chgrp 10001 "$POD_STATE_DIR/namespace-prefix" "$POD_STATE_DIR/data-topic-prefix"
 chmod 664   "$POD_STATE_DIR/namespace-prefix" "$POD_STATE_DIR/data-topic-prefix"
-chgrp 10001 "$POD_STATE_DIR/integrations/tak" "$BUNDLE_DIR/efdi"
-chmod 775   "$POD_STATE_DIR/integrations/tak" "$BUNDLE_DIR/efdi"
+chgrp 10001 "$POD_STATE_DIR/integrations/tak" "$BUNDLE_DIR/local"
+chmod 775   "$POD_STATE_DIR/integrations/tak" "$BUNDLE_DIR/local"
 ```
 
 `health.sh`'s interactive menu (option 3, "check for missing/misconfigured

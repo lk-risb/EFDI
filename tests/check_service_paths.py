@@ -3,7 +3,7 @@
 
 Catches the recurring class of bug where a service is renamed or moved but a
 launcher still points at the old file — e.g. `bridges/cot_bridge.py` lingering
-in run.sh after the entrypoint became `layers/tak_layer.py`. Compile-checks
+in run.sh after the entrypoint became `layers/vendors/tak/tak_layer.py`. Compile-checks
 pass in that case because the dead file is simply never imported; only an
 operator selecting the service at runtime discovers the break.
 
@@ -19,7 +19,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 COMPOSE = ROOT / "compose"
-LAUNCHERS = ("start.sh", "run.sh")
+LAUNCHERS = ("scripts/start.sh", "scripts/run.sh")
 
 # Only inspect actual launch lines, so a comment mentioning an old filename is
 # not mistaken for a live invocation.

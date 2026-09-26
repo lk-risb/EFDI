@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://efdi.ltu/schemas/json/mavlink_command.schema.json",
+  "title": "MAVLink command request",
+  "description": "Published BY a C2/UI to {TOPIC_ROOT}/air/mavlink/cmd/{entity_id} to drive bridges/mavlink_command_bridge.py. entity_id is the last key segment; the bridge does not read it from the payload. See mavlink_ack.schema.json for the reply on {TOPIC_ROOT}/air/mavlink/ack/{entity_id}.",
+  "x-efdi-topic": "{TOPIC_ROOT}/air/mavlink/cmd/{entity_id}",
+  "x-efdi-producer": "external (C2/UI)",
+  "x-efdi-consumer": "bridges/mavlink_command_bridge.py",
+  "type": "object",
+  "required": ["cmd"],
+  "properties": {
+    "cmd": {
+      "type": "string",
+      "enum": ["arm", "disarm", "takeoff", "rtl", "land", "hold", "goto"],
+      "description": "Which MAVLink command to send. Unknown values are REJECTED, not ignored."
+    },
+    "alt_m": {
+      "type": "number",
+      "description": "Target altitude in meters. Used by 'takeoff' (default 20) and optionally 'goto' (default 0)."
+    },
+    "lat_deg": {
+      "type": "number",
+      "minimum": -90,
+      "maximum": 90,
+      "description": "Required for 'goto'."
+    },
+    "lon_deg": {
+      "type": "number",
+      "minimum": -180,
+      "maximum": 180,
+      "description": "Required for 'goto'."
+    },
+    "target_system": {
+      "type": "integer",
+      "description": "Overrides the bridge's own MAVLink target_system from its heartbeat, if set."
+    },
+    "target_component": {
+      "type": "integer",
+      "description": "Overrides the bridge's own MAVLink target_component from its heartbeat, if set."
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"cmd": {"const": "goto"}}, "required": ["cmd"]},
+      "then": {"required": ["lat_deg", "lon_deg"]}
+    }
+  ],
+  "additionalProperties": false
+}

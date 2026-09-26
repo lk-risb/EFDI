@@ -6,7 +6,7 @@ generated bindings live under compose/generated/schemas. Extend the package
 path the same way compose/protocols/__init__.py does, so
 `schemas.vendors.<vendor>.*_pb2` resolves regardless of PYTHONPATH order.
 
-Kept apart from compose/protocols/proto/, which holds EFDI's own /v2 envelope
+Kept apart from compose/protocols/vendors/random/proto/, which holds EFDI's own /v2 envelope
 contracts, not reverse-sourced third-party ones.
 """
 

@@ -1,6 +1,6 @@
 # SitaWare / NVG sources
 
-`../../../compose/layers/sitaware_layer.py` (Zenoh → NVG 2.0.2 XML →
+`../../../compose/layers/vendors/tak/systematic/sitaware_layer.py` (Zenoh → NVG 2.0.2 XML →
 SitaWare HQ) is an egress translator, not a decoder of an inbound wire
 format the way `cat.py`/`flex335.py`/`stanag.py` are — the risk profile
 here is "does the *symbology and schema* match what the standard actually
@@ -198,7 +198,7 @@ SIP3) — confirmed by direct screenshot of a live instance. This is
 completely separate from `sitaware_layer.py`'s NVG feed documented in this
 file: NVG is EFDI's own picture pushed OUT to SitaWare; a SitaWare NFFI/FFI
 Server would be SitaWare's OWN friendly-unit picture, pulled IN to EFDI via
-the new `bridges/nffi_bridge.py` (see `../nffi/NFFI.md`) and `nffi.py`.
+the new `bridges/vendors/nffi/nffi_bridge.py` (see `../nffi/NFFI.md`) and `nffi.py`.
 Not yet configured or tested against a real SitaWare NFFI/FFI server as of
 this writing — the exact wire behavior of IP1/IP1 Classic/IP2/SIP3 is
 unconfirmed. Worth checking, once that ingest path is live, that SitaWare's

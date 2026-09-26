@@ -10,7 +10,7 @@ sys.path.insert(0, str(COMPOSE / "control"))
 
 spec = importlib.util.spec_from_file_location(
     "aartos_bridge",
-    COMPOSE / "bridges" / "aartos_bridge.py",
+    COMPOSE / "bridges" / "vendors" / "aaronia" / "aartos_bridge.py",
 )
 bridge = importlib.util.module_from_spec(spec)
 assert spec.loader is not None

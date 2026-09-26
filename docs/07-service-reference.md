@@ -13,19 +13,19 @@
 | --- | --- | --- | --- |
 | `asterix` | `protocols/vendors/asterix/cat.py` | `…/raw/asterix/catNN` and category-specific normalized ASTERIX topics | ASTERIX vendor's CAT protocol bundle: mixed UDP ingress plus per-category translators |
 | `dronuradaras` | `bridges/vendors/mainline/dronuradaras_bridge.py` | `…/land/mainline_dronuradaras/acoustic/neutral/sensor/{type}/{id}/sapient` | 60 s online-only device poll with offline eviction / 10 s detection poll |
-| `sitaware` | `bridges/sitaware_bridge.py` | `…/land/sitaware/c2/friendly/unit/{type}/{id}/sapient` | Configurable REST poll |
-| `nffi` | `protocols/random/nffi.py` | `…/land/nato/c2/friendly/unit/{type}/{id}/sapient` | Complete XML documents under `…/raw/nffi/*` in Zenoh |
+| `sitaware` | `bridges/vendors/sitaware/sitaware_bridge.py` | `…/land/sitaware/c2/friendly/unit/{type}/{id}/sapient` | Configurable REST poll |
+| `nffi` | `protocols/vendors/nffi/nffi.py` | `…/land/nato/c2/friendly/unit/{type}/{id}/sapient` | Complete XML documents under `…/raw/nffi/*` in Zenoh |
 | `stanag` | `protocols/vendors/stanag/stanag.py --proto {4586,4607,4609,5516}` | `…/raw/stanag_4609/klv`, `…/air/stanag_4609/camera/unknown/uav`, STANAG 4586 track topics, and `…/{air,sea,land}/stanag_5516/c2/**` | Launcher starts each configured `--proto` directly |
 | `sapient-raw`, `stanag4586-raw`, `stanag5516-raw` | `bridges/*_bridge.py` | `…/raw/<protocol>/<source>` | Optional socket ingress; matching protocol runs with `*_ZENOH_RAW=1` |
 | `cap` | `protocols/random/cap.py` | `…/land/cap/c2/neutral/sensor/{type}/{id}/sapient` | Complete CAP 1.2 XML on `…/raw/cap/**` |
 | `mqtt` | `protocols/random/mqtt_json.py` | `…/land/mqtt/iot/unknown/sensor/{type}/{id}/sapient` | Vendor JSON on `…/raw/mqtt/**` (bridge forwards any payload verbatim) |
 | `sparkplug` | `protocols/vendors/sparkplug/sparkplug.py` | `…/land/sparkplug/iot/unknown/sensor/{type}/{id}/sapient` | Sparkplug B protobuf on `…/raw/mqtt/spBv1.0/**` |
 | `sensor-health` / `mission-route` | Matching `protocols/random/*.py` | `…/land/health/**`, `…/air/mission/**` | JSON on their `…/raw/**` topics |
-| `tak_layer` | `layers/tak_layer.py` | Subscriber — all topics | Event-driven |
-| `tak-bridge` | `bridges/tak_bridge.py` | Subscriber — all topics | TAK-visible CoT ingress |
-| `sitaware-hq-nvg` | `layers/sitaware_layer.py` | Subscriber — all track topics | Pull-based NVG snapshot |
-| `intcore_layer` | `layers/intcore_layer.py` | Subscriber — all track topics | Event-driven; POSTs NVG 2.0.2 to INT-CORE's `Topic/SaveItems` |
-| `intcore-bridge` | `bridges/intcore_bridge.py` | `…/{domain}/intcore/c2/{affiliation}/{entity}/{type}/{id}/sapient` | HTTP Post ADT listener — INT-CORE's own Dissemination service pushes here |
+| `tak_layer` | `layers/vendors/tak/tak_layer.py` | Subscriber — all topics | Event-driven |
+| `tak-bridge` | `bridges/vendors/tak/tak_bridge.py` | Subscriber — all topics | TAK-visible CoT ingress |
+| `sitaware-hq-nvg` | `layers/vendors/tak/systematic/sitaware_layer.py` | Subscriber — all track topics | Pull-based NVG snapshot |
+| `intcore_layer` | `layers/vendors/tak/random/intcore_layer.py` | Subscriber — all track topics | Event-driven; POSTs NVG 2.0.2 to INT-CORE's `Topic/SaveItems` |
+| `intcore-bridge` | `bridges/vendors/intcore/intcore_bridge.py` | `…/{domain}/intcore/c2/{affiliation}/{entity}/{type}/{id}/sapient` | HTTP Post ADT listener — INT-CORE's own Dissemination service pushes here |
 | `track-fusion` | `protocols/fusion.py` | CAT-48 + CAT-21 subscriber | Event-driven |
 
 ### TAK users and external CoT sources
@@ -89,7 +89,7 @@ exactly the lossy-link case that already causes the relayed-NetBird RTMP
 issue in the troubleshooting doc. Not needed until a real source actually
 asks for it.
 
-**STANAG 4609 video, not just drone RTMP.** `bridges/4609_bridge.py` owns
+**STANAG 4609 video, not just drone RTMP.** `bridges/vendors/milspec/4609_bridge.py` owns
 the SRT connection carrying STANAG 4609 MPEG-TS+KLV as its *listener* (the
 sensor/GCS connects in) purely to extract KLV metadata — mediamtx cannot
 also bind that port, and routing the feed through mediamtx first isn't an

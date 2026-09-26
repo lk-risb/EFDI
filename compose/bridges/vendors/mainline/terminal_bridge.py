@@ -66,7 +66,7 @@ import websocket
 
 from http_json import read_json_response
 from namespace_prefix import topic_root
-from protocols.gateway import open_session
+from protocols.vendors.random.gateway import open_session
 import zenoh
 
 TERMINAL_URL   = os.environ.get("MAINLINE_TERMINAL_URL", "https://mainframe.dev.mainline.inc").rstrip("/")

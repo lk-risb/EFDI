@@ -13,8 +13,8 @@ import json
 import time
 
 from google.protobuf.message import DecodeError
-from protocols.gateway import TOPIC_ROOT, open_session, payload_bytes, subscribe
-from schemas.vendors.fpv.crsf_telemetry_pb2 import TelemetryMessage
+from protocols.vendors.random.gateway import TOPIC_ROOT, open_session, payload_bytes, subscribe
+from schemas.vendors.fpv.proto.crsf_telemetry_pb2 import TelemetryMessage
 
 _TOPIC_SUFFIX = "/fpv/telemetry/v1"
 INPUT_TOPIC = TOPIC_ROOT + "/raw/backbone/**"

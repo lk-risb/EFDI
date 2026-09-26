@@ -43,8 +43,8 @@ from urllib.parse import quote, unquote, urlparse
 ROOT = Path(__file__).resolve().parents[2]
 STATE_DIR = Path(os.environ.get("POD_STATE_DIR", str(ROOT / "compose" / "state")))
 ENV_FILE = Path(os.environ.get("EFDI_ENV_FILE", str(ROOT / "compose" / ".env")))
-START_SCRIPT = ROOT / "start.sh"
-STOP_SCRIPT = ROOT / "stop.sh"
+START_SCRIPT = ROOT / "scripts" / "start.sh"
+STOP_SCRIPT = ROOT / "scripts" / "stop.sh"
 NETBIRD_INSTANCE_SCRIPT = ROOT / "scripts" / "netbird-instance.sh"
 CONTROL_HOST = os.environ.get("EFDI_CONTROL_BIND", "127.0.0.1")
 CONTROL_PORT = int(os.environ.get("EFDI_CONTROL_PORT", "18896"))
@@ -103,7 +103,7 @@ _SITAWARE_VENV_PYTHON = ROOT / "compose" / "venv" / "bin" / "python3"
 _SITAWARE_LOCK = threading.Lock()
 
 # Symmetric egress side: one or more SitaWare HQ instances polling EFDI's own
-# NVG feed (layers/sitaware_layer.py), instead of the single SITAWARE_HQ_NVG_*
+# NVG feed (layers/vendors/tak/systematic/sitaware_layer.py), instead of the single SITAWARE_HQ_NVG_*
 # .env slot.
 SITAWARE_EGRESS_MANIFEST_PATH = Path(os.environ.get(
     "EFDI_SITAWARE_EGRESS_MANIFEST_PATH", str(STATE_DIR / "zenoh" / "sitaware-egress-targets.json")))
@@ -169,6 +169,7 @@ SERVICE_SPECS = [
     ("kyber", "Protocols", "Kyber SAPIENT feed (backbone, reuses flex335.py) → tracks"),
     ("fpv", "Protocols", "FPV drone CRSF telemetry (backbone) → tracks"),
     ("ita_efdi", "Protocols", "ITA-EFDI drone + radar feeds (backbone) → tracks"),
+    ("udl-platform-geolocation", "Protocols", "UDL-style platform geolocation JSON (backbone) → tracks — reverse-engineered from live traffic, no portal schema reference found"),
     ("video-zenoh-bridge", "Sensor bridges", "Zenoh-native video prototype: zenohsrc drone feed → mediamtx RTMP → video wall"),
 ]
 SERVICE_NAMES = {name for name, _, _ in SERVICE_SPECS}
@@ -183,43 +184,43 @@ SERVICE_SOURCES = {
     "zenoh": "(container) efdi-pod-zenoh-router",
     "admin-control": "admin_control.py",
     "cert-renewer": "(managed) step-ca certificate renewal",
-    "meteolt": "bridges/meteolt_forecast_bridge.py",
+    "meteolt": "bridges/vendors/meteolt/meteolt_forecast_bridge.py",
     "dronuradaras": "bridges/vendors/mainline/dronuradaras_bridge.py",
     "mainline_terminal": "bridges/vendors/mainline/terminal_bridge.py",
-    "mavlink-command": "bridges/mavlink_command_bridge.py",
+    "mavlink-command": "bridges/vendors/mavlink/mavlink_command_bridge.py",
     "asterix": "protocols/vendors/asterix/cat.py",
-    "track-fusion": "protocols/fusion.py",
-    "nffi": "protocols/random/nffi.py",
+    "track-fusion": "protocols/vendors/random/fusion.py",
+    "nffi": "protocols/vendors/nffi/nffi.py",
     "sapient": "protocols/vendors/sapient/flex335.py",
     "stanag4586": "protocols/vendors/stanag/stanag.py",
     "stanag4609": "protocols/vendors/stanag/stanag.py",
     "stanag5516": "protocols/vendors/stanag/stanag.py",
-    "cap": "protocols/random/cap.py",
-    "mqtt": "protocols/random/mqtt_json.py",
+    "cap": "protocols/vendors/random/cap.py",
+    "mqtt": "protocols/vendors/random/mqtt_json.py",
     "aartos": "protocols/vendors/aartos/aartos_json.py",
     "sparkplug": "protocols/vendors/sparkplug/sparkplug.py",
-    "sensor-health": "protocols/random/sensor_health.py",
-    "mission-route": "protocols/random/mission_route.py",
-    "sapient-raw": "bridges/flex335_bridge.py",
-    "stanag4586-raw": "bridges/4586_bridge.py",
-    "stanag4609-raw": "bridges/4609_bridge.py",
-    "stanag5516-raw": "bridges/5516_bridge.py",
-    "mqtt-raw": "bridges/mqtt_bridge.py",
-    "aartos-raw": "bridges/aartos_bridge.py",
-    "aartos-wifi-raw": "bridges/aartos_bridge.py",
-    "mediamtx": "bridges/mediamtx/mediamtx",
-    "tak_layer": "layers/tak_layer.py",
-    "tak_alert_layer": "layers/tak_alert_layer.py",
-    "tak-bridge": "bridges/tak_bridge.py",
-    "sitaware": "bridges/sitaware_bridge.py",
-    "sitaware_layer": "layers/sitaware_layer.py",
-    "intcore_layer": "layers/intcore_layer.py",
-    "intcore-bridge": "bridges/intcore_bridge.py",
-    "backbone-bridge": "bridges/backbone_bridge.py",
-    "backbone_layer": "layers/backbone_layer.py",
-    "generic_json": "protocols/random/generic_json.py",
-    "geojson": "protocols/random/geojson.py",
-    "camera_sites": "protocols/random/camera_sites.py",
+    "sensor-health": "protocols/vendors/random/sensor_health.py",
+    "mission-route": "protocols/vendors/random/mission_route.py",
+    "sapient-raw": "bridges/vendors/sapient/flex335_bridge.py",
+    "stanag4586-raw": "bridges/vendors/milspec/4586_bridge.py",
+    "stanag4609-raw": "bridges/vendors/milspec/4609_bridge.py",
+    "stanag5516-raw": "bridges/vendors/milspec/5516_bridge.py",
+    "mqtt-raw": "bridges/vendors/random/mqtt_bridge.py",
+    "aartos-raw": "bridges/vendors/aaronia/aartos_bridge.py",
+    "aartos-wifi-raw": "bridges/vendors/aaronia/aartos_bridge.py",
+    "mediamtx": "bridges/vendors/mediamtx/mediamtx",
+    "tak_layer": "layers/vendors/tak/tak_layer.py",
+    "tak_alert_layer": "layers/vendors/tak/tak_alert_layer.py",
+    "tak-bridge": "bridges/vendors/tak/tak_bridge.py",
+    "sitaware": "bridges/vendors/sitaware/sitaware_bridge.py",
+    "sitaware_layer": "layers/vendors/tak/systematic/sitaware_layer.py",
+    "intcore_layer": "layers/vendors/tak/random/intcore_layer.py",
+    "intcore-bridge": "bridges/vendors/intcore/intcore_bridge.py",
+    "backbone-bridge": "bridges/vendors/random/backbone_bridge.py",
+    "backbone_layer": "layers/vendors/tak/random/backbone_layer.py",
+    "generic_json": "protocols/vendors/random/generic_json.py",
+    "geojson": "protocols/vendors/random/geojson.py",
+    "camera_sites": "protocols/vendors/random/camera_sites.py",
     "socbx": "protocols/vendors/socbx/socbx.py",
     "palantir": "protocols/vendors/palantir/palantir.py",
     "tacvox": "protocols/vendors/tacvox/tacvox.py",
@@ -229,7 +230,8 @@ SERVICE_SOURCES = {
     "kyber": "protocols/vendors/kyber/kyber.py",
     "fpv": "protocols/vendors/fpv/fpv.py",
     "ita_efdi": "protocols/vendors/ita_efdi/ita_efdi.py",
-    "video-zenoh-bridge": "bridges/video_zenoh_bridge.py",
+    "udl-platform-geolocation": "protocols/vendors/udl/platform_geolocation.py",
+    "video-zenoh-bridge": "bridges/vendors/random/video_zenoh_bridge.py",
 }
 
 
@@ -970,7 +972,7 @@ def _sitaware_stop(target_id: str) -> None:
 
 
 def _sitaware_start(target: dict, secret: dict | None) -> dict:
-    """Same env-var contract bridges/sitaware_bridge.py already documents —
+    """Same env-var contract bridges/vendors/sitaware/sitaware_bridge.py already documents —
     only URL/credentials/topic-source vary per target; API path, poll
     interval, discover mode, and TLS verification stay whatever this
     deployment's own .env already sets for every SitaWare target."""
@@ -1124,7 +1126,7 @@ def _sitaware_egress_stop(target_id: str) -> None:
 
 
 def _sitaware_egress_start(target: dict, secret: dict | None) -> dict:
-    """Same env-var contract layers/sitaware_layer.py already documents —
+    """Same env-var contract layers/vendors/tak/systematic/sitaware_layer.py already documents —
     only bind/port/path/credentials vary per target; TLS cert/key, staleness
     threshold, max tracks, and anonymous/insecure-http policy stay whatever
     this deployment's own .env already sets for every SitaWare egress feed."""

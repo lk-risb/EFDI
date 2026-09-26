@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Eclipse Sparkplug B on Zenoh -> normalized sensor records.
 
-bridges/mqtt_bridge.py forwards broker payloads verbatim, so Sparkplug's
+bridges/vendors/random/mqtt_bridge.py forwards broker payloads verbatim, so Sparkplug's
 protobuf arrives untouched under ``.../raw/mqtt/spBv1.0/**``. The specification
 reserves that topic namespace, which is why this decoder can subscribe to it
 directly instead of sniffing every payload on the broker: JSON feeds stay with
-protocols/random/mqtt_json.py and the two never contend.
+protocols/vendors/random/mqtt_json.py and the two never contend.
 
 Sparkplug topic grammar (levels become Zenoh key segments):
     spBv1.0/{group_id}/{message_type}/{edge_node_id}[/{device_id}]
@@ -29,7 +29,7 @@ from gateway import TOPIC_ROOT, open_session, payload_bytes, publish_dual, subsc
 
 Payload = import_module("protocols.vendors.sparkplug.sparkplug_b_pb2").Payload
 SparkplugRecord = import_module(
-    "protocols.proto.sparkplug_pb2").SparkplugRecord
+    "protocols.vendors.random.proto.sparkplug_pb2").SparkplugRecord
 
 INPUT_TOPIC = os.environ.get("SPARKPLUG_INPUT_TOPIC") or TOPIC_ROOT + "/raw/mqtt/spBv1.0/**"
 OUTPUT_TOPIC = TOPIC_ROOT + "/land/sparkplug/iot/unknown/sensor"

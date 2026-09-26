@@ -20,7 +20,7 @@ Please **do not** open a public GitHub issue for security vulnerabilities.
 Use [GitHub Security Advisories](https://github.com/lk-risb/EFDI/security/advisories/new) to report privately — this keeps the report confidential until a fix ships.
 
 Include, where possible:
-- Affected component (a specific bridge/layer, the Zenoh router config, the zenoh-admin API/UI, `start.sh`/deployment scripts)
+- Affected component (a specific bridge/layer, the Zenoh router config, the zenoh-admin API/UI, `scripts/start.sh`/deployment scripts)
 - Steps to reproduce
 - Impact (what an attacker could actually do — e.g. cross-namespace publish, credential exposure, auth bypass)
 
@@ -28,7 +28,7 @@ You should receive an acknowledgement within a few days. There's no fixed SLA �
 
 ## Scope
 
-This repo covers source bridges, protocol translators, and output layers (`compose/{bridges,protocols,layers}/`), the Zenoh router deployment (`compose/docker-compose.yml`), the zenoh-admin panel (`compose/zenoh-admin/api`, `compose/zenoh-admin/ui`), and the `start.sh`/`stop.sh` launcher scripts. It does not cover vulnerabilities in upstream dependencies (Zenoh itself, ATAK/TAK Server, SitaWare) — report those to their respective maintainers.
+This repo covers source bridges, protocol translators, and output layers (`compose/{bridges,protocols,layers}/`), the Zenoh router deployment (`compose/docker-compose.yml`), the zenoh-admin panel (`compose/zenoh-admin/api`, `compose/zenoh-admin/ui`), and the `scripts/start.sh`/`scripts/stop.sh` launcher scripts. It does not cover vulnerabilities in upstream dependencies (Zenoh itself, ATAK/TAK Server, SitaWare) — report those to their respective maintainers.
 
 ## Notes for Reviewers
 

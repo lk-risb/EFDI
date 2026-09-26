@@ -2,17 +2,17 @@
 """2T Security's "soc-bx" schema on the EFDI Backbone trial fabric ->
 EFDI tracks + sensor alerts.
 
-Unlike protocols/random/generic_json.py and geojson.py, this participant's
+Unlike protocols/vendors/random/generic_json.py and geojson.py, this participant's
 data comes across as real protobuf, not JSON — so it needs a real .proto
 schema, not a flat-key guess. The schema was fetched from the fabric portal's
 Schema viewer (this vendor uploaded one, unlike most other participants) and
 is vendored at compose/schemas/vendors/socbx/socbx_unified.proto and
 socbx_alerts.proto — third-party schemas live under compose/schemas/vendors/
 <vendor>/, kept apart from both this decoder (compose/protocols/vendors/socbx/)
-and EFDI's own /v2 envelope contracts in compose/protocols/proto/ — see those
+and EFDI's own /v2 envelope contracts in compose/protocols/vendors/random/proto/ — see those
 files for the schema's own provenance/SHA-256.
 
-Two topics decoded, both fed by bridges/backbone_bridge.py's raw relay
+Two topics decoded, both fed by bridges/vendors/random/backbone_bridge.py's raw relay
 (TOPIC_ROOT/raw/backbone/<original key>, unchanged from the fabric):
 
   <slot>/soc-bx/unified/raw/v1  (protobuf:UnifiedSchema) — a map of tracked
@@ -21,7 +21,7 @@ Two topics decoded, both fed by bridges/backbone_bridge.py's raw relay
 
   <slot>/soc-bx/alerts/v1  (protobuf:Alert) — SIEM alerts with a lat/lon of
     their own. Decoded into point sensor-alert markers, same shape as
-    protocols/random/camera_sites.py's output (no coloring logic of its own
+    protocols/vendors/random/camera_sites.py's output (no coloring logic of its own
     here either — tak_layer.py's existing red/green-by-age handles it, this
     file only needs to set last_detection_ts when a fresh alert arrives).
 
@@ -38,9 +38,9 @@ import json
 import time
 
 from google.protobuf.message import DecodeError
-from protocols.gateway import TOPIC_ROOT, open_session, payload_bytes, subscribe
-from schemas.vendors.socbx.socbx_alerts_pb2 import Alert
-from schemas.vendors.socbx.socbx_unified_pb2 import UnifiedSchema
+from protocols.vendors.random.gateway import TOPIC_ROOT, open_session, payload_bytes, subscribe
+from schemas.vendors.socbx.proto.socbx_alerts_pb2 import Alert
+from schemas.vendors.socbx.proto.socbx_unified_pb2 import UnifiedSchema
 
 # The slot prefix is a per-deployment fabric registration id, not something
 # EFDI's own code should hardcode — matched by shape instead (any slot's

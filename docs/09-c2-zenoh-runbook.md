@@ -1,7 +1,7 @@
 # 09 — C2 ↔ Zenoh Bidirectional Runbook
 
 The directions are independent. Complete only the paths exposed and licensed
-by the actual deployment, then select their services in `./start.sh`.
+by the actual deployment, then select their services in `./scripts/start.sh`.
 
 ## 9.1 Verify the common Zenoh side
 
@@ -55,7 +55,7 @@ On the TAK Server side:
    operations in its [official API](https://docs.tak.gov/api/takserver); exact
    buttons differ between file-user, LDAP and external-identity deployments.
 5. Place the PEM files in a runtime-only directory on the EFDI host, enter their
-   paths above, select `tak-layer` in `./start.sh`, and confirm the identity appears
+   paths above, select `tak-layer` in `./scripts/start.sh`, and confirm the identity appears
    as connected in TAK Server.
 
 ## 9.3 TAK Server → Zenoh

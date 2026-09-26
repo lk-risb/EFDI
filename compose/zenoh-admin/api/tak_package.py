@@ -1,5 +1,5 @@
 """TAK Server mTLS client credential upload — the "Option B" bundle referenced
-by compose/layers/tak_layer.py's own header comment (cert/key/CA PEM files,
+by compose/layers/vendors/tak/tak_layer.py's own header comment (cert/key/CA PEM files,
 generated with `make add-service NAME=efdi-pod` in the TAK repo, which writes
 them to certs/<name>/{ca,cert,key}.pem on the operator's machine). Accepts
 those three files individually, or all at once as a zip of that directory —

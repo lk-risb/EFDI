@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://efdi.ltu/schemas/json/intcore_track.schema.json",
+  "title": "INT-CORE-ingested track (NVG)",
+  "description": "Published BY bridges/intcore_bridge.py via protocols.gateway.publish_dual() to {TOPIC_ROOT}/{domain}/intcore/c2/{aff}/{entity}/{id}/tracks/v1, decoded from an INT-CORE NVG 2.0 <point> element (KML->NVG transform), plus sibling .../proto/tracks/v1 and .../sapient/tracks/v1 views — this schema documents the JSON leg. domain/aff/entity are slugged from the point's own symbol code by sidc_to_topic() — only app6x:/sidc: schemes are trusted as real SIDC; flag:/icon: symbols fall back to unknown/unit routing. The parsed SIDC itself is not stored on the track (transient, topic-routing only) — see target_type below for what SAPIENT actually reads.",
+  "x-efdi-topic": "{TOPIC_ROOT}/{domain}/intcore/c2/{aff}/{entity_type}/{id}/tracks/v1",
+  "x-efdi-producer": "bridges/intcore_bridge.py",
+  "x-efdi-consumer": "layers/tak_layer.py, layers/sitaware_layer.py",
+  "type": "object",
+  "required": ["lat_deg", "lon_deg", "_ts", "_src", "_ingress"],
+  "properties": {
+    "lat_deg": {"type": "number", "minimum": -90, "maximum": 90},
+    "lon_deg": {"type": "number", "minimum": -180, "maximum": 180},
+    "_ts": {"type": "number", "description": "The NVG point's own <TimeStamp> when present and parseable; otherwise the bridge's own receipt time."},
+    "_src": {"type": "string", "description": "Fixed source tag identifying this bridge."},
+    "_ingress": {"type": "string", "const": "intcore", "description": "Marks this track as having entered via the INT-CORE path specifically."},
+    "uid": {"type": "string", "description": "Decoded from the point's uri attribute (URL-unquoted, last ':'-segment). Omitted, not empty, when uri was absent."},
+    "callsign": {"type": "string", "description": "From the point's label attribute. Omitted when absent."},
+    "alt_m": {"type": "number", "description": "From the point's z attribute (already meters). Omitted when absent/unparseable."},
+    "speed_ms": {"type": "number", "minimum": 0, "description": "From the point's speed attribute, converted from knots (NVG data.xsd unit) via *0.514444. Omitted when absent/unparseable."},
+    "heading_deg": {"type": "number", "description": "From the point's course attribute, degrees as-is (not normalized to [0,360) unlike sitaware_track). Omitted when absent/unparseable."},
+    "target_type": {"type": "string", "description": "Derived from the same parsed SIDC via entity_type_for_sidc() (aircraft/unit/vessel/satellite) — feeds flex335.py's _classification_for() for the SAPIENT view. Unlike sitaware_track, there is no raw sidc field here to compare it against (see note above); this is the only classification signal this producer carries."}
+  },
+  "additionalProperties": false
+}

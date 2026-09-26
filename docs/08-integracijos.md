@@ -185,7 +185,7 @@ niekada perkoduojami:
   ilgio priešdėlio.
 - STANAG 4609 — žalias MISB KLV paketas.
 
-`RawEnvelope` (`../compose/protocols/proto/raw_envelope.proto`) neša
+`RawEnvelope` (`../compose/protocols/vendors/random/proto/raw_envelope.proto`) neša
 `protocol`, `profile` (pvz., `cat048`, `misb-st0601`), `content_type` ir
 `payload` baitus.
 
@@ -237,7 +237,7 @@ Standards Institution išlaiko BSI Flex 335 nuosavybę ir autorių teises,
 publikavimo teises turi BSI Standards Ltd.
 
 Ji gyvena `compose/protocols/vendors/sapient/` kataloge, o ne tiesiogiai
-`compose/protocols/proto/`, nes tas katalogas skirtas EFDI *pačios* sutartims,
+`compose/protocols/vendors/random/proto/`, nes tas katalogas skirtas EFDI *pačios* sutartims,
 o tai — kažkieno kito: ji neša savo paketą (`sapient_msg.bsi_flex_335_v2_0`) ir
 vidinius importavimo kelius `sapient_msg/bsi_flex_335_v2_0/<file>.proto`, kurie
 išsisprendžia tik jei šis katalogas yra savas protoc include root, todėl
@@ -304,10 +304,10 @@ Išvestis ir įvestis yra atskiros paslaugos. TAK ar SitaWare išvesties
 #### TAK Server
 
 Zenoh → TAK kryptimi sukonfigūruokite `TAK_HOST/TAK_PORT` ir pasirinkite
-`tak_layer` (`layers/tak_layer.py`). Jis prenumeruoja normalizuotas Zenoh
+`tak_layer` (`layers/vendors/tak/tak_layer.py`). Jis prenumeruoja normalizuotas Zenoh
 temas ir siunčia CoT per TCP/mTLS į TAK Server. TAK išduoti kliento
 kredencialai reikalingi, kai `TAK_TLS=1`. TAK → Zenoh kryptimi pasirinkite
-`tak-bridge` (`bridges/tak_bridge.py`), kuris normalizuoja gaunamą CoT srautą
+`tak-bridge` (`bridges/vendors/tak/tak_bridge.py`), kuris normalizuoja gaunamą CoT srautą
 atgal į magistralę. Pirmenybę teikite stabiliam DNS `TAK_HOST`; jei TAK
 serverio sertifikatas turi kitokį paveldėtą DNS SAN, nustatykite
 `TAK_TLS_SERVER_NAME` į tą SAN, kad vardo tikrinimas liktų įjungtas.
@@ -315,7 +315,7 @@ serverio sertifikatas turi kitokį paveldėtą DNS SAN, nustatykite
 #### SitaWare
 
 Zenoh → SitaWare HQ kryptimi pasirinkite `sitaware_layer`
-(`layers/sitaware_layer.py`) ir sukonfigūruokite HQ NVG Import Subscription
+(`layers/vendors/tak/systematic/sitaware_layer.py`) ir sukonfigūruokite HQ NVG Import Subscription
 apklausti autentifikuotą NVG 2.0.2 srautą, kurį jis teikia.
 
 SitaWare HQ → Zenoh kryptimi gaukite tikrą REST resursą iš diegimo ICD:

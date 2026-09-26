@@ -25,14 +25,14 @@ and nothing downstream cares which directory a script lives in.
 
 If your sensor reports a moving object — position, optionally speed/heading/
 altitude/identity — it almost certainly fits the existing generic
-`NormalizedTrack` schema (`../compose/protocols/proto/normalized_track.proto`)
+`NormalizedTrack` schema (`../compose/protocols/vendors/random/proto/normalized_track.proto`)
 and you need **no new protobuf work at all**. Skip to step 2.
 
 Only define a new `.proto` message if your data has structured fields
 `NormalizedTrack` genuinely can't express (e.g. a multi-point area/zone, or
 a domain-specific compound value). If so:
 
-1. Add a new `.proto` file under `compose/protocols/proto/` — every
+1. Add a new `.proto` file under `compose/protocols/vendors/random/proto/` — every
    EFDI-authored schema lives there, regardless of which translator owns it
    (an actual vendored/licensed third-party schema, like the SAPIENT or
    Sparkplug B wire contracts, is the one exception and stays under
@@ -101,7 +101,7 @@ don't have real affiliation data, and what the object is (`vehicle`,
 
 **Configuration — nothing hardcoded.** Any host, port, URL, or credential your
 script needs comes from an environment variable, never a literal in the code
-(`compose/bridges/sitaware_bridge.py` is a good example of an all-env-driven
+(`compose/bridges/vendors/sitaware/sitaware_bridge.py` is a good example of an all-env-driven
 bridge). Add each new variable to `compose/.env.example` with a one-line
 comment explaining what it's for — that file is the single source of truth
 for what a deployment can configure, and it's what the next administrator
@@ -132,7 +132,7 @@ template (search for `cap` in `start.sh` to see all four at once):
 ## 10.4 Verify end-to-end
 
 ```bash
-./start.sh --service your-service-name
+./scripts/start.sh --service your-service-name
 ```
 Then confirm data is actually flowing — subscribe to your topic with any
 Zenoh client (the repo's `clients/examples/` has ready-made subscribe
@@ -144,7 +144,7 @@ correctly.
 ## 10.5 New CoT symbol needed? (TAK output only)
 
 If your sensor's affiliation/entity combination doesn't already map to a CoT
-type, add it to `_TOPIC_COT` in `compose/layers/tak_layer.py`:
+type, add it to `_TOPIC_COT` in `compose/layers/vendors/tak/tak_layer.py`:
 ```python
 "air/**/hostile/uav/**":      ("a-h-A-M-F-Q", AIR_STALE_S),
 "land/**/neutral/sensor/**":  ("a-n-G-E-S",   LAND_STALE_S * 2),
