@@ -41,7 +41,16 @@ import time
 import zenoh
 from cryptography import x509
 from cryptography.x509.oid import NameOID
+from delivery_reconcile import DeliveryReconciler
 from protocols.gateway import TOPIC_ROOT, open_session, payload_bytes, payload_json, subscribe
+
+# How often the delivery-reconciliation self-canary + intent heartbeat run
+# (see delivery_reconcile.py). This fabric's ACL denies silently — a
+# misconfigured or expired identity would otherwise mean tracks vanish with
+# nothing in this layer's own logs to show it, exactly the failure mode this
+# is for. 60s, not per-message: over-confirming loads the fabric for no
+# benefit on what is otherwise a loss-tolerant telemetry stream.
+_RECONCILE_INTERVAL_S = 60
 
 _POD_STATE_DIR = os.environ.get("POD_STATE_DIR", "/root/efdi-router/compose/state")
 _BACKBONE_TLS_DIR = os.path.join(_POD_STATE_DIR, "zenoh-backbone", "tls")
@@ -106,7 +115,7 @@ def _open_backbone_session():
             time.sleep(15)
 
 
-def _handle(backbone_session, vendor_prefix: str, sample, verbose: bool):
+def _handle(backbone_session, vendor_prefix: str, sample, verbose: bool, reconciler: DeliveryReconciler):
     key = str(sample.key_expr)
     suffix = key[len(TOPIC_ROOT) + 1:] if key.startswith(TOPIC_ROOT + "/") else key
     if "/backbone/" in suffix or suffix.startswith("raw/") or "/@" in key:
@@ -124,6 +133,7 @@ def _handle(backbone_session, vendor_prefix: str, sample, verbose: bool):
 
     topic = "{}/efdi/{}".format(vendor_prefix, suffix)
     backbone_session.put(topic, payload_bytes(sample), encoding=zenoh.Encoding.APPLICATION_JSON)
+    reconciler.sent(topic)
     if verbose:
         print("EFDI track {} -> {}".format(key, topic), flush=True)
 
@@ -143,11 +153,18 @@ def main():
 
     backbone_session, vendor_prefix = _open_backbone_session()
     print("backbone layer starting — sending EFDI tracks to the backbone as {}/efdi/**".format(vendor_prefix), flush=True)
-    sub = subscribe(local_session, TOPIC_ROOT + "/**", lambda sample: _handle(backbone_session, vendor_prefix, sample, args.verbose))
+    reconciler = DeliveryReconciler(
+        backbone_session,
+        query_prefix="{}/efdi".format(vendor_prefix),
+        heartbeat_topic="{}/efdi/_meta/heartbeat".format(vendor_prefix),
+    )
+    sub = subscribe(local_session, TOPIC_ROOT + "/**",
+                     lambda sample: _handle(backbone_session, vendor_prefix, sample, args.verbose, reconciler))
 
     try:
         while True:
-            time.sleep(3600)
+            time.sleep(_RECONCILE_INTERVAL_S)
+            reconciler.tick(verbose=args.verbose)
     except KeyboardInterrupt:
         pass
     finally:
