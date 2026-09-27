@@ -11,9 +11,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 # layers/    = TAK and SitaWare connection/output layers
 # Shared helpers every bridge/layer imports by bare name.
 COPY control/namespace_prefix.py control/http_json.py control/zenoh_auth.py control/gateway.py ./
-# bridges/ and layers/ are flattened onto /app so CMD can name a script directly.
-COPY bridges/*.py layers/*.py ./
-# protocols/ keeps its package layout — modules import protocols.<group>.<name>.
+# bridges/, layers/, and protocols/ all keep their package layout now that
+# each nests by vendor/type — a flat glob can no longer name every script,
+# and modules import protocols.<group>.<name> regardless.
+COPY bridges ./bridges
+COPY layers ./layers
 COPY protocols ./protocols
 # Generate the protobuf bindings exactly as scripts/generate-protobuf.sh does on
 # the host: -I . so `import "protocols/..."` resolves, output into generated/,
