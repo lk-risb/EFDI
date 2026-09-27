@@ -292,12 +292,12 @@ services:
       - ${POD_STATE_DIR}/integrations/tak:/integrations/tak:rw
       # Read-only: mediamtx (native host process) writes these, the WebUI's
       # Streams tab only serves them back for the scrub-back bar.
-      - ./bridges/mediamtx/recordings:/mediamtx-recordings:ro
+      - ./bridges/vendors/mediamtx/recordings:/mediamtx-recordings:ro
       # Read-write: the Streams tab's config editor (streams.py) saves
       # settings here directly, then restarts mediamtx (a native host
       # process, same as start.sh launches it) via the existing
       # /v1/services/{name}/restart control-agent action for them to apply.
-      - ./bridges/mediamtx/mediamtx.yml:/mediamtx-config/mediamtx.yml:rw
+      - ./bridges/vendors/mediamtx/mediamtx.yml:/mediamtx-config/mediamtx.yml:rw
     healthcheck:
       disable: true
 
