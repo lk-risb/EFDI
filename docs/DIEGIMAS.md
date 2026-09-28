@@ -695,7 +695,7 @@ Adresas priima tik GET/HEAD, pagal nutylėjimą reikalauja Basic autentifikavimo
 | `tak-layer` | `layers/vendors/tak/tak_layer.py` | Prenumeratorius — visos temos | Įvykio valdomas |
 | `tak-bridge` | `bridges/vendors/tak/tak_bridge.py` | Prenumeratorius — visos temos | TAK matomo CoT srauto priėmimas |
 | `tak_alert_layer` | `layers/vendors/tak/tak_alert_layer.py` | Prenumeratorius — `…/land/**` | Įvykio valdomas; pasirenkama atskirai, pagal nutylėjimą išjungta |
-| `sitaware-hq-nvg` | `layers/sitaware_hq_nvg_feed.py` | Prenumeratorius — visos takelių temos | HQ periodiškai ima NVG būseną |
+| `sitaware-hq-nvg` | `layers/vendors/tak/systematic/sitaware_layer.py` | Prenumeratorius — visos takelių temos | HQ periodiškai ima NVG būseną |
 | `track-fusion` | `protocols/fusion.py` | CAT-48 + CAT-21 prenumeratorius | Įvykio valdomas |
 
 ### TAK naudotojai ir SitaWare HQ technika
@@ -710,8 +710,8 @@ diegimas teikia NFFI, pilnus XML dokumentus skelbkite į
 ### Vaizdo srautas (mediamtx)
 
 Dronų vaizdo srautas eina atskiru keliu, ne per Zenoh: `mediamtx`
-(`bridges/mediamtx/mediamtx`, konfigūracija
-`compose/bridges/mediamtx/mediamtx.yml`) priima vieno drono RTMP srautą ir
+(`bridges/vendors/mediamtx/mediamtx`, konfigūracija
+`compose/bridges/vendors/mediamtx/mediamtx.yml`) priima vieno drono RTMP srautą ir
 paskirsto tą patį srautą TAK, SitaWare bei WebUI "Streams" skirtukui —
 RTSP (tik TCP) ir WebRTC (WHEP) išvestimis, plius paskutinių 10 minučių
 fMP4 įrašais peržiūros slankikliui. Nustatymai redaguojami tiesiogiai iš
@@ -914,7 +914,7 @@ niekada perkoduojami:
   ilgio priešdėlio.
 - STANAG 4609 — žalias MISB KLV paketas.
 
-`RawEnvelope` (`../compose/protocols/proto/raw_envelope.proto`) neša
+`RawEnvelope` (`../compose/protocols/vendors/random/proto/raw_envelope.proto`) neša
 `protocol`, `profile` (pvz., `cat048`, `misb-st0601`), `content_type` ir
 `payload` baitus.
 
@@ -966,7 +966,7 @@ Standards Institution išlaiko BSI Flex 335 nuosavybę ir autorių teises,
 publikavimo teises turi BSI Standards Ltd.
 
 Ji gyvena `compose/protocols/vendors/sapient/` kataloge, o ne tiesiogiai
-`compose/protocols/proto/`, nes tas katalogas skirtas EFDI *pačios* sutartims,
+`compose/protocols/vendors/random/proto/`, nes tas katalogas skirtas EFDI *pačios* sutartims,
 o tai — kažkieno kito: ji neša savo paketą (`sapient_msg.bsi_flex_335_v2_0`) ir
 vidinius importavimo kelius `sapient_msg/bsi_flex_335_v2_0/<file>.proto`, kurie
 išsisprendžia tik jei šis katalogas yra savas protoc include root, todėl
@@ -1692,7 +1692,7 @@ skriptas.
 
 Jei jūsų jutiklis praneša judantį objektą — poziciją, pasirinktinai
 greitį/kursą/aukštį/identitetą — jis beveik tikrai tinka esamai bendrai
-`NormalizedTrack` schemai (`../compose/protocols/proto/normalized_track.proto`)
+`NormalizedTrack` schemai (`../compose/protocols/vendors/random/proto/normalized_track.proto`)
 ir jums **visai nereikia naujo protobuf darbo**. Praleiskite iki 2 žingsnio.
 
 Naują `.proto` pranešimą apibrėžkite tik tada, kai jūsų duomenys turi
@@ -1700,7 +1700,7 @@ struktūrinius laukus, kurių `NormalizedTrack` iš tikrųjų negali išreikšti
 (pvz., daugiataškė zona/plotas, arba domenui specifinė sudėtinė reikšmė).
 Jei taip:
 
-1. Pridėkite naują `.proto` failą po `compose/protocols/proto/` — kiekviena
+1. Pridėkite naują `.proto` failą po `compose/protocols/vendors/random/proto/` — kiekviena
    EFDI-autorystės schema gyvena ten, nepriklausomai nuo to, kuris vertėjas
    ją valdo (tikra vendoruota/licencijuota trečiosios šalies schema, kaip
    SAPIENT ar Sparkplug B laidiniai kontraktai, yra vienintelė išimtis ir
@@ -1715,14 +1715,14 @@ Jei taip:
 ### 9.2 Rašykite skriptą
 
 Kiekvienas tilto/protokolo skriptas seka tą pačią formą. Tai pilna, veikianti
-nuoroda — `compose/protocols/random/cap.py` — sutrumpinta iki dalių, kurios
+nuoroda — `compose/protocols/vendors/random/cap.py` — sutrumpinta iki dalių, kurios
 svarbu:
 
 ```python
 from namespace_prefix import topic_root
 from gateway import open_session, publish_dual
 # Naudokite bendrą schemą — naujo .proto nereikia paprastam judančiam objektui:
-from protocols.proto.normalized_track_pb2 import NormalizedTrack
+from protocols.vendors.random.proto.normalized_track_pb2 import NormalizedTrack
 
 TOPIC_ROOT = topic_root()
 OUTPUT_TOPIC = TOPIC_ROOT + "/<domain>/<your-source-name>/<modality>/<affiliation>/<entity>"
@@ -1779,7 +1779,7 @@ norėdamas sužinoti, ką užpildyti.
 
 **Patikrinkite, ar kompiliuojasi:**
 ```bash
-python3 -m py_compile compose/bridges/your_new_bridge.py
+python3 -m py_compile compose/bridges/vendors/your_vendor/your_new_bridge.py
 ```
 
 ### 9.3 Registruokite jį paleidiklyje
@@ -2316,7 +2316,7 @@ Tai pagauna sintaksės klaidas, TypeScript klaidas ir Dockerfile lūžimus prie�
 | 2026-08-02 | Sujungti `PARUOSIMAS.md`, `INTEGRATIONS.md`, `C2_RUNBOOK.md`, `ADDING_A_SENSOR.md`, `TROUBLESHOOTING.md` ir `GOTCHAS.md` (visi pilnai išversti į lietuvių kalbą) į šį dokumentą (§§1, 7-9, 11) — vienas diegimo vadovas vietoj aštuonių; `ZENOH_ADMIN.md` lieka atskirai |
 | 2026-08-02 | Pridėtas BDS 1,0/1,7 (Data Link Capability / Common Usage GICB Capability) dekodavimas 7 ASTERIX kategorijoms, kurios jau naudoja BDS 3,0/4,0/5,0/6,0 GICB-ištraukimo pagalbininkus (CAT-010/011/018/020/021/048/062), pagal pyModeS |
 | 2026-08-02 | Pervadinti `layers/cot_layer.py` → `layers/vendors/tak/tak_layer.py` ir `layers/nvg_layer.py` → `layers/vendors/tak/systematic/sitaware_layer.py` (tiekėjo pavadintas išvestinis sluoksnis, atitinkantis `tak_bridge.py`/`sitaware_bridge.py` gaunamųjų pavadinimus); pašalinti nenaudojami `cot-udp`/`cot-udp-tak` UDP multicast/unicast paleidiklio įrašai ir `nvg_bridge.py` NVG-XML gaunamasis tiltas (SitaWare įėjimas dabar tik REST) |
-| 2026-08-02 | Sujungtos visos EFDI-autorystės `.proto` schemos po `compose/protocols/proto/` (anksčiau paskirstyta tarp `compose/protocols/random/`, `compose/protocols/vendors/proto/` ir `compose/protocols/vendors/sparkplug/`); vendoruotos trečiųjų šalių schemos (SAPIENT `sapient_msg/`, Sparkplug B) lieka savo `vendors/<name>/` kataloge |
+| 2026-08-02 | Sujungtos visos EFDI-autorystės `.proto` schemos po `compose/protocols/vendors/random/proto/` (anksčiau paskirstyta tarp `compose/protocols/vendors/random/`, `compose/protocols/vendors/proto/` ir `compose/protocols/vendors/sparkplug/`); vendoruotos trečiųjų šalių schemos (SAPIENT `sapient_msg/`, Sparkplug B) lieka savo `vendors/<name>/` kataloge |
 | 2026-08-28 | Pašalinti 2026-07-17 pridėti GeoJSON/OGC Features ir RF spektro stebėjimo vertėjai (tas duomenų kelias dabar yra slaptas) bei visiškai pašalintas SensorThings; CAP, MQTT, Sparkplug B, jutiklių būklės ir misijų maršrutų vertėjai nepakito |
 | 2026-08-28 | Pašalinti 2026-07-17 pridėti CAT-010/020/021/034/048/062 determinuoti dedikuoto prievado susitarimai — šio diegimo radaras/šliuzas siunčia kiekvieną kategoriją sumaišytą viename UDP dump'e per `UDP_INGRESS_PORT` (50000); `CATNN_PORT` lieka prieinamas `vendors/asterix/cat.py` viduje gamintojui, kuris tikrai naudoja dedikuotą prievadą |
 | 2026-08-28 | `zenoh-admin` duomenų bazė perkelta nuo MariaDB prie PostgreSQL 18 (savas konteineris, prievadas `ZENOH_ADMIN_DB_PORT`, numatyta reikšmė `5433`); naujas kintamasis `EFDI_DB_DATA_DIR` prisega duomenų katalogą prie vietinio disko — sąmoningai už `POD_STATE_DIR` ribų, nes pastarasis dabar gali gyventi ant JuiceFS prijungimo. `scripts/migrate_mariadb_to_postgres.py` perkelia esamas paskyras, audito žurnalą ir PKI duomenis diegimams, įdiegtiems iki šios datos. |
