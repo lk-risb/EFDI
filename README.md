@@ -182,7 +182,7 @@ EFDI/
 ├── README.md                    this file
 ├── CONTRIBUTING.md               contribution guide
 ├── SECURITY.md                   vulnerability reporting policy
-├── CLAUDE.md, AGENTS.md         agent / contributor instructions
+├── .ai/                          per-tool agent instructions (.ai/.claude/CLAUDE.md, .ai/.chatgpt/AGENTS.md)
 ├── docs/                        numbered operator manual + reference (see docs/00-start-here.md)
 │   ├── 00-start-here.md         doc map + where to start
 │   ├── 01-14-*.md               architecture, install, config, ATAK/SitaWare, integrations,

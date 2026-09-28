@@ -52,14 +52,14 @@ Jei taip:
 ## 10.2 Rašykite skriptą
 
 Kiekvienas tilto/protokolo skriptas seka tą pačią formą. Tai pilna, veikianti
-nuoroda — `compose/protocols/random/geojson_features.py` (127 eilutės) —
+nuoroda — `compose/protocols/vendors/random/geojson_features.py` (127 eilutės) —
 sutrumpinta iki dalių, kurios svarbu:
 
 ```python
 from namespace_prefix import topic_root
 from gateway import open_session, publish_dual
 # Naudokite bendrą schemą — naujo .proto nereikia paprastam judančiam objektui:
-from protocols.proto.normalized_track_pb2 import NormalizedTrack
+from protocols.vendors.random.proto.normalized_track_pb2 import NormalizedTrack
 
 TOPIC_ROOT = topic_root()
 OUTPUT_TOPIC = TOPIC_ROOT + "/<domain>/<your-source-name>/<modality>/<affiliation>/<entity>"
@@ -116,7 +116,7 @@ norėdamas sužinoti, ką užpildyti.
 
 **Patikrinkite, ar kompiliuojasi:**
 ```bash
-python3 -m py_compile compose/bridges/your_new_bridge.py
+python3 -m py_compile compose/bridges/vendors/your_vendor/your_new_bridge.py
 ```
 
 ## 10.3 Registruokite jį paleidiklyje

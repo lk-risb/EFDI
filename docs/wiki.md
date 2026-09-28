@@ -1351,13 +1351,13 @@ Do not clear a shared operational layer to work around this limitation.
 | `sitaware` | `bridges/vendors/sitaware/sitaware_bridge.py` | `…/land/sitaware/c2/friendly/unit/{type}/{id}/sapient` | Configurable REST poll |
 | `nffi` | `protocols/vendors/nffi/nffi.py` | `…/land/nato/c2/friendly/unit/{type}/{id}/sapient` | Complete XML documents under `…/raw/nffi/*` in Zenoh |
 | `stanag` | `protocols/vendors/stanag/stanag.py --proto {4586,4607,4609,5516}` | `…/raw/stanag_4609/klv`, `…/air/stanag_4609/camera/unknown/uav`, STANAG 4586 track topics, and `…/{air,sea,land}/stanag_5516/c2/**` | Launcher starts each configured `--proto` directly |
-| `sapient-raw`, `stanag4586-raw`, `stanag5516-raw` | `bridges/*_bridge.py` | `…/raw/<protocol>/<source>` | Optional socket ingress; matching protocol runs with `*_ZENOH_RAW=1` |
-| `cap` | `protocols/random/cap.py` | `…/land/cap/c2/neutral/sensor/{type}/{id}/sapient` | Complete CAP 1.2 XML on `…/raw/cap/**` |
-| `geojson` | `protocols/random/geojson_features.py` | `…/land/ogc/c2/neutral/zone/{type}/{id}/sapient` | GeoJSON/OGC Features on `…/raw/geojson/**` |
-| `mqtt` | `protocols/random/mqtt_json.py` | `…/land/mqtt/iot/unknown/sensor/{type}/{id}/sapient` | Vendor JSON on `…/raw/mqtt/**` (bridge forwards any payload verbatim) |
-| `sensorthings` | `protocols/random/sensorthings.py` | `…/land/sensorthings/iot/neutral/sensor/{type}/{id}/sapient` | Observations on `…/raw/sensorthings/**` |
+| `sapient-raw`, `stanag4586-raw`, `stanag5516-raw` | `bridges/vendors/{sapient,milspec}/*_bridge.py` | `…/raw/<protocol>/<source>` | Optional socket ingress; matching protocol runs with `*_ZENOH_RAW=1` |
+| `cap` | `protocols/vendors/random/cap.py` | `…/land/cap/c2/neutral/sensor/{type}/{id}/sapient` | Complete CAP 1.2 XML on `…/raw/cap/**` |
+| `geojson` | `protocols/vendors/random/geojson_features.py` | `…/land/ogc/c2/neutral/zone/{type}/{id}/sapient` | GeoJSON/OGC Features on `…/raw/geojson/**` |
+| `mqtt` | `protocols/vendors/random/mqtt_json.py` | `…/land/mqtt/iot/unknown/sensor/{type}/{id}/sapient` | Vendor JSON on `…/raw/mqtt/**` (bridge forwards any payload verbatim) |
+| `sensorthings` | `protocols/vendors/random/sensorthings.py` | `…/land/sensorthings/iot/neutral/sensor/{type}/{id}/sapient` | Observations on `…/raw/sensorthings/**` |
 | `sparkplug` | `protocols/vendors/sparkplug/sparkplug.py` | `…/land/sparkplug/iot/unknown/sensor/{type}/{id}/sapient` | Sparkplug B protobuf on `…/raw/mqtt/spBv1.0/**` |
-| `spectrum` / `sensor-health` / `mission-route` | Matching `protocols/random/*.py` | `…/land/spectrum/**`, `…/land/health/**`, `…/air/mission/**` | JSON on their `…/raw/**` topics |
+| `spectrum` / `sensor-health` / `mission-route` | Matching `protocols/vendors/random/*.py` | `…/land/spectrum/**`, `…/land/health/**`, `…/air/mission/**` | JSON on their `…/raw/**` topics |
 | `tak_layer` | `layers/vendors/tak/tak_layer.py` | Subscriber — all topics | Event-driven |
 | `tak-bridge` | `bridges/vendors/tak/tak_bridge.py` | Subscriber — all topics | TAK-visible CoT ingress |
 | `sitaware-hq-nvg` | `layers/vendors/tak/systematic/sitaware_layer.py` | Subscriber — all track topics | Pull-based NVG snapshot |
@@ -1397,8 +1397,8 @@ CoT output layer and it does not use Zenoh as the TAK wire transport.
 
 ### Video streaming (mediamtx)
 
-`mediamtx` (`bridges/mediamtx/mediamtx`, config at
-`compose/bridges/mediamtx/mediamtx.yml`) is a separate video pipeline —
+`mediamtx` (`bridges/vendors/mediamtx/mediamtx`, config at
+`compose/bridges/vendors/mediamtx/mediamtx.yml`) is a separate video pipeline —
 it never touches Zenoh or a topic. It ingests one drone's video, then fans
 that same path out to TAK, SitaWare, and the WebUI's Streams tab. Currently
 enabled in `mediamtx.yml`:
@@ -1610,7 +1610,7 @@ for humans and for consumers that cannot link a protobuf runtime.
   length prefix already stripped.
 - STANAG 4609 — the raw MISB KLV packet.
 
-The `RawEnvelope` (`../compose/protocols/proto/raw_envelope.proto`) carries
+The `RawEnvelope` (`../compose/protocols/vendors/random/proto/raw_envelope.proto`) carries
 `protocol`, `profile` (e.g. `cat048`, `misb-st0601`), `content_type`, and the
 `payload` bytes.
 
@@ -1660,7 +1660,7 @@ ownership and copyright of BSI Flex 335, with publication rights held by BSI
 Standards Ltd.
 
 It lives under `compose/protocols/vendors/sapient/` rather than directly under
-`compose/protocols/proto/` because that directory holds EFDI's *own*
+`compose/protocols/vendors/random/proto/` because that directory holds EFDI's *own*
 contracts, while this is someone else's — it carries its own package
 (`sapient_msg.bsi_flex_335_v2_0`) and internal import paths of the form
 `sapient_msg/bsi_flex_335_v2_0/<file>.proto` that only resolve if this
@@ -2369,14 +2369,14 @@ and nothing downstream cares which directory a script lives in.
 
 If your sensor reports a moving object — position, optionally speed/heading/
 altitude/identity — it almost certainly fits the existing generic
-`NormalizedTrack` schema (`../compose/protocols/proto/normalized_track.proto`)
+`NormalizedTrack` schema (`../compose/protocols/vendors/random/proto/normalized_track.proto`)
 and you need **no new protobuf work at all**. Skip to step 2.
 
 Only define a new `.proto` message if your data has structured fields
 `NormalizedTrack` genuinely can't express (e.g. a multi-point area/zone, or
 a domain-specific compound value). If so:
 
-1. Add a new `.proto` file under `compose/protocols/proto/` — every
+1. Add a new `.proto` file under `compose/protocols/vendors/random/proto/` — every
    EFDI-authored schema lives there, regardless of which translator owns it
    (an actual vendored/licensed third-party schema, like the SAPIENT or
    Sparkplug B wire contracts, is the one exception and stays under
@@ -2391,14 +2391,14 @@ a domain-specific compound value). If so:
 ## 10.2 Write the script
 
 Every bridge/protocol script follows the same shape. This is the complete,
-working reference — `compose/protocols/random/geojson_features.py` (127
+working reference — `compose/protocols/vendors/random/geojson_features.py` (127
 lines) — trimmed to the parts that matter:
 
 ```python
 from namespace_prefix import topic_root
 from gateway import open_session, publish_dual
 # Reuse the generic schema — no new .proto needed for a plain moving object:
-from protocols.proto.normalized_track_pb2 import NormalizedTrack
+from protocols.vendors.random.proto.normalized_track_pb2 import NormalizedTrack
 
 TOPIC_ROOT = topic_root()
 OUTPUT_TOPIC = TOPIC_ROOT + "/<domain>/<your-source-name>/<modality>/<affiliation>/<entity>"
@@ -2453,7 +2453,7 @@ reads to know what to fill in.
 
 **Verify it compiles:**
 ```bash
-python3 -m py_compile compose/bridges/your_new_bridge.py
+python3 -m py_compile compose/bridges/vendors/your_vendor/your_new_bridge.py
 ```
 
 ## 10.3 Register it with the launcher
@@ -3402,7 +3402,7 @@ This catches syntax errors, TypeScript errors, and Dockerfile breakage before me
 | 2026-08-02 | Merged `HOST_SETUP.md`, `INTEGRATIONS.md`, `C2_RUNBOOK.md`, `ADDING_A_SENSOR.md`, `TROUBLESHOOTING.md`, and `GOTCHAS.md` into this document ([Bootstrap and Install](03-bootstrap-and-install.md) §1; [Integrations](08-integrations.md), [C2 ↔ Zenoh Runbook](09-c2-zenoh-runbook.md), [Adding a Sensor](10-adding-a-sensor.md) §§7-9; [Troubleshooting](11-troubleshooting.md) §11) — one deployment guide instead of eight; [ZENOH_ADMIN.md](12-zenoh-admin-gui.md) stays separate |
 | 2026-08-02 | Added BDS 1,0/1,7 (Data Link Capability / Common Usage GICB Capability) decoding to the 7 ASTERIX categories that already reuse BDS 3,0/4,0/5,0/6,0 GICB-extraction helpers (CAT-010/011/018/020/021/048/062), sourced from pyModeS |
 | 2026-08-02 | Renamed `layers/cot_layer.py` → `layers/vendors/tak/tak_layer.py` and `layers/nvg_layer.py` → `layers/vendors/tak/systematic/sitaware_layer.py` (vendor-named egress, matching `tak_bridge.py`/`sitaware_bridge.py`'s ingress naming); removed the unused `cot-udp`/`cot-udp-tak` UDP multicast/unicast launcher entries and the `nvg_bridge.py` NVG-XML ingress bridge (SitaWare ingress is REST-only now) |
-| 2026-08-02 | Consolidated every EFDI-authored `.proto` schema under `compose/protocols/proto/` (was split across `compose/protocols/random/`, `compose/protocols/vendors/proto/`, and `compose/protocols/vendors/sparkplug/`); vendored third-party schemas (SAPIENT `sapient_msg/`, Sparkplug B) stay under their own `vendors/<name>/` directory |
+| 2026-08-02 | Consolidated every EFDI-authored `.proto` schema under `compose/protocols/vendors/random/proto/` (was split across `compose/protocols/vendors/random/`, `compose/protocols/vendors/proto/`, and `compose/protocols/vendors/sparkplug/`); vendored third-party schemas (SAPIENT `sapient_msg/`, Sparkplug B) stay under their own `vendors/<name>/` directory |
 | 2026-08-28 | `zenoh-admin`'s backing store switched from MariaDB to PostgreSQL 18 (its own container, port `ZENOH_ADMIN_DB_PORT` default `5433`); new `EFDI_DB_DATA_DIR` variable pins the datadir to local disk, kept deliberately outside `POD_STATE_DIR` now that the latter can live on a JuiceFS mount. `scripts/migrate_mariadb_to_postgres.py` carries existing accounts/audit log/PKI data across for deployments installed before this date. |
 
 ---

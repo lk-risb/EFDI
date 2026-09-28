@@ -47,14 +47,14 @@ a domain-specific compound value). If so:
 ## 10.2 Write the script
 
 Every bridge/protocol script follows the same shape. This is the complete,
-working reference — `compose/protocols/random/geojson_features.py` (127
+working reference — `compose/protocols/vendors/random/geojson_features.py` (127
 lines) — trimmed to the parts that matter:
 
 ```python
 from namespace_prefix import topic_root
 from gateway import open_session, publish_dual
 # Reuse the generic schema — no new .proto needed for a plain moving object:
-from protocols.proto.normalized_track_pb2 import NormalizedTrack
+from protocols.vendors.random.proto.normalized_track_pb2 import NormalizedTrack
 
 TOPIC_ROOT = topic_root()
 OUTPUT_TOPIC = TOPIC_ROOT + "/<domain>/<your-source-name>/<modality>/<affiliation>/<entity>"
@@ -109,7 +109,7 @@ reads to know what to fill in.
 
 **Verify it compiles:**
 ```bash
-python3 -m py_compile compose/bridges/your_new_bridge.py
+python3 -m py_compile compose/bridges/vendors/your_vendor/your_new_bridge.py
 ```
 
 ## 10.3 Register it with the launcher

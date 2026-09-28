@@ -395,7 +395,7 @@ interpretatorių:
 
 ```bash
 compose/venv/bin/pip install -r compose/requirements.txt
-compose/venv/bin/python3 layers/some_layer.py
+compose/venv/bin/python3 compose/layers/vendors/your_vendor/some_layer.py
 ```
 
 Jei `compose/venv` dar neegzistuoja, sukurkite ją taip, kaip tai daro

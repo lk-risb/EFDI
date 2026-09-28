@@ -16,11 +16,11 @@
 | `sitaware` | `bridges/vendors/sitaware/sitaware_bridge.py` | `…/land/sitaware/c2/friendly/unit/{type}/{id}/sapient` | Konfigūruojama REST apklausa |
 | `nffi` | `protocols/vendors/nffi/nffi.py` | `…/land/nato/c2/friendly/unit/{type}/{id}/sapient` | Pilni XML dokumentai Zenoh temoje `…/raw/nffi/*` |
 | `stanag` | `protocols/vendors/stanag/stanag.py --proto {4586,4607,4609,5516}` | `…/raw/stanag_4609/klv`, `…/air/stanag_4609/camera/unknown/uav`, STANAG 4586 takelių temos ir `…/{air,sea,land}/stanag_5516/c2/**` | Paleidiklis kiekvieną sukonfigūruotą `--proto` startuoja tiesiogiai |
-| `sapient-raw`, `stanag4586-raw`, `stanag5516-raw` | `bridges/*_bridge.py` | `…/raw/<protocol>/<source>` | Neprivalomas lizdo (socket) priėmimas; atitinkamas protokolas veikia su `*_ZENOH_RAW=1` |
-| `cap` | `protocols/random/cap.py` | `…/land/cap/c2/neutral/sensor/{type}/{id}/sapient` | Pilnas CAP 1.2 XML temoje `…/raw/cap/**` |
-| `mqtt` | `protocols/random/mqtt_json.py` | `…/land/mqtt/iot/unknown/sensor/{type}/{id}/sapient` | Gamintojo JSON temoje `…/raw/mqtt/**` (tiltas persiunčia bet kokį turinį nepakeistą) |
+| `sapient-raw`, `stanag4586-raw`, `stanag5516-raw` | `bridges/vendors/{sapient,milspec}/*_bridge.py` | `…/raw/<protocol>/<source>` | Neprivalomas lizdo (socket) priėmimas; atitinkamas protokolas veikia su `*_ZENOH_RAW=1` |
+| `cap` | `protocols/vendors/random/cap.py` | `…/land/cap/c2/neutral/sensor/{type}/{id}/sapient` | Pilnas CAP 1.2 XML temoje `…/raw/cap/**` |
+| `mqtt` | `protocols/vendors/random/mqtt_json.py` | `…/land/mqtt/iot/unknown/sensor/{type}/{id}/sapient` | Gamintojo JSON temoje `…/raw/mqtt/**` (tiltas persiunčia bet kokį turinį nepakeistą) |
 | `sparkplug` | `protocols/vendors/sparkplug/sparkplug.py` | `…/land/sparkplug/iot/unknown/sensor/{type}/{id}/sapient` | Sparkplug B protobuf temoje `…/raw/mqtt/spBv1.0/**` |
-| `sensor-health` / `mission-route` | Atitinkami `protocols/random/*.py` | `…/land/health/**`, `…/air/mission/**` | JSON jų pačių `…/raw/**` temose |
+| `sensor-health` / `mission-route` | Atitinkami `protocols/vendors/random/*.py` | `…/land/health/**`, `…/air/mission/**` | JSON jų pačių `…/raw/**` temose |
 | `tak_layer` | `layers/vendors/tak/tak_layer.py` | Prenumeratorius — visos temos | Įvykio valdomas |
 | `tak-bridge` | `bridges/vendors/tak/tak_bridge.py` | Prenumeratorius — visos temos | TAK matomo CoT srauto priėmimas |
 | `sitaware-hq-nvg` | `layers/vendors/tak/systematic/sitaware_layer.py` | Prenumeratorius — visos takelių temos | HQ periodiškai ima NVG būseną |
@@ -66,8 +66,8 @@ sluoksnio ir nenaudoja Zenoh kaip TAK ryšio transporto.
 
 ### Vaizdo srautas (mediamtx)
 
-`mediamtx` (`bridges/mediamtx/mediamtx`, konfigūracija
-`compose/bridges/mediamtx/mediamtx.yml`) yra atskiras vaizdo kelias — jis
+`mediamtx` (`bridges/vendors/mediamtx/mediamtx`, konfigūracija
+`compose/bridges/vendors/mediamtx/mediamtx.yml`) yra atskiras vaizdo kelias — jis
 visiškai nesiliečia su Zenoh ar temomis. Jis priima vieno drono vaizdo srautą
 ir tą patį srautą paskirsto TAK, SitaWare bei WebUI "Streams" skirtukui.
 Šiuo metu `mediamtx.yml` įjungta:
