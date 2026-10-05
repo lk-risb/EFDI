@@ -29,7 +29,7 @@ from __future__ import annotations
 import json
 import time
 
-import bridges.tak_bridge as tak_bridge
+from bridges.vendors.tak import tak_bridge
 from google.protobuf.message import DecodeError
 from protocols.vendors.random.gateway import TOPIC_ROOT, open_session, payload_bytes, subscribe
 from schemas.vendors.palantir.proto.palantir_adsb_pb2 import AdsbBatch

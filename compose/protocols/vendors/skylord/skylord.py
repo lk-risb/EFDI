@@ -27,7 +27,7 @@ from __future__ import annotations
 import json
 import time
 
-import bridges.tak_bridge as tak_bridge
+from bridges.vendors.tak import tak_bridge
 from protocols.vendors.random.gateway import TOPIC_ROOT, open_session, payload_bytes, subscribe
 
 _TOPIC_SUFFIX = "/tracks/cot"
