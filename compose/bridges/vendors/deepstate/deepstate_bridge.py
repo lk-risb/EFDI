@@ -8,11 +8,11 @@ and the endpoint is undocumented and unofficial. Every track carries "DeepState"
 credit and the map's own update time. Check DeepState's terms before publishing this to
 partners.
 
-What is published (JSON tracks, under <ORG>/land/deepstate/...):
-  frontline/neutral/zone/...   faint area fills (shape_style "wash"): occupied (red),
-                               liberated (green) and status-unknown (grey) territory
-  frontline/hostile/unit/...   attack-direction arrows and named Russian/Belarusian units
-                               (tak_layer / sitaware_layer draw these as hostile ground units)
+What is published (JSON tracks, under <ORG>/land/deepstate/frontline/hostile/unit/...):
+  attack-direction arrows and named Russian/Belarusian units (regiments, brigades,
+  divisions, armies...), drawn by tak_layer / sitaware_layer as hostile ground units.
+DeepState's occupied / liberated territory polygons are NOT published: they are not
+region-based and clash with the regional air-alert zones from dangausakis and NEPTUN.
 
 The map is polled every DEEPSTATE_POLL_S, but the tracks are re-published from memory
 every DEEPSTATE_REPUBLISH_S because the layers expire a track two minutes after its
@@ -24,7 +24,7 @@ Env:
   DEEPSTATE_POLL_S         how often to fetch the map (default 3600)
   DEEPSTATE_REPUBLISH_S    how often to re-publish the cached tracks (default 60)
   DEEPSTATE_MAX_AGE_S      publish nothing once the map is older than this (default 259200)
-  DEEPSTATE_MARKERS        set 0 to publish only the territory fills, no unit/attack markers
+  DEEPSTATE_MARKERS        set 0 to publish nothing but a log line (default on)
 """
 
 import argparse
@@ -39,7 +39,6 @@ from http_json import read_json_response
 from namespace_prefix import topic_root
 import zenoh
 from protocols.vendors.random.gateway import open_session
-from protocols.vendors.random.geo_simplify import ring_area, simplify_ring
 from protocols.vendors.random.track_views import add_version, semantic_topic
 
 TOPIC_ROOT = topic_root()
@@ -48,18 +47,9 @@ POLL_S = int(os.environ.get("DEEPSTATE_POLL_S", "3600"))
 REPUBLISH_S = int(os.environ.get("DEEPSTATE_REPUBLISH_S", "60"))
 MAX_AGE_S = int(os.environ.get("DEEPSTATE_MAX_AGE_S", "259200"))
 MARKERS_ENABLED = os.environ.get("DEEPSTATE_MARKERS", "1") != "0"
-ZONE_PREFIX = "{}/land/deepstate/frontline/neutral/zone".format(TOPIC_ROOT)
 UNIT_PREFIX = "{}/land/deepstate/frontline/hostile/unit".format(TOPIC_ROOT)
 SCHEMA = "efdi:deepstate_feature"
-MAX_VERTICES = 120           # the layers draw at most 256 points per ring
-MIN_AREA_DEG2 = 0.005        # smaller polygons are noise at map scale (about 50 km2)
-MAX_ZONES = 80               # the largest ones, so one republish stays a bounded burst
 _HEADERS = {"User-Agent": "EFDI-deepstate-bridge (+open data, credit DeepStateMap)"}
-
-# The last part of a feature's "UA /// EN /// key" name says what it is.
-_STATUS_COLORS = (("status.occupied", "red", "Occupied"), ("status.dismissed", "green", "Liberated"),
-                  ("status.unknown", "grey", "Status unknown"))
-
 
 def _key_and_english(name: str):
     """(key, English text) from a DeepState "UA /// EN /// key" name."""
@@ -77,47 +67,37 @@ def _epoch(value) -> float | None:
 
 
 def map_tracks(data: dict, now: float, markers: bool = True) -> dict:
-    """uid -> (topic prefix, track) from a DeepState map document ({"id", "map"}).
-    `id` is the map's update time as epoch seconds."""
+    """uid -> (topic prefix, track) from a DeepState map document ({"id", "map"}): the
+    attack-direction arrows and the named units. `id` is the map's update time as epoch
+    seconds. Territory polygons are deliberately skipped."""
+    if not markers:
+        return {}
     updated = _epoch(data.get("id"))
     stamp = datetime.fromtimestamp(updated, tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC") if updated else "unknown"
     credit = "Source: DeepStateMap (deepstatemap.live), map updated {} - context only, not live".format(stamp)
-    zones, units = [], []
+    out = {}
     for index, feature in enumerate((data.get("map") or {}).get("features") or []):
         geometry = feature.get("geometry") or {}
-        key, english = _key_and_english((feature.get("properties") or {}).get("name"))
         coords = geometry.get("coordinates")
-        if geometry.get("type") == "Polygon" and coords:
-            for suffix, color, label in _STATUS_COLORS:
-                if key.startswith("geoJSON." + suffix):
-                    ring = coords[0]
-                    if ring and ring_area(ring) >= MIN_AREA_DEG2:
-                        zones.append((ring_area(ring), index, ring, color, english or label, label))
-                    break
-        elif markers and geometry.get("type") == "Point" and coords and len(coords) >= 2:
-            if key.startswith("geoJSON.status.attack_direction"):
-                units.append((index, coords, "Direction of attack", "attack_direction"))
-            elif key.startswith("geoJSON.units."):
-                units.append((index, coords, english or "Unit", "unit"))
-    out = {}
-    for _, index, ring, color, name, label in sorted(zones, reverse=True)[:MAX_ZONES]:
-        ring = simplify_ring([[round(p[0], 5), round(p[1], 5)] for p in ring], MAX_VERTICES)
-        uid = "DS-ZONE-{}".format(index)
-        out[uid] = (ZONE_PREFIX, {
-            "_src": "deepstatemap.live", "_ts": now, "uid": uid, "type": "frontline_zone",
-            "callsign": "DS {}".format(label), "shape_color": color, "shape_style": "wash",
-            "lat_deg": round(sum(p[1] for p in ring[:-1]) / (len(ring) - 1), 5),
-            "lon_deg": round(sum(p[0] for p in ring[:-1]) / (len(ring) - 1), 5),
-            "geometry": {"type": "Polygon", "coordinates": [ring]}, "status": label,
-            "alert_id": "DEEPSTATE", "country": "UA", "level": color,
-            "remarks": "{} - {}".format(label if name == label else "{}: {}".format(label, name), credit),
-        })
-    for index, coords, name, kind in units:
-        uid = "DS-{}-{}".format("ARROW" if kind == "attack_direction" else "UNIT", index)
+        if geometry.get("type") != "Point" or not coords or len(coords) < 2:
+            continue
+        key, english = _key_and_english((feature.get("properties") or {}).get("name"))
+        if key.startswith("geoJSON.status.attack_direction"):
+            name, kind, uid = "Direction of attack", "attack_direction", "DS-ARROW-{}".format(index)
+        elif key.startswith("geoJSON.units."):
+            name, kind, uid = english or "Unit", "unit", "DS-UNIT-{}".format(index)
+        else:
+            continue
+        try:
+            lat, lon = round(float(coords[1]), 6), round(float(coords[0]), 6)
+        except (TypeError, ValueError):
+            continue
+        if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+            continue
         out[uid] = (UNIT_PREFIX, {
             "_src": "deepstatemap.live", "_ts": now, "uid": uid, "type": kind, "callsign": name,
-            "lat_deg": round(float(coords[1]), 6), "lon_deg": round(float(coords[0]), 6),
-            "target_type": "unit", "position_uncertainty_m": 5000, "remarks": "{} - {}".format(name, credit),
+            "lat_deg": lat, "lon_deg": lon, "target_type": "unit", "position_uncertainty_m": 5000,
+            "remarks": "{} - {}".format(name, credit),
         })
     return out
 
@@ -171,9 +151,7 @@ def main():
                         cached = {}
                     else:
                         cached = map_tracks(data, now, MARKERS_ENABLED)
-                        print("deepstate: {} features ({} zones, {} markers)".format(
-                            len(cached), sum(1 for u in cached if u.startswith("DS-ZONE")),
-                            sum(1 for u in cached if not u.startswith("DS-ZONE"))), flush=True)
+                        print("deepstate: {} markers".format(len(cached)), flush=True)
             for uid, (prefix, track) in cached.items():
                 track["_ts"] = now                       # the layers expire a track 2 minutes after this
                 _put(session, prefix, track)

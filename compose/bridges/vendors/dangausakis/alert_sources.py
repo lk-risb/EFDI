@@ -63,6 +63,10 @@ _LT_COLOURS = (("RAUDON", "red"), ("ORANŽ", "orange"), ("ORANZ", "orange"), ("G
 # the common words are translated. NEPTUN publishes Ukrainian only.
 _UA_WORDS = (
     ("Автономна Республіка Крим", "Autonomous Republic of Crimea"),
+    ("Розвідувальний БпЛА", "Reconnaissance UAV"), ("Ударний БпЛА", "Strike UAV"), ("БпЛА", "UAV"),
+    ("Керована авіабомба", "Guided bomb"), ("КАБ", "Guided bomb"), ("Балістична ракета", "Ballistic missile"),
+    ("Крилата ракета", "Cruise missile"), ("Ракета", "Missile"), ("Шахед", "Shahed"),
+    ("курсом на", "heading for"), ("Підтверджень", "Confirmations"), ("Підтвердження", "Confirmation"),
     ("Ракетна загроза", "Missile threat"), ("Дронова загроза", "Drone threat"),
     ("Балістична загроза", "Ballistic threat"), ("Авіаційна загроза", "Aircraft threat"),
     ("червоний рівень", "red level"), ("помаранчевий рівень", "orange level"),

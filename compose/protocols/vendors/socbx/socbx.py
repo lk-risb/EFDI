@@ -40,6 +40,7 @@ import time
 
 from google.protobuf.message import DecodeError
 from protocols.vendors.random.echo_filter import EchoFilter
+from protocols.vendors.random.icao_ghosts import GhostFilter
 from protocols.vendors.random.gateway import TOPIC_ROOT, open_session, payload_bytes, subscribe
 from schemas.vendors.socbx.proto.socbx_alerts_pb2 import Alert
 from schemas.vendors.socbx.proto.socbx_unified_pb2 import UnifiedSchema
@@ -167,6 +168,7 @@ def run() -> None:
 
     echoes = EchoFilter()
     echo_sub = subscribe(session, TOPIC_ROOT + "/land/**", echoes.on_sample)
+    ghosts = GhostFilter()
     dropped = [0]
 
     def on_sample(sample) -> None:
@@ -175,6 +177,8 @@ def run() -> None:
         try:
             if key.endswith(_UNIFIED_SUFFIX):
                 for record in unified_records(payload):
+                    if record.get("icao24") and ghosts.is_ghost(record["icao24"], record.get("callsign")):
+                        continue            # a bit-flipped copy of an address already seen
                     if echoes.is_echo(record):
                         dropped[0] += 1
                         if dropped[0] in (1, 100) or dropped[0] % 1000 == 0:

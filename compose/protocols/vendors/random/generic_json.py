@@ -25,9 +25,11 @@ normalizer to try.
 from __future__ import annotations
 
 import json
+import re
 import time
 
 from echo_filter import EchoFilter
+from icao_ghosts import GhostFilter
 from gateway import TOPIC_ROOT, open_session, payload_bytes, subscribe
 
 INPUT_TOPIC = TOPIC_ROOT + "/raw/backbone/**"
@@ -42,6 +44,9 @@ _AFFILIATION_SLOT = {
     "neutral": "neutral",
 }
 _DIMENSIONS = ("air", "land", "sea", "space")
+# A participant that sends ADS-B names the object by its bare 6-digit ICAO address and
+# declares no dimension or type; without this it is drawn as a stationary ground unit.
+_ICAO_HEX = re.compile(r"^[0-9a-fA-F]{6}$")
 
 
 def _first(payload: dict, keys) -> object:
@@ -107,7 +112,7 @@ def normalize(payload: dict, origin: str) -> dict | None:
     raw_id = _first(payload, _ID_KEYS) or origin
     label = _first(payload, _LABEL_KEYS)
 
-    return {
+    record = {
         "_ts": time.time(),
         "_src": "backbone:json:" + origin,
         "uid": "BACKBONE-" + "".join(
@@ -115,7 +120,16 @@ def normalize(payload: dict, origin: str) -> dict | None:
         "lat_deg": round(lat, 6),
         "lon_deg": round(lon, 6),
         "callsign": str(label)[:120] if label else str(raw_id)[:120],
-    }, _dimension(payload), _affiliation_slot(payload)
+    }
+    dimension = _dimension(payload)
+    if (dimension == "land" and not payload.get("dimension") and not payload.get("type")
+            and _ICAO_HEX.match(record["callsign"])):
+        # Key it by icao24 like every other ADS-B source, so it merges with the same aircraft
+        # from dangausakis or any other feed, and draw it as an aircraft.
+        record["icao24"] = record["callsign"].lower()
+        record["target_type"] = "aircraft"
+        dimension = "air"
+    return record, dimension, _affiliation_slot(payload)
 
 
 def run() -> None:
@@ -129,6 +143,7 @@ def run() -> None:
     prefix = INPUT_TOPIC[:-len("**")]
     echoes = EchoFilter()
     echo_sub = subscribe(session, TOPIC_ROOT + "/land/**", echoes.on_sample)
+    ghosts = GhostFilter()
 
     def on_sample(sample) -> None:
         try:
@@ -144,6 +159,8 @@ def run() -> None:
             record, dimension, slot = result
             if echoes.is_echo(record):      # a partner's copy of one of our own sensors
                 return
+            if record.get("icao24") and ghosts.is_ghost(record["icao24"], record.get("callsign")):
+                return                      # a bit-flipped copy of an address already seen
             topic = "{}/{}/backbone/{}/unit/tracks/v1".format(TOPIC_ROOT, dimension, slot)
             session.put(topic, json.dumps(record).encode())
         except Exception as exc:

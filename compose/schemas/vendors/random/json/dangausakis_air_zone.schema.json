@@ -22,7 +22,7 @@
       "properties": {"type": {"const": "Polygon"}, "coordinates": {"type": "array", "description": "One closed ring of [lon, lat], at most 150 vertices."}}
     },
     "shape_color": {"enum": ["red", "orange", "yellow"], "description": "Stroke/fill colour tak_layer applies to the polygon."},
-    "shape_style": {"const": "wash", "description": "Present on the faint fills drawn behind the district zones: DA-WASH-<oblast id> (an oblast with an active district alert, coloured by its worst district) and DA-COUNTRY-<code> (a standing country status the site draws, Belarus orange and Russia red). tak_layer draws them with a low-alpha fill and a thin outline."},
+    "shape_style": {"enum": ["wash", "country"], "description": "Present on the fills drawn behind the district zones. \"wash\": DA-WASH-<oblast id> (an oblast with an active district alert, coloured by its worst district), a faint fill with a thin outline. \"country\": DA-COUNTRY-<code> (a standing country status the site draws, Belarus orange and Russia red), a stronger fill and outline so it reads at country scale."},
     "alert_id": {"type": "string", "description": "The alert or oblast id; COUNTRY:<code> for a standing country status."},
     "country": {"type": "string"},
     "level": {"enum": ["red", "orange", "yellow"]},

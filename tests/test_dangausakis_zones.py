@@ -176,6 +176,8 @@ def test_standing_country_zones_keep_the_mainland_and_kaliningrad_but_not_far_is
     assert sorted(out) == ["DA-COUNTRY-BY", "DA-COUNTRY-RU", "DA-COUNTRY-RU-p1"]
     assert out["DA-COUNTRY-RU"][1]["shape_color"] == "red" and out["DA-COUNTRY-BY"][1]["shape_color"] == "orange"
     assert out["DA-COUNTRY-RU"][1]["callsign"] == "RU Russia (danger)"
+    assert out["DA-COUNTRY-RU"][1]["shape_style"] == "country"
+    assert all(t["shape_style"] == "country" for _, t in out.values())
 
 
 def test_load_standing_zones_reads_tone_countries_from_the_geodata_bundle():
@@ -198,5 +200,18 @@ def test_wash_zone_is_a_faint_fill_and_drawn_shapes_are_human_entered_with_a_col
     wash = tak_layer.track_to_cot(dict(track, shape_style="wash"), "a-n-G-I-R")
     assert 'how="h-e"' in solid and re.search(r'<color value="-?\d+"', solid)
     alpha = lambda xml, tag: (int(re.search(tag + r' value="(-?\d+)"', xml).group(1)) & 0xFFFFFFFF) >> 24
-    assert alpha(wash, "fillColor") < alpha(solid, "fillColor") and alpha(wash, "strokeColor") < 0xFF
+    assert alpha(wash, "fillColor") == alpha(solid, "fillColor") == 0x4D      # every fill is 30% opaque
+    assert alpha(wash, "strokeColor") < 0xFF
     assert 'strokeWeight value="1.0"' in wash and 'strokeWeight value="3.0"' in solid
+
+
+def test_country_style_has_the_same_fill_but_an_outline_between_a_wash_and_a_district_zone():
+    b = bridge.parse_boundaries(_bundle(("PL:slaskie", "Silezijos", {"type": "Polygon", "coordinates": [SQUARE]})))
+    (_, (_, track)), = bridge.zone_tracks({"PL:slaskie": _alert("PL:slaskie", level="red")}, b, NOW).items()
+    alpha = lambda xml, tag: (int(re.search(tag + r' value="(-?\d+)"', xml).group(1)) & 0xFFFFFFFF) >> 24
+    wash = tak_layer.track_to_cot(dict(track, shape_style="wash"), "a-n-G-I-R")
+    country = tak_layer.track_to_cot(dict(track, shape_style="country"), "a-n-G-I-R")
+    zone = tak_layer.track_to_cot(track, "a-n-G-I-R")
+    assert alpha(wash, "fillColor") == alpha(country, "fillColor") == alpha(zone, "fillColor") == 0x4D
+    assert alpha(wash, "strokeColor") < alpha(country, "strokeColor") < alpha(zone, "strokeColor")
+    assert 'strokeWeight value="2.0"' in country

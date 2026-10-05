@@ -10,6 +10,9 @@ each as a track via publish_dual() so tak_layer and sitaware_layer draw it:
   <ORG>/air/neptun/hostile/bomb/<type>/<uid>/...      kab (guided / glide bomb)
   <ORG>/air/neptun/hostile/aircraft/<type>/<uid>/...  mig31k
   <ORG>/air/neptun/unknown/aircraft/<type>/<uid>/...  unknown or any type not listed above
+  <ORG>/air/neptun/trail/line/trail/<uid>-TRAIL/...   the path of a threat's last reports
+                                                      (JSON only; a polyline in TAK, drawn behind
+                                                      the marker, oldest report to current position)
 
 Fusion handshake: when protocols/vendors/random/fusion.py matches a threat to a
 non-cooperative EFDI radar track it announces
@@ -52,7 +55,9 @@ import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 
+from bridges.vendors.dangausakis.alert_sources import english
 from http_json import read_json_response
+import zenoh
 from namespace_prefix import topic_root
 from protocols.vendors.random.gateway import publish_dual
 from protocols.vendors.random.proto.normalized_track_pb2 import NormalizedTrack
@@ -85,12 +90,32 @@ def _epoch(iso):
         return None
 
 
+TRAIL_MAX_POINTS = 12
+TRAIL_PREFIX = "{}/air/neptun/trail/line".format(TOPIC_ROOT)
+TRAIL_SUFFIX = "-TRAIL"
+
+
+def _count(t: dict) -> int:
+    try:
+        return int(t.get("count") or 1)
+    except (TypeError, ValueError):
+        return 1
+
+
 def _remarks(t: dict, age_s) -> str:
     parts = [ATTRIBUTION]
+    if t.get("explanationShort"):
+        parts.append(english(t["explanationShort"]).rstrip("."))
+    if _count(t) > 1:
+        parts.append("count: {}".format(_count(t)))
+    if t.get("lifecycle"):
+        parts.append("track status: {}".format(t["lifecycle"]))
     if t.get("confidenceLevel"):
         parts.append("confidence: {}".format(t["confidenceLevel"]))
     if t.get("sourceCount"):
         parts.append("sources: {}".format(t["sourceCount"]))
+    if t.get("heading") is not None and t.get("presumptiveCourse"):
+        parts.append("course is presumed, not measured")
     if t.get("uncertaintyKm"):
         parts.append("position +/-{:g} km".format(t["uncertaintyKm"]))
     if age_s is not None:
@@ -123,13 +148,20 @@ def threat_tracks(data: dict, now: float = None) -> list:
             "uid": "NEPTUN-{}".format(t["id"]),
             "type": kind or "unknown",
             "target_type": entity,
-            "callsign": "NEPTUN {} {}{}".format(
-                kind.upper() or "THREAT", t.get("locality") or t.get("region") or "",
+            "callsign": "NEPTUN {}{} {}{}".format(
+                kind.upper() or "THREAT", " x{}".format(_count(t)) if _count(t) > 1 else "",
+                english(t.get("locality") or t.get("region") or ""),
                 " (STALE)" if stale else "").replace("  ", " ").strip(),
             "lat_deg": t["lat"],
             "lon_deg": t["lon"],
-            "region": t.get("region"),
-            "locality": t.get("locality"),
+            "region": english(t.get("region")),
+            "locality": english(t.get("locality")),
+            "district": english(t.get("district")),
+            "count": _count(t) if _count(t) > 1 else None,
+            "lifecycle": t.get("lifecycle"),
+            "confirmed_ts": _epoch(t.get("confirmedAt")),
+            "course_presumptive": True if t.get("presumptiveCourse") and t.get("heading") is not None else None,
+            "explanation": english(t.get("explanationShort")),
             "confidence": t.get("confidenceLevel"),
             "source_count": t.get("sourceCount"),
             "position_quality": t.get("positionQuality"),
@@ -141,7 +173,36 @@ def threat_tracks(data: dict, now: float = None) -> list:
             track["position_uncertainty_m"] = t["uncertaintyKm"] * 1000
         out.append(("{}/air/neptun/{}/{}".format(TOPIC_ROOT, affiliation, entity),
                     {k: v for k, v in track.items() if v not in ("", None)}))
+        trail = _trail_track(t, track, now)
+        if trail:
+            out.append((TRAIL_PREFIX, trail))
     return out
+
+
+def _trail_track(t: dict, track: dict, now: float):
+    """A polyline of the threat's last reported positions ending at its current one, or None
+    when there are fewer than two distinct points. JSON only, drawn by tak_layer as a line."""
+    points = []
+    for p in (t.get("trail") or [])[-TRAIL_MAX_POINTS:]:
+        try:
+            point = [round(float(p["lon"]), 5), round(float(p["lat"]), 5)]
+        except (TypeError, ValueError, KeyError):
+            continue
+        if not points or points[-1] != point:
+            points.append(point)
+    here = [round(float(track["lon_deg"]), 5), round(float(track["lat_deg"]), 5)]
+    if not points or points[-1] != here:
+        points.append(here)
+    if len(points) < 2:
+        return None
+    uid = track["uid"] + TRAIL_SUFFIX
+    return {
+        "_src": "neptun.in.ua", "_ts": now, "uid": uid, "type": "trail",
+        "callsign": "NEPTUN {} trail".format((track.get("type") or "threat").upper()),
+        "lat_deg": track["lat_deg"], "lon_deg": track["lon_deg"],
+        "geometry": {"type": "LineString", "coordinates": points}, "shape_color": "orange", "shape_style": "trail",
+        "remarks": "Path of the last {} reports (oldest to current) - {}".format(len(points), ATTRIBUTION),
+    }
 
 
 class Suppression:
@@ -172,7 +233,7 @@ def publish_threats(session, tracks, suppression: Suppression, retracted: set, v
     as soon as the suppression lapses."""
     for prefix, track in tracks:
         uid = track["uid"]
-        if suppression.active(uid):
+        if suppression.active(uid.removesuffix(TRAIL_SUFFIX)):
             if uid not in retracted:
                 retracted.add(uid)
                 session.put(add_version(semantic_topic(prefix, track)),
@@ -182,6 +243,10 @@ def publish_threats(session, tracks, suppression: Suppression, retracted: set, v
                     print("SUPPRESS", uid, "(matched to a radar track)", flush=True)
             continue
         retracted.discard(uid)
+        if track.get("geometry"):                    # a trail line: no SAPIENT/protobuf view
+            session.put(add_version(semantic_topic(prefix, track)), json.dumps(track).encode(),
+                        encoding=zenoh.Encoding.APPLICATION_JSON.with_schema("efdi:neptun_trail"))
+            continue
         publish_dual(session, prefix, track, NormalizedTrack)
         if verbose:
             print("THREAT", uid, track["type"], track["lat_deg"], track["lon_deg"], flush=True)

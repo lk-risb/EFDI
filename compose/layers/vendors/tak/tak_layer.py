@@ -252,6 +252,7 @@ _TOPIC_COT = {
     "air/**/hostile/uav/**":       ("a-h-A-M-F-Q", AIR_STALE_S),
     "air/**/hostile/missile/**":   ("a-h-A-W-M",   AIR_STALE_S),   # NEPTUN missiles
     "air/**/hostile/bomb/**":      ("a-h-A-W-B",   AIR_STALE_S),   # NEPTUN guided (glide) bombs
+    "air/**/trail/**":             ("a-h-A",       AIR_STALE_S),   # NEPTUN threat paths (drawn as a line, not a marker)
     # SEA — full affiliation matrix
     "sea/**/civ/vessel/**":      (_CIV_SEA_TYPE,  SEA_STALE_S),
     "sea/**/mil/vessel/**":      ("a-n-S-W-C",   SEA_STALE_S),
@@ -1439,22 +1440,43 @@ def _argb(alpha: int, rgb: int) -> int:
     return value - (1 << 32) if value & 0x80000000 else value
 
 
+# Every zone fill is 30% opaque; the style (zone / wash / country) differs by outline.
+_FILL_ALPHA = 0x4D
+
 # track["shape_color"] -> (stroke, translucent fill) for Polygon zones.
 _SHAPE_COLORS = {
-    "red":    (_argb(0xFF, 0xFF2020), _argb(0x66, 0xFF2020)),
-    "orange": (_argb(0xFF, 0xFF8C00), _argb(0x59, 0xFF8C00)),
-    "yellow": (_argb(0xFF, 0xFFD000), _argb(0x4D, 0xFFD000)),
+    "red":    (_argb(0xFF, 0xFF2020), _argb(_FILL_ALPHA, 0xFF2020)),
+    "orange": (_argb(0xFF, 0xFF8C00), _argb(_FILL_ALPHA, 0xFF8C00)),
+    "yellow": (_argb(0xFF, 0xFFD000), _argb(_FILL_ALPHA, 0xFFD000)),
 }
 
 
-# shape_style "wash": a faint area fill drawn behind the real zones (oblast / country status).
+# shape_style "wash": an area fill with a thin faint outline, drawn behind the real zones (oblast fills).
 _WASH_COLORS = {
-    "red":    (_argb(0x55, 0xFF2020), _argb(0x2E, 0xFF2020)),
-    "orange": (_argb(0x55, 0xFF8C00), _argb(0x2E, 0xFF8C00)),
-    "yellow": (_argb(0x55, 0xFFD000), _argb(0x26, 0xFFD000)),
-    "green":  (_argb(0x55, 0x2EB872), _argb(0x2E, 0x2EB872)),    # deepstate: liberated
-    "grey":   (_argb(0x55, 0xBCAAA4), _argb(0x30, 0xBCAAA4)),    # deepstate: status unknown
+    "red":    (_argb(0x55, 0xFF2020), _argb(_FILL_ALPHA, 0xFF2020)),
+    "orange": (_argb(0x55, 0xFF8C00), _argb(_FILL_ALPHA, 0xFF8C00)),
+    "yellow": (_argb(0x55, 0xFFD000), _argb(_FILL_ALPHA, 0xFFD000)),
 }
+
+
+# shape_style "country": a standing country status (Belarus, Russia) - a stronger outline than a
+# wash so the country edge reads at country scale on a satellite basemap.
+_COUNTRY_COLORS = {
+    "red":    (_argb(0xB0, 0xFF2020), _argb(_FILL_ALPHA, 0xFF2020)),
+    "orange": (_argb(0xB0, 0xFF8C00), _argb(_FILL_ALPHA, 0xFF8C00)),
+}
+
+
+# shape_style "trail": the path a threat has flown, drawn as an open line behind its marker.
+_TRAIL_COLORS = {
+    "orange": (_argb(0xCC, 0xFF8C00), 0),
+    "red":    (_argb(0xCC, 0xFF2020), 0),
+}
+
+
+def _shape_colors(track: dict) -> dict:
+    return {"wash": _WASH_COLORS, "country": _COUNTRY_COLORS, "trail": _TRAIL_COLORS}.get(
+        track.get("shape_style"), _SHAPE_COLORS)
 
 
 def track_to_cot(track: dict, cot_type: str, stale_s: float = COT_STALE_S) -> str | None:
@@ -1553,6 +1575,23 @@ def track_to_cot(track: dict, cot_type: str, stale_s: float = COT_STALE_S) -> st
                 polygon = ET.SubElement(shape, "polygon")
                 for coordinate in rings[0][:256]:
                     shape_point(polygon, coordinate)
+        elif geometry_type == "LineString" and track.get("shape_style") == "trail" and isinstance(coordinates, list):
+            # An open drawing-tool line: type u-d-f with one <link point> per vertex, not closed.
+            event.set("type", "u-d-f")
+            event.set("how", "h-e")
+            for coordinate in coordinates[:256]:
+                if isinstance(coordinate, (list, tuple)) and len(coordinate) >= 2:
+                    try:
+                        ET.SubElement(detail, "link", {"point": "{},{},{}".format(
+                            round(float(coordinate[1]), 6), round(float(coordinate[0]), 6), _hae(track))})
+                    except (TypeError, ValueError):
+                        continue
+            stroke = _TRAIL_COLORS.get(track.get("shape_color"), _TRAIL_COLORS["orange"])[0]
+            ET.SubElement(detail, "strokeColor", {"value": str(stroke)})
+            ET.SubElement(detail, "strokeWeight", {"value": "2.0"})
+            ET.SubElement(detail, "fillColor", {"value": "0"})
+            ET.SubElement(detail, "color", {"value": str(stroke)})
+            ET.SubElement(detail, "__shapeExtras", {"cpvis": "false", "editable": "false"})
         elif geometry_type in {"LineString", "MultiLineString"}:
             lines = coordinates if geometry_type == "MultiLineString" else [coordinates]
             if isinstance(lines, list) and lines:
@@ -1560,12 +1599,11 @@ def track_to_cot(track: dict, cot_type: str, stale_s: float = COT_STALE_S) -> st
                 line = ET.SubElement(shape, "line")
                 for coordinate in (lines[0] if isinstance(lines[0], list) else [])[:256]:
                     shape_point(line, coordinate)
-        if geometry_type == "Polygon" and track.get("shape_color") in (
-                _WASH_COLORS if track.get("shape_style") == "wash" else _SHAPE_COLORS):
+        if geometry_type == "Polygon" and track.get("shape_color") in _shape_colors(track):
             # Drawing-tool colours (ARGB as signed int32), honoured by ATAK/WinTAK for
             # shapes; without them every zone draws in the client default.
-            wash = track.get("shape_style") == "wash"
-            stroke, fill = (_WASH_COLORS if wash else _SHAPE_COLORS)[track["shape_color"]]
+            style = track.get("shape_style")
+            stroke, fill = _shape_colors(track)[track["shape_color"]]
             # ATAK/WinTAK only draw a polygon for a drawing-tool event: type u-d-f with
             # one <link point="lat,lon,hae"> per vertex (closed). The <shape><polygon>
             # above is ignored by them, so without this a zone is only a label.
@@ -1579,7 +1617,7 @@ def track_to_cot(track: dict, cot_type: str, stale_s: float = COT_STALE_S) -> st
                 ET.SubElement(detail, "link", {"point": "{},{},{}".format(ring_lat, ring_lon, _hae(track))})
             ET.SubElement(detail, "__shapeExtras", {"cpvis": "false", "editable": "false"})
             ET.SubElement(detail, "strokeColor", {"value": str(stroke)})
-            ET.SubElement(detail, "strokeWeight", {"value": "1.0" if wash else "3.0"})
+            ET.SubElement(detail, "strokeWeight", {"value": {"wash": "1.0", "country": "2.0"}.get(style, "3.0")})
             ET.SubElement(detail, "color", {"value": str(stroke)})      # iTAK/ATAK read the shape colour here
             ET.SubElement(detail, "fillColor", {"value": str(fill)})
     # Custom marker art is opt-in because it is not portable across clients.

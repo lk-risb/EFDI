@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://efdi.ltu/schemas/json/deepstate_feature.schema.json",
+  "title": "DeepStateMap frontline feature",
+  "description": "Published BY bridges/vendors/deepstate/deepstate_bridge.py every DEEPSTATE_REPUBLISH_S for each Russian/Belarusian unit and attack-direction marker of the DeepStateMap (deepstatemap.live) map. Context data from a Ukrainian volunteer project, updated about daily; every record credits DeepState and the map's update time in remarks. Territory polygons are not published. A feature that leaves the map is retracted with a one-shot {uid, _delete: true} tombstone.",
+  "x-efdi-topic": "{TOPIC_ROOT}/land/deepstate/frontline/hostile/unit/{type}/{uid}/tracks/v1",
+  "x-efdi-producer": "bridges/vendors/deepstate/deepstate_bridge.py",
+  "x-efdi-consumer": "layers/vendors/tak/tak_layer.py, layers/vendors/tak/systematic/sitaware_layer.py",
+  "type": "object",
+  "required": [
+    "_src",
+    "_ts",
+    "uid",
+    "type",
+    "callsign",
+    "lat_deg",
+    "lon_deg",
+    "remarks"
+  ],
+  "properties": {
+    "_src": {
+      "const": "deepstatemap.live"
+    },
+    "_ts": {
+      "type": "number",
+      "description": "Time of this republish; the layers expire a track two minutes after it."
+    },
+    "uid": {
+      "type": "string",
+      "description": "DS-UNIT-<n> or DS-ARROW-<n>, n = the feature's index in the map document."
+    },
+    "type": {
+      "enum": [
+        "unit",
+        "attack_direction"
+      ]
+    },
+    "callsign": {
+      "type": "string"
+    },
+    "lat_deg": {
+      "type": "number"
+    },
+    "lon_deg": {
+      "type": "number"
+    },
+    "target_type": {
+      "const": "unit"
+    },
+    "position_uncertainty_m": {
+      "type": "number",
+      "description": "5000 for units: DeepState places a unit by its base or area, not a live fix."
+    },
+    "remarks": {
+      "type": "string"
+    },
+    "_delete": {
+      "const": true
+    }
+  },
+  "additionalProperties": false
+}

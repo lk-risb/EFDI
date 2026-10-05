@@ -287,7 +287,7 @@ def wash_tracks(current: dict, boundaries: dict, standing: dict, now: float) -> 
             out[uid] = (ZONE_PREFIX, _wash_track(
                 uid, region, level, "{} {} ({})".format(code, region["name"], region["tone"]),
                 "Standing status shown by dangausakis.lt: {} - not an official warning".format(region["tone"]),
-                [ring], now, country=code, alert_id="COUNTRY:" + code))
+                [ring], now, country=code, alert_id="COUNTRY:" + code, shape_style="country"))
     return out
 
 
