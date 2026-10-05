@@ -35,9 +35,11 @@ decoded here; add a decoder if a future use for them shows up.
 from __future__ import annotations
 
 import json
+import re
 import time
 
 from google.protobuf.message import DecodeError
+from protocols.vendors.random.echo_filter import EchoFilter
 from protocols.vendors.random.gateway import TOPIC_ROOT, open_session, payload_bytes, subscribe
 from schemas.vendors.socbx.proto.socbx_alerts_pb2 import Alert
 from schemas.vendors.socbx.proto.socbx_unified_pb2 import UnifiedSchema
@@ -49,6 +51,10 @@ from schemas.vendors.socbx.proto.socbx_unified_pb2 import UnifiedSchema
 _UNIFIED_SUFFIX = "/soc-bx/unified/raw/v1"
 _ALERTS_SUFFIX = "/soc-bx/alerts/v1"
 INPUT_TOPIC = TOPIC_ROOT + "/raw/backbone/**"
+
+# An object whose id is a bare 6-digit hex number and which carries no domain or type is an
+# ADS-B aircraft keyed by its ICAO address (this vendor republishes ADS-B that way).
+_ICAO_HEX = re.compile(r"^[0-9a-fA-F]{6}$")
 
 _DOMAIN_AIR = ("uav", "aircraft", "drone", "air", "helicopter", "rotary")
 _DOMAIN_SEA = ("vessel", "ship", "boat", "sea", "maritime", "surface")
@@ -108,6 +114,14 @@ def unified_records(payload: bytes) -> list[dict]:
         elif kinematics.HasField("ground_speed"):
             record["speed_mps"] = kinematics.ground_speed
         record["_dimension"] = _dimension(identity)
+        if (_ICAO_HEX.match(str(record["uid"])) and not (identity.domain or identity.object_type
+                                                          or identity.object_subtype or identity.platform_type)):
+            # Key it by icao24 like every other ADS-B source, so the same aircraft from
+            # dangausakis or any other feed is one marker, and draw it as an aircraft
+            # instead of a stationary ground unit.
+            record["icao24"] = str(record["uid"]).lower()
+            record["target_type"] = "aircraft"
+            record["_dimension"] = "air"
         record["_slot"] = _slot(identity)
         out.append(record)
     return out
@@ -143,12 +157,22 @@ def run() -> None:
             print("socbx: Zenoh connect failed: {} — retry in 10s".format(exc), flush=True)
             time.sleep(10)
 
+    echoes = EchoFilter()
+    echo_sub = subscribe(session, TOPIC_ROOT + "/land/**", echoes.on_sample)
+    dropped = [0]
+
     def on_sample(sample) -> None:
         key = str(sample.key_expr)
         payload = payload_bytes(sample)
         try:
             if key.endswith(_UNIFIED_SUFFIX):
                 for record in unified_records(payload):
+                    if echoes.is_echo(record):
+                        dropped[0] += 1
+                        if dropped[0] in (1, 100) or dropped[0] % 1000 == 0:
+                            print("socbx: dropped {} echoes of our own sensors (last: {})".format(
+                                dropped[0], record["uid"]), flush=True)
+                        continue
                     dimension = record.pop("_dimension")
                     slot = record.pop("_slot")
                     topic = "{}/{}/backbone/{}/unit/tracks/v1".format(TOPIC_ROOT, dimension, slot)
@@ -172,6 +196,7 @@ def run() -> None:
         pass
     finally:
         subscriber.undeclare()
+        echo_sub.undeclare()
         session.close()
 
 
