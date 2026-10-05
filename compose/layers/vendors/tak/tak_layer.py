@@ -1452,6 +1452,8 @@ _WASH_COLORS = {
     "red":    (_argb(0x55, 0xFF2020), _argb(0x2E, 0xFF2020)),
     "orange": (_argb(0x55, 0xFF8C00), _argb(0x2E, 0xFF8C00)),
     "yellow": (_argb(0x55, 0xFFD000), _argb(0x26, 0xFFD000)),
+    "green":  (_argb(0x55, 0x2EB872), _argb(0x2E, 0x2EB872)),    # deepstate: liberated
+    "grey":   (_argb(0x55, 0xBCAAA4), _argb(0x30, 0xBCAAA4)),    # deepstate: status unknown
 }
 
 
@@ -1558,7 +1560,8 @@ def track_to_cot(track: dict, cot_type: str, stale_s: float = COT_STALE_S) -> st
                 line = ET.SubElement(shape, "line")
                 for coordinate in (lines[0] if isinstance(lines[0], list) else [])[:256]:
                     shape_point(line, coordinate)
-        if geometry_type == "Polygon" and track.get("shape_color") in _SHAPE_COLORS:
+        if geometry_type == "Polygon" and track.get("shape_color") in (
+                _WASH_COLORS if track.get("shape_style") == "wash" else _SHAPE_COLORS):
             # Drawing-tool colours (ARGB as signed int32), honoured by ATAK/WinTAK for
             # shapes; without them every zone draws in the client default.
             wash = track.get("shape_style") == "wash"
