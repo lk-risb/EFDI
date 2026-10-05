@@ -19,6 +19,10 @@ Currently covers:
   - Acoustic sensor detection (dronuradaras.lt) on land tracks — same
     last_detection_ts tak_layer.py uses to recolor the sensor's own marker
     (see its _sensor_alert_cot_type); this is the separate GeoChat popup.
+  - Regional air-raid alerts (dangausakis.lt, via dangausakis_bridge.py) — one
+    popup per alert id, re-armed when the bridge reports it cleared. These
+    alerts carry an area name, not a position, so the GeoChat point is 0,0
+    (the popup text is what matters, not the marker).
 """
 
 import argparse
@@ -162,6 +166,30 @@ def make_acoustic_handler(sender, verbose: bool):
     return handler
 
 
+def make_region_alert_handler(sender, verbose: bool):
+    def handler(sample):
+        try:
+            alert = json.loads(bytes(sample.payload).decode())
+        except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
+            return
+        if (alert.get("alert_type") != "region_alert" or not alert.get("alert_id")
+                or alert.get("notify") is False):     # zone-only entries never pop up
+            return
+        uid = "DANGAUSAKIS-{}".format(alert["alert_id"])
+        if alert.get("_delete") or alert.get("stale"):
+            _clear_alert(uid)
+            return
+        if not _fire_once(uid):
+            return
+        msg = "[AIR ALERT {}] {} - {} - since {}".format(
+            alert.get("country", "?"), alert.get("area", "?"),
+            alert.get("level", "?"), alert.get("since", "?"))
+        _send_geochat_alert(sender, uid, 0, 0, msg)
+        if verbose:
+            print("ALERT {}".format(msg), flush=True)
+    return handler
+
+
 def run(args):
     hosts = [(h, args.port) for h in args.host]
     tls = getattr(args, "tls", False)
@@ -189,6 +217,9 @@ def run(args):
         subscribe(session, "{}/land/**".format(TOPIC_ROOT), make_acoustic_handler(sender, args.verbose)),
     ]
     print("SUB {}/land/** → acoustic sensor detection alerts".format(TOPIC_ROOT), flush=True)
+    subs.append(subscribe(session, "{}/land/dangausakis/alert/**".format(TOPIC_ROOT),
+                          make_region_alert_handler(sender, args.verbose)))
+    print("SUB {}/land/dangausakis/alert/** → regional air-raid alerts".format(TOPIC_ROOT), flush=True)
 
     stop = threading.Event()
 
@@ -216,7 +247,7 @@ def run(args):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(
-        description="Zenoh tracks → TAK Server GeoChat acoustic sensor detection alerts")
+        description="Zenoh tracks/alerts → TAK Server GeoChat acoustic detection and regional air-raid alerts")
     ap.add_argument("--host", action="append", default=None,
                     help="TAK Server host — repeatable, same convention as tak_layer.py; "
                          "falls back to TAK_HOST/TAK_HOST_FALLBACK/TAK_HOST_TAILSCALE env or 127.0.0.1")

@@ -22,6 +22,22 @@ Fusion strategy (in priority order):
        AND the age difference is within 30 s, merge identities.
        Marks the track as "probable" rather than confirmed.
 
+NEPTUN corroboration (non-cooperative radar tracks vs the NEPTUN feed in dangausakis_bridge.py threats):
+  A radar track WITHOUT an ICAO address that lies within the NEPTUN threat's own
+  uncertainty radius (clamped to FUSION_NEPTUN_MIN_NM..FUSION_NEPTUN_MAX_NM),
+  agrees in heading (60 deg, when both have one) and in speed class (drone-class
+  tracks <= 220 m/s, missile/ballistic/kab >= 100 m/s, when the radar reports a
+  speed) is taken to be the same object — but only one-to-one: if the track fits
+  more than one threat, or the threat fits more than one radar object (tracks
+  sharing a cross-radar handoff primary count as one), nothing is merged. The radar track stays the marker — its remarks gain "Also
+  reported by NEPTUN" — and the NEPTUN marker is suppressed by publishing
+    <ORG>/air/trackfusion/suppress/neptun/<uid>
+  which the dangausakis bridge's NEPTUN feed honours for FUSION_NEPTUN_SUPPRESS_S (30 s) after the
+  last refresh, retracting its marker with a tombstone. Fusion never suppresses
+  a radar track, and when the radar match stops (track lost, drifted apart) the
+  suppression lapses and the NEPTUN marker returns. With fusion not running,
+  NEPTUN simply publishes normally.
+
 Cross-radar handoff (same-protocol, PSR-only targets):
   When multiple radars of the same type (e.g., two CAT-48 sites) cover overlapping
   areas, a PSR-only target crossing the boundary would otherwise create two separate
@@ -60,6 +76,10 @@ Config (compose/.env):
   FUSION_SPATIAL_NM=2.0    Max distance for spatial match (default 2 NM)
   FUSION_MAX_AGE_S=60      Drop tracks older than this from the cache
   FUSION_RADAR_PREF=1      Set 0 to prefer ADS-B position (e.g. for GPS accuracy)
+  FUSION_NEPTUN_MIN_NM=1.0 Smallest radius for a radar<->NEPTUN match
+  FUSION_NEPTUN_MAX_NM=5.0 Largest radius (caps NEPTUN's own uncertainty)
+  FUSION_NEPTUN_UAV_MAX_MS=220     Fastest radar speed still accepted for a drone-class threat
+  FUSION_NEPTUN_MISSILE_MIN_MS=100 Slowest radar speed accepted for a missile / glide bomb
 
 Run:
   venv/bin/python3 protocols/fusion.py
@@ -88,6 +108,14 @@ _RADAR_PREF      = os.environ.get("FUSION_RADAR_PREF", "1") != "0"
 # Cross-radar handoff — PSR-only targets seen by multiple radars simultaneously
 _HANDOFF_NM      = float(os.environ.get("FUSION_HANDOFF_NM",  "2.0"))  # spatial tolerance
 _HANDOFF_HDG_TOL = 45.0   # heading difference tolerance in degrees
+
+# NEPTUN corroboration (see module docstring)
+_NEPTUN_MIN_NM   = float(os.environ.get("FUSION_NEPTUN_MIN_NM", "1.0"))
+_NEPTUN_MAX_NM   = float(os.environ.get("FUSION_NEPTUN_MAX_NM", "5.0"))
+_NEPTUN_HDG_TOL  = 60.0
+_NEPTUN_TOPIC    = "{}/air/neptun/hostile/**".format(TOPIC_ROOT)
+_SUPPRESS_TOPIC  = "{}/air/trackfusion/suppress/neptun/{{}}".format(TOPIC_ROOT)
+_SUPPRESS_REFRESH_S = 5.0   # re-announce a standing match at most this often
 
 TOPIC_FUSED = "{}/air/trackfusion/fused/{}/aircraft"
 
@@ -157,6 +185,71 @@ def _haversine_nm(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 
+def _heading_diff(a, b) -> float:
+    diff = abs(a - b) % 360
+    return 360 - diff if diff > 180 else diff
+
+
+_NEPTUN_MISSILE_TYPES = frozenset({"missile", "ballistic", "kab"})
+_NEPTUN_UAV_TYPES = frozenset({"uav", "fpv", "recon"})
+# Jet-powered drones reach 600-700 km/h (167-194 m/s), so the drone ceiling sits
+# above that (220 m/s ~ 790 km/h). The two ranges overlap on purpose: each is only
+# a plausibility check against the threat's own declared type, not a classifier.
+_NEPTUN_UAV_MAX_MS = float(os.environ.get("FUSION_NEPTUN_UAV_MAX_MS", "220"))
+_NEPTUN_MISSILE_MIN_MS = float(os.environ.get("FUSION_NEPTUN_MISSILE_MIN_MS", "100"))
+
+
+def _neptun_pair_ok(radar: dict, threat: dict) -> bool:
+    """Could this radar track be that NEPTUN threat? Position inside the threat's
+    own uncertainty radius, heading and speed class compatible. Transponder
+    (ICAO) tracks never qualify. A missing heading or speed is not held against
+    the pair."""
+    if radar.get("icao24") or radar.get("lat_deg") is None or radar.get("lon_deg") is None:
+        return False
+    if threat.get("lat_deg") is None or threat.get("lon_deg") is None:
+        return False
+    radius = min(max((threat.get("position_uncertainty_m") or 0) / 1852.0, _NEPTUN_MIN_NM), _NEPTUN_MAX_NM)
+    if _haversine_nm(radar["lat_deg"], radar["lon_deg"], threat["lat_deg"], threat["lon_deg"]) > radius:
+        return False
+    r_hdg, n_hdg = radar.get("heading_deg"), threat.get("heading_deg")
+    if r_hdg is not None and n_hdg is not None and _heading_diff(r_hdg, n_hdg) > _NEPTUN_HDG_TOL:
+        return False
+    speed = radar.get("speed_ms")
+    kind = (threat.get("type") or "").lower()
+    if speed and kind in _NEPTUN_MISSILE_TYPES:
+        return speed >= _NEPTUN_MISSILE_MIN_MS
+    if speed and kind in _NEPTUN_UAV_TYPES:
+        return speed <= _NEPTUN_UAV_MAX_MS
+    return True   # mig31k / unknown: no speed class to check against
+
+
+def match_neptun(radar: dict, radar_uid: str, radar_cache: dict, neptun: dict, now: float,
+                 ident=lambda uid: uid, max_age_s: float = None):
+    """uid of the NEPTUN threat this radar track corroborates, or None.
+
+    One-to-one only: the radar track must be compatible with exactly ONE fresh
+    threat, and that threat with exactly ONE radar object (cache entries that
+    `ident` maps to the same cross-radar primary count as one object). Anything
+    ambiguous returns None, so NEPTUN stays visible rather than risk hiding a
+    threat behind a wrong pairing.
+
+    `radar_cache` and `neptun` are {uid: {"track": dict, "ts": float}}.
+    """
+    max_age_s = _MAX_AGE_S if max_age_s is None else max_age_s
+    fresh = [(uid, e["track"]) for uid, e in neptun.items() if now - e["ts"] <= max_age_s]
+    candidates = [(uid, t) for uid, t in fresh if _neptun_pair_ok(radar, t)]
+    if len(candidates) != 1:
+        return None
+    threat_uid, threat = candidates[0]
+    me = ident(radar_uid)
+    for other_uid, entry in radar_cache.items():
+        if now - entry["ts"] > max_age_s or ident(other_uid) == me:
+            continue
+        if _neptun_pair_ok(entry["track"], threat):
+            return None
+    return threat_uid
+
+
 def _uid_of(track: dict) -> str:
     for f in ("icao24", "uid", "track_num", "radar_id", "mmsi"):
         v = track.get(f)
@@ -191,6 +284,9 @@ class TrackFuser:
         # Key = any radar uid; value = whichever radar uid was first to own this target.
         # When the primary ages out, the surviving secondary is promoted automatically.
         self._radar_primary: dict[str, str] = {}
+        # NEPTUN threats seen on the fabric, and when each suppression was last announced
+        self._neptun_tracks: dict[str, dict] = {}
+        self._suppress_sent: dict[str, float] = {}
         # Periodic age-out: ensures _radar_by_icao is cleaned even when radar goes
         # silent (no on_radar() calls), so ADS-B fallback kicks in automatically.
         self._start_age_timer()
@@ -325,6 +421,50 @@ class TrackFuser:
 
         return self._radar_primary[uid]
 
+    def on_neptun(self, sample):
+        topic = str(sample.key_expr)
+        if not topic.endswith("/tracks/v1"):
+            return
+        if strip_version(topic).rsplit("/", 1)[-1] in {"sapient", "proto", "raw"}:
+            return
+        try:
+            track = json.loads(bytes(sample.payload).decode())
+        except (json.JSONDecodeError, UnicodeDecodeError, ValueError, DecodeError):
+            return
+        uid = track.get("uid")
+        if not uid:
+            return
+        with self._lock:
+            if track.get("_delete"):
+                self._neptun_tracks.pop(uid, None)
+            else:
+                self._neptun_tracks[uid] = {"track": track, "ts": time.time()}
+
+    def _corroborate_with_neptun(self, fused: dict, radar: dict) -> None:
+        """If a NEPTUN threat matches this radar track one-to-one, annotate `fused`
+        and tell the dangausakis bridge to hold back that threat's marker."""
+        now = time.time()
+        radar_uid = _uid_of(radar)
+        with self._lock:
+            for uid in [u for u, e in self._neptun_tracks.items() if now - e["ts"] > _MAX_AGE_S]:
+                del self._neptun_tracks[uid]
+            uid = match_neptun(radar, radar_uid, self._radar_tracks, self._neptun_tracks, now,
+                               ident=lambda u: self._radar_primary.get(u, u))
+            threat = self._neptun_tracks[uid]["track"] if uid else None
+            announce = bool(uid) and now - self._suppress_sent.get(uid, 0) >= _SUPPRESS_REFRESH_S
+            if announce:
+                self._suppress_sent[uid] = now
+        if not uid:
+            return
+        label = "Also reported by NEPTUN ({} {})".format(
+            threat.get("type", "threat"), threat.get("locality") or threat.get("region") or "").strip()
+        fused["remarks"] = "{}; {}".format(fused["remarks"], label) if fused.get("remarks") else label
+        if announce:
+            self._session.put(_SUPPRESS_TOPIC.format(uid),
+                              json.dumps({"uid": uid, "radar_uid": radar_uid, "ts": now}).encode())
+            if self._verbose:
+                print("NEPTUN match {} ~ radar {}".format(uid, radar_uid), flush=True)
+
     def on_adsb(self, sample):
         topic = str(sample.key_expr)
         # Enrichment tracks are consumed from the JSON view only — see on_radar.
@@ -373,6 +513,7 @@ class TrackFuser:
             fused, method = self._merge(radar, adsb)
         else:
             fused, method = dict(radar), "radar-only"
+        self._corroborate_with_neptun(fused, radar)
 
         # Matched tracks retain the ADS-B database's civil/military category;
         # tak_layer.py then applies the scenario ICAO affiliation classifier.
@@ -545,6 +686,8 @@ def run(args):
     for topic in _ADSB_TOPICS:
         subs.append(subscribe(session, topic, fuser.on_adsb))
         print("  SUB adsb:  {}".format(topic), flush=True)
+    subs.append(subscribe(session, _NEPTUN_TOPIC, fuser.on_neptun))
+    print("  SUB neptun: {}".format(_NEPTUN_TOPIC), flush=True)
 
     print("Fusion running — Ctrl-C to stop", flush=True)
     try:

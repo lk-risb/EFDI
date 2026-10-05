@@ -122,6 +122,7 @@ _TOPIC_SIDC = {
     # from the NVG feed entirely, so the two C2 systems disagreed on whether the
     # track existed at all.
     "air/**/hostile/uav/**":         "SHAPMFQ---*****",
+    "air/**/hostile/missile/**":     "SHAPWM----*****",   # NEPTUN missiles / glide bombs
     "air/**/neutral/aircraft/**":    "SNAPMF----*****",
     "air/**/unknown/**":             _unknown_air_sidc,
     # Equipment/Vehicle/Civilian — NOT "UCV", which is Unit/Combat/Aviation and

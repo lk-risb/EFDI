@@ -105,6 +105,8 @@ async def list_streams(_=Depends(require_role("readonly", "admin", "superadmin")
 _LOG_LEVELS = {"error", "warn", "info", "debug"}
 _DURATION_UNIT_SECONDS = {"s": 1, "m": 60, "h": 3600}
 _DURATION_RE = re.compile(r"^(\d+)([smh])$")
+# MediaMTX itself requires 10-79 chars for srtPublishPassphrase (SRT's limit).
+_SRT_PASSPHRASE_RE = re.compile(r"^[\x21-\x7e]{10,79}$")
 
 
 class MediamtxSettings(BaseModel):
@@ -115,6 +117,10 @@ class MediamtxSettings(BaseModel):
     webrtc_enabled: bool = True
     webrtc_encryption: bool = False
     srt_enabled: bool = True
+    # Write-only: None keeps the stored value, "" clears it, anything else sets
+    # it. Never returned by any endpoint — only srt_publish_passphrase_set is.
+    srt_publish_passphrase: str | None = None
+    srt_publish_passphrase_set: bool = False
     record_segment_minutes: int = Field(1, ge=1, le=60)
     record_retention_minutes: int = Field(10, ge=1, le=1440)
 
@@ -159,6 +165,7 @@ def _settings_from_doc(doc) -> MediamtxSettings:
         webrtc_enabled=bool(doc.get("webrtc", True)),
         webrtc_encryption=bool(doc.get("webrtcEncryption", False)),
         srt_enabled=bool(doc.get("srt", False)),
+        srt_publish_passphrase_set=bool(all_others.get("srtPublishPassphrase")),
         record_segment_minutes=_duration_to_minutes(all_others.get("recordSegmentDuration"), 1),
         record_retention_minutes=_duration_to_minutes(all_others.get("recordDeleteAfter"), 10),
     )
@@ -174,11 +181,15 @@ def _apply_settings_to_doc(doc, settings: MediamtxSettings) -> None:
     doc["srt"] = settings.srt_enabled
     paths = doc.setdefault("paths", {})
     all_others = paths.setdefault("all_others", {})
+    if settings.srt_publish_passphrase == "":
+        all_others.pop("srtPublishPassphrase", None)
+    elif settings.srt_publish_passphrase is not None:
+        all_others["srtPublishPassphrase"] = settings.srt_publish_passphrase
     all_others["recordSegmentDuration"] = _minutes_to_duration(settings.record_segment_minutes)
     all_others["recordDeleteAfter"] = _minutes_to_duration(settings.record_retention_minutes)
 
 
-@router.get("/config", response_model=MediamtxSettings)
+@router.get("/config", response_model=MediamtxSettings, response_model_exclude={"srt_publish_passphrase"})
 async def get_mediamtx_settings(_=Depends(require_role("readonly", "admin", "superadmin"))):
     _, doc = _load_yaml_doc()
     return _settings_from_doc(doc)
@@ -192,6 +203,8 @@ async def update_mediamtx_settings(
 ):
     if settings.log_level not in _LOG_LEVELS:
         raise HTTPException(status_code=400, detail=f"log_level must be one of {sorted(_LOG_LEVELS)}")
+    if settings.srt_publish_passphrase and not _SRT_PASSPHRASE_RE.fullmatch(settings.srt_publish_passphrase):
+        raise HTTPException(status_code=400, detail="SRT publish passphrase must be 10-79 printable ASCII characters, no spaces")
     yaml, doc = _load_yaml_doc()
     _apply_settings_to_doc(doc, settings)
     # Not a tmp-file + os.replace() swap — _MEDIAMTX_YML_PATH is a single-file
@@ -214,8 +227,8 @@ async def update_mediamtx_settings(
     except HTTPException:
         restarted = False  # config is saved either way; retry the restart from Runtime Control
 
-    await write_audit(db, actor.id, "mediamtx_config_updated", json.dumps(settings.model_dump()))
-    return {**_settings_from_doc(doc).model_dump(), "restarted": restarted}
+    await write_audit(db, actor.id, "mediamtx_config_updated", json.dumps(settings.model_dump(exclude={"srt_publish_passphrase"})))
+    return {**_settings_from_doc(doc).model_dump(exclude={"srt_publish_passphrase"}), "restarted": restarted}
 
 
 def _current_recording_retention_seconds() -> int:

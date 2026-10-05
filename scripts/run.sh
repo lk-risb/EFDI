@@ -259,6 +259,7 @@ start_bridges() {
     start_udp_ingress_bridge
 
     start dronuradaras bridges/vendors/mainline/dronuradaras_bridge.py
+    start dangausakis bridges/vendors/dangausakis/dangausakis_bridge.py
 
     start meteolt bridges/vendors/meteolt/meteolt_forecast_bridge.py
 

@@ -27,6 +27,8 @@ interface MediamtxSettings {
   webrtc_enabled: boolean
   webrtc_encryption: boolean
   srt_enabled: boolean
+  srt_publish_passphrase?: string
+  srt_publish_passphrase_set: boolean
   record_segment_minutes: number
   record_retention_minutes: number
 }
@@ -39,6 +41,7 @@ const DEFAULT_SETTINGS: MediamtxSettings = {
   webrtc_enabled: true,
   webrtc_encryption: false,
   srt_enabled: false,
+  srt_publish_passphrase_set: false,
   record_segment_minutes: 1,
   record_retention_minutes: 10,
 }
@@ -344,7 +347,7 @@ function MediamtxSettingsPanel({settings, canWrite, onSaved}: {
             <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">mediamtx settings</h2>
             <p className="mt-1 text-xs text-zinc-500">
               {canWrite
-                ? 'Saving writes compose/bridges/mediamtx/mediamtx.yml and restarts mediamtx to apply it.'
+                ? 'Saving writes compose/bridges/vendors/mediamtx/mediamtx.yml and restarts mediamtx to apply it.'
                 : 'Your role can view mediamtx settings but only a superadmin can change them.'}
             </p>
           </div>
@@ -403,6 +406,36 @@ function MediamtxSettingsPanel({settings, canWrite, onSaved}: {
           disabled={!canWrite}
           onChange={v => setDraft({...draft, srt_enabled: v})}
         />
+      </div>
+
+      <div className="mt-6 border-t border-zinc-200 pt-4 dark:border-white/10">
+        <label className="block max-w-md">
+          <span className="text-sm text-zinc-700 dark:text-zinc-300">SRT publish passphrase</span>
+          <input
+            type="password"
+            autoComplete="new-password"
+            minLength={10} maxLength={79}
+            value={draft.srt_publish_passphrase ?? ''}
+            disabled={!canWrite}
+            placeholder={settings.srt_publish_passphrase_set ? 'set — type to replace' : 'not set (anyone can publish over SRT)'}
+            onChange={e => setDraft({...draft, srt_publish_passphrase: e.target.value})}
+            className={cn(inputClass, 'mt-1 block w-full')}
+          />
+          <p className="mt-1 text-xs text-zinc-500">
+            10-79 characters. Publishers must send this exact passphrase and a streamid of{' '}
+            <code>publish:&lt;path&gt;</code>. Write-only: never shown again after saving.
+            Stored in mediamtx.yml — do not commit that file once it holds a passphrase.
+          </p>
+        </label>
+        {canWrite && settings.srt_publish_passphrase_set && (
+          <button
+            type="button"
+            onClick={() => setDraft({...draft, srt_publish_passphrase: ''})}
+            className="mt-2 text-xs text-red-600 underline dark:text-red-400"
+          >
+            Clear passphrase
+          </button>
+        )}
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-x-8 gap-y-4 border-t border-zinc-200 pt-4 dark:border-white/10 md:grid-cols-3">

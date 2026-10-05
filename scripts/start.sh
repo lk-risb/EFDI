@@ -110,7 +110,7 @@ SERVICES=(
     # Sensor bridges (includes raw-ingress variants — SVC_CAT has no
     # separate "Raw ingress" bucket the way admin_control.py's Python-side
     # SERVICE_SPECS does; not unifying that here, out of scope for this pass)
-    sitaware dronuradaras mainline_terminal mavlink-command mavlink-video asterix track-fusion
+    sitaware dronuradaras dangausakis mainline_terminal mavlink-command mavlink-video asterix track-fusion
     sapient-raw stanag4586-raw stanag4609-raw stanag5516-raw
     mqtt-raw aartos-raw aartos-wifi-raw
     mediamtx
@@ -198,7 +198,7 @@ declare -A SVC_CAT=(
     [asterix]="Sensor bridges"
     [mqtt]="Protocols" [sparkplug]="Protocols"
     [nffi]="Protocols"
-    [sitaware]="Sensor bridges" [dronuradaras]="Sensor bridges" [mainline_terminal]="Sensor bridges"
+    [sitaware]="Sensor bridges" [dronuradaras]="Sensor bridges" [dangausakis]="Sensor bridges" [mainline_terminal]="Sensor bridges"
     [mavlink-command]="Sensor bridges" [mavlink-video]="Sensor bridges"
     [sapient]="Protocols" [stanag4586]="Protocols" [stanag4609]="Protocols" [stanag5516]="Protocols"
     [tak-bridge]="C2 inputs" [nffi-bridge]="C2 inputs"
@@ -243,6 +243,7 @@ declare -A SVC_DESC=(
     [sitaware]="SitaWare HQ friendly force tracking (inbound REST)"
     [nffi]="Raw NFFI XML on Zenoh → normalized friendly-force tracks"
     [dronuradaras]="dronuradaras.lt drone detection network"
+    [dangausakis]="dangausakis.lt alerts (→ tak_alert_layer), alert zones, ADS-B aircraft + NEPTUN drone/missile threats"
     [mainline_terminal]="mainline.inc TERMINAL drone-fleet C2 (WebSocket)"
     [mavlink-command]="Generic MAVLink drone command bridge (arm/takeoff/rtl/land/hold/goto)"
     [mavlink-video]="MAVLink video-stream auto-discovery → MediaMTX pulled path (video wall)"
@@ -262,7 +263,7 @@ declare -A SVC_DESC=(
     [sensor-health]="Sensor health on Zenoh"
     [mission-route]="UAV routes and corridors on Zenoh"
     [tak_layer]="CoT → TAK Server (mTLS)"
-    [tak_alert_layer]="Acoustic sensor detection (dronuradaras) → TAK GeoChat (opt-in, off unless selected)"
+    [tak_alert_layer]="Acoustic detections (dronuradaras) + air-raid alerts (dangausakis) → TAK GeoChat (opt-in, off unless selected)"
     [tak-bridge]="TAK Server CoT ingress"
     [nffi-bridge]="NFFI (STANAG 5527) TCP ingress → Zenoh raw"
     [sitaware_layer]="EFDI tracks → SitaWare (NVG feed, SitaWare polls)"
@@ -291,7 +292,7 @@ declare -A SVC_DESC=(
 svc_ready() {
     case "$1" in
         zenoh|meteolt|\
-        dronuradaras|nffi|tak_layer|tak_alert_layer|track-fusion|\
+        dronuradaras|dangausakis|nffi|tak_layer|tak_alert_layer|track-fusion|\
         cap|sensor-health|mission-route)
             return 0 ;;
         admin-control) [[ -n "${ZENOH_ADMIN_SECRET_KEY:-}" || -n "${EFDI_CONTROL_TOKEN:-}" ]] ;;
@@ -1008,6 +1009,10 @@ launch() {
 
         dronuradaras)
             _start dronuradaras bridges/vendors/mainline/dronuradaras_bridge.py
+            ;;
+
+        dangausakis)
+            _start dangausakis bridges/vendors/dangausakis/dangausakis_bridge.py
             ;;
 
         mainline_terminal)

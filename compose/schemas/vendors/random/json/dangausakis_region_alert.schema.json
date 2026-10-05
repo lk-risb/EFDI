@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://efdi.ltu/schemas/json/dangausakis_region_alert.schema.json",
+  "title": "dangausakis.lt regional air-raid alert",
+  "description": "Published BY bridges/vendors/dangausakis/dangausakis_bridge.py on every poll for each recent active alert, and once more with _delete=true when an alert leaves the feed. Alerts have an area name but no coordinates, so this is a status message, not a track.",
+  "x-efdi-topic": "{TOPIC_ROOT}/land/dangausakis/alert/neutral/zone/status",
+  "x-efdi-producer": "bridges/vendors/dangausakis/dangausakis_bridge.py",
+  "x-efdi-consumer": "layers/vendors/tak/tak_alert_layer.py",
+  "type": "object",
+  "required": ["_src", "_ts", "alert_type", "alert_id", "country", "level", "area", "since", "source", "stale"],
+  "properties": {
+    "_src": {"enum": ["dangausakis.lt", "neptun.in.ua", "lt72.lt", "komunikaty.tvp.pl"], "description": "Where the alert was read: the site's aggregated feed or a direct upstream."},
+    "_ts": {"type": "number"},
+    "alert_type": {"type": "string", "const": "region_alert"},
+    "alert_id": {"type": "string", "description": "Upstream id, '<COUNTRY>:<area key>'."},
+    "country": {"type": "string", "description": "Upper-case country code: LT, LV, PL, EE or UA."},
+    "level": {"type": "string", "description": "Upstream severity label, e.g. red or orange."},
+    "area": {"type": "string"},
+    "since": {"type": ["string", "null"], "description": "ISO-8601 time the alert began."},
+    "source": {"type": "string", "description": "Upstream aggregator, e.g. NEPTUN."},
+    "notify": {"type": "boolean", "description": "False for zone-only entries (e.g. NEPTUN districts, per-county copies of a nationwide alert); tak_alert_layer sends no GeoChat for them. Absent means true."},
+    "reason": {"type": "string", "description": "Upstream reason text when the source gives one (NEPTUN)."},
+    "stale": {"type": "boolean", "description": "True when the upstream source for this country is flagged stale; the layer will not alert on it."},
+    "_delete": {"type": "boolean", "const": true, "description": "Present only on the one-shot cleared variant."}
+  },
+  "additionalProperties": false
+}

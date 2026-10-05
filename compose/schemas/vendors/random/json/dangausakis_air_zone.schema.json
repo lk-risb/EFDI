@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://efdi.ltu/schemas/json/dangausakis_air_zone.schema.json",
+  "title": "dangausakis.lt air-alert region polygon",
+  "description": "Published BY bridges/vendors/dangausakis/dangausakis_bridge.py for each active alert region (one track per part of a multi-part region), JSON-only: an alert zone is not a detected object, so no SAPIENT/protobuf view exists. A cleared alert is re-published once as {uid, _delete: true}.",
+  "x-efdi-topic": "{TOPIC_ROOT}/land/dangausakis/airzone/neutral/zone/air_alert_zone/{uid}/tracks/v1",
+  "x-efdi-producer": "bridges/vendors/dangausakis/dangausakis_bridge.py",
+  "x-efdi-consumer": "layers/vendors/tak/tak_layer.py, layers/vendors/tak/systematic/sitaware_layer.py",
+  "type": "object",
+  "required": ["_src", "_ts", "uid", "type", "callsign", "lat_deg", "lon_deg", "geometry", "shape_color", "alert_id", "country", "level"],
+  "properties": {
+    "_src": {"type": "string", "const": "dangausakis.lt"},
+    "_ts": {"type": "number"},
+    "uid": {"type": "string", "description": "'DA-ZONE-<alert id>' plus '-pN' for additional parts."},
+    "type": {"type": "string", "const": "air_alert_zone"},
+    "callsign": {"type": "string", "description": "'<CC> <region name> <LEVEL>'."},
+    "lat_deg": {"type": "number", "minimum": -90, "maximum": 90, "description": "Centroid anchor for the zone's marker."},
+    "lon_deg": {"type": "number", "minimum": -180, "maximum": 180},
+    "geometry": {
+      "type": "object",
+      "required": ["type", "coordinates"],
+      "properties": {"type": {"const": "Polygon"}, "coordinates": {"type": "array", "description": "One closed ring of [lon, lat], at most 150 vertices."}}
+    },
+    "shape_color": {"enum": ["red", "orange", "yellow"], "description": "Stroke/fill colour tak_layer applies to the polygon."},
+    "alert_id": {"type": "string"},
+    "country": {"type": "string"},
+    "level": {"enum": ["red", "orange", "yellow"]},
+    "remarks": {"type": "string"},
+    "_delete": {"type": "boolean", "const": true}
+  },
+  "additionalProperties": false
+}

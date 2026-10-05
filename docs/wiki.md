@@ -1348,6 +1348,7 @@ Do not clear a shared operational layer to work around this limitation.
 | --- | --- | --- | --- |
 | `asterix` | `protocols/vendors/asterix/cat.py` | `…/raw/asterix/catNN` and category-specific normalized ASTERIX topics | ASTERIX vendor's CAT protocol bundle: mixed UDP ingress plus per-category translators |
 | `dronuradaras` | `bridges/vendors/mainline/dronuradaras_bridge.py` | `…/land/mainline_dronuradaras/acoustic/neutral/sensor/{type}/{id}/sapient` | 60 s online-only device poll with offline eviction / 10 s detection poll |
+| `dangausakis` | `bridges/vendors/dangausakis/dangausakis_bridge.py` | `…/land/dangausakis/alert/neutral/zone/status` | 60 s poll of dangausakis.lt region alerts (LT/LV/PL/EE/UA); alerts older than 6 h dropped; draws active alert regions as red/orange/yellow polygons (LT/LV/PL/EE/UA, JSON-only zone tracks under `…/land/dangausakis/airzone/…`); also publishes adsb.lol aircraft as `…/air/dangausakis/{adsb,mlat}/civ/aircraft` tracks keyed by icao24; `tak_alert_layer` turns each into a TAK GeoChat; also runs the NEPTUN threats feed (`bridges/vendors/dangausakis/neptun.py`): live Ukraine drones/missiles as hostile tracks under `…/air/neptun/…`, 10 s poll, area-only records skipped, marker held back when `track-fusion` matches it to a nearby non-cooperative radar track, visible NEPTUN credit per its terms Alerts for UA come straight from NEPTUN's district alerts and for LT from the LT72 warnings RSS (nationwide, all counties coloured, one popup); Poland's RSO notices that name an air-raid alarm are only added to the site's Polish alerts; LV/EE have no machine-readable source and come from the site's feed, and a country whose direct source is down falls back to it. |
 | `sitaware` | `bridges/vendors/sitaware/sitaware_bridge.py` | `…/land/sitaware/c2/friendly/unit/{type}/{id}/sapient` | Configurable REST poll |
 | `nffi` | `protocols/vendors/nffi/nffi.py` | `…/land/nato/c2/friendly/unit/{type}/{id}/sapient` | Complete XML documents under `…/raw/nffi/*` in Zenoh |
 | `stanag` | `protocols/vendors/stanag/stanag.py --proto {4586,4607,4609,5516}` | `…/raw/stanag_4609/klv`, `…/air/stanag_4609/camera/unknown/uav`, STANAG 4586 track topics, and `…/{air,sea,land}/stanag_5516/c2/**` | Launcher starts each configured `--proto` directly |
@@ -1361,7 +1362,7 @@ Do not clear a shared operational layer to work around this limitation.
 | `tak_layer` | `layers/vendors/tak/tak_layer.py` | Subscriber — all topics | Event-driven |
 | `tak-bridge` | `bridges/vendors/tak/tak_bridge.py` | Subscriber — all topics | TAK-visible CoT ingress |
 | `sitaware-hq-nvg` | `layers/vendors/tak/systematic/sitaware_layer.py` | Subscriber — all track topics | Pull-based NVG snapshot |
-| `track-fusion` | `protocols/fusion.py` | CAT-48 + CAT-21 subscriber | Event-driven |
+| `track-fusion` | `protocols/fusion.py` | CAT-48 + CAT-21 subscriber; also matches NEPTUN threats to non-cooperative radar tracks (`FUSION_NEPTUN_MIN_NM`/`MAX_NM`) | Event-driven |
 
 ### TAK users and external CoT sources
 

@@ -250,6 +250,7 @@ _TOPIC_COT = {
     "air/**/hostile/aircraft/**":  ("a-h-A-M-F",   AIR_STALE_S),
     "air/**/neutral/aircraft/**":  ("a-n-A-M-F",   AIR_STALE_S),
     "air/**/hostile/uav/**":       ("a-h-A-M-F-Q", AIR_STALE_S),
+    "air/**/hostile/missile/**":   ("a-h-A-W-M",   AIR_STALE_S),   # NEPTUN missiles / glide bombs
     # SEA — full affiliation matrix
     "sea/**/civ/vessel/**":      (_CIV_SEA_TYPE,  SEA_STALE_S),
     "sea/**/mil/vessel/**":      ("a-n-S-W-C",   SEA_STALE_S),
@@ -1432,6 +1433,19 @@ def _delete_point_cot(uid: str, ts: float | None = None) -> str:
     return '<?xml version="1.0" encoding="UTF-8"?>' + ET.tostring(event, encoding="unicode")
 
 
+def _argb(alpha: int, rgb: int) -> int:
+    value = (alpha << 24) | rgb
+    return value - (1 << 32) if value & 0x80000000 else value
+
+
+# track["shape_color"] -> (stroke, translucent fill) for Polygon zones.
+_SHAPE_COLORS = {
+    "red":    (_argb(0xFF, 0xFF2020), _argb(0x66, 0xFF2020)),
+    "orange": (_argb(0xFF, 0xFF8C00), _argb(0x59, 0xFF8C00)),
+    "yellow": (_argb(0xFF, 0xFFD000), _argb(0x4D, 0xFFD000)),
+}
+
+
 def track_to_cot(track: dict, cot_type: str, stale_s: float = COT_STALE_S) -> str | None:
     lat = track.get("lat_deg")
     lon = track.get("lon_deg")
@@ -1535,6 +1549,13 @@ def track_to_cot(track: dict, cot_type: str, stale_s: float = COT_STALE_S) -> st
                 line = ET.SubElement(shape, "line")
                 for coordinate in (lines[0] if isinstance(lines[0], list) else [])[:256]:
                     shape_point(line, coordinate)
+        if geometry_type == "Polygon" and track.get("shape_color") in _SHAPE_COLORS:
+            # Drawing-tool colours (ARGB as signed int32), honoured by ATAK/WinTAK for
+            # shapes; without them every zone draws in the client default.
+            stroke, fill = _SHAPE_COLORS[track["shape_color"]]
+            ET.SubElement(detail, "strokeColor", {"value": str(stroke)})
+            ET.SubElement(detail, "strokeWeight", {"value": "3.0"})
+            ET.SubElement(detail, "fillColor", {"value": str(fill)})
     # Custom marker art is opt-in because it is not portable across clients.
     # ATAK reads <usericon b64image>, but WinTAK does not resolve an icon from
     # b64image alone (it wants an iconsetpath into an installed iconset). The
