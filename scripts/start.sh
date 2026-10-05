@@ -263,7 +263,7 @@ declare -A SVC_DESC=(
     [sensor-health]="Sensor health on Zenoh"
     [mission-route]="UAV routes and corridors on Zenoh"
     [tak_layer]="CoT → TAK Server (mTLS)"
-    [tak_alert_layer]="Acoustic detections (dronuradaras) + air-raid alerts (dangausakis) → TAK GeoChat (opt-in, off unless selected)"
+    [tak_alert_layer]="Acoustic detections (dronuradaras) + air-raid alerts, status changes, data issues and drone reports (dangausakis) → TAK GeoChat (opt-in, off unless selected)"
     [tak-bridge]="TAK Server CoT ingress"
     [nffi-bridge]="NFFI (STANAG 5527) TCP ingress → Zenoh raw"
     [sitaware_layer]="EFDI tracks → SitaWare (NVG feed, SitaWare polls)"
@@ -606,6 +606,43 @@ _wait_for_zenoh() {
     return 1  # Give up quietly — the service's own reconnect loop is still the backstop.
 }
 
+# SIGTERM, wait up to 10 s, then SIGKILL (same as stop.sh's stop_pid).
+stop_pid() {
+    local pid="$1" waited=0 grace="${STOP_GRACE_S:-10}"
+    kill "$pid" 2>/dev/null || return 0
+    while kill -0 "$pid" 2>/dev/null && (( waited < grace * 2 )); do
+        sleep 0.5
+        waited=$((waited + 1))
+    done
+    kill -0 "$pid" 2>/dev/null && kill -9 "$pid" 2>/dev/null
+    return 0
+}
+
+# Stop leftover copies of a service whose script moved (layers/tak_layer.py ->
+# layers/vendors/tak/tak_layer.py): same file name under $COMPOSE_DIR at a different
+# path, same arguments, owned by no pidfile. is_running() and the supervisor only look
+# for the CURRENT path, so such a copy is invisible to them and would keep publishing
+# next to the new one (two tak_layers = duplicate markers and two TAK sessions that
+# evict each other).
+#   retire_moved_instances <name> <rel-script-path> [args...]
+retire_moved_instances() {
+    local name="$1" script="$2" base pid arg moved
+    shift 2
+    base="${script##*/}"
+    while IFS= read -r pid; do
+        [[ "$pid" =~ ^[0-9]+$ && "$pid" != "$$" && -r "/proc/$pid/cmdline" ]] || continue
+        pid_claimed_by_other "$pid" "$PID_DIR/$name.pid" && continue
+        moved=1
+        while IFS= read -r -d '' arg; do
+            [[ "$arg" == "$COMPOSE_DIR/"*"/$base" && "$arg" != "$COMPOSE_DIR/$script" ]] && moved=0
+        done < "/proc/$pid/cmdline"
+        (( moved == 0 )) || continue
+        pid_has_args "$pid" "$@" || continue
+        printf "  ${DIM}[retire]${R} %-16s pid %s runs a moved copy of this script\n" "$name" "$pid"
+        stop_pid "$pid"
+    done < <(pgrep -f "/$base" 2>/dev/null || true)
+}
+
 _start() {   # _start <name> <rel-script-path> [args…]
     local name="$1"; shift
     local script="$1"; shift
@@ -615,6 +652,7 @@ _start() {   # _start <name> <rel-script-path> [args…]
         return
     fi
     rm -f "$pid_file"
+    retire_moved_instances "$name" "$script" "$@"
     _wait_for_zenoh
     ( exec setsid "$PYTHON" "$COMPOSE_DIR/$script" "$@" >> "$LOG_DIR/$name.log" 2>&1 ) &
     echo $! > "$pid_file"
@@ -634,6 +672,7 @@ _start_bin() {   # _start_bin <name> <rel-binary-path> [args…]
         return
     fi
     rm -f "$pid_file"
+    retire_moved_instances "$name" "$script" "$@"
     _wait_for_zenoh
     ( cd "$(dirname "$COMPOSE_DIR/$script")" && exec setsid "$COMPOSE_DIR/$script" "$@" >> "$LOG_DIR/$name.log" 2>&1 ) &
     echo $! > "$pid_file"

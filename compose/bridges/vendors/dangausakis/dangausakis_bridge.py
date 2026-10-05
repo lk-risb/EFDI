@@ -53,13 +53,21 @@ Env:
                                 for this long, or reports an error (default 1800)
   DANGAUSAKIS_AIRCRAFT_POLL_S   aircraft poll interval, seconds (default 15)
   DANGAUSAKIS_ZONES             set 0 to disable the coloured region polygons
-  DANGAUSAKIS_DIRECT_SOURCES    comma list of direct alert sources to use: neptun,lt72,rso
+  DANGAUSAKIS_COMMUNITY         set 0 to disable the community drone reports and incident
+                                markers (tracks under air/dangausakis/community and
+                                land/dangausakis/incident); default on
+  DANGAUSAKIS_COMMUNITY_POLL_S  their poll interval, seconds (default 30)
+  DANGAUSAKIS_EVENTS            set 0 to disable the status-change / data-issue / new-report
+                                events that tak_alert_layer turns into GeoChat (default on)
+  DANGAUSAKIS_DIRECT_SOURCES    comma list of direct alert sources to use: neptun,lt72,rso,lv
                                 (default all three; empty = the site's feed only)
   NEPTUN_ENABLED                set 0 to disable the NEPTUN threats feed (default on)
   NEPTUN_POLL_S / NEPTUN_STALE_S / NEPTUN_MAX_AGE_S   see neptun.py
 """
 
 import argparse
+import gzip
+import io
 import json
 import os
 import re
@@ -78,6 +86,7 @@ from protocols.vendors.random.track_views import add_version, semantic_topic
 
 TOPIC_ROOT = topic_root()
 API = "https://dangausakis.lt/wp-json/dangaus-akis/v1/"
+_MAX_BODY_BYTES = 16 * 1024 * 1024    # the JS-bundle fallback is ~400 KB
 _HEADERS = {
     "Referer": "https://dangausakis.lt/zemelapis/",
     "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
@@ -91,7 +100,7 @@ MAX_AGE_S = int(os.environ.get("DANGAUSAKIS_ALERT_MAX_AGE_S", "21600"))
 # (it differs from `upstreamUpdatedAt`), but that is inferred, not documented — a quiet
 # period must not be mistaken for a dead feed.
 SOURCE_MAX_AGE_S = int(os.environ.get("DANGAUSAKIS_SOURCE_MAX_AGE_S", "1800"))
-DIRECT_SOURCES = {s.strip().lower() for s in os.environ.get("DANGAUSAKIS_DIRECT_SOURCES", "neptun,lt72,rso").split(",")
+DIRECT_SOURCES = {s.strip().lower() for s in os.environ.get("DANGAUSAKIS_DIRECT_SOURCES", "neptun,lt72,rso,lv").split(",")
                   if s.strip()}
 NEPTUN_ENABLED = os.environ.get("NEPTUN_ENABLED", "1") not in {"0", "false", "no"}
 ZONES_ENABLED = os.environ.get("DANGAUSAKIS_ZONES", "1") not in {"0", "false", "no"}
@@ -105,6 +114,12 @@ ZONE_COLORS = {"red", "orange", "yellow"}
 ZONE_PREFIX = "{}/land/dangausakis/airzone/neutral/zone".format(TOPIC_ROOT)
 AIRCRAFT_POLL_S = int(os.environ.get("DANGAUSAKIS_AIRCRAFT_POLL_S", "15"))
 AIRCRAFT_MAX_POSITION_AGE_S = 60
+COMMUNITY_ENABLED = os.environ.get("DANGAUSAKIS_COMMUNITY", "1") != "0"
+COMMUNITY_POLL_S = int(os.environ.get("DANGAUSAKIS_COMMUNITY_POLL_S", "30"))
+EVENTS_ENABLED = os.environ.get("DANGAUSAKIS_EVENTS", "1") != "0"
+COMMUNITY_REPORT_PREFIX = "{}/air/dangausakis/community/unknown/uav".format(TOPIC_ROOT)
+COMMUNITY_INCIDENT_PREFIX = "{}/land/dangausakis/incident/unknown/unit".format(TOPIC_ROOT)
+_DIRECT_LABELS = (("neptun", "NEPTUN"), ("lt72", "LT72"), ("rso", "RSO"), ("lv", "112.lv"))
 _FT_M, _KT_MS = 0.3048, 0.514444
 COUNTRIES = {c.strip().upper() for c in os.environ.get("DANGAUSAKIS_COUNTRIES", "").split(",") if c.strip()}
 TOPIC = "{}/land/dangausakis/alert/neutral/zone/status".format(TOPIC_ROOT)
@@ -241,8 +256,11 @@ def zone_tracks(alerts: dict, boundaries: dict, now: float) -> dict:
 def _get(url: str, timeout: int = 15) -> str | None:
     try:
         with urllib.request.urlopen(urllib.request.Request(url, headers=_HEADERS), timeout=timeout) as resp:
-            return resp.read().decode("utf-8", "replace")
-    except urllib.error.URLError as exc:
+            body = resp.read(_MAX_BODY_BYTES + 1)
+            if resp.headers.get("Content-Encoding") == "gzip":      # some hosts (112.lv) send it unasked
+                body = gzip.GzipFile(fileobj=io.BytesIO(body)).read(_MAX_BODY_BYTES + 1)
+            return body[:_MAX_BODY_BYTES].decode("utf-8", "replace")
+    except (urllib.error.URLError, OSError) as exc:
         print("dangausakis fetch failed {}: {}".format(url, exc), flush=True)
         return None
 
@@ -338,24 +356,62 @@ def _fetch(path: str) -> dict | None:
         return None
 
 
-def compose_alerts(now: float, site_data, neptun_data, lt_feed, rso_data, boundaries) -> dict | None:
+def compose_alerts(now: float, site_data, neptun_data, lt_feed, rso_data, boundaries, lv_data=None) -> dict | None:
     """One cycle's merged alerts from whatever sources are available (a failed or disabled
     source is None). Direct sources replace the site's data for UA and LT, are added to it
-    for PL; a country whose direct source is None falls back to the site's data. Returns
+    for PL and LV; a country whose direct source is None falls back to the site's data. Returns
     None when nothing at all is available, so the caller keeps the current picture."""
     direct = {
-        "UA": alert_sources.neptun_alerts(neptun_data, now, MAX_AGE_S, SOURCE_MAX_AGE_S) if neptun_data else None,
+        "UA": alert_sources.neptun_alerts(neptun_data, now, SOURCE_MAX_AGE_S) if neptun_data else None,
         "LT": (alert_sources.expand_nationwide(alert_sources.lt72_alert(lt_feed, now, MAX_AGE_S),
                                                boundaries or {}, "LT") if lt_feed else None),
         "PL": alert_sources.rso_alerts(rso_data, now, MAX_AGE_S) if rso_data else None,
+        "LV": (alert_sources.expand_nationwide(alert_sources.lv_alerts(lv_data, now), boundaries or {}, "LV")
+               if lv_data is not None else None),
     }
     if site_data is None and all(v is None for v in direct.values()):
         return None
     site = active_alerts(site_data, now, MAX_AGE_S, COUNTRIES) if site_data else {}
-    current = alert_sources.merge(site, direct, additive=frozenset({"PL"}))
+    current = alert_sources.merge(site, direct, additive=frozenset({"PL", "LV"}))
     if COUNTRIES:
         current = {k: v for k, v in current.items() if v["country"] in COUNTRIES}
     return current
+
+
+def publish_community(session, put_event, now: float, state: dict, verbose: bool) -> None:
+    """Drone reports and incident markers as tracks, a JSON tombstone for each one that
+    left the feed, and one event per report/incident that is new since the last poll
+    (none on the first poll, so a restart does not re-announce what is already shown).
+    A failed fetch keeps that kind's previous entries instead of retracting them.
+    state: {"tracks": {uid: (kind, prefix, track)}, "seen": set | None}."""
+    fetched = (("report", COMMUNITY_REPORT_PREFIX, _fetch("drone-reports"), alert_sources.drone_report_tracks),
+               ("incident", COMMUNITY_INCIDENT_PREFIX, _fetch("incident-markers"),
+                alert_sources.incident_marker_tracks))
+    current = {}
+    for kind, prefix, data, build in fetched:
+        if data is None:
+            current.update({u: v for u, v in state["tracks"].items() if v[0] == kind})
+            continue
+        for uid, track in build(data, now).items():
+            current[uid] = (kind, prefix, track)
+    for uid, (kind, prefix, track) in current.items():
+        publish_dual(session, prefix, track, NormalizedTrack)
+        if state["seen"] is not None and uid not in state["seen"]:
+            event = {"_src": "dangausakis.lt", "_ts": now, "lat": track["lat_deg"], "lon": track["lon_deg"]}
+            if kind == "report":
+                event.update(alert_type="drone_report", report_type=track["report_type"], uid=uid)
+            else:
+                event.update(alert_type="incident", title=track["title"], url=track["url"], uid=uid)
+            put_event(event)
+        if verbose:
+            print("COMMUNITY", kind, uid, track["callsign"], flush=True)
+    for uid in set(state["tracks"]) - set(current):
+        _, prefix, track = state["tracks"][uid]
+        session.put(add_version(semantic_topic(prefix, track)),
+                    json.dumps({"uid": uid, "_delete": True, "_ts": now, "_src": "dangausakis.lt"}).encode())
+    state["tracks"] = current
+    if all(data is not None for _, _, data, _ in fetched):
+        state["seen"] = set(current)
 
 
 def main():
@@ -378,12 +434,22 @@ def main():
     suppression, retracted = neptun.Suppression(), set()
     suppress_sub = subscribe(session, neptun.SUPPRESS_TOPIC, suppression.on_sample) if NEPTUN_ENABLED else None
     next_threats = 0.0
-    site_cache, neptun_cache, lt_cache, rso_cache = (
-        alert_sources.SourceCache(SOURCE_MAX_AGE_S) for _ in range(4))
+    site_cache, neptun_cache, lt_cache, rso_cache, lv_cache = (
+        alert_sources.SourceCache(SOURCE_MAX_AGE_S) for _ in range(5))
     known: dict = {}
     boundaries, next_boundaries = None, 0.0
     known_zones: dict = {}
-    next_alerts = next_aircraft = 0.0
+    next_alerts = next_aircraft = next_community = 0.0
+    health = alert_sources.SourceHealth()
+    previous_alerts = None                    # None until the first cycle: nothing to diff against
+    community_state = {"tracks": {}, "seen": None}
+    enabled_sources = {"dangausakis.lt"} | {label for key, label in _DIRECT_LABELS if key in DIRECT_SOURCES}
+
+    def put_event(payload: dict) -> None:
+        if EVENTS_ENABLED:
+            pub.put(json.dumps(payload).encode(),
+                    encoding=zenoh.Encoding.APPLICATION_JSON.with_schema("efdi:dangausakis_alert_event"))
+
     try:
         while True:
             if time.time() >= next_aircraft:
@@ -393,6 +459,9 @@ def main():
                     publish_dual(session, prefix, track, NormalizedTrack)
                     if args.verbose:
                         print("AIRCRAFT", track["icao24"], track.get("callsign", ""), flush=True)
+            if COMMUNITY_ENABLED and time.time() >= next_community:
+                next_community = time.time() + COMMUNITY_POLL_S
+                publish_community(session, put_event, time.time(), community_state, args.verbose)
             if NEPTUN_ENABLED and time.time() >= next_threats:
                 next_threats = time.time() + neptun.POLL_S
                 neptun.publish_threats(session, neptun.threat_tracks(neptun.fetch_threats() or {}),
@@ -407,16 +476,31 @@ def main():
                 boundaries = loaded or boundaries
                 next_boundaries = time.time() + (BOUNDARY_REFRESH_S if loaded else BOUNDARY_RETRY_S)
 
-            site_data = site_cache.update(_fetch("region-alerts"), now)
-            neptun_data = (neptun_cache.update(_get_json(alert_sources.NEPTUN_ALERTS_URL), now)
-                           if "neptun" in DIRECT_SOURCES else None)
-            lt_feed = (lt_cache.update(_get(alert_sources.LT72_FEED_URL), now)
-                       if "lt72" in DIRECT_SOURCES else None)
-            rso_data = (rso_cache.update(_get_json(alert_sources.RSO_URL), now)
-                        if "rso" in DIRECT_SOURCES else None)
-            current = compose_alerts(now, site_data, neptun_data, lt_feed, rso_data, boundaries)
+            raw = {"dangausakis.lt": _fetch("region-alerts"),
+                   "NEPTUN": _get_json(alert_sources.NEPTUN_ALERTS_URL) if "neptun" in DIRECT_SOURCES else None,
+                   "LT72": _get(alert_sources.LT72_FEED_URL) if "lt72" in DIRECT_SOURCES else None,
+                   "RSO": _get_json(alert_sources.RSO_URL) if "rso" in DIRECT_SOURCES else None,
+                   "112.lv": _get_json(alert_sources.LV_URL) if "lv" in DIRECT_SOURCES else None}
+            for label, (ok, detail) in alert_sources.source_observations(
+                    now, raw, enabled_sources, SOURCE_MAX_AGE_S).items():
+                warning = health.observe(label, ok, detail, now)
+                if warning:
+                    put_event(warning)
+                    print("SOURCE", label, warning["state"], detail, flush=True)
+            site_data = site_cache.update(raw["dangausakis.lt"], now)
+            neptun_data = neptun_cache.update(raw["NEPTUN"], now) if "neptun" in DIRECT_SOURCES else None
+            lt_feed = lt_cache.update(raw["LT72"], now) if "lt72" in DIRECT_SOURCES else None
+            rso_data = rso_cache.update(raw["RSO"], now) if "rso" in DIRECT_SOURCES else None
+            lv_data = lv_cache.update(raw["112.lv"], now) if "lv" in DIRECT_SOURCES else None
+            current = compose_alerts(now, site_data, neptun_data, lt_feed, rso_data, boundaries, lv_data)
             if current is None:
                 continue                      # every source down: keep what is on screen
+
+            if previous_alerts is not None:
+                for country, change in alert_sources.status_changes(previous_alerts, current).items():
+                    put_event({"_src": "dangausakis.lt", "_ts": now, "alert_type": "region_status_change",
+                               "country": country, **change})
+            previous_alerts = current
 
             popups = {k: v for k, v in current.items() if v.get("notify", True)}
             gone = {i: dict(p, _delete=True, _ts=now) for i, p in known.items() if i not in popups}

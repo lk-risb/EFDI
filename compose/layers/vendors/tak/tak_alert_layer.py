@@ -23,6 +23,9 @@ Currently covers:
     popup per alert id, re-armed when the bridge reports it cleared. These
     alerts carry an area name, not a position, so the GeoChat point is 0,0
     (the popup text is what matters, not the marker).
+  - dangausakis bridge events, one GeoChat each: regional status changes (raised /
+    changed / cleared, grouped per country), data-source warnings (a feed down or
+    frozen, and its recovery), new community drone reports and incident markers.
 """
 
 import argparse
@@ -190,6 +193,59 @@ def make_region_alert_handler(sender, verbose: bool):
     return handler
 
 
+_MAX_NAMES = 6          # areas listed per group before "+N more"
+
+
+def _names(items, fmt) -> str:
+    shown = ", ".join(fmt(i) for i in items[:_MAX_NAMES])
+    return shown + (" +{} more".format(len(items) - _MAX_NAMES) if len(items) > _MAX_NAMES else "")
+
+
+def format_event(alert: dict) -> str | None:
+    """GeoChat text for a dangausakis bridge event, None for anything else: a regional
+    status change, a data-source warning, a new community drone report or incident."""
+    kind = alert.get("alert_type")
+    if kind == "region_status_change":
+        parts = []
+        if alert.get("raised"):
+            parts.append("raised: " + _names(alert["raised"], lambda a: "{} ({})".format(a["area"], a["level"])))
+        if alert.get("changed"):
+            parts.append("changed: " + _names(alert["changed"],
+                                              lambda a: "{} {}->{}".format(a["area"], a["from"], a["to"])))
+        if alert.get("cleared"):
+            parts.append("cleared: " + _names(alert["cleared"], lambda a: a["area"]))
+        return "[AIR STATUS {}] {}".format(alert.get("country", "?"), " | ".join(parts)) if parts else None
+    if kind == "source_warning":
+        if alert.get("state") == "recovered":
+            return "[AIR ALERT DATA] {} recovered".format(alert.get("source", "?"))
+        return "[AIR ALERT DATA] {} {} - its alerts may be missing or out of date".format(
+            alert.get("source", "?"), alert.get("detail") or "is down")
+    if kind == "drone_report":
+        return "[DRONE REPORT LT] {} (unverified, approximate) - {:.3f}/{:.3f}".format(
+            alert.get("report_type", "report"), alert.get("lat", 0), alert.get("lon", 0))
+    if kind == "incident":
+        return "[INCIDENT] {} - {}".format(alert.get("title", "?"), alert.get("url", ""))
+    return None
+
+
+def make_event_handler(sender, verbose: bool):
+    """One GeoChat per event; the bridge already sends only transitions, so there is no
+    per-uid state here."""
+    def handler(sample):
+        try:
+            alert = json.loads(bytes(sample.payload).decode())
+        except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
+            return
+        msg = format_event(alert) if isinstance(alert, dict) else None
+        if msg is None:
+            return
+        _send_geochat_alert(sender, "DANGAUSAKIS-EVENT-{}".format(alert.get("alert_type")),
+                            alert.get("lat", 0), alert.get("lon", 0), msg)
+        if verbose:
+            print("ALERT {}".format(msg), flush=True)
+    return handler
+
+
 def run(args):
     hosts = [(h, args.port) for h in args.host]
     tls = getattr(args, "tls", False)
@@ -220,6 +276,10 @@ def run(args):
     subs.append(subscribe(session, "{}/land/dangausakis/alert/**".format(TOPIC_ROOT),
                           make_region_alert_handler(sender, args.verbose)))
     print("SUB {}/land/dangausakis/alert/** → regional air-raid alerts".format(TOPIC_ROOT), flush=True)
+    subs.append(subscribe(session, "{}/land/dangausakis/alert/**".format(TOPIC_ROOT),
+                          make_event_handler(sender, args.verbose)))
+    print("SUB {}/land/dangausakis/alert/** → status changes, data issues, drone reports".format(TOPIC_ROOT),
+          flush=True)
 
     stop = threading.Event()
 

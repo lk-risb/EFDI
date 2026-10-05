@@ -43,6 +43,24 @@ is_bridge_pid() {
     return 1
 }
 
+# SIGTERM, wait up to 10 s, then SIGKILL. A service that hangs in its shutdown path
+# (e.g. a Zenoh session that cannot close while its link is down) used to survive a
+# plain `kill`; its PID file was removed anyway, leaving an orphan that start.sh and
+# the supervisor could no longer see, running next to its own replacement.
+stop_pid() {
+    local pid="$1" waited=0 grace="${STOP_GRACE_S:-10}"
+    kill "$pid" 2>/dev/null || return 0
+    while kill -0 "$pid" 2>/dev/null && (( waited < grace * 2 )); do
+        sleep 0.5
+        waited=$((waited + 1))
+    done
+    if kill -0 "$pid" 2>/dev/null; then
+        kill -9 "$pid" 2>/dev/null
+        sleep 0.2
+        echo "  [kill] pid $pid ignored SIGTERM for ${grace} s - sent SIGKILL"
+    fi
+}
+
 stop_scripts() {
     local pattern="${1:-*}"
     if [[ ! -d "$PID_DIR" ]]; then return; fi
@@ -51,7 +69,8 @@ stop_scripts() {
         name="$(basename "$pid_file" .pid)"
         pid="$(cat "$pid_file")"
         if is_bridge_pid "$pid"; then
-            kill "$pid" 2>/dev/null && echo "  [stop] $name (pid $pid)"
+            echo "  [stop] $name (pid $pid)"
+            stop_pid "$pid"
         else
             echo "  [gone] $name PID file is stale or belongs to another process"
         fi

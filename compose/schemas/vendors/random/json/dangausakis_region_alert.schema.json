@@ -9,7 +9,7 @@
   "type": "object",
   "required": ["_src", "_ts", "alert_type", "alert_id", "country", "level", "area", "since", "source", "stale"],
   "properties": {
-    "_src": {"enum": ["dangausakis.lt", "neptun.in.ua", "lt72.lt", "komunikaty.tvp.pl"], "description": "Where the alert was read: the site's aggregated feed or a direct upstream."},
+    "_src": {"enum": ["dangausakis.lt", "neptun.in.ua", "lt72.lt", "komunikaty.tvp.pl", "112.lv"], "description": "Where the alert was read: the site's aggregated feed or a direct upstream."},
     "_ts": {"type": "number"},
     "alert_type": {"type": "string", "const": "region_alert"},
     "alert_id": {"type": "string", "description": "Upstream id, '<COUNTRY>:<area key>'."},

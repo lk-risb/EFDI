@@ -147,7 +147,7 @@ SERVICE_SPECS = [
     ("aartos-wifi-raw", "Raw ingress", "Aaronia AARTOS HTTP stream ingress (WiFi operator-position block)"),
     ("mediamtx", "Sensor bridges", "RTMP video ingress (drone remote) → RTSP/WebRTC/recording fan-out"),
     ("tak_layer", "C2 outputs", "CoT → TAK Server (mTLS)"),
-    ("tak_alert_layer", "C2 outputs", "Acoustic detections + air-raid alerts → TAK GeoChat (opt-in)"),
+    ("tak_alert_layer", "C2 outputs", "Acoustic detections + air-raid alerts, status changes, data issues, drone reports → TAK GeoChat (opt-in)"),
     ("tak-bridge", "C2 inputs", "TAK Server CoT ingress"),
     ("sitaware", "C2 inputs", "SitaWare HQ REST input"),
     # A _bridge brings a C2 system's data INTO the fabric, a _layer writes the

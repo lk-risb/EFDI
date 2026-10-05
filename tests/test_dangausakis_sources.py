@@ -33,18 +33,18 @@ def _raion(key="бахмутський", level="red", age=600):
 
 
 def test_neptun_district_alert_shape_and_no_popup():
-    out = src.neptun_alerts(_neptun([_raion()]), NOW, MAX_AGE, SRC_AGE)
+    out = src.neptun_alerts(_neptun([_raion()]), NOW, SRC_AGE)
     a = out["UA-R:бахмутський"]
     assert a["country"] == "UA" and a["level"] == "red" and a["source"] == "NEPTUN"
-    assert a["notify"] is False and a["stale"] is False and "Ракетна" in a["reason"]
+    assert a["notify"] is False and a["stale"] is False and "Missile threat" in a["reason"]
     assert a["_src"] == "neptun.in.ua"
 
 
-def test_neptun_drops_standing_old_alerts_and_unknown_levels_and_flags_stale_source():
-    old = _raion("крим", age=4 * 365 * 86400)
-    assert src.neptun_alerts(_neptun(oblasts=[old]), NOW, MAX_AGE, SRC_AGE) == {}
-    assert src.neptun_alerts(_neptun([_raion(level="purple")]), NOW, MAX_AGE, SRC_AGE) == {}
-    stale = src.neptun_alerts(_neptun([_raion()], updated_age=7200), NOW, MAX_AGE, SRC_AGE)
+def test_neptun_keeps_long_standing_alerts_drops_unknown_levels_and_flags_stale_source():
+    old = _raion("крим", age=4 * 365 * 86400)                  # occupied regions stay red for years
+    assert "UA-O:крим" in src.neptun_alerts(_neptun(oblasts=[old]), NOW, SRC_AGE)
+    assert src.neptun_alerts(_neptun([_raion(level="purple")]), NOW, SRC_AGE) == {}
+    stale = src.neptun_alerts(_neptun([_raion()], updated_age=7200), NOW, SRC_AGE)
     assert stale["UA-R:бахмутський"]["stale"] is True
 
 
@@ -55,7 +55,7 @@ def test_neptun_boundaries_use_the_alert_ids():
     oblasts = {"features": [{"properties": {"key": "донецька", "region": "Донецька область"},
                              "geometry": {"type": "MultiPolygon", "coordinates": [[sq], [sq]]}}]}
     b = src.neptun_boundaries(raions, oblasts)
-    assert b["UA-R:бахмутський"]["name"] == "Бахмутський район" and len(b["UA-O:донецька"]["rings"]) == 2
+    assert b["UA-R:бахмутський"]["name"] == "Bakhmutskyi District" and len(b["UA-O:донецька"]["rings"]) == 2
 
 
 def _rss(*items):
@@ -229,3 +229,21 @@ def test_compose_healthy_but_quiet_direct_source_still_replaces_the_sites_alerts
 def test_compose_respects_country_filter(monkeypatch):
     monkeypatch.setattr(bridge, "COUNTRIES", {"LV"})
     assert set(_compose()) == {"LV:0001000"}
+
+
+def test_english_romanises_ukrainian_names_and_translates_common_words():
+    assert src.english("Кропивницький район") == "Kropyvnytskyi District"
+    assert src.english("Київська область") == "Kyivska Oblast"
+    assert src.english("м. Київ") == "City of Kyiv"
+    assert src.english("Автономна Республіка Крим") == "Autonomous Republic of Crimea"
+    assert src.english("Ракетна загроза (червоний рівень)") == "Missile threat (red level)"
+    assert src.english("already English 12") == "already English 12"
+    out = src.neptun_alerts(_neptun([_raion()]), NOW, SRC_AGE)
+    assert out["UA-R:бахмутський"]["area"] == "Bakhmutskyi District"
+
+
+def test_lv_alert_only_for_air_raid_items_and_empty_feed_is_healthy():
+    assert src.lv_alerts({"alerts": []}, NOW) == {}
+    assert src.lv_alerts({"alerts": [{"title": "Plūdu brīdinājums"}]}, NOW) == {}
+    got = src.lv_alerts({"alerts": [{"title": "Gaisa trauksme visā valstī"}]}, NOW)
+    assert got["LV:ALL"]["level"] == "red" and got["LV:ALL"]["country"] == "LV"

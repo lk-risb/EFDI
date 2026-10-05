@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://efdi.ltu/schemas/json/dangausakis_alert_event.schema.json",
+  "title": "dangausakis bridge alert event",
+  "description": "One-shot events published BY bridges/vendors/dangausakis/dangausakis_bridge.py on the alert topic when something changes: a regional status change (raised / changed / cleared alerts, one message per country per poll), a data-source warning (a feed down or frozen for several polls, and its recovery), or a new community drone report / incident marker. Nothing is published for the first poll after a start. tak_alert_layer turns each into one GeoChat message.",
+  "x-efdi-topic": "{TOPIC_ROOT}/land/dangausakis/alert/neutral/zone/status",
+  "x-efdi-producer": "bridges/vendors/dangausakis/dangausakis_bridge.py",
+  "x-efdi-consumer": "layers/vendors/tak/tak_alert_layer.py",
+  "type": "object",
+  "required": ["_src", "_ts", "alert_type"],
+  "properties": {
+    "_src": {"type": "string"},
+    "_ts": {"type": "number"},
+    "alert_type": {"enum": ["region_status_change", "source_warning", "drone_report", "incident"]},
+    "country": {"type": "string", "description": "region_status_change: upper-case country code."},
+    "raised": {"type": "array", "items": {"type": "object", "required": ["area", "level"], "properties": {"area": {"type": "string"}, "level": {"type": "string"}}}},
+    "changed": {"type": "array", "items": {"type": "object", "required": ["area", "from", "to"], "properties": {"area": {"type": "string"}, "from": {"type": "string"}, "to": {"type": "string"}}}},
+    "cleared": {"type": "array", "items": {"type": "object", "required": ["area", "level"], "properties": {"area": {"type": "string"}, "level": {"type": "string"}}}},
+    "source": {"type": "string", "description": "source_warning: the feed, e.g. NEPTUN."},
+    "state": {"enum": ["down", "recovered"], "description": "source_warning."},
+    "detail": {"type": "string", "description": "source_warning: why, e.g. 'not updated for 38 h'."},
+    "uid": {"type": "string", "description": "drone_report / incident: the track uid."},
+    "report_type": {"type": "string", "description": "drone_report: the site's report type, e.g. heard."},
+    "title": {"type": "string", "description": "incident: article title."},
+    "url": {"type": "string", "description": "incident: article link on dangausakis.lt."},
+    "lat": {"type": "number"},
+    "lon": {"type": "number"}
+  },
+  "additionalProperties": false
+}
