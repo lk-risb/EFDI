@@ -17,18 +17,25 @@ from schemas.vendors.socbx.proto.socbx_unified_pb2 import UnifiedSchema  # noqa:
 def _payload(*objects):
     msg = UnifiedSchema()
     msg.node_id = "n1"
-    for object_id, callsign, domain in objects:
+    for object_id, callsign, domain, *rest in objects:
         features = msg.objects[object_id].features
         features.location.latitude, features.location.longitude = 52.36, 13.5
         features.identity.object_id = object_id
         features.identity.callsign = callsign
         features.identity.domain = domain
+        if rest:
+            features.identity.object_type = features.identity.platform_type = rest[0]
     return msg.SerializeToString()
 
 
 def test_bare_hex_object_without_type_is_an_icao_keyed_aircraft():
     (rec,) = socbx.unified_records(_payload(("0101B7", "MSR731", "")))
     assert rec["icao24"] == "0101b7" and rec["_dimension"] == "air" and rec["target_type"] == "aircraft"
+
+
+def test_generic_sensor_tag_does_not_stop_an_aircraft_being_recognised():
+    (rec,) = socbx.unified_records(_payload(("48c595", "SPSMZ   ", "", "sensor")))
+    assert rec["icao24"] == "48c595" and rec["callsign"] == "SPSMZ" and rec["_dimension"] == "air"
 
 
 def test_hex_lookalike_with_a_declared_type_and_other_ids_are_left_alone():

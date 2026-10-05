@@ -52,9 +52,18 @@ _UNIFIED_SUFFIX = "/soc-bx/unified/raw/v1"
 _ALERTS_SUFFIX = "/soc-bx/alerts/v1"
 INPUT_TOPIC = TOPIC_ROOT + "/raw/backbone/**"
 
-# An object whose id is a bare 6-digit hex number and which carries no domain or type is an
-# ADS-B aircraft keyed by its ICAO address (this vendor republishes ADS-B that way).
+# An object whose id is a bare 6-digit hex number and which carries no real domain or type is
+# an ADS-B aircraft keyed by its ICAO address. This vendor republishes ADS-B that way, and
+# tags many of those objects with the generic type "sensor" (seen live: object_type
+# "sensor", platform_type "Sensor" on an aircraft with a callsign), which says nothing.
 _ICAO_HEX = re.compile(r"^[0-9a-fA-F]{6}$")
+_GENERIC_TYPES = ("", "sensor", "unknown")
+
+
+def _generic(identity) -> bool:
+    return (not (identity.domain or identity.object_subtype)
+            and all(value.strip().lower() in _GENERIC_TYPES
+                    for value in (identity.object_type, identity.platform_type, identity.vehicle_type)))
 
 _DOMAIN_AIR = ("uav", "aircraft", "drone", "air", "helicopter", "rotary")
 _DOMAIN_SEA = ("vessel", "ship", "boat", "sea", "maritime", "surface")
@@ -100,7 +109,7 @@ def unified_records(payload: bytes) -> list[dict]:
         if location.HasField("altitude"):
             record["alt_m"] = location.altitude
         if identity.callsign:
-            record["callsign"] = identity.callsign
+            record["callsign"] = identity.callsign.strip()
         if identity.object_type:
             record["object_type"] = identity.object_type
         if identity.classification:
@@ -114,8 +123,7 @@ def unified_records(payload: bytes) -> list[dict]:
         elif kinematics.HasField("ground_speed"):
             record["speed_mps"] = kinematics.ground_speed
         record["_dimension"] = _dimension(identity)
-        if (_ICAO_HEX.match(str(record["uid"])) and not (identity.domain or identity.object_type
-                                                          or identity.object_subtype or identity.platform_type)):
+        if _ICAO_HEX.match(str(record["uid"])) and _generic(identity):
             # Key it by icao24 like every other ADS-B source, so the same aircraft from
             # dangausakis or any other feed is one marker, and draw it as an aircraft
             # instead of a stationary ground unit.
