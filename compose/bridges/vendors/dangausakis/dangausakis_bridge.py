@@ -53,6 +53,8 @@ Env:
                                 for this long, or reports an error (default 1800)
   DANGAUSAKIS_AIRCRAFT_POLL_S   aircraft poll interval, seconds (default 15)
   DANGAUSAKIS_ZONES             set 0 to disable the coloured region polygons
+  DANGAUSAKIS_COUNTRY_ZONES     set 0 to skip the faint oblast fills and the standing Belarus/Russia
+                                colours the site draws (default on; needs DANGAUSAKIS_ZONES)
   DANGAUSAKIS_COMMUNITY         set 0 to disable the community drone reports and incident
                                 markers (tracks under air/dangausakis/community and
                                 land/dangausakis/incident); default on
@@ -114,6 +116,7 @@ ZONE_COLORS = {"red", "orange", "yellow"}
 ZONE_PREFIX = "{}/land/dangausakis/airzone/neutral/zone".format(TOPIC_ROOT)
 AIRCRAFT_POLL_S = int(os.environ.get("DANGAUSAKIS_AIRCRAFT_POLL_S", "15"))
 AIRCRAFT_MAX_POSITION_AGE_S = 60
+WASH_ENABLED = os.environ.get("DANGAUSAKIS_COUNTRY_ZONES", "1") != "0"
 COMMUNITY_ENABLED = os.environ.get("DANGAUSAKIS_COMMUNITY", "1") != "0"
 COMMUNITY_POLL_S = int(os.environ.get("DANGAUSAKIS_COMMUNITY_POLL_S", "30"))
 EVENTS_ENABLED = os.environ.get("DANGAUSAKIS_EVENTS", "1") != "0"
@@ -250,6 +253,94 @@ def zone_tracks(alerts: dict, boundaries: dict, now: float) -> dict:
                     alert["level"], alert.get("since") or "?", alert.get("source") or "?",
                     " via dangausakis.lt" if alert.get("_src", "dangausakis.lt") == "dangausakis.lt" else ""),
             })
+    return out
+
+
+_WASH_RANK = {"yellow": 1, "orange": 2, "red": 3}
+# Standing country status the site draws as a permanent colour (tone in its geoData bundle).
+_TONE_LEVEL = {"warning": "orange", "danger": "red"}
+_GEODATA_JS_RE = re.compile(r"/wp-content/plugins/[^\"']*/geoData\.[0-9a-f]+\.js")
+# Country parts drawn: those overlapping the European theatre, big enough to see (this keeps
+# Russia's mainland, Crimea and Kaliningrad and drops the Arctic and Pacific islands).
+_THEATRE = (10.0, 40.0, 60.0, 66.0)          # lon min, lat min, lon max, lat max
+_MIN_PART_DEG2 = 1.0
+
+
+def _in_theatre(ring: list) -> bool:
+    """True when the ring's bounding box overlaps the European theatre."""
+    xs, ys = [p[0] for p in ring], [p[1] for p in ring]
+    return (max(xs) >= _THEATRE[0] and min(xs) <= _THEATRE[2]
+            and max(ys) >= _THEATRE[1] and min(ys) <= _THEATRE[3])
+
+
+def _wash_track(uid: str, region: dict, level: str, callsign: str, remarks: str, rings: list, now: float,
+                **extra) -> dict:
+    ring = simplify_ring(rings[0])
+    return {
+        "_src": "dangausakis.lt", "_ts": now, "uid": uid, "type": "air_alert_zone", "callsign": callsign,
+        "lat_deg": round(sum(p[1] for p in ring[:-1]) / (len(ring) - 1), 5),
+        "lon_deg": round(sum(p[0] for p in ring[:-1]) / (len(ring) - 1), 5),
+        "geometry": {"type": "Polygon", "coordinates": [ring]}, "shape_color": level, "shape_style": "wash",
+        "level": level, "remarks": remarks, **extra,
+    }
+
+
+def wash_tracks(current: dict, boundaries: dict, standing: dict, now: float) -> dict:
+    """uid -> (topic prefix, track): faint area fills drawn behind the district zones, like the
+    site's map. One per Ukrainian oblast that has an active district alert (coloured by the
+    worst district; an oblast with an alert of its own already has a full zone), plus one per
+    standing country status (Belarus, Russia) from the site's geoData."""
+    out = {}
+    worst = {}
+    for alert in current.values():
+        if alert.get("country") == "UA" and alert.get("oblast") and not alert.get("stale") \
+                and alert.get("level") in _WASH_RANK:
+            if _WASH_RANK[alert["level"]] > _WASH_RANK.get(worst.get(alert["oblast"]), 0):
+                worst[alert["oblast"]] = alert["level"]
+    by_name = {r["name"]: rid for rid, r in boundaries.items() if rid.startswith("UA-O:")}
+    for oblast, level in worst.items():
+        rid = by_name.get(oblast)
+        if rid is None or rid in current:
+            continue
+        rings = sorted(boundaries[rid]["rings"], key=_ring_area, reverse=True)[:1]
+        if rings:
+            uid = "DA-WASH-" + rid
+            out[uid] = (ZONE_PREFIX, _wash_track(
+                uid, boundaries[rid], level, "UA {} {}".format(oblast, level.upper()),
+                "Oblast with an active district alert (worst level {}) - source: NEPTUN via dangausakis.lt - "
+                "not an official warning".format(level), rings, now, country="UA", alert_id=rid))
+    for code, region in standing.items():
+        level = _TONE_LEVEL[region["tone"]]
+        rings = [r for r in sorted(region["rings"], key=_ring_area, reverse=True)
+                 if _ring_area(r) >= _MIN_PART_DEG2 and _in_theatre(r)][:ZONE_MAX_PARTS]
+        for index, ring in enumerate(rings):
+            uid = "DA-COUNTRY-{}{}".format(code, "-p{}".format(index) if index else "")
+            out[uid] = (ZONE_PREFIX, _wash_track(
+                uid, region, level, "{} {} ({})".format(code, region["name"], region["tone"]),
+                "Standing status shown by dangausakis.lt: {} - not an official warning".format(region["tone"]),
+                [ring], now, country=code, alert_id="COUNTRY:" + code))
+    return out
+
+
+def load_standing_zones() -> dict:
+    """{country code: {"name", "tone", "rings"}} for the countries the site draws with a standing
+    warning/danger colour, from the geoData bundle named on the map page. {} on any failure."""
+    page = _get(MAP_PAGE)
+    match = _GEODATA_JS_RE.search(page or "")
+    text = _get("https://dangausakis.lt" + match.group(0), timeout=60) if match else None
+    if not text:
+        return {}
+    start = re.search(r'\{\s*"type"\s*:\s*"FeatureCollection"', text)
+    try:
+        data = json.loads(text[start.start():text.rindex("}") + 1]) if start else {}
+    except ValueError:
+        return {}
+    out = {}
+    for feature in data.get("features", []):
+        props = feature.get("properties") or {}
+        if props.get("tone") in _TONE_LEVEL and props.get("code"):
+            out[props["code"]] = {"name": alert_sources.english_country(props["code"], props.get("name")),
+                                  "tone": props["tone"], "rings": alert_sources.rings_of(feature["geometry"])}
     return out
 
 
@@ -438,6 +529,7 @@ def main():
         alert_sources.SourceCache(SOURCE_MAX_AGE_S) for _ in range(5))
     known: dict = {}
     boundaries, next_boundaries = None, 0.0
+    standing: dict = {}
     known_zones: dict = {}
     next_alerts = next_aircraft = next_community = 0.0
     health = alert_sources.SourceHealth()
@@ -474,6 +566,8 @@ def main():
             if ZONES_ENABLED and time.time() >= next_boundaries:
                 loaded = load_boundaries()
                 boundaries = loaded or boundaries
+                if WASH_ENABLED:
+                    standing = load_standing_zones() or standing
                 next_boundaries = time.time() + (BOUNDARY_REFRESH_S if loaded else BOUNDARY_RETRY_S)
 
             raw = {"dangausakis.lt": _fetch("region-alerts"),
@@ -514,6 +608,8 @@ def main():
 
             if ZONES_ENABLED:
                 zones = zone_tracks(current, boundaries or {}, now)
+                if WASH_ENABLED:
+                    zones.update(wash_tracks(current, boundaries or {}, standing, now))
                 for uid, (prefix, track) in zones.items():
                     session.put(add_version(semantic_topic(prefix, track)), json.dumps(track).encode(),
                                 encoding=zenoh.Encoding.APPLICATION_JSON.with_schema("efdi:dangausakis_air_zone"))

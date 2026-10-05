@@ -6,7 +6,8 @@ point. Polls NEPTUN's open REST API (GET /api/v1/threats; free, read-only, no ke
 CORS open) for active drones, missiles and glide bombs over Ukraine and publishes
 each as a track via publish_dual() so tak_layer and sitaware_layer draw it:
   <ORG>/air/neptun/hostile/uav/<type>/<uid>/...       uav, fpv, recon
-  <ORG>/air/neptun/hostile/missile/<type>/<uid>/...   missile, ballistic, kab (glide bomb)
+  <ORG>/air/neptun/hostile/missile/<type>/<uid>/...   missile, ballistic
+  <ORG>/air/neptun/hostile/bomb/<type>/<uid>/...      kab (guided / glide bomb)
   <ORG>/air/neptun/hostile/aircraft/<type>/<uid>/...  mig31k
   <ORG>/air/neptun/unknown/aircraft/<type>/<uid>/...  unknown or any type not listed above
 
@@ -71,7 +72,7 @@ ATTRIBUTION = "Data: NEPTUN https://neptun.in.ua/ - OSINT aggregator, not radar 
 # known is published as an unknown-affiliation aircraft rather than guessed as a drone.
 _KIND = {
     "uav": ("hostile", "uav"), "fpv": ("hostile", "uav"), "recon": ("hostile", "uav"),
-    "missile": ("hostile", "missile"), "ballistic": ("hostile", "missile"), "kab": ("hostile", "missile"),
+    "missile": ("hostile", "missile"), "ballistic": ("hostile", "missile"), "kab": ("hostile", "bomb"),
     "mig31k": ("hostile", "aircraft"),
 }
 _DEFAULT_KIND = ("unknown", "aircraft")

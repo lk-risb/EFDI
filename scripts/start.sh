@@ -289,7 +289,19 @@ declare -A SVC_DESC=(
 )
 
 # ── Ready check — 0=can start, 1=missing config ───────────────────────────
+# Services listed in EFDI_DISABLED_SERVICES (space or comma separated, set in compose/.env) are
+# never started by this script or by the supervisor, so one can be kept off across restarts
+# without editing the code, e.g. EFDI_DISABLED_SERVICES="socbx backbone-bridge".
+svc_disabled() {
+    local d
+    for d in ${EFDI_DISABLED_SERVICES//,/ }; do
+        [[ "$d" == "$1" ]] && return 0
+    done
+    return 1
+}
+
 svc_ready() {
+    svc_disabled "$1" && return 1
     case "$1" in
         zenoh|meteolt|\
         dronuradaras|dangausakis|nffi|tak_layer|tak_alert_layer|track-fusion|\
@@ -360,6 +372,7 @@ svc_ready() {
 # Short config note shown in status column when not ready
 svc_hint() {
     local _n
+    svc_disabled "$1" && { echo "disabled by EFDI_DISABLED_SERVICES"; return; }
     case "$1" in
         asterix) echo "ASTERIX family bundle" ;;
         mqtt-raw) echo "MQTT_HOST not set" ;;

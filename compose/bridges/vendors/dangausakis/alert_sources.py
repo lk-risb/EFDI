@@ -77,6 +77,15 @@ _UA_LETTERS = dict(zip("абвгґдезиіклмнопрстуфхцчшщ", [
 _UA_LETTERS.update({"ж": "zh", "ь": "", "'": "", "’": "", "ʼ": ""})
 
 
+_COUNTRY_NAMES = {"BY": "Belarus", "RU": "Russia", "UA": "Ukraine", "LT": "Lithuania", "LV": "Latvia",
+                  "PL": "Poland", "EE": "Estonia"}
+
+
+def english_country(code: str, fallback=None) -> str:
+    """English country name for a code; the site's own (Lithuanian) name if the code is unknown."""
+    return _COUNTRY_NAMES.get(code) or str(fallback or code)
+
+
 def english(text) -> str:
     """Ukrainian text -> English: known words translated, the rest romanised. Text that
     is already Latin (or empty) comes back unchanged."""
@@ -118,11 +127,12 @@ def rings_of(geometry: dict) -> list:
 
 
 def _alert(alert_id, country, level, area, since, source, now, notify, stale=False, reason="",
-           origin="dangausakis.lt"):
+           origin="dangausakis.lt", oblast=""):
     return {
         "_src": origin, "_ts": now, "alert_type": "region_alert", "alert_id": alert_id,
         "country": country, "level": level, "area": area, "since": since, "source": source,
         "stale": bool(stale), "notify": notify, **({"reason": reason} if reason else {}),
+        **({"oblast": oblast} if oblast else {}),
     }
 
 
@@ -143,7 +153,8 @@ def neptun_alerts(data: dict, now: float, source_max_age_s: float) -> dict:
             alert_id = "{}:{}".format(prefix, key)
             out[alert_id] = _alert(alert_id, "UA", entry["level"], english(entry.get("name") or key), entry["since"],
                                    "NEPTUN", now, False, stale, english("; ".join(entry.get("reasons") or [])),
-                                   origin="neptun.in.ua")
+                                   origin="neptun.in.ua",
+                                   oblast=english(entry.get("oblast")) if kind == "raions" else "")
     return out
 
 

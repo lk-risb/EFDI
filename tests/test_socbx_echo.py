@@ -64,6 +64,19 @@ def test_echo_filter_drops_copies_of_our_own_sensors_only():
 def test_echo_filter_forgets_a_sensor_after_the_ttl():
     echoes = EchoFilter(ttl_s=10)
     echoes.on_sample(_sample({"sensor_id": "MAINLINE-DRONU-0478D5C6", "_src": "dronuradaras.lt"}))
-    now = max(echoes._seen.values())
+    now = max(echoes._ids.values())
     assert echoes.is_echo({"uid": "SENSOR:MAINLINE-DRONU-0478D5C6"}, now=now + 5)
     assert not echoes.is_echo({"uid": "SENSOR:MAINLINE-DRONU-0478D5C6"}, now=now + 60)
+
+
+def test_echo_filter_also_matches_our_sensor_display_name_for_uuid_keyed_copies():
+    echoes = EchoFilter()
+    echoes.on_sample(_sample({"sensor_id": "MAINLINE-DRONU-755A1B2C", "sensor_name": "radar-30684",
+                              "_src": "dronuradaras.lt"}))
+    echoes.on_sample(_sample({"sensor_id": "MAINLINE-DRONU-00000001", "sensor_name": "dronu-sensor",
+                              "_src": "dronuradaras.lt"}))                     # the bridge's fallback name
+    uuid_copy = {"uid": "BACKBONE-68A6EFA3-0F1E-5D2B-9C3D-123456789ABC", "callsign": "radar-30684"}
+    assert echoes.is_echo(uuid_copy)
+    assert echoes.is_echo({"uid": "BACKBONE-X", "label": "RADAR-30684"})
+    assert not echoes.is_echo({"uid": "BACKBONE-X", "callsign": "radar-99999"})
+    assert not echoes.is_echo({"uid": "BACKBONE-X", "callsign": "dronu-sensor"})

@@ -250,7 +250,8 @@ _TOPIC_COT = {
     "air/**/hostile/aircraft/**":  ("a-h-A-M-F",   AIR_STALE_S),
     "air/**/neutral/aircraft/**":  ("a-n-A-M-F",   AIR_STALE_S),
     "air/**/hostile/uav/**":       ("a-h-A-M-F-Q", AIR_STALE_S),
-    "air/**/hostile/missile/**":   ("a-h-A-W-M",   AIR_STALE_S),   # NEPTUN missiles / glide bombs
+    "air/**/hostile/missile/**":   ("a-h-A-W-M",   AIR_STALE_S),   # NEPTUN missiles
+    "air/**/hostile/bomb/**":      ("a-h-A-W-B",   AIR_STALE_S),   # NEPTUN guided (glide) bombs
     # SEA — full affiliation matrix
     "sea/**/civ/vessel/**":      (_CIV_SEA_TYPE,  SEA_STALE_S),
     "sea/**/mil/vessel/**":      ("a-n-S-W-C",   SEA_STALE_S),
@@ -1446,6 +1447,14 @@ _SHAPE_COLORS = {
 }
 
 
+# shape_style "wash": a faint area fill drawn behind the real zones (oblast / country status).
+_WASH_COLORS = {
+    "red":    (_argb(0x55, 0xFF2020), _argb(0x2E, 0xFF2020)),
+    "orange": (_argb(0x55, 0xFF8C00), _argb(0x2E, 0xFF8C00)),
+    "yellow": (_argb(0x55, 0xFFD000), _argb(0x26, 0xFFD000)),
+}
+
+
 def track_to_cot(track: dict, cot_type: str, stale_s: float = COT_STALE_S) -> str | None:
     lat = track.get("lat_deg")
     lon = track.get("lon_deg")
@@ -1552,11 +1561,13 @@ def track_to_cot(track: dict, cot_type: str, stale_s: float = COT_STALE_S) -> st
         if geometry_type == "Polygon" and track.get("shape_color") in _SHAPE_COLORS:
             # Drawing-tool colours (ARGB as signed int32), honoured by ATAK/WinTAK for
             # shapes; without them every zone draws in the client default.
-            stroke, fill = _SHAPE_COLORS[track["shape_color"]]
+            wash = track.get("shape_style") == "wash"
+            stroke, fill = (_WASH_COLORS if wash else _SHAPE_COLORS)[track["shape_color"]]
             # ATAK/WinTAK only draw a polygon for a drawing-tool event: type u-d-f with
             # one <link point="lat,lon,hae"> per vertex (closed). The <shape><polygon>
             # above is ignored by them, so without this a zone is only a label.
             event.set("type", "u-d-f")
+            event.set("how", "h-e")       # drawn shapes are "human entered"; some clients skip m-g ones
             ring = [(round(float(c[1]), 6), round(float(c[0]), 6)) for c in coordinates[0][:256]
                     if isinstance(c, (list, tuple)) and len(c) >= 2]
             if ring and ring[0] != ring[-1]:
@@ -1565,7 +1576,8 @@ def track_to_cot(track: dict, cot_type: str, stale_s: float = COT_STALE_S) -> st
                 ET.SubElement(detail, "link", {"point": "{},{},{}".format(ring_lat, ring_lon, _hae(track))})
             ET.SubElement(detail, "__shapeExtras", {"cpvis": "false", "editable": "false"})
             ET.SubElement(detail, "strokeColor", {"value": str(stroke)})
-            ET.SubElement(detail, "strokeWeight", {"value": "3.0"})
+            ET.SubElement(detail, "strokeWeight", {"value": "1.0" if wash else "3.0"})
+            ET.SubElement(detail, "color", {"value": str(stroke)})      # iTAK/ATAK read the shape colour here
             ET.SubElement(detail, "fillColor", {"value": str(fill)})
     # Custom marker art is opt-in because it is not portable across clients.
     # ATAK reads <usericon b64image>, but WinTAK does not resolve an icon from

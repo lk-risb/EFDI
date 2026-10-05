@@ -89,3 +89,15 @@ def test_start_sh_retires_a_moved_copy_but_leaves_other_processes(tmp_path):
         assert _alive(same_path.pid) and _alive(other_args.pid) and _alive(other_name.pid)
     finally:
         _reap(old_copy, same_path, other_args, other_name)
+
+
+def test_start_sh_never_starts_a_service_listed_in_efdi_disabled_services():
+    functions = _bash_functions((ROOT / "scripts/start.sh").read_text(), "svc_disabled")
+    script = functions + '\nfor n in socbx backbone-bridge socbx2 tak_layer; do svc_disabled "$n" && echo "$n"; done; true'
+    for value in ("socbx backbone-bridge", "socbx,backbone-bridge", "  socbx   backbone-bridge "):
+        out = subprocess.run(["bash", "-c", script], check=True, capture_output=True, text=True,
+                             env={**os.environ, "EFDI_DISABLED_SERVICES": value}).stdout.split()
+        assert out == ["socbx", "backbone-bridge"]               # exact names only, not socbx2 or tak_layer
+    unset = subprocess.run(["bash", "-c", script], check=True, capture_output=True, text=True,
+                           env={k: v for k, v in os.environ.items() if k != "EFDI_DISABLED_SERVICES"}).stdout
+    assert unset == ""

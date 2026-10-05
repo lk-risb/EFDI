@@ -20,6 +20,7 @@
     "source": {"type": "string", "description": "Upstream aggregator, e.g. NEPTUN."},
     "notify": {"type": "boolean", "description": "False for zone-only entries (e.g. NEPTUN districts, per-county copies of a nationwide alert); tak_alert_layer sends no GeoChat for them. Absent means true."},
     "reason": {"type": "string", "description": "Upstream reason text when the source gives one (NEPTUN)."},
+    "oblast": {"type": "string", "description": "UA district alerts: the oblast the district is in (English), used to draw the oblast wash."},
     "stale": {"type": "boolean", "description": "True when the upstream source for this country is flagged stale; the layer will not alert on it."},
     "_delete": {"type": "boolean", "const": true, "description": "Present only on the one-shot cleared variant."}
   },

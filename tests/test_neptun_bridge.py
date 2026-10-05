@@ -34,10 +34,12 @@ def test_uav_track_fields_and_key():
     assert "/hostile/uav/uav/neptun-trk_1/" in key.lower() and key.endswith("/tracks/v1")
 
 
-def test_missile_ballistic_and_kab_use_missile_entity():
-    for kind in ("missile", "ballistic", "kab"):
+def test_missile_and_ballistic_use_missile_entity_and_kab_is_a_bomb():
+    for kind in ("missile", "ballistic"):
         (prefix, _), = bridge.threat_tracks({"threats": [_t(type=kind)]})
         assert prefix.endswith("/air/neptun/hostile/missile")
+    (prefix, track), = bridge.threat_tracks({"threats": [_t(type="kab")]})
+    assert prefix.endswith("/air/neptun/hostile/bomb") and track["target_type"] == "bomb"
 
 
 def test_mig31k_is_a_hostile_aircraft_and_unknown_types_are_not_drones():
@@ -58,9 +60,12 @@ def test_same_position_different_ids_are_not_merged():
     assert {tr["uid"] for _, tr in out} == {"NEPTUN-a", "NEPTUN-b"}
 
 
-def test_layers_map_hostile_missile():
-    assert '"air/**/hostile/missile/**"' in (ROOT / "compose/layers/vendors/tak/tak_layer.py").read_text()
-    assert '"air/**/hostile/missile/**"' in (ROOT / "compose/layers/vendors/tak/systematic/sitaware_layer.py").read_text()
+def test_layers_map_hostile_missile_and_bomb_apart():
+    tak = (ROOT / "compose/layers/vendors/tak/tak_layer.py").read_text()
+    sitaware = (ROOT / "compose/layers/vendors/tak/systematic/sitaware_layer.py").read_text()
+    for text in (tak, sitaware):
+        assert '"air/**/hostile/missile/**"' in text and '"air/**/hostile/bomb/**"' in text
+    assert '("a-h-A-W-B"' in tak and '"SHAPWB----*****"' in sitaware
 
 
 def test_attribution_link_is_in_remarks():

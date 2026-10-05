@@ -27,6 +27,7 @@ from __future__ import annotations
 import json
 import time
 
+from echo_filter import EchoFilter
 from gateway import TOPIC_ROOT, open_session, payload_bytes, subscribe
 
 INPUT_TOPIC = TOPIC_ROOT + "/raw/backbone/**"
@@ -126,6 +127,8 @@ def run() -> None:
             print("json translator: Zenoh connect failed: {} — retry in 10s".format(exc), flush=True)
             time.sleep(10)
     prefix = INPUT_TOPIC[:-len("**")]
+    echoes = EchoFilter()
+    echo_sub = subscribe(session, TOPIC_ROOT + "/land/**", echoes.on_sample)
 
     def on_sample(sample) -> None:
         try:
@@ -139,6 +142,8 @@ def run() -> None:
             if result is None:
                 return
             record, dimension, slot = result
+            if echoes.is_echo(record):      # a partner's copy of one of our own sensors
+                return
             topic = "{}/{}/backbone/{}/unit/tracks/v1".format(TOPIC_ROOT, dimension, slot)
             session.put(topic, json.dumps(record).encode())
         except Exception as exc:
@@ -153,6 +158,7 @@ def run() -> None:
         pass
     finally:
         subscriber.undeclare()
+        echo_sub.undeclare()
         session.close()
 
 

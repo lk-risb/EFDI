@@ -141,3 +141,62 @@ def test_load_boundaries_prefers_rest_route_then_falls_back_to_bundle(monkeypatc
     rest_ok["value"] = False
     assert "LT:LT-VL" in bridge.load_site_boundaries()
     assert calls[0].endswith("/region-geometry") and calls[1] == bridge.MAP_PAGE and "adminGeoData.abc123.js" in calls[2]
+
+
+def _region(name, rings):
+    return {"name": name, "rings": rings}
+
+
+def test_oblast_wash_uses_the_worst_district_level_and_skips_oblasts_with_their_own_alert():
+    big = [[x, y] for x, y in [(30, 50), (34, 50), (34, 54), (30, 54), (30, 50)]]
+    bounds = {"UA-O:a": _region("Alpha Oblast", [big]), "UA-O:b": _region("Beta Oblast", [big]),
+              "UA-O:c": _region("Gamma Oblast", [big])}
+    current = {
+        "UA-R:1": dict(_alert("UA-R:1", level="yellow"), country="UA", oblast="Alpha Oblast"),
+        "UA-R:2": dict(_alert("UA-R:2", level="red"), country="UA", oblast="Alpha Oblast"),
+        "UA-R:3": dict(_alert("UA-R:3", level="yellow"), country="UA", oblast="Beta Oblast"),
+        "UA-O:b": dict(_alert("UA-O:b", level="red"), country="UA"),            # Beta has its own full zone
+        "UA-R:4": dict(_alert("UA-R:4", level="red", stale=True), country="UA", oblast="Gamma Oblast"),
+    }
+    out = bridge.wash_tracks(current, bounds, {}, NOW)
+    assert sorted(out) == ["DA-WASH-UA-O:a"]
+    track = out["DA-WASH-UA-O:a"][1]
+    assert track["shape_color"] == "red" and track["shape_style"] == "wash"
+    assert track["callsign"] == "UA Alpha Oblast RED" and track["geometry"]["type"] == "Polygon"
+
+
+def test_standing_country_zones_keep_the_mainland_and_kaliningrad_but_not_far_islands():
+    mainland = [[30, 45], [60, 45], [60, 60], [30, 60], [30, 45]]
+    kaliningrad = [[20, 54], [23, 54], [23, 55.5], [20, 55.5], [20, 54]]
+    arctic = [[55, 70], [60, 70], [60, 74], [55, 74], [55, 70]]
+    tiny = [[25, 50], [25.1, 50], [25.1, 50.1], [25, 50.1], [25, 50]]
+    standing = {"RU": {"name": "Russia", "tone": "danger", "rings": [tiny, arctic, kaliningrad, mainland]},
+                "BY": {"name": "Belarus", "tone": "warning", "rings": [[[24, 52], [32, 52], [32, 56], [24, 56], [24, 52]]]}}
+    out = bridge.wash_tracks({}, {}, standing, NOW)
+    assert sorted(out) == ["DA-COUNTRY-BY", "DA-COUNTRY-RU", "DA-COUNTRY-RU-p1"]
+    assert out["DA-COUNTRY-RU"][1]["shape_color"] == "red" and out["DA-COUNTRY-BY"][1]["shape_color"] == "orange"
+    assert out["DA-COUNTRY-RU"][1]["callsign"] == "RU Russia (danger)"
+
+
+def test_load_standing_zones_reads_tone_countries_from_the_geodata_bundle():
+    page = '<script src="/wp-content/plugins/dangaus-akis-map-assets/assets/geoData.abc123.js"></script>'
+    sq = [[[20, 50], [21, 50], [21, 51], [20, 51], [20, 50]]]
+    bundle = "window.daMapAssetData.geoData=" + json.dumps({"type": "FeatureCollection", "features": [
+        {"properties": {"name": "Lietuva", "code": "LT", "tone": "monitored"}, "geometry": {"type": "Polygon", "coordinates": sq}},
+        {"properties": {"name": "Rusija", "code": "RU", "tone": "danger"}, "geometry": {"type": "Polygon", "coordinates": sq}}]}) + ";"
+    with mock.patch.object(bridge, "_get", side_effect=lambda url, timeout=15: bundle if url.endswith("abc123.js") else page):
+        got = bridge.load_standing_zones()
+    assert list(got) == ["RU"] and got["RU"]["name"] == "Russia" and got["RU"]["tone"] == "danger"
+    with mock.patch.object(bridge, "_get", return_value=None):
+        assert bridge.load_standing_zones() == {}
+
+
+def test_wash_zone_is_a_faint_fill_and_drawn_shapes_are_human_entered_with_a_colour_element():
+    b = bridge.parse_boundaries(_bundle(("PL:slaskie", "Silezijos", {"type": "Polygon", "coordinates": [SQUARE]})))
+    (_, (_, track)), = bridge.zone_tracks({"PL:slaskie": _alert("PL:slaskie", level="red")}, b, NOW).items()
+    solid = tak_layer.track_to_cot(track, "a-n-G-I-R")
+    wash = tak_layer.track_to_cot(dict(track, shape_style="wash"), "a-n-G-I-R")
+    assert 'how="h-e"' in solid and re.search(r'<color value="-?\d+"', solid)
+    alpha = lambda xml, tag: (int(re.search(tag + r' value="(-?\d+)"', xml).group(1)) & 0xFFFFFFFF) >> 24
+    assert alpha(wash, "fillColor") < alpha(solid, "fillColor") and alpha(wash, "strokeColor") < 0xFF
+    assert 'strokeWeight value="1.0"' in wash and 'strokeWeight value="3.0"' in solid
