@@ -58,6 +58,12 @@ def adsb_records(payload: bytes) -> list[dict]:
             "label": track.callsign.strip() or track.icao24,
             "affiliation": "unknown",
         }
+        if track.icao24:
+            # The layers dedupe aircraft on "icao24"; without it this track gets a different
+            # uid from the same aircraft reported by dangausakis/ASTERIX and shows twice.
+            record["icao24"] = track.icao24.lower()
+            if track.callsign.strip():
+                record["callsign"] = track.callsign.strip()
         if track.alt_baro_ft:
             record["alt_m"] = track.alt_baro_ft * _FT_TO_M
         if track.ground_speed_kt:

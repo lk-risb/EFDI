@@ -1553,6 +1553,17 @@ def track_to_cot(track: dict, cot_type: str, stale_s: float = COT_STALE_S) -> st
             # Drawing-tool colours (ARGB as signed int32), honoured by ATAK/WinTAK for
             # shapes; without them every zone draws in the client default.
             stroke, fill = _SHAPE_COLORS[track["shape_color"]]
+            # ATAK/WinTAK only draw a polygon for a drawing-tool event: type u-d-f with
+            # one <link point="lat,lon,hae"> per vertex (closed). The <shape><polygon>
+            # above is ignored by them, so without this a zone is only a label.
+            event.set("type", "u-d-f")
+            ring = [(round(float(c[1]), 6), round(float(c[0]), 6)) for c in coordinates[0][:256]
+                    if isinstance(c, (list, tuple)) and len(c) >= 2]
+            if ring and ring[0] != ring[-1]:
+                ring.append(ring[0])
+            for ring_lat, ring_lon in ring:
+                ET.SubElement(detail, "link", {"point": "{},{},{}".format(ring_lat, ring_lon, _hae(track))})
+            ET.SubElement(detail, "__shapeExtras", {"cpvis": "false", "editable": "false"})
             ET.SubElement(detail, "strokeColor", {"value": str(stroke)})
             ET.SubElement(detail, "strokeWeight", {"value": "3.0"})
             ET.SubElement(detail, "fillColor", {"value": str(fill)})
@@ -1757,7 +1768,7 @@ def make_handler(cot_type_or_fn, sender, verbose: bool, stale_s: float = COT_STA
 
         if verbose:
             cs = track.get("callsign") or track.get("registration") or track.get("mmsi") or "?"
-            print("CoT {} {}".format(cot_type, cs), flush=True)
+            print("CoT {} {} uid={} src={}".format(cot_type, cs, uid, track.get("_src", "?")), flush=True)
     return handler
 
 

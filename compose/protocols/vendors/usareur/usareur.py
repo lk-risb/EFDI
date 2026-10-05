@@ -41,6 +41,12 @@ def aircraft_records(payload: bytes) -> list[dict]:
             "label": aircraft.callsign.strip() or aircraft.registration or aircraft.icao_hex,
             "affiliation": "unknown",
         }
+        if aircraft.icao_hex:
+            # The layers dedupe aircraft on "icao24"; "uid" alone gives a second marker for
+            # an aircraft that dangausakis/ASTERIX/Palantir also report.
+            record["icao24"] = aircraft.icao_hex.lower()
+            if aircraft.callsign.strip():
+                record["callsign"] = aircraft.callsign.strip()
         if aircraft.alt_baro_ft:
             record["alt_m"] = aircraft.alt_baro_ft * _FT_TO_M
         elif aircraft.alt_geom_ft:

@@ -88,9 +88,12 @@ def test_cot_zone_has_polygon_and_colours_only_when_requested():
     stroke = int(re.search(r'strokeColor value="(-?\d+)"', xml).group(1)) & 0xFFFFFFFF
     assert stroke == 0xFFFF8C00
     assert "fillColor" in xml and "strokeWeight" in xml
+    assert 'type="u-d-f"' in xml                        # WinTAK/ATAK draw only drawing-tool events
+    assert xml.count("<link point=") == len(SQUARE) + (SQUARE[0] != SQUARE[-1])
     plain = dict(track)
     del plain["shape_color"]
-    assert "strokeColor" not in tak_layer.track_to_cot(plain, "a-n-G-I-R")
+    plain_xml = tak_layer.track_to_cot(plain, "a-n-G-I-R")
+    assert "strokeColor" not in plain_xml and 'type="u-d-f"' not in plain_xml
 
 
 def test_layers_route_zone_topic_and_alert_layer_ignores_zone_tracks():
