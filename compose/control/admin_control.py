@@ -122,7 +122,7 @@ SERVICE_SPECS = [
     ("cert-renewer", "Infrastructure", "Short-lived transport certificate renewal"),
     ("meteolt", "Open-data bridges", "meteo.lt weather"),
     ("dronuradaras", "Sensor bridges", "dronuradaras.lt sensors"),
-    ("dangausakis", "Sensor bridges", "dangausakis.lt alerts/zones/aircraft + NEPTUN threats"),
+    ("dangausakis", "Open-data bridges", "dangausakis.lt alerts/zones/aircraft + NEPTUN threats"),
     ("mainline_terminal", "Sensor bridges", "mainline.inc TERMINAL drone-fleet C2"),
     ("mavlink-command", "Sensor bridges", "Generic MAVLink drone command bridge"),
     ("asterix", "Sensor bridges", "ASTERIX family bundle"),

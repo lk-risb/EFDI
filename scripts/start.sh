@@ -106,11 +106,11 @@ SERVICES=(
     # Infrastructure
     zenoh admin-control cert-renewer supervisor presence
     # Open-data bridges
-    meteolt
+    meteolt dangausakis
     # Sensor bridges (includes raw-ingress variants — SVC_CAT has no
     # separate "Raw ingress" bucket the way admin_control.py's Python-side
     # SERVICE_SPECS does; not unifying that here, out of scope for this pass)
-    sitaware dronuradaras dangausakis mainline_terminal mavlink-command mavlink-video asterix track-fusion
+    sitaware dronuradaras mainline_terminal mavlink-command mavlink-video asterix track-fusion
     sapient-raw stanag4586-raw stanag4609-raw stanag5516-raw
     mqtt-raw aartos-raw aartos-wifi-raw
     mediamtx
@@ -194,11 +194,11 @@ declare -A SVC_CAT=(
     [cert-renewer]="Infrastructure"
     [supervisor]="Infrastructure"
     [presence]="Infrastructure"
-    [meteolt]="Open-data bridges"
+    [meteolt]="Open-data bridges" [dangausakis]="Open-data bridges"
     [asterix]="Sensor bridges"
     [mqtt]="Protocols" [sparkplug]="Protocols"
     [nffi]="Protocols"
-    [sitaware]="Sensor bridges" [dronuradaras]="Sensor bridges" [dangausakis]="Sensor bridges" [mainline_terminal]="Sensor bridges"
+    [sitaware]="Sensor bridges" [dronuradaras]="Sensor bridges" [mainline_terminal]="Sensor bridges"
     [mavlink-command]="Sensor bridges" [mavlink-video]="Sensor bridges"
     [sapient]="Protocols" [stanag4586]="Protocols" [stanag4609]="Protocols" [stanag5516]="Protocols"
     [tak-bridge]="C2 inputs" [nffi-bridge]="C2 inputs"
