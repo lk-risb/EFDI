@@ -580,7 +580,7 @@ def test_zone_polygon_carries_a_colour_style_and_has_no_anchor_marker():
     root, tags = _nvg_children(xml)
     assert tags == {"polygon"}                      # an anchor marker would be a sensor icon in the middle of the zone
     polygon = [c for c in root if c.tag.endswith("polygon")][0]
-    assert "stroke:#FF2020" in polygon.get("style") and "fill-opacity:0.3" in polygon.get("style")
+    assert "stroke:#FF2020" in polygon.get("style") and "fill-opacity:0.2" in polygon.get("style")
     # nvg.data.2.0.xsd: the vertices are one `points` attribute of "lon,lat" pairs (not child elements);
     # a polygon closes itself, so the repeated first vertex is dropped.
     assert polygon.get("points") == "24.000000,59.000000 24.100000,59.000000 24.100000,59.100000"
@@ -682,4 +682,4 @@ def test_nvg_fill_opacity_rises_with_the_level():
         _, xml = track_to_nvg_item(track, "SNGPES----*****")
         root, _ = _nvg_children(xml)
         return [c for c in root if c.tag.endswith("polygon")][0].get("style").split("fill-opacity:")[1]
-    assert [opacity(c) for c in ("white", "yellow", "orange", "red")] == ["0.1", "0.2", "0.2", "0.3"]
+    assert [opacity(c) for c in ("white", "yellow", "orange", "red")] == ["0.1", "0.15", "0.15", "0.2"]

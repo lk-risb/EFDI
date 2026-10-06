@@ -202,7 +202,7 @@ def test_wash_zone_is_a_faint_fill_and_drawn_shapes_are_human_entered_with_a_col
     wash = tak_layer.track_to_cot(dict(track, shape_style="wash"), "a-n-G-I-R")
     assert 'how="h-e"' in solid and re.search(r'<color value="-?\d+"', solid)
     alpha = lambda xml, tag: (int(re.search(tag + r' value="(-?\d+)"', xml).group(1)) & 0xFFFFFFFF) >> 24
-    assert alpha(wash, "fillColor") == alpha(solid, "fillColor") == 0x4D      # every fill is 30% opaque
+    assert alpha(wash, "fillColor") == alpha(solid, "fillColor") == 0x33      # a red fill is 20% opaque
     assert alpha(wash, "strokeColor") < 0xFF
     assert 'strokeWeight value="1.0"' in wash and 'strokeWeight value="3.0"' in solid
 
@@ -214,7 +214,7 @@ def test_country_style_has_the_same_fill_but_an_outline_between_a_wash_and_a_dis
     wash = tak_layer.track_to_cot(dict(track, shape_style="wash"), "a-n-G-I-R")
     country = tak_layer.track_to_cot(dict(track, shape_style="country"), "a-n-G-I-R")
     zone = tak_layer.track_to_cot(track, "a-n-G-I-R")
-    assert alpha(wash, "fillColor") == alpha(country, "fillColor") == alpha(zone, "fillColor") == 0x4D
+    assert alpha(wash, "fillColor") == alpha(country, "fillColor") == alpha(zone, "fillColor") == 0x33
     assert alpha(wash, "strokeColor") < alpha(country, "strokeColor") < alpha(zone, "strokeColor")
     assert 'strokeWeight value="2.0"' in country
 
@@ -274,5 +274,5 @@ def test_fill_opacity_rises_with_the_level_in_tak_and_sitaware():
         xml = tak_layer.track_to_cot(track, "a-n-G-I-R")
         argb = int(re.search(r'<fillColor value="(-?\d+)"', xml).group(1)) & 0xFFFFFFFF
         return argb >> 24
-    assert [fill_alpha(c, "wash") for c in ("white", "yellow", "orange", "red")] == [0x1A, 0x33, 0x33, 0x4D]
-    assert fill_alpha("red", None) == 0x4D and fill_alpha("yellow", None) == 0x33
+    assert [fill_alpha(c, "wash") for c in ("white", "yellow", "orange", "red")] == [0x1A, 0x26, 0x26, 0x33]
+    assert fill_alpha("red", None) == 0x33 and fill_alpha("yellow", None) == 0x26

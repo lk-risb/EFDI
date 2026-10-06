@@ -671,11 +671,11 @@ def _nvg_modifiers(track: dict, label: str) -> str:
 
 # NVG shape style (a CSS-like `style` attribute on polygon/polyline/circle). Without it SitaWare
 # draws every zone in its default style, which is barely visible, while TAK gets coloured outlines
-# and 30% fills. Mirrors tak_layer's zone / wash / country / trail styles. Set
+# and 20% red fills. Mirrors tak_layer's zone / wash / country / trail styles. Set
 # NVG_SHAPE_STYLE_ENABLE=0 if an HQ release rejects the attribute.
 _NVG_COLORS = {"red": "#FF2020", "orange": "#FF8C00", "yellow": "#FFD000", "blue": "#3399FF", "white": "#FFFFFF"}
-# Fill opacity rises with the level, as in tak_layer: lowest (white) 10%, yellow and orange 20%, red 30%.
-_NVG_FILL_OPACITY = {"white": "0.1", "yellow": "0.2", "orange": "0.2", "red": "0.3"}
+# Fill opacity rises with the level, as in tak_layer: lowest (white) 10%, yellow and orange 15%, red 20%.
+_NVG_FILL_OPACITY = {"white": "0.1", "yellow": "0.15", "orange": "0.15", "red": "0.2"}
 
 
 def _nvg_shape_style(track: dict) -> str | None:
@@ -685,7 +685,7 @@ def _nvg_shape_style(track: dict) -> str | None:
     color = _NVG_COLORS.get(level)
     if color is None:
         return None
-    opacity = _NVG_FILL_OPACITY.get(level, "0.3")
+    opacity = _NVG_FILL_OPACITY.get(level, "0.2")
     kind = track.get("shape_style")
     if kind == "trail":
         return "stroke:{};stroke-opacity:0.8;stroke-width:2;fill:none".format(color)

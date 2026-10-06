@@ -1443,10 +1443,10 @@ def _argb(alpha: int, rgb: int) -> int:
     return value - (1 << 32) if value & 0x80000000 else value
 
 
-# Every zone fill is 30% opaque; the style (zone / wash / country) differs by outline.
-_FILL_ALPHA = 0x4D            # 30%: red
-# Fill opacity rises with the level: lowest (white) 10%, yellow and orange 20%, red 30%.
-_LEVEL_ALPHA = {"white": 0x1A, "yellow": 0x33, "orange": 0x33, "red": _FILL_ALPHA}
+# Zone fill opacity follows the level (below); the style (zone / wash / country) differs by outline.
+_FILL_ALPHA = 0x33            # 20%: red
+# Fill opacity rises with the level: lowest (white) 10%, yellow and orange 15%, red 20%.
+_LEVEL_ALPHA = {"white": 0x1A, "yellow": 0x26, "orange": 0x26, "red": _FILL_ALPHA}
 
 # track["shape_color"] -> (stroke, translucent fill) for Polygon zones.
 _SHAPE_COLORS = {
