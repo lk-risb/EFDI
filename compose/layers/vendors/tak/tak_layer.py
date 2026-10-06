@@ -83,7 +83,7 @@ SAT_STALE_S    = 300     # satellites: polled every 60s, 5 min gives 5× margin
 ENV_STALE_S    = 3600    # weather stations: polled every 15–30 min, 1 h gives plenty of margin
 
 # A drawn shape (zone, trail) is cut to this many vertices; the bridges simplify below it.
-MAX_SHAPE_POINTS = 1000
+MAX_SHAPE_POINTS = 20000
 
 # Dead-reckoning — extrapolate position forward when sensor updates stop
 _DR_TICK_S   = 2.0   # extrapolation interval (seconds)
@@ -1444,29 +1444,33 @@ def _argb(alpha: int, rgb: int) -> int:
 
 
 # Every zone fill is 30% opaque; the style (zone / wash / country) differs by outline.
-_FILL_ALPHA = 0x4D
+_FILL_ALPHA = 0x4D            # 30%: red
+# Fill opacity rises with the level: lowest (white) 10%, yellow and orange 20%, red 30%.
+_LEVEL_ALPHA = {"white": 0x1A, "yellow": 0x33, "orange": 0x33, "red": _FILL_ALPHA}
 
 # track["shape_color"] -> (stroke, translucent fill) for Polygon zones.
 _SHAPE_COLORS = {
-    "red":    (_argb(0xFF, 0xFF2020), _argb(_FILL_ALPHA, 0xFF2020)),
-    "orange": (_argb(0xFF, 0xFF8C00), _argb(_FILL_ALPHA, 0xFF8C00)),
-    "yellow": (_argb(0xFF, 0xFFD000), _argb(_FILL_ALPHA, 0xFFD000)),
+    "red":    (_argb(0xFF, 0xFF2020), _argb(_LEVEL_ALPHA["red"], 0xFF2020)),
+    "orange": (_argb(0xFF, 0xFF8C00), _argb(_LEVEL_ALPHA["orange"], 0xFF8C00)),
+    "yellow": (_argb(0xFF, 0xFFD000), _argb(_LEVEL_ALPHA["yellow"], 0xFFD000)),
+    "white":  (_argb(0xCC, 0xFFFFFF), _argb(_LEVEL_ALPHA["white"], 0xFFFFFF)),
 }
 
 
 # shape_style "wash": an area fill with a thin faint outline, drawn behind the real zones (oblast fills).
 _WASH_COLORS = {
-    "red":    (_argb(0x55, 0xFF2020), _argb(_FILL_ALPHA, 0xFF2020)),
-    "orange": (_argb(0x55, 0xFF8C00), _argb(_FILL_ALPHA, 0xFF8C00)),
-    "yellow": (_argb(0x55, 0xFFD000), _argb(_FILL_ALPHA, 0xFFD000)),
+    "red":    (_argb(0x55, 0xFF2020), _argb(_LEVEL_ALPHA["red"], 0xFF2020)),
+    "orange": (_argb(0x55, 0xFF8C00), _argb(_LEVEL_ALPHA["orange"], 0xFF8C00)),
+    "yellow": (_argb(0x55, 0xFFD000), _argb(_LEVEL_ALPHA["yellow"], 0xFFD000)),
+    "white":  (_argb(0x55, 0xFFFFFF), _argb(_LEVEL_ALPHA["white"], 0xFFFFFF)),
 }
 
 
 # shape_style "country": a standing country status (Belarus, Russia) - a stronger outline than a
 # wash so the country edge reads at country scale on a satellite basemap.
 _COUNTRY_COLORS = {
-    "red":    (_argb(0xB0, 0xFF2020), _argb(_FILL_ALPHA, 0xFF2020)),
-    "orange": (_argb(0xB0, 0xFF8C00), _argb(_FILL_ALPHA, 0xFF8C00)),
+    "red":    (_argb(0xB0, 0xFF2020), _argb(_LEVEL_ALPHA["red"], 0xFF2020)),
+    "orange": (_argb(0xB0, 0xFF8C00), _argb(_LEVEL_ALPHA["orange"], 0xFF8C00)),
 }
 
 

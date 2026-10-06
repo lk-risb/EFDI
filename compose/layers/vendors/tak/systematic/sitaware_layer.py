@@ -67,7 +67,7 @@ NVG_VERSION = "2.0.2"
 NVG_SCHEMA_REF = "urn:efdi:nvg-fields"
 REFRESH_S   = 10    # re-PUT all live tracks at this interval
 STALE_S     = 120   # delete tracks older than this
-MAX_SHAPE_POINTS = 1000   # a drawn shape is cut to this many vertices; the bridges simplify below it
+MAX_SHAPE_POINTS = 20000   # a drawn shape is cut to this many vertices; the bridges simplify below it
 ZENOH_RETRY_S = 5
 
 # APP-6(B) SIDC codes — keyed by new schema wildcard patterns. `civ`/`mil`
@@ -673,27 +673,30 @@ def _nvg_modifiers(track: dict, label: str) -> str:
 # draws every zone in its default style, which is barely visible, while TAK gets coloured outlines
 # and 30% fills. Mirrors tak_layer's zone / wash / country / trail styles. Set
 # NVG_SHAPE_STYLE_ENABLE=0 if an HQ release rejects the attribute.
-_NVG_COLORS = {"red": "#FF2020", "orange": "#FF8C00", "yellow": "#FFD000", "blue": "#3399FF"}
-_NVG_FILL_OPACITY = "0.3"
+_NVG_COLORS = {"red": "#FF2020", "orange": "#FF8C00", "yellow": "#FFD000", "blue": "#3399FF", "white": "#FFFFFF"}
+# Fill opacity rises with the level, as in tak_layer: lowest (white) 10%, yellow and orange 20%, red 30%.
+_NVG_FILL_OPACITY = {"white": "0.1", "yellow": "0.2", "orange": "0.2", "red": "0.3"}
 
 
 def _nvg_shape_style(track: dict) -> str | None:
     if os.environ.get("NVG_SHAPE_STYLE_ENABLE", "1") in {"0", "false", "no"}:
         return None
-    color = _NVG_COLORS.get(str(track.get("shape_color") or "").lower())
+    level = str(track.get("shape_color") or "").lower()
+    color = _NVG_COLORS.get(level)
     if color is None:
         return None
+    opacity = _NVG_FILL_OPACITY.get(level, "0.3")
     kind = track.get("shape_style")
     if kind == "trail":
         return "stroke:{};stroke-opacity:0.8;stroke-width:2;fill:none".format(color)
     if kind == "wash":
         return "stroke:{};stroke-opacity:0.33;stroke-width:1;fill:{};fill-opacity:{}".format(
-            color, color, _NVG_FILL_OPACITY)
+            color, color, opacity)
     if kind == "country":
         return "stroke:{};stroke-opacity:0.7;stroke-width:2;fill:{};fill-opacity:{}".format(
-            color, color, _NVG_FILL_OPACITY)
+            color, color, opacity)
     return "stroke:{};stroke-opacity:1;stroke-width:3;fill:{};fill-opacity:{}".format(
-        color, color, _NVG_FILL_OPACITY)
+        color, color, opacity)
 
 
 def track_to_nvg_item(

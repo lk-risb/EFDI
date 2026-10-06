@@ -147,7 +147,7 @@ def _region(name, rings):
     return {"name": name, "rings": rings}
 
 
-def test_oblast_wash_uses_the_worst_district_level_and_skips_oblasts_with_their_own_alert():
+def test_oblast_wash_uses_the_worst_district_level_defaults_to_yellow_and_skips_oblasts_with_their_own_alert():
     big = [[x, y] for x, y in [(30, 50), (34, 50), (34, 54), (30, 54), (30, 50)]]
     bounds = {"UA-O:a": _region("Alpha Oblast", [big]), "UA-O:b": _region("Beta Oblast", [big]),
               "UA-O:c": _region("Gamma Oblast", [big])}
@@ -159,7 +159,9 @@ def test_oblast_wash_uses_the_worst_district_level_and_skips_oblasts_with_their_
         "UA-R:4": dict(_alert("UA-R:4", level="red", stale=True), country="UA", oblast="Gamma Oblast"),
     }
     out = bridge.wash_tracks(current, bounds, {}, NOW)
-    assert sorted(out) == ["DA-WASH-UA-O:a"]
+    # Alpha: worst district. Beta: has its own full zone. Gamma: only a stale alert, so the yellow default.
+    assert sorted(out) == ["DA-WASH-UA-O:a", "DA-WASH-UA-O:c"]
+    assert out["DA-WASH-UA-O:c"][1]["shape_color"] == "yellow" and out["DA-WASH-UA-O:c"][1]["callsign"] == "UA Gamma Oblast YELLOW"
     track = out["DA-WASH-UA-O:a"][1]
     assert track["shape_color"] == "red" and track["shape_style"] == "wash"
     assert track["callsign"] == "UA Alpha Oblast RED" and track["geometry"]["type"] == "Polygon"
@@ -234,8 +236,8 @@ def test_country_zones_keep_more_vertices_than_district_zones():
 def test_zones_ask_for_a_long_stale_time_and_tak_layer_honours_a_sane_one_only():
     b = bridge.parse_boundaries(_bundle(("PL:slaskie", "Silezijos", {"type": "Polygon", "coordinates": [SQUARE]})))
     (_, (_, track)), = bridge.zone_tracks({"PL:slaskie": _alert("PL:slaskie", level="red")}, b, NOW).items()
-    assert track["stale_s"] == bridge.ZONE_STALE_S == 600 and bridge.ZONE_REFRESH_S < bridge.ZONE_STALE_S
-    assert tak_layer._track_stale_s(track, 120) == 600
+    assert track["stale_s"] == bridge.ZONE_STALE_S == 1800 and bridge.ZONE_REFRESH_S < bridge.ZONE_STALE_S
+    assert tak_layer._track_stale_s(track, 120) == 1800
     for bad in (None, "x", 0, -5, 99999, float("nan")):
         assert tak_layer._track_stale_s({"stale_s": bad}, 120) == 120
 
@@ -248,3 +250,29 @@ def test_a_zone_with_many_points_is_drawn_whole_by_tak_layer():
                                   "geometry": {"type": "Polygon", "coordinates": [ring]}, "shape_color": "red"},
                                  "a-n-G-I-R")
     assert xml.count("<link point=") == 701          # closed ring, nothing cut at the old 256 limit
+
+
+def test_other_countries_regions_get_a_faint_white_wash_unless_they_have_an_alert_zone():
+    ring = [[24.0, 54.0], [25.0, 54.0], [25.0, 55.0], [24.0, 55.0], [24.0, 54.0]]
+    bounds = {"LT:LT-VL": _region("Vilnius County", [ring]), "LT:LT-KU": _region("Kaunas County", [ring]),
+              "PL:slaskie": _region("Silesia", [ring]), "UA-O:a": _region("Alpha Oblast", [ring])}
+    current = {"LT:LT-KU": _alert("LT:LT-KU", level="red")}                       # Kaunas has its own red zone
+    out = bridge.wash_tracks(current, bounds, {}, NOW)
+    assert sorted(out) == ["DA-WASH-LT:LT-VL", "DA-WASH-PL:slaskie", "DA-WASH-UA-O:a"]
+    white = out["DA-WASH-LT:LT-VL"][1]
+    assert white["shape_color"] == "white" and white["shape_style"] == "wash" and white["country"] == "LT"
+    assert white["callsign"] == "LT Vilnius County (monitored)"
+    assert out["DA-WASH-UA-O:a"][1]["shape_color"] == "yellow"                     # Ukraine keeps its yellow default
+
+
+def test_fill_opacity_rises_with_the_level_in_tak_and_sitaware():
+    import re
+    ring = [[24.0, 54.0], [25.0, 54.0], [25.0, 55.0], [24.0, 54.0]]
+    def fill_alpha(color, style):
+        track = {"uid": "Z-" + color, "callsign": "z", "lat_deg": 54.3, "lon_deg": 24.3, "shape_color": color, "shape_style": style,
+                 "geometry": {"type": "Polygon", "coordinates": [ring]}}
+        xml = tak_layer.track_to_cot(track, "a-n-G-I-R")
+        argb = int(re.search(r'<fillColor value="(-?\d+)"', xml).group(1)) & 0xFFFFFFFF
+        return argb >> 24
+    assert [fill_alpha(c, "wash") for c in ("white", "yellow", "orange", "red")] == [0x1A, 0x33, 0x33, 0x4D]
+    assert fill_alpha("red", None) == 0x4D and fill_alpha("yellow", None) == 0x33

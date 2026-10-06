@@ -672,3 +672,14 @@ def test_a_zone_without_any_shape_style_still_has_no_anchor_marker():
     _, xml = track_to_nvg_item(track, "SNGPES----*****")
     _, tags = _nvg_children(xml)
     assert tags == {"polygon"}
+
+
+def test_nvg_fill_opacity_rises_with_the_level():
+    ring = [[24.0, 59.0], [24.1, 59.0], [24.1, 59.1], [24.0, 59.0]]
+    def opacity(color):
+        track = {"uid": "Z-" + color, "callsign": "z", "lat_deg": 59.03, "lon_deg": 24.03, "shape_color": color,
+                 "shape_style": "wash", "geometry": {"type": "Polygon", "coordinates": [ring]}}
+        _, xml = track_to_nvg_item(track, "SNGPES----*****")
+        root, _ = _nvg_children(xml)
+        return [c for c in root if c.tag.endswith("polygon")][0].get("style").split("fill-opacity:")[1]
+    assert [opacity(c) for c in ("white", "yellow", "orange", "red")] == ["0.1", "0.2", "0.2", "0.3"]

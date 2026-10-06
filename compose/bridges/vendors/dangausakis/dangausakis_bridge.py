@@ -53,7 +53,7 @@ Env:
                                 for this long, or reports an error (default 1800)
   DANGAUSAKIS_AIRCRAFT_POLL_S   aircraft poll interval, seconds (default 15)
   DANGAUSAKIS_ZONES             set 0 to disable the coloured region polygons
-  DANGAUSAKIS_ZONE_REFRESH_S    re-send an unchanged zone this often (default 240; a zone lives 600 s)
+  DANGAUSAKIS_ZONE_REFRESH_S    re-send an unchanged zone this often (default 600; a zone lives 1800 s)
   DANGAUSAKIS_COUNTRY_ZONES     set 0 to skip the faint oblast fills and the standing Belarus/Russia
                                 colours the site draws (default on; needs DANGAUSAKIS_ZONES)
   DANGAUSAKIS_COMMUNITY         set 0 to disable the community drone reports and incident
@@ -112,10 +112,10 @@ MAP_PAGE = "https://dangausakis.lt/zemelapis/"
 _BOUNDARY_JS_RE = re.compile(r"/wp-content/plugins/dangaus-akis-map-assets/assets/adminGeoData\.[0-9a-f]+\.js")
 BOUNDARY_REFRESH_S = 6 * 3600
 BOUNDARY_RETRY_S = 300
-ZONE_MAX_VERTICES = 800      # the layers draw up to 1000 points per shape (MAX_SHAPE_POINTS)
-COUNTRY_MAX_VERTICES = 1000  # a whole country needs the most points to keep its coast and borders
-ZONE_STALE_S = 600           # zones are re-sent every ZONE_REFRESH_S, so they may live much longer than a track
-ZONE_REFRESH_S = int(os.environ.get("DANGAUSAKIS_ZONE_REFRESH_S", "240"))
+ZONE_MAX_VERTICES = 6000     # the raw data (largest district 513 points, largest oblast 1427, Estonian region 5408); the layers draw up to 20000
+COUNTRY_MAX_VERTICES = 20000 # a whole country needs the most points to keep its coast and borders
+ZONE_STALE_S = 1800          # zones are re-sent every ZONE_REFRESH_S, so they may live much longer than a track
+ZONE_REFRESH_S = int(os.environ.get("DANGAUSAKIS_ZONE_REFRESH_S", "600"))
 ZONE_MAX_PARTS = 8           # largest parts of a multi-part region
 ZONE_COLORS = {"red", "orange", "yellow"}
 ZONE_PREFIX = "{}/land/dangausakis/airzone/neutral/zone".format(TOPIC_ROOT)
@@ -262,9 +262,10 @@ def _wash_track(uid: str, region: dict, level: str, callsign: str, remarks: str,
 
 def wash_tracks(current: dict, boundaries: dict, standing: dict, now: float) -> dict:
     """uid -> (topic prefix, track): faint area fills drawn behind the district zones, like the
-    site's map. One per Ukrainian oblast that has an active district alert (coloured by the
-    worst district; an oblast with an alert of its own already has a full zone), plus one per
-    standing country status (Belarus, Russia) from the site's geoData."""
+    site's map. One per Ukrainian oblast: yellow by default (the site draws all of Ukraine as
+    "monitored"), coloured by the worst active district alert in it; an oblast with an alert of its
+    own already has a full zone. Plus one per standing country status (Belarus, Russia) from the
+    site's geoData."""
     out = {}
     worst = {}
     for alert in current.values():
@@ -273,17 +274,30 @@ def wash_tracks(current: dict, boundaries: dict, standing: dict, now: float) -> 
             if _WASH_RANK[alert["level"]] > _WASH_RANK.get(worst.get(alert["oblast"]), 0):
                 worst[alert["oblast"]] = alert["level"]
     by_name = {r["name"]: rid for rid, r in boundaries.items() if rid.startswith("UA-O:")}
-    for oblast, level in worst.items():
-        rid = by_name.get(oblast)
-        if rid is None or rid in current:
+    for oblast, rid in by_name.items():
+        level = worst.get(oblast, "yellow")
+        if rid in current:
             continue
         rings = sorted(boundaries[rid]["rings"], key=_ring_area, reverse=True)[:1]
         if rings:
             uid = "DA-WASH-" + rid
             out[uid] = (ZONE_PREFIX, _wash_track(
                 uid, boundaries[rid], level, "UA {} {}".format(oblast, level.upper()),
-                "Oblast with an active district alert (worst level {}) - source: NEPTUN via dangausakis.lt - "
-                "not an official warning".format(level), rings, now, country="UA", alert_id=rid))
+                "Oblast status {} (yellow = monitored, no active alert; otherwise the worst district alert in it) - "
+                "source: NEPTUN via dangausakis.lt - not an official warning".format(level),
+                rings, now, country="UA", alert_id=rid))
+    # Every other country's regions at the lowest status: a faint white fill (the site's "monitored"),
+    # except the regions that have an alert zone of their own.
+    for rid, region in boundaries.items():
+        if rid.startswith("UA") or rid in current:
+            continue
+        rings = sorted(region["rings"], key=_ring_area, reverse=True)[:1]
+        if rings:
+            uid = "DA-WASH-" + rid
+            out[uid] = (ZONE_PREFIX, _wash_track(
+                uid, region, "white", "{} {} (monitored)".format(rid.split(":")[0], region["name"]),
+                "Lowest status (monitored, no active alert) - source: dangausakis.lt - not an official warning",
+                rings, now, country=rid.split(":")[0], alert_id=rid))
     for code, region in standing.items():
         level = _TONE_LEVEL[region["tone"]]
         rings = [r for r in sorted(region["rings"], key=_ring_area, reverse=True)
