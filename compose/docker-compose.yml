@@ -102,6 +102,12 @@ services:
     restart: unless-stopped
     profiles:
       - backbone
+    # Same raised descriptor limit as zenoh-router (see there): the container default of 1024 is
+    # reachable after enough reconnect churn.
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
     environment:
       - RUST_LOG=${ZENOH_LOG:-info}
     volumes:
