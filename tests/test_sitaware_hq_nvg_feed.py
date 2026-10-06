@@ -572,19 +572,19 @@ def _nvg_children(xml: str):
     return root, {child.tag.split("}")[1] for child in root}
 
 
-def test_zone_polygon_carries_a_colour_style_and_keeps_its_anchor_marker():
+def test_zone_polygon_carries_a_colour_style_and_has_no_anchor_marker():
     ring = [[24.0, 59.0], [24.1, 59.0], [24.1, 59.1], [24.0, 59.0]]
     track = {"uid": "DA-ZONE-1", "callsign": "UA Test District RED", "lat_deg": 59.03, "lon_deg": 24.03,
              "geometry": {"type": "Polygon", "coordinates": [ring]}, "shape_color": "red", "shape_style": "zone"}
     _, xml = track_to_nvg_item(track, "SNGPES----*****")
     root, tags = _nvg_children(xml)
-    assert tags == {"point", "polygon"}
+    assert tags == {"polygon"}                      # an anchor marker would be a sensor icon in the middle of the zone
     polygon = [c for c in root if c.tag.endswith("polygon")][0]
     assert "stroke:#FF2020" in polygon.get("style") and "fill-opacity:0.3" in polygon.get("style")
     # nvg.data.2.0.xsd: the vertices are one `points` attribute of "lon,lat" pairs (not child elements);
     # a polygon closes itself, so the repeated first vertex is dropped.
     assert polygon.get("points") == "24.000000,59.000000 24.100000,59.000000 24.100000,59.100000"
-    assert len(list(polygon)) == 0
+    assert not [c for c in polygon if c.tag.endswith('point')]       # no child point elements either
 
 
 def test_wash_and_country_styles_differ_and_an_unstyled_shape_gets_no_style_attribute():

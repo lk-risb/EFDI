@@ -750,8 +750,9 @@ def track_to_nvg_item(
     if any(track.get(key) is not None for key in ("heading_deg", "track_deg", "cog_deg")):
         point_attrs["course"] = str(_course(track))
 
-    trail_only = track.get("shape_style") == "trail" and isinstance(track.get("geometry"), dict)
-    # A threat's trail is only a line: an anchor marker would sit on top of the threat's own marker.
+    # A drawn area or line is just that shape, with no anchor marker: a trail's marker would sit on top of
+    # the threat's own, and a zone's would be a sensor-looking icon (SNGPES) in the middle of the region.
+    trail_only = track.get("shape_style") in {"trail", "zone", "wash", "country"} and isinstance(track.get("geometry"), dict)
     point = None if trail_only else ET.SubElement(root, "{%s}point" % NVG_NS, point_attrs)
     content = point
     geometry = track.get("geometry")
