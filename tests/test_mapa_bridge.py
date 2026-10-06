@@ -48,3 +48,44 @@ def test_old_active_object_stays_by_default_but_is_marked_stale():
     assert track["callsign"] == "MAPA UAV Nizhyn (STALE)" and "STALE" in track["remarks"]
     fresh, *_ = mapa_bridge.object_tracks({"objects": [_obj(last_seen=NOW - 30)]}, NOW)
     assert "STALE" not in fresh[1]["callsign"]
+
+
+def test_default_age_limit_drops_an_object_mapa_still_calls_active_after_hours():
+    assert mapa_bridge.MAX_AGE_S == 1800
+    tracks = mapa_bridge.object_tracks({"objects": [_obj(id=1, last_seen=NOW - 3 * 3600), _obj(id=2, last_seen=NOW - 60)]}, NOW)
+    assert [t["uid"] for _, t in tracks if not t["uid"].endswith("-TRAIL")] == ["MAPA-2"]
+
+
+def test_units_of_one_group_become_one_marker_with_a_count_at_their_centre():
+    units = [_obj(id="9_u%d" % i, lat=51.0 + i * 0.001, lon=31.0, amount=1) for i in range(4)]
+    markers = [t for _, t in mapa_bridge.object_tracks({"objects": units}, NOW) if not t["uid"].endswith("-TRAIL")]
+    assert len(markers) == 1 and markers[0]["uid"] == "MAPA-9" and markers[0]["count"] == 4
+    assert markers[0]["callsign"] == "MAPA UAV x4 Nizhyn" and abs(markers[0]["lat_deg"] - 51.0015) < 1e-6
+
+
+def _mapa(uid, lat, lon, slot="uav", heading=None):
+    return {"uid": uid, "target_type": slot, "lat_deg": lat, "lon_deg": lon, "heading_deg": heading}
+
+
+def _neptun(uid, lat, lon, kind="uav", uncertainty_m=4000, heading=None):
+    return {"uid": uid, "type": kind, "lat_deg": lat, "lon_deg": lon, "position_uncertainty_m": uncertainty_m, "heading_deg": heading}
+
+
+def test_one_to_one_match_inside_the_neptun_error_radius_merges():
+    assert mapa_bridge.merge_with_neptun({"MAPA-1": _mapa("MAPA-1", 50.0, 30.0)},
+                                         {"NEPTUN-A": _neptun("NEPTUN-A", 50.02, 30.0)}) == {"MAPA-1": "NEPTUN-A"}
+
+
+def test_no_merge_when_far_wrong_class_fpv_or_heading_disagrees():
+    near = _neptun("NEPTUN-A", 50.02, 30.0)
+    assert mapa_bridge.merge_with_neptun({"M": _mapa("M", 50.0, 30.0)}, {"N": _neptun("N", 50.5, 30.0)}) == {}
+    assert mapa_bridge.merge_with_neptun({"M": _mapa("M", 50.0, 30.0, slot="missile")}, {"N": near}) == {}
+    assert mapa_bridge.merge_with_neptun({"M": _mapa("M", 50.0, 30.0)}, {"N": _neptun("N", 50.0, 30.0, kind="fpv")}) == {}
+    assert mapa_bridge.merge_with_neptun({"M": _mapa("M", 50.0, 30.0, heading=0)}, {"N": _neptun("N", 50.0, 30.0, heading=180)}) == {}
+
+
+def test_ambiguous_pairings_are_left_as_two_markers():
+    two_mapa = {"M1": _mapa("M1", 50.0, 30.0), "M2": _mapa("M2", 50.01, 30.0)}
+    assert mapa_bridge.merge_with_neptun(two_mapa, {"N": _neptun("N", 50.0, 30.0)}) == {}
+    two_neptun = {"N1": _neptun("N1", 50.0, 30.0), "N2": _neptun("N2", 50.01, 30.0)}
+    assert mapa_bridge.merge_with_neptun({"M": _mapa("M", 50.0, 30.0)}, two_neptun) == {}

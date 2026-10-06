@@ -1346,6 +1346,9 @@ select_service() {
 # output layers, plus ASTERIX when its input is configured.
 for svc in "${SERVICES[@]}"; do sel[$svc]=0; done
 restored=0
+# update.sh stops everything first and hands over the services that were running, so a service
+# started by hand (not in the saved selection) comes back too.
+[[ -n "${EFDI_RESTORE_RUNNING:-}" ]] && REMEMBERED_SERVICES="${REMEMBERED_SERVICES:+$REMEMBERED_SERVICES,}$EFDI_RESTORE_RUNNING"
 if [[ -n "$REMEMBERED_SERVICES" ]]; then
     IFS=',' read -r -a remembered_services <<< "$REMEMBERED_SERVICES"
     for remembered in "${remembered_services[@]}"; do

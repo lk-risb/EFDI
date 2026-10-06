@@ -234,6 +234,33 @@ esac
 check_docker_disk_space
 section_done
 
+section "Shutdown"
+# Stop everything before anything is changed, remembering what was on, so the update never swaps files
+# or containers under a running service and the same set comes back afterwards. Data volumes and the
+# saved launcher selection are kept.
+PID_DIR="${POD_STATE_DIR}/.pids"
+RUNNING_NATIVE=""
+for pid_file in "$PID_DIR"/*.pid; do
+    [ -f "$pid_file" ] || continue
+    kill -0 "$(cat "$pid_file" 2>/dev/null)" 2>/dev/null || continue
+    name="$(basename "$pid_file" .pid)"
+    RUNNING_NATIVE="${RUNNING_NATIVE:+$RUNNING_NATIVE,}$name"
+done
+export EFDI_RESTORE_RUNNING="$RUNNING_NATIVE"
+RUNNING_INFRA="$(docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" --profile '*' ps --services --status running 2>/dev/null | tr '\n' ' ')"
+info "Running before the update — native: ${RUNNING_NATIVE:-none}; infrastructure: ${RUNNING_INFRA:-none}"
+"$ROOT/scripts/stop.sh" native
+docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" --profile '*' stop >/dev/null 2>&1 || true
+ok "Everything stopped"
+# A failed step after this point must not leave the pod down: bring back what was running (old images).
+restore_previous() {
+    warn "Update step failed — starting the previous services again"
+    # shellcheck disable=SC2086  # RUNNING_INFRA is a space-separated list of service names
+    [ -z "$RUNNING_INFRA" ] || docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" --profile '*' up -d $RUNNING_INFRA >/dev/null 2>&1 || true
+    EFDI_NONINTERACTIVE=1 "$ROOT/scripts/start.sh" --restore >/dev/null 2>&1 || true
+}
+section_done
+
 section "Python dependencies"
 if [ ! -x "$PYTHON" ]; then
     python3 -m venv "$ROOT/compose/venv"
@@ -242,7 +269,7 @@ run_spin "Synchronizing Python dependencies" "Python dependencies synchronized" 
     "$PYTHON" -m pip install --disable-pip-version-check \
         -r "$ROOT/compose/requirements.txt" \
         -r "$ROOT/compose/zenoh-admin/requirements.txt" \
-    || fail "Python dependency installation failed"
+    || { restore_previous; fail "Python dependency installation failed"; }
 section_done
 
 section "Infrastructure rebuild and restart"
@@ -250,12 +277,21 @@ GIT_COMMIT="$(git rev-parse HEAD)"
 export GIT_COMMIT
 run_spin "Building updated infrastructure" "Infrastructure image built" \
     docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" build \
-    || fail "Infrastructure build failed"
+    || { restore_previous; fail "Infrastructure build failed"; }
 
-info "Recreating changed infrastructure without a full shutdown..."
+info "Starting the infrastructure (changed containers are recreated, the rest start as they were)..."
 docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d --remove-orphans \
     || { dump_service_logs "$COMPOSE_FILE" "$ENV_FILE"; fail "Infrastructure restart failed"; }
-ok "Infrastructure restarted"
+if [ -n "$RUNNING_INFRA" ]; then
+    # shellcheck disable=SC2086  # RUNNING_INFRA is a space-separated list of service names
+    docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" --profile '*' up -d $RUNNING_INFRA \
+        || { dump_service_logs "$COMPOSE_FILE" "$ENV_FILE"; fail "Restarting the previously running infrastructure failed"; }
+fi
+for _ in $(seq 1 60); do
+    [ "$(docker inspect -f '{{.State.Health.Status}}' "${ROUTER_WATCHDOG_CONTAINER:-efdi-pod-zenoh-router}" 2>/dev/null)" = "healthy" ] && break
+    sleep 2
+done
+ok "Infrastructure started"
 
 # Rebuilding retags the image, which leaves the previous build behind as an untagged ("dangling")
 # image, and BuildKit keeps growing its layer cache. Remove the dangling images (never one a
@@ -265,8 +301,7 @@ docker image prune -f >/dev/null 2>&1 || true
 docker builder prune -f --keep-storage "${EFDI_BUILD_CACHE_KEEP:-3gb}" >/dev/null 2>&1 || true
 ok "Old images removed, build cache capped at ${EFDI_BUILD_CACHE_KEEP:-3gb}"
 
-info "Restarting native bridges and layers from the saved selection..."
-"$ROOT/scripts/stop.sh" native
+info "Starting the native bridges and layers that were running (plus the saved selection)..."
 EFDI_NONINTERACTIVE=1 "$ROOT/scripts/start.sh" --restore
 ok "Native runtime restored"
 
