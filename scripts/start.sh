@@ -236,7 +236,7 @@ declare -A SVC_DESC=(
     [cert-renewer]="Automatic short-lived transport certificate renewal"
     [supervisor]="Auto-restarts crashed bridges, protocols, and layers"
     [presence]="Liveliness presence tokens (fabric node visibility in panoscope)"
-    [router-watchdog]="Restarts the local Zenoh router if it stops accepting clients (opt-in: ROUTER_WATCHDOG=1)"
+    [router-watchdog]="Restarts the local Zenoh router if it stops accepting clients (on unless ROUTER_WATCHDOG=0)"
     [meteolt]="meteo.lt weather stations"
     [asterix]="ASTERIX family bundle: UDP ingress + CAT-010/020/021/034/048/062 translators"
     [mqtt]="MQTT sensor JSON on Zenoh → sensor records"
@@ -319,7 +319,7 @@ svc_ready() {
             ;;
         asterix) return 0 ;;
         presence) [[ -n "${PARTNER_NAMESPACE:-}" ]] ;;
-        router-watchdog) [[ "${ROUTER_WATCHDOG:-0}" == "1" ]] ;;
+        router-watchdog) [[ "${ROUTER_WATCHDOG:-1}" != "0" ]] ;;
         mqtt)         return 0 ;;
         sparkplug)    return 0 ;;
         mqtt-raw)     [[ "${MQTT_HOST:-}" ]] ;;

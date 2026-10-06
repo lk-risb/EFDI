@@ -6,8 +6,10 @@ every new Zenoh session: seen live, every bridge looped on "Unable to connect to
 [tcp/127.0.0.1:7448]" for about 17 minutes until a manual restart. This opens a real Zenoh
 session every WATCHDOG_INTERVAL_S, the same way a bridge does. After WATCHDOG_FAILS failures in a
 row it runs `docker restart <container>`, at most once per WATCHDOG_COOLDOWN_S, and logs it.
-Opt-in (ROUTER_WATCHDOG=1 in compose/.env) because a restart drops every connection for a few
-seconds; the bridges and layers reconnect on their own.
+On by default (set ROUTER_WATCHDOG=0 in compose/.env to turn it off): a restart drops every
+connection for a few seconds, the bridges and layers reconnect on their own, and the alternative is
+a router that has stopped accepting and silently blacks out every feed. A container Docker reports
+"unhealthy" also counts as a failed probe; `restart: unless-stopped` does not act on that.
 
 Env:
   ROUTER_WATCHDOG_CONTAINER   container to restart (default efdi-pod-zenoh-router)
@@ -46,8 +48,20 @@ class Watchdog:
         return False
 
 
+def container_unhealthy() -> bool:
+    done = subprocess.run(["docker", "inspect", "-f", "{{.State.Health.Status}}", CONTAINER],
+                          capture_output=True, text=True, timeout=20)
+    return done.returncode == 0 and done.stdout.strip() == "unhealthy"
+
+
 def probe() -> bool:
     from protocols.vendors.random.gateway import open_session
+    try:
+        if container_unhealthy():
+            print("router_watchdog: {} is reported unhealthy".format(CONTAINER), flush=True)
+            return False
+    except (OSError, subprocess.SubprocessError):
+        pass
     try:
         open_session().close()
         return True
