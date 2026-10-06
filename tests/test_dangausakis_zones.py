@@ -290,3 +290,9 @@ def test_a_zone_too_big_for_one_cot_event_is_simplified_to_fit():
     small = {**track, "geometry": {"type": "Polygon", "coordinates": [[[24, 54], [25, 54], [25, 55], [24, 54]]]}}
     untimed = lambda xml: re.sub(r'(time|start|stale)="[^"]*"', "", xml)           # every call stamps the current time
     assert [untimed(x) for x in tak_layer.shape_cots(small, "a-n-G-I-R")] == [untimed(tak_layer.track_to_cot(small, "a-n-G-I-R"))]
+
+
+def test_delete_for_a_drawn_shape_names_its_type_and_forces_the_delete():
+    shape = tak_layer._delete_point_cot("EFDI-UID-MAPA-1-TRAIL", 1.0, "u-d-f")
+    assert 'type="u-d-f"' in shape and 'uid="EFDI-UID-MAPA-1-TRAIL"' in shape and "<__forcedelete" in shape and 't-x-d-d' in shape
+    assert 'type="a-u-G"' in tak_layer._delete_point_cot("EFDI-UID-MAPA-1", 1.0)

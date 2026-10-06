@@ -134,6 +134,7 @@ _DISTRESS_NAV = frozenset({"aground", "not_under_command", "not under command"})
 # Module-level stores — initialised once, shared across all handler threads
 _dr_lock     = threading.Lock()
 _dr_store:   dict[str, dict] = {}
+_drawn_uids: set = set()      # uids sent as drawing-tool shapes (u-d-f), whose delete must name that type
 _radar_status_lock = threading.Lock()
 _radar_status: dict[str, dict] = {}   # "sac-sic" → latest CAT-34 status dict
 
@@ -1438,7 +1439,7 @@ def _course(track: dict) -> float:
     return 0.0
 
 
-def _delete_point_cot(uid: str, ts: float | None = None) -> str:
+def _delete_point_cot(uid: str, ts: float | None = None, link_type: str = "a-u-G") -> str:
     """Standard CoT "delete point" event (type t-x-d-d) — tells a TAK client
     to remove the marker for this uid immediately, whatever its real type
     was. Deliberately position-independent (dummy 0,0 point, already-stale
@@ -1457,7 +1458,8 @@ def _delete_point_cot(uid: str, ts: float | None = None) -> str:
     })
     ET.SubElement(event, "point", {"lat": "0.0", "lon": "0.0", "hae": "0.0", "ce": "9999999.0", "le": "9999999.0"})
     detail = ET.SubElement(event, "detail")
-    ET.SubElement(detail, "link", {"relation": "p-p", "uid": uid, "type": "a-u-G"})
+    ET.SubElement(detail, "link", {"relation": "p-p", "uid": uid, "type": link_type})
+    ET.SubElement(detail, "__forcedelete")      # ATAK/WinTAK remove drawing-tool shapes only on a forced delete
     return '<?xml version="1.0" encoding="UTF-8"?>' + ET.tostring(event, encoding="unicode")
 
 
@@ -1812,7 +1814,10 @@ def make_handler(cot_type_or_fn, sender, verbose: bool, stale_s: float = COT_STA
         # instead of disappearing immediately.
         if track.get("_delete"):
             uid = _uid(track)
-            sender.send(_delete_point_cot(uid, track.get("_ts")))
+            sender.send(_delete_point_cot(uid, track.get("_ts"), "u-d-f" if uid in _drawn_uids else "a-u-G"))
+            _drawn_uids.discard(uid)
+            with _dr_lock:
+                _dr_store.pop(uid, None)            # or dead reckoning would send the deleted marker again
             if verbose:
                 print("CoT deleted {}".format(uid), flush=True)
             return
@@ -1839,6 +1844,8 @@ def make_handler(cot_type_or_fn, sender, verbose: bool, stale_s: float = COT_STA
             return
         for xml in events:
             sender.send(xml)
+        if 'type="u-d-f"' in events[0][:400]:
+            _drawn_uids.add(_uid(track))
 
         # Update dead-reckoning state (skip extrapolated updates to prevent feedback).
         # Also skip AARTOS entirely: its own reported speed/heading come from
