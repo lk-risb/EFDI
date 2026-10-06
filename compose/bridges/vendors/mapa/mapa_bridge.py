@@ -15,7 +15,9 @@ Env:
   MAPA_URL         endpoint (default https://mapa.ua/api/v1/current)
   MAPA_POLL_S      poll interval (default 20)
   MAPA_STALE_S     how long a marker lives between polls (default 120)
-  MAPA_MAX_AGE_S   skip an object whose last_seen is older than this (default 900)
+  MAPA_MAX_AGE_S   skip an active object whose last_seen is older than this (default 0 = never,
+                   like mapa.ua itself, which keeps an object until it is no longer active)
+  MAPA_STALE_REPORT_S  mark an object "(STALE)" once its last report is older than this (default 600)
 """
 
 import argparse
@@ -35,7 +37,8 @@ TOPIC_ROOT = topic_root()
 URL = os.environ.get("MAPA_URL", "https://mapa.ua/api/v1/current")
 POLL_S = max(5, int(os.environ.get("MAPA_POLL_S", "20")))
 STALE_S = int(os.environ.get("MAPA_STALE_S", "120"))
-MAX_AGE_S = int(os.environ.get("MAPA_MAX_AGE_S", "900"))
+MAX_AGE_S = int(os.environ.get("MAPA_MAX_AGE_S", "0"))
+STALE_REPORT_S = int(os.environ.get("MAPA_STALE_REPORT_S", "600"))
 TRAIL_MAX_POINTS = 12
 TRAIL_PREFIX = "{}/air/mapa/trail/line".format(TOPIC_ROOT)
 TRAIL_SUFFIX = "-TRAIL"
@@ -57,7 +60,7 @@ def _place(slug) -> str:
     return str(slug or "").replace("_", " ").title()
 
 
-def object_tracks(data: dict, now: float) -> list:
+def object_tracks(data: dict, now: float, max_age_s: int = MAX_AGE_S) -> list:
     """(topic prefix, track) per active object, each followed by its trail line if it has one."""
     out = []
     for o in data.get("objects") or []:
@@ -71,8 +74,10 @@ def object_tracks(data: dict, now: float) -> list:
         if not (-90 <= lat <= 90 and -180 <= lon <= 180):
             continue
         seen = o.get("last_seen")
-        if isinstance(seen, (int, float)) and now - seen > MAX_AGE_S:
+        age_s = now - seen if isinstance(seen, (int, float)) else None
+        if max_age_s and age_s is not None and age_s > max_age_s:
             continue
+        stale = age_s is not None and age_s > STALE_REPORT_S
         slot, label = entity
         amount = o.get("amount") or 1
         uid = "MAPA-{}".format(o["id"])
@@ -82,9 +87,12 @@ def object_tracks(data: dict, now: float) -> list:
             remarks.append("from {} to {}".format(origin or "?", target or "?"))
         if o.get("speed_kmh"):
             remarks.append("speed {:g} km/h".format(o["speed_kmh"]))
+        if age_s is not None:
+            remarks.append("last report {} s ago{}".format(int(age_s), " - STALE" if stale else ""))
         track = {
             "_src": "mapa.ua", "_ts": now, "uid": uid, "type": o.get("kind"), "target_type": slot,
-            "callsign": "MAPA {}{} {}".format(label, " x{}".format(amount) if amount > 1 else "", target).strip(),
+            "callsign": "MAPA {}{} {}{}".format(label, " x{}".format(amount) if amount > 1 else "", target,
+                                                " (STALE)" if stale else "").strip(),
             "lat_deg": lat, "lon_deg": lon, "heading_deg": o.get("heading"), "speed_ms": (o["speed_kmh"] / 3.6) if o.get("speed_kmh") else None,
             "count": amount if amount > 1 else None, "origin": origin, "destination": target,
             "observed_ts": seen if isinstance(seen, (int, float)) else None,

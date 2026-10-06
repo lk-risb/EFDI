@@ -36,7 +36,15 @@ def test_active_drone_becomes_a_hostile_uav_with_a_trail_line():
 def test_only_active_recent_valid_objects_are_published():
     objs = [_obj(id=1, status="lost"), _obj(id=2, last_seen=NOW - 99999), _obj(id=3, lat=999), _obj(id=4, kind="plane"),
             _obj(id=5, kind="missile", amount=3, trail=[]), _obj(id=6, kind="bomb_kab")]
-    tracks = mapa_bridge.object_tracks({"objects": objs}, NOW)
+    tracks = mapa_bridge.object_tracks({"objects": objs}, NOW, max_age_s=900)
     assert [t["uid"] for _, t in tracks] == ["MAPA-5", "MAPA-6", "MAPA-6-TRAIL"]
     assert tracks[0][1]["callsign"] == "MAPA MISSILE x3 Nizhyn" and tracks[0][0].endswith("/hostile/missile")
     assert tracks[1][0].endswith("/hostile/bomb")
+
+
+def test_old_active_object_stays_by_default_but_is_marked_stale():
+    old = _obj(last_seen=NOW - 1071)                       # the Sumy KAB: mapa.ua still showed it active
+    (prefix, track), *_ = mapa_bridge.object_tracks({"objects": [old]}, NOW)
+    assert track["callsign"] == "MAPA UAV Nizhyn (STALE)" and "STALE" in track["remarks"]
+    fresh, *_ = mapa_bridge.object_tracks({"objects": [_obj(last_seen=NOW - 30)]}, NOW)
+    assert "STALE" not in fresh[1]["callsign"]
