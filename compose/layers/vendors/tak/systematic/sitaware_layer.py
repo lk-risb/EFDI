@@ -56,6 +56,7 @@ from layers.vendors.tak.tak_layer import (
 )
 from namespace_prefix import topic_root
 from protocols.vendors.random.gateway import open_session, subscribe
+from protocols.vendors.random.twin_suppress import TwinSuppressions
 
 TOPIC_ROOT = topic_root()
 
@@ -1148,6 +1149,9 @@ class NVGFeedHandler(BaseHTTPRequestHandler):
             print("NVG HTTP {} - {}".format(self.client_address[0], fmt % args), flush=True)
 
 
+_twins = TwinSuppressions()   # loose copies of ICAO-keyed aircraft that track fusion asked us to hold back
+
+
 def make_handler(
     sidc,
     cache: NVGFeedCache,
@@ -1177,6 +1181,9 @@ def make_handler(
             uid = cache.remove(track)
             if verbose:
                 print("NVG feed removed {}".format(uid), flush=True)
+            return
+        if _twins.is_suppressed(track):
+            cache.remove(track)                     # the same aircraft is already shown from its ICAO key
             return
         item_stale_s = stale_s if stale_s is not None else STALE_S
         try:                                    # a publisher may ask for longer for what it re-sends rarely
@@ -1249,6 +1256,7 @@ def run(args) -> None:
             time.sleep(10)
     subscribers = []
     try:
+        subscribers.append(subscribe(session, "{}/air/trackfusion/suppress/twin/*".format(TOPIC_ROOT), _twins.on_sample))
         for suffix, sidc in _TOPIC_SIDC.items():
             key = "{}/{}".format(TOPIC_ROOT, suffix)
             item_stale_s = max(args.stale_s, _TOPIC_STALE_S.get(suffix, args.stale_s))

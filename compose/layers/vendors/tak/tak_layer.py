@@ -51,6 +51,7 @@ import zenoh.ext
 from namespace_prefix import topic_root
 from protocols.vendors.random.gateway import open_session, subscribe
 from protocols.vendors.random.tak_transport import TcpSender, RECONNECT_S
+from protocols.vendors.random.twin_suppress import TwinSuppressions
 
 # (Re)connect catch-up + mid-session gap-healing for this layer's subscriptions.
 # A network blip or this process's own restart (SIGTERM'd on every supervisor/
@@ -137,6 +138,7 @@ _dr_store:   dict[str, dict] = {}
 _drawn_uids: set = set()      # uids sent as drawing-tool shapes (u-d-f), whose delete must name that type
 # A trail line belongs to its marker (uid + _TRAIL): when the marker is withdrawn or stops being reported the
 # line must go too. ATAK/WinTAK never expire drawing-tool shapes by their stale time, so the layer does it.
+_twins = TwinSuppressions()   # loose copies of ICAO-keyed aircraft that track fusion asked us to hold back
 _TRAIL_SUFFIX = "-TRAIL"
 _TRAIL_ORPHAN_S = float(os.environ.get("TAK_TRAIL_ORPHAN_S", "180"))
 _marker_seen: dict[str, float] = {}      # uid -> when a marker (not a trail) was last sent
@@ -1848,6 +1850,12 @@ def make_handler(cot_type_or_fn, sender, verbose: bool, stale_s: float = COT_STA
             return
         if _is_unfused_sensor_track(track, key):
             return
+        if _twins.is_suppressed(track):
+            uid = _uid(track)                       # the same aircraft is already drawn from its ICAO key
+            sender.send(_delete_point_cot(uid, track.get("_ts")))
+            with _dr_lock:
+                _dr_store.pop(uid, None)
+            return
         # ATC towers / ground vehicles show up in ADS-B with "TWR", "GND" etc.
         # Reclassify as neutral ground radar/radio station instead of aircraft.
         if _is_adsb_surface_vehicle(track):
@@ -1982,6 +1990,9 @@ def run(args):
             time.sleep(RECONNECT_S)
     _start_dr_thread(sender)
     subs = []
+    twin_key = "{}/air/trackfusion/suppress/twin/*".format(TOPIC_ROOT)
+    subs.append(subscribe(session, twin_key, _twins.on_sample))
+    print("SUB {} → [duplicate suppression from track fusion]".format(twin_key), flush=True)
     for suffix, (cot_type, stale_s) in _TOPIC_COT.items():
         key = "{}/{}".format(TOPIC_ROOT, suffix)
         fn = cot_type.__name__ if callable(cot_type) else str(cot_type)

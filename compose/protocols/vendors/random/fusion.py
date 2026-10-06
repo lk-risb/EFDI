@@ -98,6 +98,7 @@ from google.protobuf.message import DecodeError
 from namespace_prefix import topic_root
 from protocols.vendors.random.gateway import open_session, publish_collection, subscribe
 from protocols.vendors.random.track_views import strip_version
+from protocols.vendors.random.twin_suppress import TwinIndex, twin_topic
 
 TOPIC_ROOT = topic_root()
 
@@ -287,6 +288,9 @@ class TrackFuser:
         # NEPTUN threats seen on the fabric, and when each suppression was last announced
         self._neptun_tracks: dict[str, dict] = {}
         self._suppress_sent: dict[str, float] = {}
+        # Loose copies of an ICAO-keyed aircraft (see twin_suppress.py) and when each was last announced
+        self._twins = TwinIndex()
+        self._twin_sent: dict[str, float] = {}
         # Periodic age-out: ensures _radar_by_icao is cleaned even when radar goes
         # silent (no on_radar() calls), so ADS-B fallback kicks in automatically.
         self._start_age_timer()
@@ -464,6 +468,30 @@ class TrackFuser:
                               json.dumps({"uid": uid, "radar_uid": radar_uid, "ts": now}).encode())
             if self._verbose:
                 print("NEPTUN match {} ~ radar {}".format(uid, radar_uid), flush=True)
+
+    def on_any_track(self, sample):
+        """Every track on the fabric, whatever its source: announce the loose copies of aircraft that
+        another feed already reports by their ICAO address, so the output layers draw one marker."""
+        topic = str(sample.key_expr)
+        if not topic.endswith("/tracks/v1") or topic.startswith(_OWN_PREFIX):
+            return
+        if strip_version(topic).rsplit("/", 1)[-1] in {"sapient", "proto", "raw"}:
+            return
+        try:
+            track = json.loads(bytes(sample.payload).decode())
+        except (ValueError, UnicodeDecodeError):
+            return
+        if not isinstance(track, dict):
+            return
+        now = time.time()
+        for uid in self._twins.observe(track, now):
+            with self._lock:
+                if now - self._twin_sent.get(uid, 0) < _SUPPRESS_REFRESH_S:
+                    continue
+                self._twin_sent[uid] = now
+            self._session.put(twin_topic(TOPIC_ROOT, uid), json.dumps({"uid": uid, "ts": now}).encode())
+            if self._verbose:
+                print("twin of an ICAO-keyed aircraft: {}".format(uid), flush=True)
 
     def on_adsb(self, sample):
         topic = str(sample.key_expr)
@@ -688,6 +716,10 @@ def run(args):
         print("  SUB adsb:  {}".format(topic), flush=True)
     subs.append(subscribe(session, _NEPTUN_TOPIC, fuser.on_neptun))
     print("  SUB neptun: {}".format(_NEPTUN_TOPIC), flush=True)
+    for domain in ("air", "land", "sea"):
+        topic = "{}/{}/**".format(TOPIC_ROOT, domain)
+        subs.append(subscribe(session, topic, fuser.on_any_track))
+        print("  SUB twins:  {}".format(topic), flush=True)
 
     print("Fusion running — Ctrl-C to stop", flush=True)
     try:
