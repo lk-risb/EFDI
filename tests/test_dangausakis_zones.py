@@ -227,7 +227,8 @@ def test_country_zones_keep_more_vertices_than_district_zones():
     out = bridge.wash_tracks({}, {}, {"RU": {"name": "Russia", "tone": "danger", "rings": [ring]}}, NOW)
     n = len(out["DA-COUNTRY-RU"][1]["geometry"]["coordinates"][0])
     district = len(bridge.simplify_ring(ring))
-    assert district <= bridge.ZONE_MAX_VERTICES < n <= bridge.COUNTRY_MAX_VERTICES <= tak_layer.MAX_SHAPE_POINTS
+    assert district <= bridge.ZONE_MAX_VERTICES < bridge.COUNTRY_MAX_VERTICES <= tak_layer.MAX_SHAPE_POINTS
+    assert district <= n == len(bridge.simplify_ring(ring, bridge.COUNTRY_MAX_VERTICES)) <= bridge.COUNTRY_MAX_VERTICES
 
 
 def test_zones_ask_for_a_long_stale_time_and_tak_layer_honours_a_sane_one_only():

@@ -1477,12 +1477,8 @@ _TRAIL_COLORS = {
 }
 
 
-# shape_style "geozone": a standing civil-drone restriction (not an alert), drawn in blue.
-_GEOZONE_COLORS = {"blue": (_argb(0xCC, 0x3399FF), _argb(_FILL_ALPHA, 0x3399FF))}
-
-
 def _shape_colors(track: dict) -> dict:
-    return {"wash": _WASH_COLORS, "country": _COUNTRY_COLORS, "trail": _TRAIL_COLORS, "geozone": _GEOZONE_COLORS}.get(
+    return {"wash": _WASH_COLORS, "country": _COUNTRY_COLORS, "trail": _TRAIL_COLORS}.get(
         track.get("shape_style"), _SHAPE_COLORS)
 
 
