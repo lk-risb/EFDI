@@ -6,6 +6,7 @@ import json
 import pathlib
 import sys
 import threading
+import pytest
 import unittest
 import urllib.error
 import urllib.request
@@ -27,7 +28,8 @@ from sitaware_layer import (  # noqa: E402
     NVGFeedServer,
     basic_authorized,
 )
-from sitaware_layer import NVG_NS  # noqa: E402
+from sitaware_layer import NVG_NS, _TOPIC_SIDC, track_to_nvg_item  # noqa: E402
+import time  # noqa: E402
 from sitaware_layer import _TOPIC_SIDC  # noqa: E402
 from sitaware_layer import _resolve_sidc  # noqa: E402
 from sitaware_layer import track_to_nvg_item  # noqa: E402
@@ -562,3 +564,102 @@ class ShapePointTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def _nvg_children(xml: str):
+    import xml.etree.ElementTree as ET
+    root = ET.fromstring(xml.split("?>", 1)[1])
+    return root, {child.tag.split("}")[1] for child in root}
+
+
+def test_zone_polygon_carries_a_colour_style_and_keeps_its_anchor_marker():
+    ring = [[24.0, 59.0], [24.1, 59.0], [24.1, 59.1], [24.0, 59.0]]
+    track = {"uid": "DA-ZONE-1", "callsign": "UA Test District RED", "lat_deg": 59.03, "lon_deg": 24.03,
+             "geometry": {"type": "Polygon", "coordinates": [ring]}, "shape_color": "red", "shape_style": "zone"}
+    _, xml = track_to_nvg_item(track, "SNGPES----*****")
+    root, tags = _nvg_children(xml)
+    assert tags == {"point", "polygon"}
+    polygon = [c for c in root if c.tag.endswith("polygon")][0]
+    assert "stroke:#FF2020" in polygon.get("style") and "fill-opacity:0.3" in polygon.get("style")
+    # nvg.data.2.0.xsd: the vertices are one `points` attribute of "lon,lat" pairs (not child elements);
+    # a polygon closes itself, so the repeated first vertex is dropped.
+    assert polygon.get("points") == "24.000000,59.000000 24.100000,59.000000 24.100000,59.100000"
+    assert len(list(polygon)) == 0
+
+
+def test_wash_and_country_styles_differ_and_an_unstyled_shape_gets_no_style_attribute():
+    base = {"uid": "Z", "callsign": "Z", "lat_deg": 1.0, "lon_deg": 1.0,
+            "geometry": {"type": "Polygon", "coordinates": [[[1, 1], [2, 1], [2, 2], [1, 1]]]}}
+    def style(**extra):
+        _, xml = track_to_nvg_item(dict(base, **extra), "SNGPES----*****")
+        root, _ = _nvg_children(xml)
+        return [c for c in root if c.tag.endswith("polygon")][0].get("style")
+    assert "stroke-width:1" in style(shape_color="orange", shape_style="wash")
+    assert "stroke-width:2" in style(shape_color="orange", shape_style="country")
+    assert style() is None
+
+
+def test_trail_is_a_bare_styled_polyline_without_an_anchor_marker_and_can_be_switched_off(monkeypatch):
+    track = {"uid": "NEPTUN-1-TRAIL", "callsign": "NEPTUN UAV trail", "lat_deg": 50.0, "lon_deg": 31.0,
+             "geometry": {"type": "LineString", "coordinates": [[30.0, 49.0], [31.0, 50.0]]},
+             "shape_color": "orange", "shape_style": "trail"}
+    _, xml = track_to_nvg_item(track, "SHAP------*****", valid_until=time.time() + 60)
+    root, tags = _nvg_children(xml)
+    assert tags == {"polyline"}
+    line = list(root)[0]
+    assert "fill:none" in line.get("style") and line.get("points") == "30.000000,49.000000 31.000000,50.000000"
+    assert line.find("{%s}TimeSpan" % NVG_NS) is not None            # expiry lands on the line itself
+    assert "air/**/trail/**" in _TOPIC_SIDC
+    monkeypatch.setenv("NVG_SHAPE_STYLE_ENABLE", "0")
+    _, plain = track_to_nvg_item(track, "SHAP------*****")
+    assert "style=" not in plain
+
+
+def test_circle_uses_cx_cy_and_a_radius_in_metres():
+    track = {"uid": "C", "callsign": "C", "lat_deg": 50.5, "lon_deg": 30.25,
+             "geometry": {"type": "Circle", "radius_km": 2.5}}
+    _, xml = track_to_nvg_item(track, "SNGPES----*****")
+    root, tags = _nvg_children(xml)
+    circle = [c for c in root if c.tag.endswith("circle")][0]
+    assert (circle.get("cx"), circle.get("cy"), circle.get("r")) == ("30.250000", "50.500000", "2500.0")
+
+
+def test_feed_document_validates_against_the_nvg_2_0_schema():
+    """Polygons, polylines, circles and points as one document, checked against nvg.2.0.xsd.
+
+    The schema ships with INTCORE, outside this repository: set NVG_XSD to nvg.2.0.xsd (its
+    nvg.data and nvg.types siblings must sit beside it) or keep INTCORE next to this checkout."""
+    import os
+    lxml_etree = pytest.importorskip("lxml.etree")
+    xsd_path = pathlib.Path(os.environ.get(
+        "NVG_XSD", ROOT.parent / "INTCORE/Schemas/NVG 2.0 Canonical Schema/nvg.2.0.xsd"))
+    if not xsd_path.exists():
+        pytest.skip("NVG 2.0 schema not available ({})".format(xsd_path))
+    schema = lxml_etree.XMLSchema(lxml_etree.parse(str(xsd_path)))
+    cache = NVGFeedCache(60, 100)
+    ring = [[24.0, 59.0], [24.1, 59.0], [24.1, 59.1], [24.0, 59.0]]
+    for track, sidc in (
+        ({"uid": "Z", "callsign": "Zone", "lat_deg": 59.03, "lon_deg": 24.03, "shape_color": "red", "shape_style": "zone",
+          "geometry": {"type": "Polygon", "coordinates": [ring]}}, "SNGPES----*****"),
+        ({"uid": "T-TRAIL", "callsign": "trail", "lat_deg": 50.0, "lon_deg": 31.0, "shape_color": "orange", "shape_style": "trail",
+          "geometry": {"type": "LineString", "coordinates": [[30, 49], [31, 50]]}}, "SHAP------*****"),
+        ({"uid": "C", "callsign": "circle", "lat_deg": 50.5, "lon_deg": 30.25,
+          "geometry": {"type": "Circle", "radius_km": 2.5}}, "SNGPES----*****"),
+        ({"uid": "P", "callsign": "drone", "lat_deg": 50.0, "lon_deg": 31.0, "heading_deg": 90, "speed_ms": 30}, "SHAPMFQ---*****"),
+    ):
+        cache.upsert(track, sidc)
+    document, _ = cache.document()
+    tree = lxml_etree.fromstring(document if isinstance(document, bytes) else document.encode())
+    assert schema.validate(tree), [str(e.message)[:160] for e in schema.error_log][:3]
+
+
+def test_hostile_ground_units_get_a_function_so_the_frame_is_not_empty():
+    from sitaware_layer import _resolve_sidc
+    hostile = _TOPIC_SIDC["land/**/hostile/unit/**"]
+    cases = {"82nd Motor Rifle Regiment": "SHGPUCIZ--*****", "3rd Tank Division": "SHGPUCA---*****",
+             "Artillery Brigade": "SHGPUCF---*****", "Reconnaissance Battalion": "SHGPUCR---*****",
+             "20th Army": "SHGPUC----*****", "": "SHGPUC----*****"}
+    for name, expected in cases.items():
+        assert _resolve_sidc(hostile, {"callsign": name}) == expected, name
+    assert _resolve_sidc(_TOPIC_SIDC["land/**/unknown/unit/**"], {"callsign": "x"}) == "SUGPUC----*****"
+    assert _TOPIC_SIDC["land/**/friendly/unit/**"] == "SFGPU-----*****"         # NFFI units are left as they were

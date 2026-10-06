@@ -227,7 +227,7 @@ _TOPIC_COT = {
     "air/**/unknown/**":         (_unknown_air_type, AIR_STALE_S),
     # LAND — full affiliation matrix for SitaWare / NFFI
     "land/**/civ/vehicle/**":    ("a-f-G-E-V-C", LAND_STALE_S),
-    "land/**/neutral/station/**":("a-n-G-I-R",   LAND_STALE_S),
+    "land/**/neutral/station/**":("a-n-G-E-S",   LAND_STALE_S),   # ground sensor equipment, as sitaware_layer's SNGPES
     "land/**/friendly/unit/**":  ("a-f-G-U-C",   LAND_STALE_S),
     "land/**/hostile/unit/**":   ("a-h-G-U-C",   LAND_STALE_S),
     "land/**/neutral/unit/**":   ("a-n-G-U-C",   LAND_STALE_S),
@@ -270,7 +270,7 @@ _TOPIC_COT = {
     "space/**/neutral/satellite/**":  ("a-n-P",   SAT_STALE_S),
     "space/**/unknown/satellite/**":  ("a-u-P",   SAT_STALE_S),
     # ENV — weather stations and air quality sensors show as ground icons
-    "env/weather/station/**":    ("a-n-G-I-R",   ENV_STALE_S),
+    "env/weather/station/**":    ("a-n-G-E-S-E", ENV_STALE_S),    # emplaced ground sensor, as sitaware_layer's SNGPESE
     # ACOUSTIC / RF SENSOR SITES — sensor box; recolors green/yellow/red by
     # last_detection_ts (see _sensor_alert_cot_type), same icon throughout
     "land/**/neutral/sensor/**": (_sensor_alert_cot_type, LAND_STALE_S * 2),

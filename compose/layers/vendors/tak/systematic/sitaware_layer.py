@@ -113,6 +113,30 @@ def _resolve_sidc(resolver, track: dict) -> str:
 # including a bare topic with no view suffix, is the flat JSON payload.
 _NON_JSON_VIEWS = frozenset({"sapient", "proto", "raw"})
 
+def _ground_unit_sidc(affiliation: str):
+    """SIDC resolver for a ground unit. Bare "unit" (SxGPU-----) is an empty frame in SitaWare, while
+    TAK's a-x-G-U-C shows a combat symbol; this sends combat (UC) for hostile and unknown units
+    (friendly and neutral units come from NFFI, which keeps the unspecified frame) and, when the unit's name says what
+    it is, the specific MIL-STD-2525B function: infantry UCI, mechanized infantry UCIZ, armor UCA,
+    field artillery UCF, reconnaissance UCR."""
+    def resolve(track: dict) -> str:
+        name = " ".join(str(track.get(key) or "") for key in ("callsign", "label", "name")).lower()
+        if "motor rifle" in name or "mechanized" in name or "mechanised" in name:
+            function = "UCIZ--"
+        elif "tank" in name or "armor" in name or "armour" in name:
+            function = "UCA---"
+        elif "artillery" in name or "rocket" in name or "howitzer" in name:
+            function = "UCF---"
+        elif "recon" in name:
+            function = "UCR---"
+        elif any(word in name for word in ("infantry", "airborne", "marine", "assault", "rifle")):
+            function = "UCI---"
+        else:
+            function = "UC----"
+        return "S{}GP{}*****".format(affiliation, function)
+    return resolve
+
+
 _TOPIC_SIDC = {
     "air/**/civ/aircraft/**":        _civil_air_sidc,
     "air/**/mil/aircraft/**":        _military_air_sidc,
@@ -125,6 +149,7 @@ _TOPIC_SIDC = {
     "air/**/hostile/uav/**":         "SHAPMFQ---*****",
     "air/**/hostile/missile/**":     "SHAPWM----*****",   # NEPTUN missiles
     "air/**/hostile/bomb/**":        "SHAPWB----*****",   # NEPTUN guided (glide) bombs
+    "air/**/trail/**":               "SHAP------*****",   # threat paths: only the line is drawn, see track_to_nvg_item
     "air/**/neutral/aircraft/**":    "SNAPMF----*****",
     "air/**/unknown/**":             _unknown_air_sidc,
     # Equipment/Vehicle/Civilian — NOT "UCV", which is Unit/Combat/Aviation and
@@ -135,9 +160,9 @@ _TOPIC_SIDC = {
     "land/**/neutral/sensor/**":     "SNGPES----*****",  # Neutral Ground Sensor
     "land/**/neutral/radar/**":      "SNGPESR---*****",  # Neutral Ground Radar
     "land/**/friendly/unit/**":      "SFGPU-----*****",  # Friendly Ground Unit (NFFI)
-    "land/**/hostile/unit/**":       "SHGPU-----*****",
+    "land/**/hostile/unit/**":       _ground_unit_sidc("H"),   # DeepState units etc.: combat unit, function from its name
     "land/**/neutral/unit/**":       "SNGPU-----*****",
-    "land/**/unknown/unit/**":       "SUGPU-----*****",
+    "land/**/unknown/unit/**":       _ground_unit_sidc("U"),
     # NFFI's friendly/unit entity, routed off "land" by its unitSymbol SIDC's
     # Battle Dimension (see nffi.py's OUTPUT_TOPICS). Air/Sea/Space have no
     # Unit/Equipment/Installation split in the standard the way Ground does
@@ -644,6 +669,33 @@ def _nvg_modifiers(track: dict, label: str) -> str:
     return ";".join("{}:{}".format(key, safe(value)) for key, value in modifiers)
 
 
+# NVG shape style (a CSS-like `style` attribute on polygon/polyline/circle). Without it SitaWare
+# draws every zone in its default style, which is barely visible, while TAK gets coloured outlines
+# and 30% fills. Mirrors tak_layer's zone / wash / country / trail styles. Set
+# NVG_SHAPE_STYLE_ENABLE=0 if an HQ release rejects the attribute.
+_NVG_COLORS = {"red": "#FF2020", "orange": "#FF8C00", "yellow": "#FFD000", "blue": "#3399FF"}
+_NVG_FILL_OPACITY = "0.3"
+
+
+def _nvg_shape_style(track: dict) -> str | None:
+    if os.environ.get("NVG_SHAPE_STYLE_ENABLE", "1") in {"0", "false", "no"}:
+        return None
+    color = _NVG_COLORS.get(str(track.get("shape_color") or "").lower())
+    if color is None:
+        return None
+    kind = track.get("shape_style")
+    if kind == "trail":
+        return "stroke:{};stroke-opacity:0.8;stroke-width:2;fill:none".format(color)
+    if kind == "wash":
+        return "stroke:{};stroke-opacity:0.33;stroke-width:1;fill:{};fill-opacity:{}".format(
+            color, color, _NVG_FILL_OPACITY)
+    if kind == "country":
+        return "stroke:{};stroke-opacity:0.7;stroke-width:2;fill:{};fill-opacity:{}".format(
+            color, color, _NVG_FILL_OPACITY)
+    return "stroke:{};stroke-opacity:1;stroke-width:3;fill:{};fill-opacity:{}".format(
+        color, color, _NVG_FILL_OPACITY)
+
+
 def track_to_nvg_item(
     track: dict,
     sidc: str,
@@ -698,13 +750,20 @@ def track_to_nvg_item(
     if any(track.get(key) is not None for key in ("heading_deg", "track_deg", "cog_deg")):
         point_attrs["course"] = str(_course(track))
 
-    point = ET.SubElement(root, "{%s}point" % NVG_NS, point_attrs)
+    trail_only = track.get("shape_style") == "trail" and isinstance(track.get("geometry"), dict)
+    # A threat's trail is only a line: an anchor marker would sit on top of the threat's own marker.
+    point = None if trail_only else ET.SubElement(root, "{%s}point" % NVG_NS, point_attrs)
+    content = point
     geometry = track.get("geometry")
     if isinstance(geometry, dict) and os.environ.get("NVG_GEOMETRY_ENABLE", "1") not in {"0", "false", "no"}:
         geometry_type = geometry.get("type")
         coordinates = geometry.get("coordinates")
 
-        def add_points(parent, values):
+        def points_attr(values, closed: bool = False) -> str:
+            """NVG 2.0 polygon/polyline reference points: one `points` attribute of space-separated
+            "lon,lat" pairs (nvg.types.2.0.xsd ListOfLongLatType), not child elements. A polygon is
+            closed implicitly, so a repeated first vertex is dropped."""
+            pairs = []
             for coordinate in values[:MAX_SHAPE_POINTS] if isinstance(values, list) else []:
                 if not isinstance(coordinate, (list, tuple)) or len(coordinate) < 2:
                     continue
@@ -713,36 +772,50 @@ def track_to_nvg_item(
                 except (TypeError, ValueError):
                     continue
                 if -180 <= x_lon <= 180 and -90 <= y_lat <= 90:
-                    ET.SubElement(parent, "{%s}point" % NVG_NS, {
-                        "x": str(round(x_lon, 6)), "y": str(round(y_lat, 6))
-                    })
+                    pairs.append("{:.6f},{:.6f}".format(x_lon, y_lat))
+            if closed and len(pairs) > 1 and pairs[0] == pairs[-1]:
+                pairs.pop()
+            return " ".join(pairs)
 
         shape_attrs = {
-            "uri": "urn:efdi:" + urllib.parse.quote(uid + "-geometry", safe="-._~"),
+            "uri": "urn:efdi:" + urllib.parse.quote(uid + ("" if trail_only else "-geometry"), safe="-._~"),
             "label": label,
         }
+        shape_style = _nvg_shape_style(track)
+        if shape_style:
+            shape_attrs["style"] = shape_style
         if geometry_type == "Polygon" and isinstance(coordinates, list) and coordinates:
-            polygon = ET.SubElement(root, "{%s}polygon" % NVG_NS, shape_attrs)
-            add_points(polygon, coordinates[0])
+            points = points_attr(coordinates[0], closed=True)
+            if len(points.split()) >= 3:
+                polygon = ET.SubElement(root, "{%s}polygon" % NVG_NS, dict(shape_attrs, points=points))
+                content = content if content is not None else polygon
         elif geometry_type == "LineString":
-            line = ET.SubElement(root, "{%s}polyline" % NVG_NS, shape_attrs)
-            add_points(line, coordinates)
+            points = points_attr(coordinates)
+            if len(points.split()) >= 2:
+                line = ET.SubElement(root, "{%s}polyline" % NVG_NS, dict(shape_attrs, points=points))
+                content = content if content is not None else line
         elif geometry_type == "MultiLineString" and isinstance(coordinates, list):
             for index, values in enumerate(coordinates[:8]):
-                line = ET.SubElement(root, "{%s}polyline" % NVG_NS,
-                                      dict(shape_attrs, uri=shape_attrs["uri"] + "-{}".format(index)))
-                add_points(line, values)
+                points = points_attr(values)
+                if len(points.split()) >= 2:
+                    line = ET.SubElement(root, "{%s}polyline" % NVG_NS,
+                                         dict(shape_attrs, points=points, uri=shape_attrs["uri"] + "-{}".format(index)))
+                    content = content if content is not None else line
         elif geometry_type == "Circle" and isinstance(geometry.get("radius_km"), (int, float)):
-            ET.SubElement(root, "{%s}circle" % NVG_NS, dict(
-                shape_attrs, x=str(round(lon, 6)), y=str(round(lat, 6)),
-                radius_km=str(round(float(geometry["radius_km"]), 3))))
+            # nvg.data.2.0.xsd CircleType: centre cx/cy in degrees, radius r in METRES.
+            circle = ET.SubElement(root, "{%s}circle" % NVG_NS, dict(
+                shape_attrs, cx="{:.6f}".format(lon), cy="{:.6f}".format(lat),
+                r=str(round(float(geometry["radius_km"]) * 1000, 1))))
+            content = content if content is not None else circle
     # ContentType's sequence (nvg.data.2.0.xsd) is fixed order: metadata?,
     # ExtendedData?, textInfo?, TimeStamp?, TimeSpan? — ExtendedData MUST
     # come before textInfo/TimeStamp/TimeSpan, not after.
     extended_fields = _nvg_extended_data(track, uid, sidc)
+    if content is None:
+        return None
     if extended_fields:
         extended_data = ET.SubElement(
-            point, "{%s}ExtendedData" % NVG_NS, {"schemaRef": NVG_SCHEMA_REF}
+            content, "{%s}ExtendedData" % NVG_NS, {"schemaRef": NVG_SCHEMA_REF}
         )
         sections: dict[str | None, list[tuple[str, str]]] = {}
         section_order: list[str | None] = []
@@ -775,13 +848,13 @@ def track_to_nvg_item(
         20_000,
     )
     if text_info:
-        ET.SubElement(point, "{%s}textInfo" % NVG_NS).text = text_info
+        ET.SubElement(content, "{%s}textInfo" % NVG_NS).text = text_info
     timestamp = _timestamp(track)
     if timestamp:
-        ET.SubElement(point, "{%s}TimeStamp" % NVG_NS).text = timestamp
+        ET.SubElement(content, "{%s}TimeStamp" % NVG_NS).text = timestamp
     expiry = _iso_timestamp(valid_until)
     if expiry:
-        time_span = ET.SubElement(point, "{%s}TimeSpan" % NVG_NS)
+        time_span = ET.SubElement(content, "{%s}TimeSpan" % NVG_NS)
         ET.SubElement(time_span, "{%s}end" % NVG_NS).text = expiry
 
     xml_str = '<?xml version="1.0" encoding="UTF-8"?>' + ET.tostring(root, encoding="unicode")
