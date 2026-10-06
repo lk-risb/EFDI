@@ -8,8 +8,12 @@ allowBuilds:
 # GHSA-c83g-rgw3-j3cx / GHSA-73wf-gq98-2v4g (browserslist) and GHSA-w5vr-8v7q-w6rv
 # (baseline-browser-mapping) — pulled in transitively via @babel/core (itself via
 # @tanstack/router-plugin and @vitejs/plugin-react), dev/build-time only.
+# GHSA seroval (fromJSON thenable assimilation, TypedArray memory exhaustion; via @tanstack/react-router's
+# router-core) and source-map-js (event-loop DoS; via postcss) — pinned to the first patched releases.
 overrides:
   postcss: "8.5.26"
   nanoid: "3.3.18"
   browserslist: ">=4.28.7"
   baseline-browser-mapping: ">=2.11.0"
+  seroval: ">=1.6.3"
+  source-map-js: ">=1.2.2"
