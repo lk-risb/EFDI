@@ -53,11 +53,11 @@ _UNIFIED_SUFFIX = "/soc-bx/unified/raw/v1"
 _ALERTS_SUFFIX = "/soc-bx/alerts/v1"
 INPUT_TOPIC = TOPIC_ROOT + "/raw/backbone/**"
 
-# An object whose id is a bare 6-digit hex number and which carries no real domain or type is
-# an ADS-B aircraft keyed by its ICAO address. This vendor republishes ADS-B that way, and
+# An object whose id is a 6-digit hex number, bare or behind a word prefix ("STATES:502D5A", seen
+# live), and which carries no real domain or type is an ADS-B aircraft keyed by its ICAO address. This vendor republishes ADS-B that way, and
 # tags many of those objects with the generic type "sensor" (seen live: object_type
 # "sensor", platform_type "Sensor" on an aircraft with a callsign), which says nothing.
-_ICAO_HEX = re.compile(r"^[0-9a-fA-F]{6}$")
+_ICAO_HEX = re.compile(r"^(?:[A-Za-z]+:)?([0-9a-fA-F]{6})$")
 _GENERIC_TYPES = ("", "sensor", "unknown")
 
 
@@ -124,11 +124,12 @@ def unified_records(payload: bytes) -> list[dict]:
         elif kinematics.HasField("ground_speed"):
             record["speed_mps"] = kinematics.ground_speed
         record["_dimension"] = _dimension(identity)
-        if _ICAO_HEX.match(str(record["uid"])) and _generic(identity):
+        icao = _ICAO_HEX.match(str(record["uid"]))
+        if icao and _generic(identity):
             # Key it by icao24 like every other ADS-B source, so the same aircraft from
             # dangausakis or any other feed is one marker, and draw it as an aircraft
             # instead of a stationary ground unit.
-            record["icao24"] = str(record["uid"]).lower()
+            record["icao24"] = icao.group(1).lower()
             record["target_type"] = "aircraft"
             record["_dimension"] = "air"
         record["_slot"] = _slot(identity)

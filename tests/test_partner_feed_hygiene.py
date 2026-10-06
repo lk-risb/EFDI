@@ -57,3 +57,9 @@ def test_ghost_filter_also_matches_on_registration_when_the_callsign_differs():
     assert not ghosts.is_ghost("4C11EC", "ASL124", registration="LN-ABC")
     assert ghosts.is_ghost("4C01EC", "ASL999", registration="LN-ABC")       # new flight number, same airframe
     assert not ghosts.is_ghost("4C01EC", "ASL999", registration="LN-XYZ")   # a different airframe is left alone
+
+
+def test_generic_json_object_id_with_a_word_prefix_is_still_the_icao_aircraft():
+    record, dimension, _ = generic_json.normalize({"ci_uuid": "STATES:502D5A", "ci_name": "BTI7HB", "lat": 53.3, "lon": 14.5}, "o")
+    assert dimension == "air" and record["icao24"] == "502d5a" and record["callsign"] == "BTI7HB"
+    assert tak_layer._uid(record) == "EFDI-ICAO-502D5A"           # one marker with the ICAO-keyed feeds, not a ground unit

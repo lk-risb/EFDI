@@ -95,3 +95,9 @@ def test_echo_filter_also_recognises_copies_of_our_alert_zones_and_markers():
     assert not echoes.is_echo({"uid": "BACKBONE-u3", "callsign": "Withdrawn zone"})            # tombstones teach nothing
     assert not echoes.is_echo({"uid": "BACKBONE-u4", "callsign": "Partner thing"})              # theirs, not ours
     assert not echoes.is_echo({"uid": "BACKBONE-u5", "callsign": "UA Other District RED"})
+
+
+def test_socbx_icao_id_may_carry_a_word_prefix():
+    match = socbx._ICAO_HEX.match("STATES:502D5A")
+    assert match and match.group(1) == "502D5A" and socbx._ICAO_HEX.match("502D5A")
+    assert not socbx._ICAO_HEX.match("SENSOR:MAINLINE-DRONU-0478D5C6") and not socbx._ICAO_HEX.match("STATES:502D5")

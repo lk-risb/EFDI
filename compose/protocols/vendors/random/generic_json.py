@@ -46,7 +46,7 @@ _AFFILIATION_SLOT = {
 _DIMENSIONS = ("air", "land", "sea", "space")
 # A participant that sends ADS-B names the object by its bare 6-digit ICAO address and
 # declares no dimension or type; without this it is drawn as a stationary ground unit.
-_ICAO_HEX = re.compile(r"^[0-9a-fA-F]{6}$")
+_ICAO_HEX = re.compile(r"^(?:[A-Za-z]+:)?([0-9a-fA-F]{6})$")   # bare, or behind a word prefix ("STATES:502D5A")
 
 
 def _first(payload: dict, keys) -> object:
@@ -122,11 +122,11 @@ def normalize(payload: dict, origin: str) -> dict | None:
         "callsign": str(label)[:120] if label else str(raw_id)[:120],
     }
     dimension = _dimension(payload)
-    if (dimension == "land" and not payload.get("dimension") and not payload.get("type")
-            and _ICAO_HEX.match(record["callsign"])):
+    icao = _ICAO_HEX.match(str(raw_id)) or _ICAO_HEX.match(record["callsign"])
+    if dimension == "land" and not payload.get("dimension") and not payload.get("type") and icao:
         # Key it by icao24 like every other ADS-B source, so it merges with the same aircraft
         # from dangausakis or any other feed, and draw it as an aircraft.
-        record["icao24"] = record["callsign"].lower()
+        record["icao24"] = icao.group(1).lower()
         record["target_type"] = "aircraft"
         dimension = "air"
     return record, dimension, _affiliation_slot(payload)
