@@ -123,3 +123,16 @@ def test_echo_filter_matches_our_uid_used_as_the_partners_callsign():
     assert echoes.is_echo({"uid": "BACKBONE-08E5E910-20C7-56F0", "callsign": "DA-ZONE-UA-R:бердянський"})
     assert echoes.is_echo({"uid": "BACKBONE-1", "label": "da-zone-ua-r:бердянський"})
     assert not echoes.is_echo({"uid": "BACKBONE-2", "callsign": "DA-ZONE-UA-R:other-place"})
+
+
+def test_socbx_adsb_aircraft_go_to_civ_aircraft_but_other_objects_stay_units():
+    msg = UnifiedSchema()
+    plane = msg.objects["502D5A"].features
+    plane.location.latitude, plane.location.longitude = 53.0, 14.0
+    plane.identity.callsign = "BTI7HB"
+    unit = msg.objects["abc-1"].features
+    unit.location.latitude, unit.location.longitude = 50.0, 8.0
+    unit.identity.callsign = "SOMEUNIT"
+    records = {r["uid"]: r for r in socbx.unified_records(msg.SerializeToString())}
+    assert (records["502D5A"]["_slot"], records["502D5A"]["_entity"]) == ("civ", "aircraft")
+    assert records["abc-1"]["_slot"] == "unknown" and "_entity" not in records["abc-1"]

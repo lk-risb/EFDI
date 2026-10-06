@@ -139,6 +139,11 @@ def unified_records(payload: bytes) -> list[dict]:
             record["target_type"] = "aircraft"
             record["_dimension"] = "air"
         record["_slot"] = _slot(identity)
+        if record.get("icao24") and record["_slot"] == "unknown":
+            # A Mode-S aircraft with no declared affiliation is ADS-B traffic: publish it where
+            # dangausakis publishes the same ADS-B (civ/aircraft) so both draw it the same way,
+            # not as an "unknown unit" (yellow cloud) beside the neutral civil one (green square).
+            record["_slot"], record["_entity"] = "civ", "aircraft"
         out.append(record)
     return out
 
@@ -197,7 +202,8 @@ def run() -> None:
                         continue
                     dimension = record.pop("_dimension")
                     slot = record.pop("_slot")
-                    topic = "{}/{}/backbone/{}/unit/tracks/v1".format(TOPIC_ROOT, dimension, slot)
+                    entity = record.pop("_entity", "unit")
+                    topic = "{}/{}/backbone/{}/{}/tracks/v1".format(TOPIC_ROOT, dimension, slot, entity)
                     session.put(topic, json.dumps(record).encode())
             elif key.endswith(_ALERTS_SUFFIX):
                 record = alert_record(payload)

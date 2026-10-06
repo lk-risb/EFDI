@@ -75,3 +75,15 @@ def test_twin_filter_drops_a_non_icao_copy_of_an_icao_keyed_aircraft_only_when_n
     assert not twins.is_twin({"callsign": "OMCBS", "lat_deg": 49.22, "lon_deg": 19.62}, now=1500.0)  # too long ago
     assert not twins.is_twin({"callsign": "OTHER1", "lat_deg": 49.22, "lon_deg": 19.62}, now=1030.0)
     assert not twins.is_twin({"lat_deg": 49.22, "lon_deg": 19.62}, now=1030.0)                       # no callsign
+
+
+def test_partner_adsb_aircraft_use_the_same_civ_aircraft_slot_as_dangausakis():
+    record, dimension, slot = generic_json.normalize(
+        {"ci_uuid": "STATES:502D5A", "ci_name": "BTI7HB", "lat": 53.3, "lon": 14.5}, "o")
+    assert (dimension, slot, record["_entity"]) == ("air", "civ", "aircraft")
+    # an object that declares its own affiliation keeps it, and a non-aircraft keeps the unit entity
+    declared, _, declared_slot = generic_json.normalize(
+        {"ci_uuid": "STATES:502D5A", "ci_name": "X", "lat": 53.3, "lon": 14.5, "affiliation": "hostile"}, "o")
+    other, _, other_slot = generic_json.normalize({"ci_uuid": "u1", "ci_name": "radar-1", "lat": 50, "lon": 30}, "o")
+    assert declared_slot == "hostile" and "_entity" not in declared
+    assert other_slot == "unknown" and "_entity" not in other

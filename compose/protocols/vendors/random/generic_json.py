@@ -129,7 +129,11 @@ def normalize(payload: dict, origin: str) -> dict | None:
         record["icao24"] = icao.group(1).lower()
         record["target_type"] = "aircraft"
         dimension = "air"
-    return record, dimension, _affiliation_slot(payload)
+    slot = _affiliation_slot(payload)
+    if record.get("icao24") and slot == "unknown":
+        # ADS-B traffic: same topic slot as dangausakis' ADS-B (civ/aircraft), see socbx.py.
+        slot, record["_entity"] = "civ", "aircraft"
+    return record, dimension, slot
 
 
 def run() -> None:
@@ -164,7 +168,8 @@ def run() -> None:
                 return
             if record.get("icao24") and ghosts.is_ghost(record["icao24"], record.get("callsign"), registration=record.get("registration")):
                 return                      # a bit-flipped copy of an address already seen
-            topic = "{}/{}/backbone/{}/unit/tracks/v1".format(TOPIC_ROOT, dimension, slot)
+            entity = record.pop("_entity", "unit")
+            topic = "{}/{}/backbone/{}/{}/tracks/v1".format(TOPIC_ROOT, dimension, slot, entity)
             session.put(topic, json.dumps(record).encode())
         except Exception as exc:
             print("json translator decode error:", exc, flush=True)
