@@ -279,6 +279,34 @@ docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" restart zenoh-admin-pro
 ok "zenoh-admin-proxy restarted"
 section_done
 
+section "Router session check"
+# `docker compose up -d` leaves an unchanged router running, and a router can keep listening
+# while it refuses every new Zenoh session (the bridges then loop on "Unable to connect to any of
+# [tcp/127.0.0.1:7448]"). Open a real session the way a bridge does; if that fails, restart the
+# router and the native services once so an update never ends with every feed dark.
+router_session_ok() {
+    PYTHONPATH="$ROOT/compose" timeout 20 "$PYTHON" -c \
+        'from protocols.vendors.random.gateway import open_session; open_session().close()' >/dev/null 2>&1
+}
+router_ok=0
+for _ in 1 2 3 4; do
+    router_session_ok && { router_ok=1; break; }
+    sleep 5
+done
+if [ "$router_ok" -eq 1 ]; then
+    ok "Zenoh router accepts sessions"
+else
+    warn "Zenoh router refuses new sessions — restarting it and the native services"
+    docker restart "${ROUTER_WATCHDOG_CONTAINER:-efdi-pod-zenoh-router}" >/dev/null \
+        || fail "Zenoh router restart failed"
+    for _ in $(seq 1 30); do router_session_ok && { router_ok=1; break; }; sleep 2; done
+    [ "$router_ok" -eq 1 ] || fail "Zenoh router still refuses sessions after a restart"
+    "$ROOT/scripts/stop.sh" native
+    EFDI_NONINTERACTIVE=1 "$ROOT/scripts/start.sh" --restore
+    ok "Zenoh router restarted, native runtime restored"
+fi
+section_done
+
 section "Self-test"
 if ! efdi_selftest; then
     warn "Self-test failed — escalating to health.sh for automatic recovery"
