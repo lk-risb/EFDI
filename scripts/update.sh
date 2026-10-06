@@ -257,6 +257,14 @@ docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d --remove-orphans 
     || { dump_service_logs "$COMPOSE_FILE" "$ENV_FILE"; fail "Infrastructure restart failed"; }
 ok "Infrastructure restarted"
 
+# Rebuilding retags the image, which leaves the previous build behind as an untagged ("dangling")
+# image, and BuildKit keeps growing its layer cache. Remove the dangling images (never one a
+# container uses, never a volume) and cap the cache so repeated updates cannot fill the disk.
+# The cache is kept up to EFDI_BUILD_CACHE_KEEP (default 3gb) so the next update stays incremental.
+docker image prune -f >/dev/null 2>&1 || true
+docker builder prune -f --keep-storage "${EFDI_BUILD_CACHE_KEEP:-3gb}" >/dev/null 2>&1 || true
+ok "Old images removed, build cache capped at ${EFDI_BUILD_CACHE_KEEP:-3gb}"
+
 info "Restarting native bridges and layers from the saved selection..."
 "$ROOT/scripts/stop.sh" native
 EFDI_NONINTERACTIVE=1 "$ROOT/scripts/start.sh" --restore

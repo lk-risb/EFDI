@@ -70,6 +70,10 @@ class TcpSender:
         self._thread.start()
 
     def send(self, xml: str) -> None:
+        if not self._thread.is_alive() and not self._stop.is_set():
+            print("TAK writer thread was not running, restarting it", flush=True)
+            self._thread = threading.Thread(target=self._run, name="tak-writer", daemon=True)
+            self._thread.start()
         # Hand off to the writer thread; never blocks the caller. On overflow,
         # drop the oldest queued event so the freshest still gets through.
         while not self._stop.is_set():
@@ -100,47 +104,62 @@ class TcpSender:
         return s
 
     def _run(self) -> None:
+        # The writer must never die: a dead thread leaves the layer running and connected to
+        # Zenoh but silently sending nothing to TAK. Anything unexpected is logged and the
+        # connect/write loop starts over; _serve closes its own socket on the way out.
+        while not self._stop.is_set():
+            try:
+                self._serve()
+            except Exception as exc:
+                print("TAK writer error ({}: {}), restarting in {}s".format(
+                    type(exc).__name__, exc, RECONNECT_S), flush=True)
+                self._stop.wait(RECONNECT_S)
+
+    def _serve(self) -> None:
         sock: socket.socket | None = None
         idx = 0
-        while not self._stop.is_set():
-            if sock is None:
-                host, port = self.hosts[idx % len(self.hosts)]
+        try:
+            while not self._stop.is_set():
+                if sock is None:
+                    host, port = self.hosts[idx % len(self.hosts)]
+                    try:
+                        sock = self._open(host, port)
+                        print("TAK {} connected → {}:{}".format(
+                            "TLS" if self._tls else "TCP", host, port), flush=True)
+                    except Exception as exc:     # OSError, ssl.SSLError, ValueError from a bad cert path...
+                        # Connect failed → this path is down; rotate to the next
+                        # candidate and back off. One thread, so no reconnect storm.
+                        print("TAK connect failed ({}:{}) — {}, next candidate in {}s".format(
+                            host, port, exc, RECONNECT_S), flush=True)
+                        idx += 1
+                        self._stop.wait(RECONNECT_S)
+                        continue
                 try:
-                    sock = self._open(host, port)
-                    print("TAK {} connected → {}:{}".format(
-                        "TLS" if self._tls else "TCP", host, port), flush=True)
-                except OSError as exc:
-                    # Connect failed → this path is down; rotate to the next
-                    # candidate and back off. One thread, so no reconnect storm.
-                    print("TAK connect failed ({}:{}) — {}, next candidate in {}s".format(
-                        host, port, exc, RECONNECT_S), flush=True)
-                    idx += 1
+                    xml = self._q.get(timeout=1.0)
+                except queue.Empty:
+                    continue  # idle: loop back to re-check the stop flag
+                try:
+                    sock.sendall((xml + "\n").encode("utf-8"))
+                except Exception as exc:
+                    print("TAK write failed ({}), reconnecting in {}s".format(exc, RECONNECT_S), flush=True)
+                    # A failed write means the server closed an established stream,
+                    # not that the path is down — reconnect to the SAME candidate.
+                    # The candidates are alternate addresses of one TAK Server, which
+                    # identifies clients by certificate, so returning on a different
+                    # address would drop the prior session and churn. If the path is
+                    # genuinely down, the next connect fails and rotation happens there.
+                    try:
+                        sock.close()
+                    except OSError:
+                        pass
+                    sock = None
                     self._stop.wait(RECONNECT_S)
-                    continue
-            try:
-                xml = self._q.get(timeout=1.0)
-            except queue.Empty:
-                continue  # idle: loop back to re-check the stop flag
-            try:
-                sock.sendall((xml + "\n").encode("utf-8"))
-            except OSError:
-                # A failed write means the server closed an established stream,
-                # not that the path is down — reconnect to the SAME candidate.
-                # The candidates are alternate addresses of one TAK Server, which
-                # identifies clients by certificate, so returning on a different
-                # address would drop the prior session and churn. If the path is
-                # genuinely down, the next connect fails and rotation happens there.
+        finally:
+            if sock is not None:
                 try:
                     sock.close()
                 except OSError:
                     pass
-                sock = None
-                self._stop.wait(RECONNECT_S)
-        if sock is not None:
-            try:
-                sock.close()
-            except OSError:
-                pass
 
     def close(self) -> None:
         self._stop.set()
