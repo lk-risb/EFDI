@@ -34,7 +34,7 @@ echo -e "${NC}"
 # Numbered, framed step banners (ported from the INTCORE installer's
 # "====\n[N/TOTAL] Title...\n====" style), overriding _spinner.sh's plain
 # underlined section() for this script only.
-TOTAL_STEPS=9
+TOTAL_STEPS=11
 STEP=0
 SECTION_TITLE=""
 _SECTION_RULE="$(printf '=%.0s' $(seq 1 70))"
