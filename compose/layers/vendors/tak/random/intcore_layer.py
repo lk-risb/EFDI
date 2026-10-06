@@ -46,8 +46,8 @@ import urllib.request
 
 from namespace_prefix import topic_root
 from protocols.vendors.random.gateway import open_session, subscribe
-from compose.layers.vendors.tak.tak_layer import _is_unfused_sensor_track
-from compose.layers.vendors.tak.systematic.sitaware_layer import _TOPIC_SIDC, _resolve_sidc, track_to_nvg_item, _NON_JSON_VIEWS
+from layers.vendors.tak.tak_layer import _is_unfused_sensor_track
+from layers.vendors.tak.systematic.sitaware_layer import _TOPIC_SIDC, _resolve_sidc, track_to_nvg_item, _NON_JSON_VIEWS
 
 TOPIC_ROOT = topic_root()
 ZENOH_RETRY_S = 5

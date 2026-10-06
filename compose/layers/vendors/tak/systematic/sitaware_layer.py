@@ -45,7 +45,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from defusedxml import ElementTree as SafeET
 from defusedxml.common import DefusedXmlException
-from compose.layers.vendors.tak.tak_layer import (
+from layers.vendors.tak.tak_layer import (
     _build_remarks,
     _callsign as _cot_callsign,
     _course,
