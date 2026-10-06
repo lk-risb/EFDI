@@ -136,3 +136,19 @@ def test_socbx_adsb_aircraft_go_to_civ_aircraft_but_other_objects_stay_units():
     records = {r["uid"]: r for r in socbx.unified_records(msg.SerializeToString())}
     assert (records["502D5A"]["_slot"], records["502D5A"]["_entity"]) == ("civ", "aircraft")
     assert records["abc-1"]["_slot"] == "unknown" and "_entity" not in records["abc-1"]
+
+
+def test_echo_filter_recognises_an_anonymous_copy_of_a_fixed_sensor_by_position():
+    sensor = {"uid": "SENS-MAINLINE-DRONU-595EFFB1", "sensor_id": "MAINLINE-DRONU-595EFFB1", "sensor_name": "radar-56138",
+              "lat_deg": 54.65255, "lon_deg": 25.36503}
+    echoes = EchoFilter()
+    echoes.on_sample(mock.Mock(payload=json.dumps(sensor).encode()))
+    copy = {"uid": "31CEFC90-DB5F-5C96-A29A-E3D373A8E22C", "callsign": "E3D373A8E22C", "lat_deg": 54.65255, "lon_deg": 25.36503}
+    assert echoes.is_echo(copy)
+    assert echoes.is_echo(dict(copy, lat_deg=54.65260))                         # a few metres off, still the same place
+    assert not echoes.is_echo(dict(copy, lat_deg=54.7))                          # a different place
+    assert not echoes.is_echo(dict(copy, icao24="e3d373"))                       # an aircraft passing over it is not a sensor copy
+    moving = dict(sensor, uid="TRK-1", sensor_id=None)
+    other = EchoFilter()
+    other.on_sample(mock.Mock(payload=json.dumps(moving).encode()))
+    assert not other.is_echo(copy)                                               # only fixed sensors count

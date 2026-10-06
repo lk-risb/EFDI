@@ -288,4 +288,5 @@ def test_a_zone_too_big_for_one_cot_event_is_simplified_to_fit():
     (xml,) = tak_layer.shape_cots(track, "a-n-G-I-R")
     assert 30000 < len(xml.encode()) < tak_layer.MAX_COT_BYTES < 65536 and 500 < xml.count("<link point=") < n
     small = {**track, "geometry": {"type": "Polygon", "coordinates": [[[24, 54], [25, 54], [25, 55], [24, 54]]]}}
-    assert tak_layer.shape_cots(small, "a-n-G-I-R") == [tak_layer.track_to_cot(small, "a-n-G-I-R")]
+    untimed = lambda xml: re.sub(r'(time|start|stale)="[^"]*"', "", xml)           # every call stamps the current time
+    assert [untimed(x) for x in tak_layer.shape_cots(small, "a-n-G-I-R")] == [untimed(tak_layer.track_to_cot(small, "a-n-G-I-R"))]
