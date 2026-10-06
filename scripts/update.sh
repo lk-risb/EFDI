@@ -285,7 +285,7 @@ section "Router session check"
 # [tcp/127.0.0.1:7448]"). Open a real session the way a bridge does; if that fails, restart the
 # router and the native services once so an update never ends with every feed dark.
 router_session_ok() {
-    PYTHONPATH="$ROOT/compose" timeout 20 "$PYTHON" -c \
+    PYTHONPATH="$ROOT/compose/generated:$ROOT/compose/generated/protocols:$ROOT/compose:$ROOT/compose/control" timeout 20 "$PYTHON" -c \
         'from protocols.vendors.random.gateway import open_session; open_session().close()' >/dev/null 2>&1
 }
 router_ok=0
