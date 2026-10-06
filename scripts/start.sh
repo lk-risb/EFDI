@@ -1369,6 +1369,12 @@ for svc in "${SERVICES[@]}"; do
         restored=1
     fi
 done
+# A safety service must not depend on what an older launcher saved: a gateway restored from a
+# selection written before router-watchdog existed would never run it, and a router that stops
+# accepting sessions would then black out every feed until someone restarts it by hand.
+if svc_ready router-watchdog; then
+    sel[router-watchdog]=1
+fi
 if (( restored == 0 )); then
     for svc in zenoh admin-control tak_layer track-fusion asterix stanag; do
         sel[$svc]=1
