@@ -14,8 +14,8 @@ longer active are retracted with a JSON tombstone. Only status "active" is publi
 mapa.ua splits a group into one object per drone ("308825_u0".."308825_u3", a metre or so
 apart); they are published as one marker with a count, at the group's centre. A group that is the
 same threat as one NEPTUN reports (see merge_with_neptun) is not drawn a second time: NEPTUN's
-marker stays (its report is fresher and declares an error radius) and mapa's trail line stays,
-tagged with the NEPTUN threat it matches. Anything ambiguous is left as two markers.
+marker stays (its report is fresher and declares an error radius) and mapa's marker and its trail
+line are not drawn. Anything ambiguous is left as two markers.
 
 Env:
   MAPA_URL         endpoint (default https://mapa.ua/api/v1/current)
@@ -255,11 +255,9 @@ def main():
                     with neptun_lock:
                         fresh = {u: t for u, (t, seen) in neptun.items() if now - seen <= NEPTUN_MAX_AGE_S}
                     markers = {u: t for u, (_, t) in current.items() if not u.endswith(TRAIL_SUFFIX)}
-                    for mapa_uid, neptun_uid in merge_with_neptun(markers, fresh).items():
+                    for mapa_uid in merge_with_neptun(markers, fresh):
                         current.pop(mapa_uid)                 # NEPTUN's marker stays; ours would draw it twice
-                        trail = current.get(mapa_uid + TRAIL_SUFFIX)
-                        if trail:
-                            trail[1]["remarks"] += " | Same threat as {}".format(fresh[neptun_uid].get("callsign") or neptun_uid)
+                        current.pop(mapa_uid + TRAIL_SUFFIX, None)   # a trail goes with its marker
                 for prefix, track in current.values():
                     _put(session, prefix, track)
                 for uid in set(published) - set(current):

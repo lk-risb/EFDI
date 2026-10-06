@@ -135,6 +135,12 @@ _DISTRESS_NAV = frozenset({"aground", "not_under_command", "not under command"})
 _dr_lock     = threading.Lock()
 _dr_store:   dict[str, dict] = {}
 _drawn_uids: set = set()      # uids sent as drawing-tool shapes (u-d-f), whose delete must name that type
+# A trail line belongs to its marker (uid + _TRAIL): when the marker is withdrawn or stops being reported the
+# line must go too. ATAK/WinTAK never expire drawing-tool shapes by their stale time, so the layer does it.
+_TRAIL_SUFFIX = "-TRAIL"
+_TRAIL_ORPHAN_S = float(os.environ.get("TAK_TRAIL_ORPHAN_S", "180"))
+_marker_seen: dict[str, float] = {}      # uid -> when a marker (not a trail) was last sent
+_trail_sent: dict[str, float] = {}       # trail uid -> when it was last sent
 _radar_status_lock = threading.Lock()
 _radar_status: dict[str, dict] = {}   # "sac-sic" → latest CAT-34 status dict
 
@@ -555,12 +561,26 @@ def _local_clock_suffix(ts, lat, lon) -> str:
         return ""
 
 
+def _retract_orphan_trails(sender, now: float) -> None:
+    """Delete the trail line of every marker that has not been sent for _TRAIL_ORPHAN_S (it was withdrawn
+    without a tombstone, for instance by a bridge restart) and forget markers unseen for an hour."""
+    for trail_uid, sent in list(_trail_sent.items()):
+        parent = trail_uid[:-len(_TRAIL_SUFFIX)]
+        if now - max(_marker_seen.get(parent, 0.0), sent if parent not in _marker_seen else 0.0) > _TRAIL_ORPHAN_S:
+            sender.send(_delete_point_cot(trail_uid, now, "u-d-f"))
+            _trail_sent.pop(trail_uid, None)
+            _drawn_uids.discard(trail_uid)
+    for uid in [u for u, seen in _marker_seen.items() if now - seen > 3600]:
+        _marker_seen.pop(uid, None)
+
+
 def _start_dr_thread(sender):
     """Background thread: dead-reckon contacts that haven't sent a real update."""
     def _loop():
         while True:
             time.sleep(_DR_TICK_S)
             now = time.time()
+            _retract_orphan_trails(sender, now)
             with _dr_lock:
                 items = list(_dr_store.items())
             for uid, st in items:
@@ -1818,6 +1838,11 @@ def make_handler(cot_type_or_fn, sender, verbose: bool, stale_s: float = COT_STA
             _drawn_uids.discard(uid)
             with _dr_lock:
                 _dr_store.pop(uid, None)            # or dead reckoning would send the deleted marker again
+            _marker_seen.pop(uid, None)
+            if uid + _TRAIL_SUFFIX in _trail_sent:  # the trail goes with its marker
+                sender.send(_delete_point_cot(uid + _TRAIL_SUFFIX, track.get("_ts"), "u-d-f"))
+                _trail_sent.pop(uid + _TRAIL_SUFFIX, None)
+                _drawn_uids.discard(uid + _TRAIL_SUFFIX)
             if verbose:
                 print("CoT deleted {}".format(uid), flush=True)
             return
@@ -1844,8 +1869,13 @@ def make_handler(cot_type_or_fn, sender, verbose: bool, stale_s: float = COT_STA
             return
         for xml in events:
             sender.send(xml)
+        sent_uid = _uid(track)
         if 'type="u-d-f"' in events[0][:400]:
-            _drawn_uids.add(_uid(track))
+            _drawn_uids.add(sent_uid)
+        if sent_uid.endswith(_TRAIL_SUFFIX):
+            _trail_sent[sent_uid] = time.time()
+        else:
+            _marker_seen[sent_uid] = time.time()
 
         # Update dead-reckoning state (skip extrapolated updates to prevent feedback).
         # Also skip AARTOS entirely: its own reported speed/heading come from

@@ -296,3 +296,26 @@ def test_delete_for_a_drawn_shape_names_its_type_and_forces_the_delete():
     shape = tak_layer._delete_point_cot("EFDI-UID-MAPA-1-TRAIL", 1.0, "u-d-f")
     assert 'type="u-d-f"' in shape and 'uid="EFDI-UID-MAPA-1-TRAIL"' in shape and "<__forcedelete" in shape and 't-x-d-d' in shape
     assert 'type="a-u-G"' in tak_layer._delete_point_cot("EFDI-UID-MAPA-1", 1.0)
+
+
+def test_a_trail_is_retracted_when_its_marker_stops_being_sent():
+    class Sender:
+        def __init__(self):
+            self.sent = []
+
+        def send(self, xml):
+            self.sent.append(xml)
+
+    for table in (tak_layer._marker_seen, tak_layer._trail_sent, tak_layer._drawn_uids):
+        table.clear()
+    sender = Sender()
+    tak_layer._marker_seen["EFDI-UID-MAPA-1"] = 1000.0
+    tak_layer._trail_sent["EFDI-UID-MAPA-1-TRAIL"] = 1000.0
+    tak_layer._trail_sent["EFDI-UID-MAPA-2-TRAIL"] = 1000.0           # its marker was never seen
+    tak_layer._marker_seen["EFDI-UID-MAPA-3"] = 1000.0
+    tak_layer._trail_sent["EFDI-UID-MAPA-3-TRAIL"] = 1000.0
+    tak_layer._marker_seen["EFDI-UID-MAPA-3"] = 1000.0 + tak_layer._TRAIL_ORPHAN_S + 50
+    tak_layer._retract_orphan_trails(sender, 1000.0 + tak_layer._TRAIL_ORPHAN_S + 60)
+    assert sorted(re.search(r'uid="([^"]+)"', x).group(1) for x in sender.sent) == ["EFDI-UID-MAPA-1-TRAIL", "EFDI-UID-MAPA-2-TRAIL"]
+    assert all('type="u-d-f"' in x for x in sender.sent)
+    assert list(tak_layer._trail_sent) == ["EFDI-UID-MAPA-3-TRAIL"]       # a live marker keeps its trail
