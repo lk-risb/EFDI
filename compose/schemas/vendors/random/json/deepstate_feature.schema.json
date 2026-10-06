@@ -56,6 +56,10 @@
     },
     "_delete": {
       "const": true
+    },
+    "stale_s": {
+      "type": "number",
+      "description": "Seconds the layers keep this track without a re-send (zones 600, DeepState markers 600): the bridges re-send rarely because TAK stores every event."
     }
   },
   "additionalProperties": false

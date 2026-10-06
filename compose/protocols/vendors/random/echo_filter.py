@@ -1,12 +1,15 @@
-"""Recognise our own sensors when a partner sends them back.
+"""Recognise our own tracks (sensors, alert zones, markers) when a partner sends them back.
 
 A participant on the backbone fabric can ingest what this pod exports and publish it
 again under its own ids. The soc-bx feed uses object ids such as
 "SENSOR:MAINLINE-DRONU-0478D5C6" for our sensor MAINLINE-DRONU-0478D5C6; a generic JSON
 feed uses a UUID but keeps our display name ("radar-30684") as the callsign. Decoded as
-normal tracks these get a uid unlike the original, so every such sensor shows twice.
-EchoFilter remembers the sensor ids and display names this pod publishes itself, so a
-decoder can drop those copies.
+normal tracks these get a uid unlike the original, so every such sensor shows twice. The
+same happens to our alert zones: a partner's copy arrived as a ground marker called
+"DA-ZONE-UA-R:..." (our uid as its callsign) or "UA Vyshhorodskyi District YELLOW" (our
+callsign) beside the real polygon. EchoFilter remembers the ids (sensor id, uid) and names
+(sensor name, callsign) of what this pod publishes under land/**, so a decoder can drop
+those copies.
 """
 
 import json
@@ -29,22 +32,25 @@ class EchoFilter:
         self._lock = threading.Lock()
 
     def on_sample(self, sample) -> None:
-        """Zenoh callback for this pod's own tracks (any JSON dict carrying a sensor_id).
-        Records that came in from the backbone are not ours and are ignored."""
+        """Zenoh callback for this pod's own tracks under land/**. Records that came in from the
+        backbone are not ours, and tombstones carry nothing to remember."""
         try:
             data = json.loads(bytes(sample.payload).decode())
         except (ValueError, UnicodeDecodeError):
             return
-        if not isinstance(data, dict) or not data.get("sensor_id"):
+        if not isinstance(data, dict) or data.get("_delete"):
             return
         if str(data.get("_src") or "").startswith("backbone:"):
             return
         now = time.time()
-        name = str(data.get("sensor_name") or "").strip().lower()
+        ids = {str(data[k]).upper() for k in ("sensor_id", "uid") if data.get(k)}
+        names = {str(data[k]).strip().lower() for k in ("sensor_name", "callsign") if data.get(k)}
         with self._lock:
-            self._ids[str(data["sensor_id"]).upper()] = now
-            if len(name) >= MIN_NAME_LEN and name not in _GENERIC_NAMES:
-                self._names[name] = now
+            for identifier in ids:
+                self._ids[identifier] = now
+            for name in names:
+                if len(name) >= MIN_NAME_LEN and name not in _GENERIC_NAMES:
+                    self._names[name] = now
 
     def is_echo(self, record: dict, now: float | None = None) -> bool:
         """True when the record's uid embeds one of our sensor ids, or its callsign or

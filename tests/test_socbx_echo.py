@@ -80,3 +80,18 @@ def test_echo_filter_also_matches_our_sensor_display_name_for_uuid_keyed_copies(
     assert echoes.is_echo({"uid": "BACKBONE-X", "label": "RADAR-30684"})
     assert not echoes.is_echo({"uid": "BACKBONE-X", "callsign": "radar-99999"})
     assert not echoes.is_echo({"uid": "BACKBONE-X", "callsign": "dronu-sensor"})
+
+
+def test_echo_filter_also_recognises_copies_of_our_alert_zones_and_markers():
+    echoes = EchoFilter()
+    echoes.on_sample(_sample({"uid": "DA-ZONE-UA-R:вишгородський", "callsign": "UA Vyshhorodskyi District YELLOW",
+                              "_src": "dangausakis.lt", "geometry": {"type": "Polygon", "coordinates": []}}))
+    echoes.on_sample(_sample({"uid": "DS-UNIT-12", "callsign": "488th Motor Rifle Regiment", "_src": "deepstatemap.live"}))
+    echoes.on_sample(_sample({"uid": "DA-ZONE-GONE-1234567", "callsign": "Withdrawn zone", "_delete": True}))
+    echoes.on_sample(_sample({"uid": "BACKBONE-SOMEONE-ELSES-OBJECT", "callsign": "Partner thing", "_src": "backbone:json:x"}))
+    assert echoes.is_echo({"uid": "BACKBONE-DA-ZONE-UA-R:вишгородський", "callsign": "x"})      # our uid inside theirs
+    assert echoes.is_echo({"uid": "BACKBONE-u1", "callsign": "UA Vyshhorodskyi District YELLOW"})  # our callsign
+    assert echoes.is_echo({"uid": "BACKBONE-u2", "label": "488th Motor Rifle Regiment"})
+    assert not echoes.is_echo({"uid": "BACKBONE-u3", "callsign": "Withdrawn zone"})            # tombstones teach nothing
+    assert not echoes.is_echo({"uid": "BACKBONE-u4", "callsign": "Partner thing"})              # theirs, not ours
+    assert not echoes.is_echo({"uid": "BACKBONE-u5", "callsign": "UA Other District RED"})

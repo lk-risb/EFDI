@@ -261,6 +261,8 @@ start_bridges() {
     start dronuradaras bridges/vendors/mainline/dronuradaras_bridge.py
     start dangausakis bridges/vendors/dangausakis/dangausakis_bridge.py
     start deepstate bridges/vendors/deepstate/deepstate_bridge.py
+    start mapa bridges/vendors/mapa/mapa_bridge.py
+    start geozones bridges/vendors/dronealerts/geozones_bridge.py
 
     start meteolt bridges/vendors/meteolt/meteolt_forecast_bridge.py
 

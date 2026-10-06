@@ -67,6 +67,7 @@ NVG_VERSION = "2.0.2"
 NVG_SCHEMA_REF = "urn:efdi:nvg-fields"
 REFRESH_S   = 10    # re-PUT all live tracks at this interval
 STALE_S     = 120   # delete tracks older than this
+MAX_SHAPE_POINTS = 1000   # a drawn shape is cut to this many vertices; the bridges simplify below it
 ZENOH_RETRY_S = 5
 
 # APP-6(B) SIDC codes — keyed by new schema wildcard patterns. `civ`/`mil`
@@ -704,7 +705,7 @@ def track_to_nvg_item(
         coordinates = geometry.get("coordinates")
 
         def add_points(parent, values):
-            for coordinate in values[:256] if isinstance(values, list) else []:
+            for coordinate in values[:MAX_SHAPE_POINTS] if isinstance(values, list) else []:
                 if not isinstance(coordinate, (list, tuple)) or len(coordinate) < 2:
                     continue
                 try:
@@ -1098,11 +1099,14 @@ def make_handler(
             if verbose:
                 print("NVG feed removed {}".format(uid), flush=True)
             return
-        uid = cache.upsert(
-            track,
-            _resolve_sidc(sidc, track),
-            stale_s=stale_s if stale_s is not None else STALE_S,
-        )
+        item_stale_s = stale_s if stale_s is not None else STALE_S
+        try:                                    # a publisher may ask for longer for what it re-sends rarely
+            wanted = float(track.get("stale_s"))
+            if math.isfinite(wanted) and 1 <= wanted <= 3600:
+                item_stale_s = wanted
+        except (TypeError, ValueError):
+            pass
+        uid = cache.upsert(track, _resolve_sidc(sidc, track), stale_s=item_stale_s)
         if verbose and uid:
             print("NVG feed cached {}".format(uid), flush=True)
 

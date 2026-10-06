@@ -159,7 +159,7 @@ def run() -> None:
             record, dimension, slot = result
             if echoes.is_echo(record):      # a partner's copy of one of our own sensors
                 return
-            if record.get("icao24") and ghosts.is_ghost(record["icao24"], record.get("callsign")):
+            if record.get("icao24") and ghosts.is_ghost(record["icao24"], record.get("callsign"), registration=record.get("registration")):
                 return                      # a bit-flipped copy of an address already seen
             topic = "{}/{}/backbone/{}/unit/tracks/v1".format(TOPIC_ROOT, dimension, slot)
             session.put(topic, json.dumps(record).encode())

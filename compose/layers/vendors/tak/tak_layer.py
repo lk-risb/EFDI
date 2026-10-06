@@ -82,6 +82,9 @@ COT_STALE_S    = AIR_STALE_S  # default (air)
 SAT_STALE_S    = 300     # satellites: polled every 60s, 5 min gives 5× margin
 ENV_STALE_S    = 3600    # weather stations: polled every 15–30 min, 1 h gives plenty of margin
 
+# A drawn shape (zone, trail) is cut to this many vertices; the bridges simplify below it.
+MAX_SHAPE_POINTS = 1000
+
 # Dead-reckoning — extrapolate position forward when sensor updates stop
 _DR_TICK_S   = 2.0   # extrapolation interval (seconds)
 _DR_MIN_MS   = 5.15  # don't extrapolate below ~10 kt (5.15 m/s)
@@ -1474,8 +1477,12 @@ _TRAIL_COLORS = {
 }
 
 
+# shape_style "geozone": a standing civil-drone restriction (not an alert), drawn in blue.
+_GEOZONE_COLORS = {"blue": (_argb(0xCC, 0x3399FF), _argb(_FILL_ALPHA, 0x3399FF))}
+
+
 def _shape_colors(track: dict) -> dict:
-    return {"wash": _WASH_COLORS, "country": _COUNTRY_COLORS, "trail": _TRAIL_COLORS}.get(
+    return {"wash": _WASH_COLORS, "country": _COUNTRY_COLORS, "trail": _TRAIL_COLORS, "geozone": _GEOZONE_COLORS}.get(
         track.get("shape_style"), _SHAPE_COLORS)
 
 
@@ -1573,13 +1580,13 @@ def track_to_cot(track: dict, cot_type: str, stale_s: float = COT_STALE_S) -> st
             if rings and isinstance(rings[0], list):
                 shape = ET.SubElement(detail, "shape")
                 polygon = ET.SubElement(shape, "polygon")
-                for coordinate in rings[0][:256]:
+                for coordinate in rings[0][:MAX_SHAPE_POINTS]:
                     shape_point(polygon, coordinate)
         elif geometry_type == "LineString" and track.get("shape_style") == "trail" and isinstance(coordinates, list):
             # An open drawing-tool line: type u-d-f with one <link point> per vertex, not closed.
             event.set("type", "u-d-f")
             event.set("how", "h-e")
-            for coordinate in coordinates[:256]:
+            for coordinate in coordinates[:MAX_SHAPE_POINTS]:
                 if isinstance(coordinate, (list, tuple)) and len(coordinate) >= 2:
                     try:
                         ET.SubElement(detail, "link", {"point": "{},{},{}".format(
@@ -1597,7 +1604,7 @@ def track_to_cot(track: dict, cot_type: str, stale_s: float = COT_STALE_S) -> st
             if isinstance(lines, list) and lines:
                 shape = ET.SubElement(detail, "shape")
                 line = ET.SubElement(shape, "line")
-                for coordinate in (lines[0] if isinstance(lines[0], list) else [])[:256]:
+                for coordinate in (lines[0] if isinstance(lines[0], list) else [])[:MAX_SHAPE_POINTS]:
                     shape_point(line, coordinate)
         if geometry_type == "Polygon" and track.get("shape_color") in _shape_colors(track):
             # Drawing-tool colours (ARGB as signed int32), honoured by ATAK/WinTAK for
@@ -1609,7 +1616,7 @@ def track_to_cot(track: dict, cot_type: str, stale_s: float = COT_STALE_S) -> st
             # above is ignored by them, so without this a zone is only a label.
             event.set("type", "u-d-f")
             event.set("how", "h-e")       # drawn shapes are "human entered"; some clients skip m-g ones
-            ring = [(round(float(c[1]), 6), round(float(c[0]), 6)) for c in coordinates[0][:256]
+            ring = [(round(float(c[1]), 6), round(float(c[0]), 6)) for c in coordinates[0][:MAX_SHAPE_POINTS]
                     if isinstance(c, (list, tuple)) and len(c) >= 2]
             if ring and ring[0] != ring[-1]:
                 ring.append(ring[0])
@@ -1721,6 +1728,16 @@ def _terminal_view(key: str) -> str:
 # Zenoh → CoT callbacks
 # ---------------------------------------------------------------------------
 
+def _track_stale_s(track: dict, default: float) -> float:
+    """A publisher may ask for a longer stale time for something it re-sends rarely (zones,
+    unit markers); anything not a number between 1 s and 1 h is ignored."""
+    try:
+        wanted = float(track.get("stale_s"))
+    except (TypeError, ValueError):
+        return default
+    return wanted if math.isfinite(wanted) and 1 <= wanted <= 3600 else default
+
+
 def make_handler(cot_type_or_fn, sender, verbose: bool, stale_s: float = COT_STALE_S):
     def handler(sample):
         # An object published via publish_dual appears in several views
@@ -1786,7 +1803,7 @@ def make_handler(cot_type_or_fn, sender, verbose: bool, stale_s: float = COT_STA
             stale_s_used = LAND_STALE_S
         else:
             cot_type     = cot_type_or_fn(track) if callable(cot_type_or_fn) else cot_type_or_fn
-            stale_s_used = stale_s
+            stale_s_used = _track_stale_s(track, stale_s)
 
         # Broadcasting an emergency/status GeoChat alert to every connected
         # TAK client is a separate concern from translating this track to

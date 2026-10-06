@@ -53,6 +53,7 @@ Env:
                                 for this long, or reports an error (default 1800)
   DANGAUSAKIS_AIRCRAFT_POLL_S   aircraft poll interval, seconds (default 15)
   DANGAUSAKIS_ZONES             set 0 to disable the coloured region polygons
+  DANGAUSAKIS_ZONE_REFRESH_S    re-send an unchanged zone this often (default 240; a zone lives 600 s)
   DANGAUSAKIS_COUNTRY_ZONES     set 0 to skip the faint oblast fills and the standing Belarus/Russia
                                 colours the site draws (default on; needs DANGAUSAKIS_ZONES)
   DANGAUSAKIS_COMMUNITY         set 0 to disable the community drone reports and incident
@@ -111,7 +112,10 @@ MAP_PAGE = "https://dangausakis.lt/zemelapis/"
 _BOUNDARY_JS_RE = re.compile(r"/wp-content/plugins/dangaus-akis-map-assets/assets/adminGeoData\.[0-9a-f]+\.js")
 BOUNDARY_REFRESH_S = 6 * 3600
 BOUNDARY_RETRY_S = 300
-ZONE_MAX_VERTICES = 150      # layers draw at most 256 points per ring
+ZONE_MAX_VERTICES = 400      # the layers draw up to 1000 points per shape
+COUNTRY_MAX_VERTICES = 900   # a whole country needs more points to keep its coast and borders
+ZONE_STALE_S = 600           # zones are re-sent every ZONE_REFRESH_S, so they may live much longer than a track
+ZONE_REFRESH_S = int(os.environ.get("DANGAUSAKIS_ZONE_REFRESH_S", "240"))
 ZONE_MAX_PARTS = 8           # largest parts of a multi-part region
 ZONE_COLORS = {"red", "orange", "yellow"}
 ZONE_PREFIX = "{}/land/dangausakis/airzone/neutral/zone".format(TOPIC_ROOT)
@@ -214,6 +218,7 @@ def zone_tracks(alerts: dict, boundaries: dict, now: float) -> dict:
                 "lat_deg": round(sum(p[1] for p in ring[:-1]) / (len(ring) - 1), 5),
                 "lon_deg": round(sum(p[0] for p in ring[:-1]) / (len(ring) - 1), 5),
                 "geometry": {"type": "Polygon", "coordinates": [ring]},
+                "stale_s": ZONE_STALE_S,
                 "shape_color": alert["level"],
                 "alert_id": alert_id,
                 "country": alert["country"],
@@ -243,13 +248,14 @@ def _in_theatre(ring: list) -> bool:
 
 
 def _wash_track(uid: str, region: dict, level: str, callsign: str, remarks: str, rings: list, now: float,
-                **extra) -> dict:
-    ring = simplify_ring(rings[0])
+                max_vertices: int = ZONE_MAX_VERTICES, **extra) -> dict:
+    ring = simplify_ring(rings[0], max_vertices)
     return {
         "_src": "dangausakis.lt", "_ts": now, "uid": uid, "type": "air_alert_zone", "callsign": callsign,
         "lat_deg": round(sum(p[1] for p in ring[:-1]) / (len(ring) - 1), 5),
         "lon_deg": round(sum(p[0] for p in ring[:-1]) / (len(ring) - 1), 5),
-        "geometry": {"type": "Polygon", "coordinates": [ring]}, "shape_color": level, "shape_style": "wash",
+        "geometry": {"type": "Polygon", "coordinates": [ring]}, "stale_s": ZONE_STALE_S,
+        "shape_color": level, "shape_style": "wash",
         "level": level, "remarks": remarks, **extra,
     }
 
@@ -287,7 +293,8 @@ def wash_tracks(current: dict, boundaries: dict, standing: dict, now: float) -> 
             out[uid] = (ZONE_PREFIX, _wash_track(
                 uid, region, level, "{} {} ({})".format(code, region["name"], region["tone"]),
                 "Standing status shown by dangausakis.lt: {} - not an official warning".format(region["tone"]),
-                [ring], now, country=code, alert_id="COUNTRY:" + code, shape_style="country"))
+                [ring], now, max_vertices=COUNTRY_MAX_VERTICES, country=code, alert_id="COUNTRY:" + code,
+                shape_style="country"))
     return out
 
 
@@ -500,6 +507,7 @@ def main():
     boundaries, next_boundaries = None, 0.0
     standing: dict = {}
     known_zones: dict = {}
+    zone_sent: dict = {}                      # uid -> (digest of what was sent, time sent)
     next_alerts = next_aircraft = next_community = 0.0
     health = alert_sources.SourceHealth()
     previous_alerts = None                    # None until the first cycle: nothing to diff against
@@ -580,6 +588,13 @@ def main():
                 if WASH_ENABLED:
                     zones.update(wash_tracks(current, boundaries or {}, standing, now))
                 for uid, (prefix, track) in zones.items():
+                    # A zone is big (hundreds of points) and TAK stores every event, so an unchanged
+                    # zone is re-sent only every ZONE_REFRESH_S, well inside its ZONE_STALE_S.
+                    digest = json.dumps({k: v for k, v in track.items() if k != "_ts"}, sort_keys=True)
+                    sent = zone_sent.get(uid)
+                    if sent and sent[0] == digest and time.time() - sent[1] < ZONE_REFRESH_S:
+                        continue
+                    zone_sent[uid] = (digest, time.time())
                     session.put(add_version(semantic_topic(prefix, track)), json.dumps(track).encode(),
                                 encoding=zenoh.Encoding.APPLICATION_JSON.with_schema("efdi:dangausakis_air_zone"))
                 for uid in set(known_zones) - set(zones):
@@ -587,6 +602,8 @@ def main():
                     session.put(add_version(semantic_topic(prefix, track)),
                                 json.dumps({"uid": uid, "_delete": True, "_ts": now,
                                             "_src": "dangausakis.lt"}).encode())
+                for uid in set(zone_sent) - set(zones):
+                    del zone_sent[uid]
                 known_zones = zones
     except KeyboardInterrupt:
         pass

@@ -50,3 +50,10 @@ def test_ghost_filter_forgets_after_the_window():
     assert not ghosts.is_ghost("c2c36d", "CFC3455", now=0)
     assert ghosts.is_ghost("82c36d", "CFC3455", now=50)
     assert not ghosts.is_ghost("82c36d", "CFC3455", now=500)       # the first address is long gone
+
+
+def test_ghost_filter_also_matches_on_registration_when_the_callsign_differs():
+    ghosts = GhostFilter()
+    assert not ghosts.is_ghost("4C11EC", "ASL124", registration="LN-ABC")
+    assert ghosts.is_ghost("4C01EC", "ASL999", registration="LN-ABC")       # new flight number, same airframe
+    assert not ghosts.is_ghost("4C01EC", "ASL999", registration="LN-XYZ")   # a different airframe is left alone

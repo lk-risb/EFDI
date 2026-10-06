@@ -215,3 +215,35 @@ def test_country_style_has_the_same_fill_but_an_outline_between_a_wash_and_a_dis
     assert alpha(wash, "fillColor") == alpha(country, "fillColor") == alpha(zone, "fillColor") == 0x4D
     assert alpha(wash, "strokeColor") < alpha(country, "strokeColor") < alpha(zone, "strokeColor")
     assert 'strokeWeight value="2.0"' in country
+
+
+def test_country_zones_keep_more_vertices_than_district_zones():
+    import math
+    import random
+    rng = random.Random(7)                       # a ragged coastline: the point count falls smoothly with tolerance
+    ring = [[30 + (10 + rng.uniform(-1.5, 1.5)) * math.cos(i / 3000 * 2 * math.pi),
+             50 + (8 + rng.uniform(-1.5, 1.5)) * math.sin(i / 3000 * 2 * math.pi)] for i in range(3000)]
+    ring.append(ring[0])
+    out = bridge.wash_tracks({}, {}, {"RU": {"name": "Russia", "tone": "danger", "rings": [ring]}}, NOW)
+    n = len(out["DA-COUNTRY-RU"][1]["geometry"]["coordinates"][0])
+    district = len(bridge.simplify_ring(ring))
+    assert district <= bridge.ZONE_MAX_VERTICES < n <= bridge.COUNTRY_MAX_VERTICES <= tak_layer.MAX_SHAPE_POINTS
+
+
+def test_zones_ask_for_a_long_stale_time_and_tak_layer_honours_a_sane_one_only():
+    b = bridge.parse_boundaries(_bundle(("PL:slaskie", "Silezijos", {"type": "Polygon", "coordinates": [SQUARE]})))
+    (_, (_, track)), = bridge.zone_tracks({"PL:slaskie": _alert("PL:slaskie", level="red")}, b, NOW).items()
+    assert track["stale_s"] == bridge.ZONE_STALE_S == 600 and bridge.ZONE_REFRESH_S < bridge.ZONE_STALE_S
+    assert tak_layer._track_stale_s(track, 120) == 600
+    for bad in (None, "x", 0, -5, 99999, float("nan")):
+        assert tak_layer._track_stale_s({"stale_s": bad}, 120) == 120
+
+
+def test_a_zone_with_many_points_is_drawn_whole_by_tak_layer():
+    import math
+    ring = [[30 + math.cos(i / 700 * 6.2832), 50 + math.sin(i / 700 * 6.2832)] for i in range(700)]
+    ring.append(ring[0])
+    xml = tak_layer.track_to_cot({"uid": "z", "_ts": NOW, "lat_deg": 50, "lon_deg": 30, "callsign": "z",
+                                  "geometry": {"type": "Polygon", "coordinates": [ring]}, "shape_color": "red"},
+                                 "a-n-G-I-R")
+    assert xml.count("<link point=") == 701          # closed ring, nothing cut at the old 256 limit

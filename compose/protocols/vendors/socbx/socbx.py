@@ -177,7 +177,7 @@ def run() -> None:
         try:
             if key.endswith(_UNIFIED_SUFFIX):
                 for record in unified_records(payload):
-                    if record.get("icao24") and ghosts.is_ghost(record["icao24"], record.get("callsign")):
+                    if record.get("icao24") and ghosts.is_ghost(record["icao24"], record.get("callsign"), registration=record.get("registration")):
                         continue            # a bit-flipped copy of an address already seen
                     if echoes.is_echo(record):
                         dropped[0] += 1

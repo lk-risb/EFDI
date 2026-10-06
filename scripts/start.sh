@@ -106,7 +106,7 @@ SERVICES=(
     # Infrastructure
     zenoh admin-control cert-renewer supervisor presence
     # Open-data bridges
-    meteolt dangausakis deepstate
+    meteolt dangausakis deepstate mapa geozones
     # Sensor bridges (includes raw-ingress variants — SVC_CAT has no
     # separate "Raw ingress" bucket the way admin_control.py's Python-side
     # SERVICE_SPECS does; not unifying that here, out of scope for this pass)
@@ -194,7 +194,7 @@ declare -A SVC_CAT=(
     [cert-renewer]="Infrastructure"
     [supervisor]="Infrastructure"
     [presence]="Infrastructure"
-    [meteolt]="Open-data bridges" [dangausakis]="Open-data bridges" [deepstate]="Open-data bridges"
+    [meteolt]="Open-data bridges" [dangausakis]="Open-data bridges" [deepstate]="Open-data bridges" [mapa]="Open-data bridges" [geozones]="Open-data bridges"
     [asterix]="Sensor bridges"
     [mqtt]="Protocols" [sparkplug]="Protocols"
     [nffi]="Protocols"
@@ -244,6 +244,8 @@ declare -A SVC_DESC=(
     [nffi]="Raw NFFI XML on Zenoh → normalized friendly-force tracks"
     [dronuradaras]="dronuradaras.lt drone detection network"
     [deepstate]="DeepStateMap frontline (occupied/liberated fills, attack arrows, units) - context layer, updated daily"
+    [geozones]="Estonia + Poland civil UAS airspace-restriction zones (static, not alerts)"
+    [mapa]="MAPA.UA live drone/missile/KAB tracks with trail lines (OSINT; compare with NEPTUN)"
     [dangausakis]="dangausakis.lt alerts (→ tak_alert_layer), alert zones, ADS-B aircraft + NEPTUN drone/missile threats"
     [mainline_terminal]="mainline.inc TERMINAL drone-fleet C2 (WebSocket)"
     [mavlink-command]="Generic MAVLink drone command bridge (arm/takeoff/rtl/land/hold/goto)"
@@ -305,7 +307,7 @@ svc_ready() {
     svc_disabled "$1" && return 1
     case "$1" in
         zenoh|meteolt|\
-        dronuradaras|dangausakis|deepstate|nffi|tak_layer|tak_alert_layer|track-fusion|\
+        dronuradaras|dangausakis|deepstate|mapa|geozones|nffi|tak_layer|tak_alert_layer|track-fusion|\
         cap|sensor-health|mission-route)
             return 0 ;;
         admin-control) [[ -n "${ZENOH_ADMIN_SECRET_KEY:-}" || -n "${EFDI_CONTROL_TOKEN:-}" ]] ;;
@@ -1066,6 +1068,12 @@ launch() {
 
         deepstate)
             _start deepstate bridges/vendors/deepstate/deepstate_bridge.py
+            ;;
+        mapa)
+            _start mapa bridges/vendors/mapa/mapa_bridge.py
+            ;;
+        geozones)
+            _start geozones bridges/vendors/dronealerts/geozones_bridge.py
             ;;
         dangausakis)
             _start dangausakis bridges/vendors/dangausakis/dangausakis_bridge.py

@@ -15,14 +15,15 @@ DeepState's occupied / liberated territory polygons are NOT published: they are 
 region-based and clash with the regional air-alert zones from dangausakis and NEPTUN.
 
 The map is polled every DEEPSTATE_POLL_S, but the tracks are re-published from memory
-every DEEPSTATE_REPUBLISH_S because the layers expire a track two minutes after its
-_ts. Features that leave the map are retracted with a JSON tombstone, and nothing is
+every DEEPSTATE_REPUBLISH_S (240 s) because the layers expire a track after its stale
+time (600 s here, asked for through the track's stale_s field; TAK stores every event, so
+re-sending less often keeps its database smaller). Features that leave the map are retracted with a JSON tombstone, and nothing is
 published once the map is older than DEEPSTATE_MAX_AGE_S.
 
 Env:
   DEEPSTATE_URL            map endpoint (default the public one above)
   DEEPSTATE_POLL_S         how often to fetch the map (default 3600)
-  DEEPSTATE_REPUBLISH_S    how often to re-publish the cached tracks (default 60)
+  DEEPSTATE_REPUBLISH_S    how often to re-publish the cached tracks (default 240; they live 600 s)
   DEEPSTATE_MAX_AGE_S      publish nothing once the map is older than this (default 259200)
   DEEPSTATE_MARKERS        set 0 to publish nothing but a log line (default on)
 """
@@ -44,7 +45,8 @@ from protocols.vendors.random.track_views import add_version, semantic_topic
 TOPIC_ROOT = topic_root()
 URL = os.environ.get("DEEPSTATE_URL", "https://deepstatemap.live/api/history/last")
 POLL_S = int(os.environ.get("DEEPSTATE_POLL_S", "3600"))
-REPUBLISH_S = int(os.environ.get("DEEPSTATE_REPUBLISH_S", "60"))
+REPUBLISH_S = int(os.environ.get("DEEPSTATE_REPUBLISH_S", "240"))
+STALE_S = 600               # markers live this long between re-publishes (the map changes about daily)
 MAX_AGE_S = int(os.environ.get("DEEPSTATE_MAX_AGE_S", "259200"))
 MARKERS_ENABLED = os.environ.get("DEEPSTATE_MARKERS", "1") != "0"
 UNIT_PREFIX = "{}/land/deepstate/frontline/hostile/unit".format(TOPIC_ROOT)
@@ -96,7 +98,7 @@ def map_tracks(data: dict, now: float, markers: bool = True) -> dict:
             continue
         out[uid] = (UNIT_PREFIX, {
             "_src": "deepstatemap.live", "_ts": now, "uid": uid, "type": kind, "callsign": name,
-            "lat_deg": lat, "lon_deg": lon, "target_type": "unit", "position_uncertainty_m": 5000,
+            "lat_deg": lat, "lon_deg": lon, "target_type": "unit", "position_uncertainty_m": 5000, "stale_s": STALE_S,
             "remarks": "{} - {}".format(name, credit),
         })
     return out
