@@ -752,7 +752,9 @@ def track_to_nvg_item(
 
     # A drawn area or line is just that shape, with no anchor marker: a trail's marker would sit on top of
     # the threat's own, and a zone's would be a sensor-looking icon (SNGPES) in the middle of the region.
-    trail_only = track.get("shape_style") in {"trail", "zone", "wash", "country"} and isinstance(track.get("geometry"), dict)
+    # Plain district zones carry no shape_style at all, so any polygon or line track counts.
+    geometry_type = (track.get("geometry") or {}).get("type") if isinstance(track.get("geometry"), dict) else None
+    trail_only = geometry_type in {"Polygon", "LineString", "MultiLineString"}
     point = None if trail_only else ET.SubElement(root, "{%s}point" % NVG_NS, point_attrs)
     content = point
     geometry = track.get("geometry")

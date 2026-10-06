@@ -663,3 +663,12 @@ def test_hostile_ground_units_get_a_function_so_the_frame_is_not_empty():
         assert _resolve_sidc(hostile, {"callsign": name}) == expected, name
     assert _resolve_sidc(_TOPIC_SIDC["land/**/unknown/unit/**"], {"callsign": "x"}) == "SUGPUC----*****"
     assert _TOPIC_SIDC["land/**/friendly/unit/**"] == "SFGPU-----*****"         # NFFI units are left as they were
+
+
+def test_a_zone_without_any_shape_style_still_has_no_anchor_marker():
+    ring = [[24.0, 59.0], [24.1, 59.0], [24.1, 59.1], [24.0, 59.0]]
+    track = {"uid": "DA-ZONE-2", "callsign": "plain zone", "lat_deg": 59.03, "lon_deg": 24.03,
+             "geometry": {"type": "Polygon", "coordinates": [ring]}, "shape_color": "yellow"}      # as dangausakis publishes district zones
+    _, xml = track_to_nvg_item(track, "SNGPES----*****")
+    _, tags = _nvg_children(xml)
+    assert tags == {"polygon"}
