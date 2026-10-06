@@ -84,6 +84,10 @@ ENV_STALE_S    = 3600    # weather stations: polled every 15–30 min, 1 h gives
 
 # A drawn shape (zone, trail) is cut to this many vertices; the bridges simplify below it.
 MAX_SHAPE_POINTS = 20000
+# TAK Server refuses to write a CoT event of 65536 bytes or more to its clients ("Attempt to write
+# message greater than max size : 65740" in the messaging log), so a bigger zone never reaches a
+# client. A polygon that does not fit is simplified to the most vertices that do.
+MAX_COT_BYTES = 65000
 
 # Dead-reckoning — extrapolate position forward when sensor updates stop
 _DR_TICK_S   = 2.0   # extrapolation interval (seconds)
@@ -585,6 +589,25 @@ def _start_dr_thread(sender):
 
 def _ts(ts: float) -> str:
     return datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+
+
+def shape_cots(track: dict, cot_type: str, stale_s: float = COT_STALE_S) -> list:
+    """CoT event for a track, below MAX_COT_BYTES: a zone polygon too big for TAK Server is simplified
+    (Douglas-Peucker) to the most vertices that fit."""
+    xml = track_to_cot(track, cot_type, stale_s=stale_s)
+    geometry = track.get("geometry")
+    if xml is None or len(xml.encode()) < MAX_COT_BYTES or not isinstance(geometry, dict) or geometry.get("type") != "Polygon":
+        return [xml] if xml is not None else []
+    from protocols.vendors.random.geo_simplify import simplify_ring
+    ring = [c for c in geometry["coordinates"][0] if isinstance(c, (list, tuple)) and len(c) >= 2]
+    budget = int(len(ring) * MAX_COT_BYTES / len(xml.encode()))
+    while budget >= 8:
+        candidate = dict(track, geometry={"type": "Polygon", "coordinates": [simplify_ring(ring, budget)]})
+        fitted = track_to_cot(candidate, cot_type, stale_s=stale_s)
+        if fitted is not None and len(fitted.encode()) < MAX_COT_BYTES:
+            return [fitted]
+        budget = int(budget * 0.95)
+    return []
 
 
 def _uid(track: dict) -> str:
@@ -1575,7 +1598,9 @@ def track_to_cot(track: dict, cot_type: str, stale_s: float = COT_STALE_S) -> st
                     "le":  str(_le(track)),
                 })
 
-        if geometry_type == "Polygon" and isinstance(coordinates, list):
+        # A polygon with a zone colour is drawn from the <link point> list below; ATAK/WinTAK ignore
+        # <shape><polygon>, and writing every vertex twice doubles the size of the event.
+        if geometry_type == "Polygon" and isinstance(coordinates, list) and track.get("shape_color") not in _shape_colors(track):
             rings = coordinates[:1]
             if rings and isinstance(rings[0], list):
                 shape = ET.SubElement(detail, "shape")
@@ -1809,10 +1834,11 @@ def make_handler(cot_type_or_fn, sender, verbose: bool, stale_s: float = COT_STA
         # TAK client is a separate concern from translating this track to
         # CoT — see layers/tak_alert_layer.py, which subscribes to the same
         # tracks independently and owns that entirely.
-        xml = track_to_cot(track, cot_type, stale_s=stale_s_used)
-        if xml is None:
+        events = shape_cots(track, cot_type, stale_s=stale_s_used)
+        if not events:
             return
-        sender.send(xml)
+        for xml in events:
+            sender.send(xml)
 
         # Update dead-reckoning state (skip extrapolated updates to prevent feedback).
         # Also skip AARTOS entirely: its own reported speed/heading come from

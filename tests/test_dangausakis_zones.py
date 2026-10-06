@@ -84,7 +84,7 @@ def test_cot_zone_has_polygon_and_colours_only_when_requested():
     b = bridge.parse_boundaries(_bundle(("PL:slaskie", "Silezijos", {"type": "Polygon", "coordinates": [SQUARE]})))
     (_, (_, track)), = bridge.zone_tracks({"PL:slaskie": _alert("PL:slaskie", level="orange")}, b, NOW).items()
     xml = tak_layer.track_to_cot(track, "a-n-G-I-R")
-    assert "<polygon>" in xml
+    assert "<polygon>" not in xml                       # drawn from the links; a second copy of every vertex doubles the size
     stroke = int(re.search(r'strokeColor value="(-?\d+)"', xml).group(1)) & 0xFFFFFFFF
     assert stroke == 0xFFFF8C00
     assert "fillColor" in xml and "strokeWeight" in xml
@@ -93,7 +93,7 @@ def test_cot_zone_has_polygon_and_colours_only_when_requested():
     plain = dict(track)
     del plain["shape_color"]
     plain_xml = tak_layer.track_to_cot(plain, "a-n-G-I-R")
-    assert "strokeColor" not in plain_xml and 'type="u-d-f"' not in plain_xml
+    assert "strokeColor" not in plain_xml and 'type="u-d-f"' not in plain_xml and "<polygon>" in plain_xml
 
 
 def test_layers_route_zone_topic_and_alert_layer_ignores_zone_tracks():
@@ -276,3 +276,16 @@ def test_fill_opacity_rises_with_the_level_in_tak_and_sitaware():
         return argb >> 24
     assert [fill_alpha(c, "wash") for c in ("white", "yellow", "orange", "red")] == [0x1A, 0x26, 0x26, 0x33]
     assert fill_alpha("red", None) == 0x33 and fill_alpha("yellow", None) == 0x26
+
+
+def test_a_zone_too_big_for_one_cot_event_is_simplified_to_fit():
+    import math
+    n = 12000
+    ring = [[24 + math.cos(i * 2 * math.pi / n) * (1 + 0.1 * math.sin(i * 0.37)), 54 + math.sin(i * 2 * math.pi / n)] for i in range(n)]
+    ring.append(ring[0])
+    track = {"uid": "DA-COUNTRY-XX", "callsign": "XX", "lat_deg": 54.0, "lon_deg": 24.0, "shape_color": "red", "shape_style": "country",
+             "geometry": {"type": "Polygon", "coordinates": [ring]}}
+    (xml,) = tak_layer.shape_cots(track, "a-n-G-I-R")
+    assert 30000 < len(xml.encode()) < tak_layer.MAX_COT_BYTES < 65536 and 500 < xml.count("<link point=") < n
+    small = {**track, "geometry": {"type": "Polygon", "coordinates": [[[24, 54], [25, 54], [25, 55], [24, 54]]]}}
+    assert tak_layer.shape_cots(small, "a-n-G-I-R") == [tak_layer.track_to_cot(small, "a-n-G-I-R")]
