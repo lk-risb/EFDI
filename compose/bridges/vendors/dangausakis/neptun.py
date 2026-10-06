@@ -205,6 +205,27 @@ def _trail_track(t: dict, track: dict, now: float):
     }
 
 
+def region_crossings(state: dict, tracks: list, now: float) -> list:
+    """Alert events for threats that moved from one NEPTUN region to another since the last poll.
+
+    `state` (uid -> region) is updated in place and forgets threats that are no longer reported.
+    A threat seen for the first time, or with no region, raises nothing."""
+    events, seen = [], {}
+    for _, track in tracks:
+        region, uid = track.get("region"), track.get("uid")
+        if track.get("geometry") or not region or not uid:
+            continue
+        seen[uid] = region
+        before = state.get(uid)
+        if before and before != region:
+            events.append({"_src": "neptun.in.ua", "_ts": now, "alert_type": "drone_crossing", "uid": uid,
+                           "kind": track.get("type") or "threat", "count": track.get("count") or 1,
+                           "from": before, "to": region, "lat": track["lat_deg"], "lon": track["lon_deg"]})
+    state.clear()
+    state.update(seen)
+    return events
+
+
 class Suppression:
     """uid -> expiry, fed by fusion's announcements."""
 

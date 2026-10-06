@@ -85,7 +85,7 @@ if [ "$deployed_commit" != "$git_commit" ]; then
     # --no-cache discards every reusable layer, so it needs more free space
     # than a normal cached build — check before attempting it rather than
     # failing mid-build with a bare "no space left on device".
-    check_docker_disk_space
+    check_docker_disk_space full
     export GIT_COMMIT="$git_commit"
     docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" build --no-cache zenoh-admin \
         || fail "Clean zenoh-admin rebuild failed"

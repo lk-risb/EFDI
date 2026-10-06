@@ -152,3 +152,12 @@ def test_publish_community_tracks_tombstones_and_announces_only_new_after_first_
         bridge.publish_community(session, events.append, NOW, state, False)
     tombstones = [json.loads(c.args[1]) for c in session.put.call_args_list]
     assert sorted(t["uid"][-16:] for t in tombstones) == ["a" * 16, "b" * 16] and all(t["_delete"] for t in tombstones)
+
+
+def test_drone_crossing_event_text_and_schema_value():
+    import json as _json
+    schema = _json.load(open(ROOT / "compose/schemas/vendors/random/json/dangausakis_alert_event.schema.json"))
+    assert "drone_crossing" in schema["properties"]["alert_type"]["enum"] and {"kind", "count", "from", "to"} <= set(schema["properties"])
+    from layers.vendors.tak import tak_alert_layer
+    text = tak_alert_layer.format_event({"alert_type": "drone_crossing", "kind": "uav", "count": 3, "from": "Sumy Oblast", "to": "Poltava Oblast"})
+    assert text == "[DRONE CROSSING] UAV x3 moved Sumy Oblast -> Poltava Oblast"

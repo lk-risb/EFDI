@@ -101,3 +101,25 @@ def test_socbx_icao_id_may_carry_a_word_prefix():
     match = socbx._ICAO_HEX.match("STATES:502D5A")
     assert match and match.group(1) == "502D5A" and socbx._ICAO_HEX.match("502D5A")
     assert not socbx._ICAO_HEX.match("SENSOR:MAINLINE-DRONU-0478D5C6") and not socbx._ICAO_HEX.match("STATES:502D5")
+
+
+def test_socbx_skips_objects_that_are_only_a_flattened_field_path():
+    msg = UnifiedSchema()
+    for key in ("ROOT_ATTRIBUTES", "LOCATION", "AUTO:/LOCATION"):
+        features = msg.objects[key].features
+        features.location.latitude, features.location.longitude = 54.6, 25.1
+    real = msg.objects["abc-1"].features
+    real.location.latitude, real.location.longitude = 50.0, 8.0
+    real.identity.callsign = "DLH12"
+    bare = msg.objects["502D5A"].features
+    bare.location.latitude, bare.location.longitude = 53.0, 14.0
+    uids = sorted(r["uid"] for r in socbx.unified_records(msg.SerializeToString()))
+    assert uids == ["502D5A", "abc-1"]
+
+
+def test_echo_filter_matches_our_uid_used_as_the_partners_callsign():
+    echoes = EchoFilter()
+    echoes.on_sample(_sample({"uid": "DA-ZONE-UA-R:бердянський", "callsign": "UA Berdianskyi District RED", "_src": "dangausakis.lt"}))
+    assert echoes.is_echo({"uid": "BACKBONE-08E5E910-20C7-56F0", "callsign": "DA-ZONE-UA-R:бердянський"})
+    assert echoes.is_echo({"uid": "BACKBONE-1", "label": "da-zone-ua-r:бердянський"})
+    assert not echoes.is_echo({"uid": "BACKBONE-2", "callsign": "DA-ZONE-UA-R:other-place"})

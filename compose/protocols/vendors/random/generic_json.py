@@ -28,8 +28,8 @@ import json
 import re
 import time
 
-from echo_filter import EchoFilter
-from icao_ghosts import GhostFilter
+from echo_filter import EchoFilter, subscribe_own
+from icao_ghosts import GhostFilter, TwinFilter
 from gateway import TOPIC_ROOT, open_session, payload_bytes, subscribe
 
 INPUT_TOPIC = TOPIC_ROOT + "/raw/backbone/**"
@@ -142,8 +142,9 @@ def run() -> None:
             time.sleep(10)
     prefix = INPUT_TOPIC[:-len("**")]
     echoes = EchoFilter()
-    echo_sub = subscribe(session, TOPIC_ROOT + "/land/**", echoes.on_sample)
+    echo_subs = subscribe_own(session, TOPIC_ROOT, echoes, subscribe)
     ghosts = GhostFilter()
+    twins = TwinFilter()
 
     def on_sample(sample) -> None:
         try:
@@ -157,6 +158,8 @@ def run() -> None:
             if result is None:
                 return
             record, dimension, slot = result
+            if twins.is_twin(record):       # the same aircraft sent again under a non-ICAO id
+                return
             if echoes.is_echo(record):      # a partner's copy of one of our own sensors
                 return
             if record.get("icao24") and ghosts.is_ghost(record["icao24"], record.get("callsign"), registration=record.get("registration")):
@@ -175,7 +178,8 @@ def run() -> None:
         pass
     finally:
         subscriber.undeclare()
-        echo_sub.undeclare()
+        for echo_sub in echo_subs:
+            echo_sub.undeclare()
         session.close()
 
 

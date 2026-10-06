@@ -223,6 +223,9 @@ def format_event(alert: dict) -> str | None:
     if kind == "drone_report":
         return "[DRONE REPORT LT] {} (unverified, approximate) - {:.3f}/{:.3f}".format(
             alert.get("report_type", "report"), alert.get("lat", 0), alert.get("lon", 0))
+    if kind == "drone_crossing":
+        return "[DRONE CROSSING] {} x{} moved {} -> {}".format(
+            str(alert.get("kind", "threat")).upper(), alert.get("count", 1), alert.get("from", "?"), alert.get("to", "?"))
     if kind == "incident":
         return "[INCIDENT] {} - {}".format(alert.get("title", "?"), alert.get("url", ""))
     return None

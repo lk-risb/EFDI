@@ -11,7 +11,7 @@
   "properties": {
     "_src": {"type": "string"},
     "_ts": {"type": "number"},
-    "alert_type": {"enum": ["region_status_change", "source_warning", "drone_report", "incident"]},
+    "alert_type": {"enum": ["region_status_change", "source_warning", "drone_report", "incident", "drone_crossing"]},
     "country": {"type": "string", "description": "region_status_change: upper-case country code."},
     "raised": {"type": "array", "items": {"type": "object", "required": ["area", "level"], "properties": {"area": {"type": "string"}, "level": {"type": "string"}}}},
     "changed": {"type": "array", "items": {"type": "object", "required": ["area", "from", "to"], "properties": {"area": {"type": "string"}, "from": {"type": "string"}, "to": {"type": "string"}}}},
@@ -23,6 +23,10 @@
     "report_type": {"type": "string", "description": "drone_report: the site's report type, e.g. heard."},
     "title": {"type": "string", "description": "incident: article title."},
     "url": {"type": "string", "description": "incident: article link on dangausakis.lt."},
+    "kind": {"type": "string", "description": "drone_crossing: NEPTUN threat type, e.g. uav."},
+    "count": {"type": "integer", "description": "drone_crossing: how many objects the threat groups."},
+    "from": {"type": "string", "description": "drone_crossing: region the threat was in."},
+    "to": {"type": "string", "description": "drone_crossing: region it moved into."},
     "lat": {"type": "number"},
     "lon": {"type": "number"}
   },

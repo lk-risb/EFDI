@@ -104,7 +104,7 @@ fi
 # layers, and C2 inputs each used to appear in two or three separate places).
 SERVICES=(
     # Infrastructure
-    zenoh admin-control cert-renewer supervisor presence
+    zenoh admin-control cert-renewer supervisor presence router-watchdog
     # Open-data bridges
     meteolt dangausakis deepstate mapa
     # Sensor bridges (includes raw-ingress variants — SVC_CAT has no
@@ -193,7 +193,7 @@ declare -A SVC_CAT=(
     [admin-control]="Infrastructure"
     [cert-renewer]="Infrastructure"
     [supervisor]="Infrastructure"
-    [presence]="Infrastructure"
+    [presence]="Infrastructure" [router-watchdog]="Infrastructure"
     [meteolt]="Open-data bridges" [dangausakis]="Open-data bridges" [deepstate]="Open-data bridges" [mapa]="Open-data bridges"
     [asterix]="Sensor bridges"
     [mqtt]="Protocols" [sparkplug]="Protocols"
@@ -236,6 +236,7 @@ declare -A SVC_DESC=(
     [cert-renewer]="Automatic short-lived transport certificate renewal"
     [supervisor]="Auto-restarts crashed bridges, protocols, and layers"
     [presence]="Liveliness presence tokens (fabric node visibility in panoscope)"
+    [router-watchdog]="Restarts the local Zenoh router if it stops accepting clients (opt-in: ROUTER_WATCHDOG=1)"
     [meteolt]="meteo.lt weather stations"
     [asterix]="ASTERIX family bundle: UDP ingress + CAT-010/020/021/034/048/062 translators"
     [mqtt]="MQTT sensor JSON on Zenoh → sensor records"
@@ -318,6 +319,7 @@ svc_ready() {
             ;;
         asterix) return 0 ;;
         presence) [[ -n "${PARTNER_NAMESPACE:-}" ]] ;;
+        router-watchdog) [[ "${ROUTER_WATCHDOG:-0}" == "1" ]] ;;
         mqtt)         return 0 ;;
         sparkplug)    return 0 ;;
         mqtt-raw)     [[ "${MQTT_HOST:-}" ]] ;;
@@ -849,6 +851,9 @@ launch() {
             printf "  ${GREEN}[start]${R} %-16s pid %s\n" "supervisor" "$!"
             ;;
 
+        router-watchdog)
+            _start router-watchdog control/router_watchdog.py
+            ;;
         presence)
             _start presence control/presence.py
             ;;

@@ -63,3 +63,15 @@ def test_generic_json_object_id_with_a_word_prefix_is_still_the_icao_aircraft():
     record, dimension, _ = generic_json.normalize({"ci_uuid": "STATES:502D5A", "ci_name": "BTI7HB", "lat": 53.3, "lon": 14.5}, "o")
     assert dimension == "air" and record["icao24"] == "502d5a" and record["callsign"] == "BTI7HB"
     assert tak_layer._uid(record) == "EFDI-ICAO-502D5A"           # one marker with the ICAO-keyed feeds, not a ground unit
+
+
+def test_twin_filter_drops_a_non_icao_copy_of_an_icao_keyed_aircraft_only_when_near_and_recent():
+    from protocols.vendors.random.icao_ghosts import TwinFilter
+    twins = TwinFilter()
+    icao = {"icao24": "505ce9", "callsign": "OMCBS", "lat_deg": 49.22, "lon_deg": 19.62}
+    assert not twins.is_twin(icao, now=1000.0)
+    assert twins.is_twin({"callsign": "omcbs", "lat_deg": 49.40, "lon_deg": 19.62}, now=1030.0)      # about 20 km away
+    assert not twins.is_twin({"callsign": "OMCBS", "lat_deg": 52.0, "lon_deg": 19.62}, now=1030.0)   # a different place
+    assert not twins.is_twin({"callsign": "OMCBS", "lat_deg": 49.22, "lon_deg": 19.62}, now=1500.0)  # too long ago
+    assert not twins.is_twin({"callsign": "OTHER1", "lat_deg": 49.22, "lon_deg": 19.62}, now=1030.0)
+    assert not twins.is_twin({"lat_deg": 49.22, "lon_deg": 19.62}, now=1030.0)                       # no callsign

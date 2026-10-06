@@ -158,3 +158,22 @@ def test_tak_draws_a_trail_as_an_open_drawing_line():
     assert 'type="u-d-f"' in xml and 'how="h-e"' in xml and xml.count("<link point=") == 3
     assert "strokeColor" in xml and 'fillColor value="0"' in xml and "<shape>" not in xml
     assert '"air/**/trail/**"' in (ROOT / "compose/layers/vendors/tak/tak_layer.py").read_text()
+
+
+def test_region_crossing_alerts_only_when_a_known_threat_changes_region():
+    state: dict = {}
+    first = bridge.threat_tracks({"threats": [_t(region="Sumy Oblast", count=3)]})
+    assert bridge.region_crossings(state, first, 100.0) == []                      # first sighting: nothing
+    same = bridge.threat_tracks({"threats": [_t(region="Sumy Oblast", lat=50.9)]})
+    assert bridge.region_crossings(state, same, 130.0) == []
+    moved = bridge.threat_tracks({"threats": [_t(region="Poltava Oblast", lat=50.2, count=3)]})
+    (event,) = bridge.region_crossings(state, moved, 160.0)
+    assert event["alert_type"] == "drone_crossing" and event["from"] == "Sumy Oblast" and event["to"] == "Poltava Oblast"
+    assert event["kind"] == "uav" and event["count"] == 3 and event["uid"] == "NEPTUN-trk_1"
+    assert bridge.region_crossings(state, [], 190.0) == [] and state == {}         # a threat that left is forgotten
+
+
+def test_region_crossing_ignores_trail_lines_and_threats_without_a_region():
+    state: dict = {}
+    tracks = bridge.threat_tracks({"threats": [_t(region="", trail=[{"lat": 50.0, "lon": 31.0}, {"lat": 50.5, "lon": 31.5}])]})
+    assert bridge.region_crossings(state, tracks, 1.0) == [] and state == {}

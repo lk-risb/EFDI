@@ -499,6 +499,7 @@ def main():
         TOPIC, POLL_S, MAX_AGE_S, ",".join(sorted(COUNTRIES)) or "all"), flush=True)
 
     suppression, retracted = neptun.Suppression(), set()
+    crossing_state: dict = {}                 # NEPTUN threat uid -> the region it was last reported in
     suppress_sub = subscribe(session, neptun.SUPPRESS_TOPIC, suppression.on_sample) if NEPTUN_ENABLED else None
     next_threats = 0.0
     site_cache, neptun_cache, lt_cache, rso_cache, lv_cache = (
@@ -533,8 +534,10 @@ def main():
                 publish_community(session, put_event, time.time(), community_state, args.verbose)
             if NEPTUN_ENABLED and time.time() >= next_threats:
                 next_threats = time.time() + neptun.POLL_S
-                neptun.publish_threats(session, neptun.threat_tracks(neptun.fetch_threats() or {}),
-                                       suppression, retracted, args.verbose)
+                threats = neptun.threat_tracks(neptun.fetch_threats() or {})
+                neptun.publish_threats(session, threats, suppression, retracted, args.verbose)
+                for crossing in neptun.region_crossings(crossing_state, threats, time.time()):
+                    put_event(crossing)
             if time.time() < next_alerts:
                 time.sleep(1)
                 continue

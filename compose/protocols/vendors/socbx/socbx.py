@@ -39,8 +39,8 @@ import re
 import time
 
 from google.protobuf.message import DecodeError
-from protocols.vendors.random.echo_filter import EchoFilter
-from protocols.vendors.random.icao_ghosts import GhostFilter
+from protocols.vendors.random.echo_filter import EchoFilter, subscribe_own
+from protocols.vendors.random.icao_ghosts import GhostFilter, TwinFilter
 from protocols.vendors.random.gateway import TOPIC_ROOT, open_session, payload_bytes, subscribe
 from schemas.vendors.socbx.proto.socbx_alerts_pb2 import Alert
 from schemas.vendors.socbx.proto.socbx_unified_pb2 import UnifiedSchema
@@ -59,6 +59,10 @@ INPUT_TOPIC = TOPIC_ROOT + "/raw/backbone/**"
 # "sensor", platform_type "Sensor" on an aircraft with a callsign), which says nothing.
 _ICAO_HEX = re.compile(r"^(?:[A-Za-z]+:)?([0-9a-fA-F]{6})$")
 _GENERIC_TYPES = ("", "sensor", "unknown")
+
+
+def _has_identity(identity) -> bool:
+    return any((identity.object_id, identity.track_id, identity.callsign, identity.name, identity.label))
 
 
 def _generic(identity) -> bool:
@@ -98,6 +102,8 @@ def unified_records(payload: bytes) -> list[dict]:
             continue
         identity = features.identity
         kinematics = features.kinematics
+        if not _has_identity(identity) and not _ICAO_HEX.match(str(object_id)):
+            continue                        # a field path the partner flattened into an object ("LOCATION", "ROOT_ATTRIBUTES")
         record = {
             "_ts": time.time(),
             "_src": "backbone:socbx:{}".format(msg.node_id or "unknown"),
@@ -168,8 +174,9 @@ def run() -> None:
             time.sleep(10)
 
     echoes = EchoFilter()
-    echo_sub = subscribe(session, TOPIC_ROOT + "/land/**", echoes.on_sample)
+    echo_subs = subscribe_own(session, TOPIC_ROOT, echoes, subscribe)
     ghosts = GhostFilter()
+    twins = TwinFilter()
     dropped = [0]
 
     def on_sample(sample) -> None:
@@ -180,6 +187,8 @@ def run() -> None:
                 for record in unified_records(payload):
                     if record.get("icao24") and ghosts.is_ghost(record["icao24"], record.get("callsign"), registration=record.get("registration")):
                         continue            # a bit-flipped copy of an address already seen
+                    if twins.is_twin(record):
+                        continue            # the same aircraft sent again under a UUID
                     if echoes.is_echo(record):
                         dropped[0] += 1
                         if dropped[0] in (1, 100) or dropped[0] % 1000 == 0:
@@ -209,7 +218,8 @@ def run() -> None:
         pass
     finally:
         subscriber.undeclare()
-        echo_sub.undeclare()
+        for echo_sub in echo_subs:
+            echo_sub.undeclare()
         session.close()
 
 
