@@ -319,3 +319,29 @@ def test_a_trail_is_retracted_when_its_marker_stops_being_sent():
     assert sorted(re.search(r'uid="([^"]+)"', x).group(1) for x in sender.sent) == ["EFDI-UID-MAPA-1-TRAIL", "EFDI-UID-MAPA-2-TRAIL"]
     assert all('type="u-d-f"' in x for x in sender.sent)
     assert list(tak_layer._trail_sent) == ["EFDI-UID-MAPA-3-TRAIL"]       # a live marker keeps its trail
+
+
+def test_trail_table_survives_a_restart_so_old_trails_can_still_be_retracted(tmp_path, monkeypatch):
+    monkeypatch.setattr(tak_layer, "_TRAIL_STATE", str(tmp_path / "trails.json"))
+    for table in (tak_layer._marker_seen, tak_layer._trail_sent, tak_layer._drawn_uids):
+        table.clear()
+    tak_layer._trail_sent["EFDI-UID-MAPA-9-TRAIL"] = 1000.0
+    monkeypatch.setattr(tak_layer, "_trail_saved_at", 0.0)
+    tak_layer._save_trail_state(5000.0)
+    tak_layer._trail_sent.clear()                                  # the process restarts
+    tak_layer._load_trail_state()
+    assert tak_layer._trail_sent == {"EFDI-UID-MAPA-9-TRAIL": 1000.0} and "EFDI-UID-MAPA-9-TRAIL" in tak_layer._drawn_uids
+
+    class Sender:
+        sent = []
+
+        def send(self, xml):
+            self.sent.append(xml)
+
+    sender = Sender()
+    tak_layer._retract_orphan_trails(sender, 1000.0 + tak_layer._TRAIL_ORPHAN_S + 5)    # its marker never came back
+    assert len(sender.sent) == 1 and 'uid="EFDI-UID-MAPA-9-TRAIL"' in sender.sent[0] and 'type="u-d-f"' in sender.sent[0]
+    monkeypatch.setattr(tak_layer, "_TRAIL_STATE", str(tmp_path / "missing.json"))
+    tak_layer._trail_sent.clear()
+    tak_layer._load_trail_state()                                  # a missing file is not an error
+    assert tak_layer._trail_sent == {}

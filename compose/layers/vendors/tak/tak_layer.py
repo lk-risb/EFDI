@@ -143,6 +143,11 @@ _TRAIL_SUFFIX = "-TRAIL"
 _TRAIL_ORPHAN_S = float(os.environ.get("TAK_TRAIL_ORPHAN_S", "180"))
 _marker_seen: dict[str, float] = {}      # uid -> when a marker (not a trail) was last sent
 _trail_sent: dict[str, float] = {}       # trail uid -> when it was last sent
+# The trail table survives a restart: a layer that forgot its trails could never retract the lines it had
+# already drawn, and they stayed on the clients for good.
+_TRAIL_STATE = os.path.join(os.environ.get("POD_STATE_DIR") or "/tmp", "tak-layer-trails.json")
+_TRAIL_STATE_EVERY_S = 30.0
+_trail_saved_at = 0.0
 _radar_status_lock = threading.Lock()
 _radar_status: dict[str, dict] = {}   # "sac-sic" → latest CAT-34 status dict
 
@@ -563,6 +568,31 @@ def _local_clock_suffix(ts, lat, lon) -> str:
         return ""
 
 
+def _load_trail_state() -> None:
+    try:
+        with open(_TRAIL_STATE, encoding="utf-8") as handle:
+            saved = json.load(handle)
+        for uid, sent in saved.items():
+            _trail_sent.setdefault(str(uid), float(sent))
+            _drawn_uids.add(str(uid))
+    except (OSError, ValueError, AttributeError):
+        pass                                # no file yet, or an unreadable one: start empty
+
+
+def _save_trail_state(now: float) -> None:
+    global _trail_saved_at
+    if now - _trail_saved_at < _TRAIL_STATE_EVERY_S:
+        return
+    _trail_saved_at = now
+    try:
+        temporary = _TRAIL_STATE + ".tmp"
+        with open(temporary, "w", encoding="utf-8") as handle:
+            json.dump(dict(_trail_sent), handle)
+        os.replace(temporary, _TRAIL_STATE)
+    except OSError:
+        pass
+
+
 def _retract_orphan_trails(sender, now: float) -> None:
     """Delete the trail line of every marker that has not been sent for _TRAIL_ORPHAN_S (it was withdrawn
     without a tombstone, for instance by a bridge restart) and forget markers unseen for an hour."""
@@ -574,10 +604,13 @@ def _retract_orphan_trails(sender, now: float) -> None:
             _drawn_uids.discard(trail_uid)
     for uid in [u for u, seen in _marker_seen.items() if now - seen > 3600]:
         _marker_seen.pop(uid, None)
+    _save_trail_state(now)
 
 
 def _start_dr_thread(sender):
     """Background thread: dead-reckon contacts that haven't sent a real update."""
+    _load_trail_state()
+
     def _loop():
         while True:
             time.sleep(_DR_TICK_S)
@@ -1836,7 +1869,7 @@ def make_handler(cot_type_or_fn, sender, verbose: bool, stale_s: float = COT_STA
         # instead of disappearing immediately.
         if track.get("_delete"):
             uid = _uid(track)
-            sender.send(_delete_point_cot(uid, track.get("_ts"), "u-d-f" if uid in _drawn_uids else "a-u-G"))
+            sender.send(_delete_point_cot(uid, track.get("_ts"), "u-d-f" if uid in _drawn_uids or uid.endswith(_TRAIL_SUFFIX) else "a-u-G"))
             _drawn_uids.discard(uid)
             with _dr_lock:
                 _dr_store.pop(uid, None)            # or dead reckoning would send the deleted marker again
