@@ -688,6 +688,10 @@ _start_bin() {   # _start_bin <name> <rel-binary-path> [args…]
         printf "  ${DIM}[skip]${R}  %-16s already running (pid %s)\n" "$name" "$(cat "$pid_file")"
         return
     fi
+    if [[ ! -x "$COMPOSE_DIR/$script" ]]; then
+        printf "  ${YELLOW}[skip]${R}  %-16s binary missing: compose/%s (the binary is not in git; copy it there)\n" "$name" "$script"
+        return
+    fi
     rm -f "$pid_file"
     retire_moved_instances "$name" "$script" "$@"
     _wait_for_zenoh

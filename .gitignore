@@ -37,6 +37,9 @@ compose/bridges/vendors/mediamtx/mediamtx
 compose/bridges/vendors/mediamtx/recordings/
 compose/bridges/vendors/mediamtx/auto.crt
 compose/bridges/vendors/mediamtx/auto.key
+compose/bridges/vendors/mediamtx/server.crt
+compose/bridges/vendors/mediamtx/server.key
+compose/bridges/vendors/mediamtx/LICENSE
 # Throwaway AI-agent / developer verification scripts. Never part of the
 # product — see scratch/README.md.
 scratch/*
