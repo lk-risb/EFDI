@@ -106,3 +106,23 @@ def test_a_marker_that_declared_its_affiliation_does_not_flip_back_to_unknown():
     assert memory.settle("U2", "SFAPMFQ---*****", 101.0) == "SFAPMFQ---*****"
     assert memory.settle("U2", "SUAPMFQ---*****", 102.0) == "SFAPMFQ---*****"
     assert memory.settle("U3", "not-a-code", 100.0) == "not-a-code"
+
+
+def test_adsb_aircraft_a_partner_sends_back_are_keyed_by_icao_address_like_dangausakis_does():
+    # three shapes seen live from the soc-bx feed (our own adsb.lol data via dangausakis, returned under a partner id)
+    shapes = [
+        ("aircraft:ae057d", dict(object_id="ae057d", callsign="RCH2048", object_type="aircraft", model="C5M"), "ae057d"),
+        ("aircraft_observation:503fd9", dict(external_id="503fd9", callsign="LYF02", object_type="aircraft"), "503fd9"),
+        ("aircraft_track:3f6cb8", dict(external_id="3f6cb8", callsign="LIMIT13", platform_type="aircraft"), "3f6cb8"),
+    ]
+    for key, identity, address in shapes:
+        record, topic = _socbx_source(key, 49.2, 11.9, **identity)
+        assert record["icao24"] == address and record["target_type"] == "aircraft", key
+        assert "/air/backbone/civ/" in topic, topic
+
+
+def test_a_loose_adsb_copy_behind_several_words_is_still_a_twin_of_the_keyed_aircraft():
+    index = TwinIndex()
+    index.observe({"icao24": "4a34e9", "callsign": "ROF224", "lat_deg": 46.5, "lon_deg": 22.7}, 100.0)
+    assert index.observe({"uid": "Entity:aircraft:4a34e9", "callsign": "ROF224", "lat_deg": 46.6, "lon_deg": 22.8}, 101.0) \
+        == ["Entity:aircraft:4a34e9"]

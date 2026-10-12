@@ -58,12 +58,16 @@ INPUT_TOPIC = TOPIC_ROOT + "/raw/backbone/**"
 # live), and which carries no real domain or type is an ADS-B aircraft keyed by its ICAO address. This vendor republishes ADS-B that way, and
 # tags many of those objects with the generic type "sensor" (seen live: object_type
 # "sensor", platform_type "Sensor" on an aircraft with a callsign), which says nothing.
-_ICAO_HEX = re.compile(r"^(?:[A-Za-z]+:)?([0-9a-fA-F]{6})$")
+_ICAO_HEX = re.compile(r"^(?:[A-Za-z]+[:_-])*([0-9a-fA-F]{6})$")   # bare, or behind words ("aircraft_track:3f6cb8")
 _GENERIC_TYPES = ("", "sensor", "unknown")
 
 
 def _has_identity(identity) -> bool:
     return any((identity.object_id, identity.track_id, identity.callsign, identity.name, identity.label))
+
+
+def _says_aircraft(identity) -> bool:
+    return any(value.strip().lower() == "aircraft" for value in (identity.object_type, identity.platform_type, identity.vehicle_type))
 
 
 def _generic(identity) -> bool:
@@ -113,7 +117,7 @@ def unified_records(payload: bytes) -> list[dict]:
         record = {
             "_ts": time.time(),
             "_src": "backbone:socbx:{}".format(msg.node_id or "unknown"),
-            "uid": identity.object_id or identity.track_id or object_id,
+            "uid": identity.object_id or identity.track_id or identity.external_id or object_id,
             "lat_deg": location.latitude,
             "lon_deg": location.longitude,
             "label": identity.label or identity.name or identity.callsign or object_id,
@@ -139,7 +143,7 @@ def unified_records(payload: bytes) -> list[dict]:
         if record["_dimension"] == "air" and _names_a_drone(identity, object_id):
             record["target_type"] = "uav"
         icao = _ICAO_HEX.match(str(record["uid"]))
-        if icao and _generic(identity):
+        if icao and (_generic(identity) or _says_aircraft(identity)):
             # Key it by icao24 like every other ADS-B source, so the same aircraft from
             # dangausakis or any other feed is one marker, and draw it as an aircraft
             # instead of a stationary ground unit.

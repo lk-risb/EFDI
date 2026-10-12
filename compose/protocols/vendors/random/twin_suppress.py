@@ -30,7 +30,7 @@ TWIN_TTL_S = 20.0            # a layer keeps holding a loose copy back this long
 TWIN_FRESH_S = 120.0         # a keyed or loose track counts for this long after it was last seen
 TWIN_NEAR_KM = 10.0
 _NAME_MIN_LEN = 8            # shorter or digit-free names ("unit", "N21") are too generic to match two objects on
-_HEX = re.compile(r"^(?:[A-Za-z]+[:_-])?([0-9A-Fa-f]{6})$")
+_HEX = re.compile(r"^(?:[A-Za-z]+[:_-])*([0-9A-Fa-f]{6})$")      # "48A5C6", "STATES:48A5C6", "Entity:aircraft:48a5c6"
 _UNSAFE = re.compile(r"[^A-Za-z0-9._-]")
 
 
