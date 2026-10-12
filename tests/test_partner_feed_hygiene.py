@@ -110,3 +110,12 @@ def test_generic_json_soc_bx_wrapper_identity_decides_domain_and_affiliation():
             "domain": "air", "affiliation": "friend", "object_subtype": "a-f-A-M-F-Q"}}}}},
     }, "consilium/sa-event/out/x/v2")
     assert (dimension, slot, record["target_type"]) == ("air", "friendly", "uav")
+
+
+def test_generic_json_drone_telemetry_is_named_by_its_drone_field_not_the_slot_hash():
+    # a real telemetry/v1 payload: the only name is the "drone" field
+    record, dimension, _ = generic_json.normalize(
+        {"alt": 931.3, "drone": "deltaquad-nvrec5", "heading": 53.4, "lat": 49.2039, "lon": 11.8716},
+        "df7b0baaa7e56b4fc9d0f1f0564d6692/telemetry/v1/deltaquad-nvrec5")
+    assert (dimension, record["target_type"], record["callsign"]) == ("air", "uav", "deltaquad-nvrec5")
+    assert record["uid"] == "BACKBONE-deltaquad-nvrec5"

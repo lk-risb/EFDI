@@ -56,6 +56,7 @@ from layers.vendors.tak.tak_layer import (
 )
 from namespace_prefix import topic_root
 from protocols.vendors.random.gateway import open_session, subscribe
+from protocols.vendors.random.marker_memory import MarkerMemory
 from protocols.vendors.random.twin_suppress import TwinSuppressions
 
 TOPIC_ROOT = topic_root()
@@ -1152,6 +1153,7 @@ class NVGFeedHandler(BaseHTTPRequestHandler):
             print("NVG HTTP {} - {}".format(self.client_address[0], fmt % args), flush=True)
 
 
+_marker_memory = MarkerMemory()   # a marker does not flip back to unknown when an undeclared copy arrives
 _twins = TwinSuppressions()   # loose copies of ICAO-keyed aircraft that track fusion asked us to hold back
 
 
@@ -1195,7 +1197,10 @@ def make_handler(
                 item_stale_s = wanted
         except (TypeError, ValueError):
             pass
-        uid = cache.upsert(track, _resolve_sidc(sidc, track), stale_s=item_stale_s)
+        resolved = _resolve_sidc(sidc, track)
+        if track.get("uid"):
+            resolved = _marker_memory.settle(str(track["uid"]), resolved)
+        uid = cache.upsert(track, resolved, stale_s=item_stale_s)
         if verbose and uid:
             print("NVG feed cached {}".format(uid), flush=True)
 

@@ -37,8 +37,8 @@ INPUT_TOPIC = TOPIC_ROOT + "/raw/backbone/**"
 
 _LAT_KEYS = ("lat", "latitude", "lat_deg")
 _LON_KEYS = ("lon", "lng", "longitude", "lon_deg")
-_ID_KEYS = ("ci_uuid", "ci_name", "id", "uid")
-_LABEL_KEYS = ("ci_name", "label", "name")
+_ID_KEYS = ("ci_uuid", "ci_name", "id", "uid", "drone")
+_LABEL_KEYS = ("ci_name", "label", "name", "drone")
 _AFFILIATION_SLOT = {
     "friendly": "friendly",
     "hostile": "hostile",

@@ -484,14 +484,14 @@ class TrackFuser:
         if not isinstance(track, dict):
             return
         now = time.time()
-        for uid in self._twins.observe(track, now):
+        for uid in self._twins.observe(track, now, topic):
             with self._lock:
                 if now - self._twin_sent.get(uid, 0) < _SUPPRESS_REFRESH_S:
                     continue
                 self._twin_sent[uid] = now
             self._session.put(twin_topic(TOPIC_ROOT, uid), json.dumps({"uid": uid, "ts": now}).encode())
             if self._verbose:
-                print("twin of an ICAO-keyed aircraft: {}".format(uid), flush=True)
+                print("twin held back: {}".format(uid), flush=True)
 
     def on_adsb(self, sample):
         topic = str(sample.key_expr)

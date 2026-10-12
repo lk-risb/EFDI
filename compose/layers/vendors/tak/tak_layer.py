@@ -51,6 +51,7 @@ import zenoh.ext
 from namespace_prefix import topic_root
 from protocols.vendors.random.gateway import open_session, subscribe
 from protocols.vendors.random.tak_transport import TcpSender, RECONNECT_S
+from protocols.vendors.random.marker_memory import MarkerMemory
 from protocols.vendors.random.twin_suppress import TwinSuppressions
 
 # (Re)connect catch-up + mid-session gap-healing for this layer's subscriptions.
@@ -138,6 +139,7 @@ _dr_store:   dict[str, dict] = {}
 _drawn_uids: set = set()      # uids sent as drawing-tool shapes (u-d-f), whose delete must name that type
 # A trail line belongs to its marker (uid + _TRAIL): when the marker is withdrawn or stops being reported the
 # line must go too. ATAK/WinTAK never expire drawing-tool shapes by their stale time, so the layer does it.
+_marker_memory = MarkerMemory()   # a marker does not flip back to unknown when an undeclared copy arrives
 _twins = TwinSuppressions()   # loose copies of ICAO-keyed aircraft that track fusion asked us to hold back
 _TRAIL_SUFFIX = "-TRAIL"
 _TRAIL_ORPHAN_S = float(os.environ.get("TAK_TRAIL_ORPHAN_S", "180"))
@@ -1910,6 +1912,7 @@ def make_handler(cot_type_or_fn, sender, verbose: bool, stale_s: float = COT_STA
         else:
             cot_type     = cot_type_or_fn(track) if callable(cot_type_or_fn) else cot_type_or_fn
             stale_s_used = _track_stale_s(track, stale_s)
+        cot_type = _marker_memory.settle(_uid(track), cot_type)
 
         # Broadcasting an emergency/status GeoChat alert to every connected
         # TAK client is a separate concern from translating this track to
