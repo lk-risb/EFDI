@@ -1,4 +1,4 @@
-FROM node:24.18.0-slim@sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6 AS ui-builder
+FROM node:26.11.1-slim@sha256:193fe51b64e77981119c98c2002c9e32a70e2f006fb4d25068ce0558998917f0 AS ui-builder
 WORKDIR /ui
 RUN apt-get update \
     && apt-get upgrade -y \
