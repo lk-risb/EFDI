@@ -111,3 +111,21 @@ def test_sitaware_draws_fused_tracks_from_track_fusion():
     handler = sitaware_layer.make_handler("SUAPMF----*****", cache, False)
     handler(_sample(topic, {"uid": "FUSED-1", "icao24": "123456", "callsign": "TST1", "lat_deg": 50.0, "lon_deg": 20.0}))
     assert len(cache._items) == 1
+
+
+def test_consilium_drone_record_ends_up_as_a_friendly_unmanned_aircraft_in_both_c2s():
+    import importlib.util
+    sys.path.insert(0, str(ROOT / "compose/protocols/vendors/random"))
+    spec = importlib.util.spec_from_file_location(
+        "generic_json_display", ROOT / "compose/protocols/vendors/random/generic_json.py")
+    generic_json = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(generic_json)
+    record, dimension, slot = generic_json.normalize({
+        "ci_name": "minerva:teil-s-10:deltaquad-nvrec5", "device": {"type": "Sensor"},
+        "location": {"latitude": 49.2, "longitude": 11.87},
+        "metadata": {"soc_bx_unified": {"original": {"features": {"identity": {
+            "domain": "air", "affiliation": "friend", "object_subtype": "a-f-A-M-F-Q"}}}}},
+    }, "consilium/sa-event/out/x/v2")
+    topic = _topic(dimension, slot)
+    assert _tak(topic, record) == ["a-f-A-M-F-Q"]
+    assert _sidc(topic, record) == ["SFAPMFQ---*****"]

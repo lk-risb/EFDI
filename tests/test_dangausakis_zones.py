@@ -345,3 +345,54 @@ def test_trail_table_survives_a_restart_so_old_trails_can_still_be_retracted(tmp
     tak_layer._trail_sent.clear()
     tak_layer._load_trail_state()                                  # a missing file is not an error
     assert tak_layer._trail_sent == {}
+
+
+def test_simplify_ring_does_not_leave_the_ring_crossing_itself():
+    # plain Douglas-Peucker to 12 vertices makes this jagged outline cross itself; stray bands in WinTAK
+    from protocols.vendors.random import geo_simplify
+    ring = [
+        [9.417, 5.0],
+        [9.554, 5.755],
+        [6.991, 6.212],
+        [7.209, 6.141],
+        [6.893, 7.29],
+        [8.274, 7.001],
+        [7.045, 9.041],
+        [7.252, 7.545],
+        [5.847, 9.075],
+        [5.342, 9.4],
+        [5.0, 9.018],
+        [4.44, 7.938],
+        [3.54, 7.61],
+        [2.8, 8.317],
+        [2.272, 8.908],
+        [1.649, 7.038],
+        [1.185, 7.913],
+        [2.28, 6.154],
+        [2.201, 6.518],
+        [2.765, 5.436],
+        [0.914, 5.0],
+        [1.99, 4.316],
+        [2.388, 4.326],
+        [1.602, 4.079],
+        [1.657, 3.284],
+        [2.628, 2.034],
+        [2.074, 0.969],
+        [3.635, 1.322],
+        [4.247, 0.302],
+        [4.413, 1.732],
+        [5.0, 1.358],
+        [5.413, 2.974],
+        [5.926, 0.752],
+        [6.342, 1.771],
+        [7.001, 2.198],
+        [7.447, 2.136],
+        [6.689, 2.683],
+        [8.049, 3.075],
+        [9.389, 3.62],
+        [9.178, 4.49],
+        [9.417, 5.0],
+    ]
+    simple = geo_simplify.simplify_ring(ring, max_vertices=12)
+    assert simple[0] == simple[-1]
+    assert geo_simplify._crossings(simple[:-1]) == []

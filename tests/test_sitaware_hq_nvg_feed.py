@@ -201,7 +201,7 @@ class NVGFeedCacheTests(unittest.TestCase):
         # Air/Sea/Space in the standard (unlike Ground's "U"), so these use
         # an unspecified (dash) function ID rather than a fabricated one.
         self.assertEqual(_TOPIC_SIDC["land/**/friendly/unit/**"], "SFGPU-----*****")
-        self.assertEqual(_TOPIC_SIDC["air/**/friendly/unit/**"], "SFAP------*****")
+        self.assertEqual(_TOPIC_SIDC["air/**/friendly/unit/**"]({}), "SFAP------*****")
         self.assertEqual(_TOPIC_SIDC["sea/**/friendly/unit/**"], "SFSP------*****")
         self.assertEqual(_TOPIC_SIDC["space/**/friendly/unit/**"], "SFPP------*****")
 
@@ -209,7 +209,7 @@ class NVGFeedCacheTests(unittest.TestCase):
         # matching entry per domain or the track is dropped silently (no
         # subscription matches, not even a wrong-icon fallback).
         self.assertEqual(_TOPIC_COT["land/**/friendly/unit/**"][0], "a-f-G-U-C")
-        self.assertEqual(_TOPIC_COT["air/**/friendly/unit/**"][0], "a-f-A")
+        self.assertEqual(_TOPIC_COT["air/**/friendly/unit/**"][0]({}), "a-f-A")
         self.assertEqual(_TOPIC_COT["sea/**/friendly/unit/**"][0], "a-f-S")
         self.assertEqual(_TOPIC_COT["space/**/friendly/unit/**"][0], "a-f-P")
 

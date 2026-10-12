@@ -160,6 +160,10 @@ _radar_status: dict[str, dict] = {}   # "sac-sic" → latest CAT-34 status dict
 _CIV_AIR_TYPE = "a-n-A-C-F"
 _MIL_AIR_TYPE = "a-n-A-M-F"
 
+def _friendly_air_type(track: dict) -> str:
+    return "a-f-A-M-F-Q" if _unknown_air_type(track) == "a-u-A-M-F-Q" else "a-f-A"
+
+
 def _unknown_air_type(track: dict) -> str:
     object_class = str(
         track.get("sapient_class")
@@ -262,7 +266,7 @@ _TOPIC_COT = {
     # entries exist at all, only the bare dimension-only tracks below, which
     # this codebase already uses elsewhere (a-u-A, a-f-P). Using those here
     # rather than inventing a finer-grained code.
-    "air/**/friendly/unit/**":   ("a-f-A",       AIR_STALE_S),
+    "air/**/friendly/unit/**":   (_friendly_air_type, AIR_STALE_S),
     "sea/**/friendly/unit/**":   ("a-f-S",       SEA_STALE_S),  # covers subsurface too — see nffi.py's S/U -> "sea" note
     "space/**/friendly/unit/**":("a-f-P",        SAT_STALE_S),
     "land/**/unknown/vehicle/**":("a-u-G-E-V",   LAND_STALE_S),

@@ -174,7 +174,7 @@ _TOPIC_SIDC = {
     # exist), so the function ID (positions 5-10) stays unspecified dashes
     # instead of a fabricated "unit" letter, same convention already used for
     # the dimension-only space/satellite entries below.
-    "air/**/friendly/unit/**":       "SFAP------*****",
+    "air/**/friendly/unit/**":       lambda t: "SFAPMFQ---*****" if _unknown_air_sidc(t) == "SUAPMFQ---*****" else "SFAP------*****",
     "sea/**/friendly/unit/**":       "SFSP------*****",  # covers subsurface too — see nffi.py's S/U -> "sea" note
     "space/**/friendly/unit/**":     "SFPP------*****",
     "land/**/unknown/vehicle/**":    "SUGPEV----*****",
