@@ -52,3 +52,13 @@ def test_echo_filter_drop_regex_and_own_topics(monkeypatch):
     finally:
         monkeypatch.delenv("BACKBONE_DROP_REGEX")
         importlib.reload(echo_filter)
+
+
+def test_echo_filter_still_recognises_a_copy_of_a_track_of_ours_that_expired_an_hour_ago():
+    import json
+    from unittest import mock
+    echoes = echo_filter.EchoFilter()
+    ours = {"_src": "neptun.in.ua", "uid": "NEPTUN-trk_00258879", "callsign": "NEPTUN MISSILE Dnipro", "lat_deg": 48.46, "lon_deg": 35.04}
+    echoes.on_sample(mock.Mock(payload=json.dumps(ours).encode()))
+    copy = {"uid": "BACKBONE-DODE42DD", "callsign": "NEPTUN-trk_00258879"}
+    assert echoes.is_echo(copy, now=__import__("time").time() + 3600)

@@ -28,6 +28,9 @@ MIN_NAME_LEN = 8
 # A fixed sensor of ours and a partner's copy of it share coordinates, so a partner object within
 # POSITION_CELL_DEG (about 11 m, checked with its neighbouring cells) of one counts as its copy.
 POSITION_CELL_DEG = 1e-4
+# A partner can keep re-sending a copy of a threat of ours long after our own track expired (a missile frozen at its
+# last position, stamped fresh), so what we published is remembered for hours, not minutes.
+_MAX_REMEMBERED = 50000
 _GENERIC_NAMES = {"dronu-sensor", "sensor", "unknown"}
 # Operators can drop a partner's test or junk objects without a code change: a regex matched
 # against uid, callsign and label of each backbone record (restart socbx / generic_json after setting it).
@@ -46,7 +49,7 @@ def subscribe_own(session, topic_root: str, echoes: "EchoFilter", subscribe) -> 
 
 
 class EchoFilter:
-    def __init__(self, ttl_s: float = 1800.0):
+    def __init__(self, ttl_s: float = 12 * 3600.0):
         self._ttl = ttl_s
         self._ids: dict = {}
         self._names: dict = {}
@@ -75,6 +78,10 @@ class EchoFilter:
             for name in names:
                 if len(name) >= MIN_NAME_LEN and name not in _GENERIC_NAMES:
                     self._names[name] = now
+            for table in (self._ids, self._names):
+                if len(table) > _MAX_REMEMBERED:        # forget the oldest first
+                    for stale in sorted(table, key=table.get)[:len(table) - _MAX_REMEMBERED]:
+                        del table[stale]
 
     @staticmethod
     def _cell(lat, lon) -> tuple:
