@@ -42,7 +42,7 @@ Jei taip:
    ją valdo (tikra vendoruota/licencijuota trečiosios šalies schema, kaip
    SAPIENT ar Sparkplug B laidiniai kontraktai, yra vienintelė išimtis ir
    lieka po `compose/protocols/vendors/<name>/` šalia savo LICENSE) —
-   pagal esamą pavyzdį — `geojson_features.proto` yra trumpas pavyzdys.
+   pagal esamą pavyzdį — `cap.proto` yra trumpas pavyzdys.
 2. Iš naujo sugeneruokite Python bindingus: `scripts/generate-protobuf.sh`
    (reikia `grpc_tools.protoc` + `protobuf` — jau `compose/requirements.txt`).
    Tai rašo į `compose/generated/`, kuris yra gitignored — kiekvienas
@@ -52,7 +52,7 @@ Jei taip:
 ## 10.2 Rašykite skriptą
 
 Kiekvienas tilto/protokolo skriptas seka tą pačią formą. Tai pilna, veikianti
-nuoroda — `compose/protocols/vendors/random/geojson_features.py` (127 eilutės) —
+nuoroda — `compose/protocols/vendors/random/geojson.py` (118 eilutės) —
 sutrumpinta iki dalių, kurios svarbu:
 
 ```python

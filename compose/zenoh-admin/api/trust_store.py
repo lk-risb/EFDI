@@ -383,8 +383,3 @@ async def accept_delegation(
     else:
         await db.flush()
     return authority, delegation
-
-
-def authority_active_now(authority: TrustAuthority, now: datetime | None = None) -> bool:
-    current = now or datetime.now(timezone.utc)
-    return authority.state == "active" and authority.not_after > current

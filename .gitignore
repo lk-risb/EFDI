@@ -92,3 +92,6 @@ COMMIT_MSG.txt
 *.pem
 *.bak-*
 *.orig
+
+# Local repowise index (generated, large, per-machine)
+.repowise/

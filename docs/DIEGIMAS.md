@@ -1769,7 +1769,7 @@ abiejose be jokio papildomo kodo.
 `air`/`sea`), jūsų jutiklio trumpas vardas, kokio tipo stebėsena tai yra,
 `neutral`, jei neturite tikrų priklausomybės duomenų, ir koks objektas yra
 (`vehicle`, `vessel`, `unit`, ...). Pažvelkite į keletą esamų temų
-(`docs/topic-taxonomy.md`) dėl šablono prieš išrandant naują formą.
+(`docs/13-topic-taxonomy.md`) dėl šablono prieš išrandant naują formą.
 
 **Konfigūracija — nieko fiksuoto kode.** Bet koks serveris, prievadas, URL ar
 kredencialas, kurio reikia jūsų skriptui, ateina iš aplinkos kintamojo,
@@ -2261,7 +2261,7 @@ angliški: **[ZENOH_ADMIN.md](ZENOH_ADMIN.md)**.
 
 ## 13. Tęstinė integracija (CI)
 
-`.github/workflows/ci.yml` paleidžiamas kas kartą pushinant/darant PR į `main`:
+Septyni workflow'ai `.github/workflows/` aplanke paleidžiami kas kartą pushinant/darant PR į `main`:
 
 | Job | Tikrina |
 | --- | --- |
@@ -2270,6 +2270,8 @@ angliški: **[ZENOH_ADMIN.md](ZENOH_ADMIN.md)**.
 | `bridge-syntax` | `py_compile` kiekvienam failui `compose/bridges/`, `compose/protocols/` ir `compose/layers/` |
 | `zenoh-admin-frontend` | `pnpm type-check` + `pnpm build` `compose/zenoh-admin/ui` |
 | `docker-build` | Sukuria `compose/Dockerfile` ir `compose/zenoh-admin` image'us, be push |
+| `python-tests` | Paleidžia Python testus ir kompiliavimo patikras |
+| `security` | gitleaks visai git istorijai; trivy (priklausomybės, paslaptys, Dockerfile), pip-audit ir pnpm audit |
 
 Tai pagauna sintaksės klaidas, TypeScript klaidas ir Dockerfile lūžimus prieš merge — **nepaleidžia** pačių bridge'ų (dauguma reikalauja tikrų API raktų/tinklo prieigos, kurios CI neturi).
 

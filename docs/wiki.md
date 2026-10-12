@@ -1356,7 +1356,7 @@ Do not clear a shared operational layer to work around this limitation.
 | `stanag` | `protocols/vendors/stanag/stanag.py --proto {4586,4607,4609,5516}` | `…/raw/stanag_4609/klv`, `…/air/stanag_4609/camera/unknown/uav`, STANAG 4586 track topics, and `…/{air,sea,land}/stanag_5516/c2/**` | Launcher starts each configured `--proto` directly |
 | `sapient-raw`, `stanag4586-raw`, `stanag5516-raw` | `bridges/vendors/{sapient,milspec}/*_bridge.py` | `…/raw/<protocol>/<source>` | Optional socket ingress; matching protocol runs with `*_ZENOH_RAW=1` |
 | `cap` | `protocols/vendors/random/cap.py` | `…/land/cap/c2/neutral/sensor/{type}/{id}/sapient` | Complete CAP 1.2 XML on `…/raw/cap/**` |
-| `geojson` | `protocols/vendors/random/geojson_features.py` | `…/land/ogc/c2/neutral/zone/{type}/{id}/sapient` | GeoJSON/OGC Features on `…/raw/geojson/**` |
+| `geojson` | `protocols/vendors/random/geojson.py` | `…/land/ogc/c2/neutral/zone/{type}/{id}/sapient` | GeoJSON/OGC Features on `…/raw/geojson/**` |
 | `mqtt` | `protocols/vendors/random/mqtt_json.py` | `…/land/mqtt/iot/unknown/sensor/{type}/{id}/sapient` | Vendor JSON on `…/raw/mqtt/**` (bridge forwards any payload verbatim) |
 | `sensorthings` | `protocols/vendors/random/sensorthings.py` | `…/land/sensorthings/iot/neutral/sensor/{type}/{id}/sapient` | Observations on `…/raw/sensorthings/**` |
 | `sparkplug` | `protocols/vendors/sparkplug/sparkplug.py` | `…/land/sparkplug/iot/unknown/sensor/{type}/{id}/sapient` | Sparkplug B protobuf on `…/raw/mqtt/spBv1.0/**` |
@@ -2384,7 +2384,7 @@ a domain-specific compound value). If so:
    (an actual vendored/licensed third-party schema, like the SAPIENT or
    Sparkplug B wire contracts, is the one exception and stays under
    `compose/protocols/vendors/<name>/` next to its own LICENSE) —
-   modeled on an existing one — `geojson_features.proto` is a short example.
+   modeled on an existing one — `cap.proto` is a short example.
 2. Regenerate the Python bindings: `scripts/generate-protobuf.sh` (needs
    `grpc_tools.protoc` + `protobuf` — already in `compose/requirements.txt`).
    This writes into `compose/generated/`, which is gitignored — every
@@ -2394,7 +2394,7 @@ a domain-specific compound value). If so:
 ## 10.2 Write the script
 
 Every bridge/protocol script follows the same shape. This is the complete,
-working reference — `compose/protocols/vendors/random/geojson_features.py` (127
+working reference — `compose/protocols/vendors/random/geojson.py` (118
 lines) — trimmed to the parts that matter:
 
 ```python
@@ -3343,7 +3343,7 @@ match with `**`, which absorbs the added segment; `fusion` and
 
 ## Continuous Integration
 
-Five workflows in `.github/workflows/` run on every push/PR to `main`:
+Seven workflows in `.github/workflows/` run on every push/PR to `main`:
 
 | Workflow | Checks |
 | --- | --- |
@@ -3352,6 +3352,8 @@ Five workflows in `.github/workflows/` run on every push/PR to `main`:
 | `bridge-syntax.yml` | `py_compile` on every file in `compose/bridges/`, `compose/protocols/`, and `compose/layers/` |
 | `zenoh-admin-frontend.yml` | `pnpm type-check` + `pnpm build` for `compose/zenoh-admin/ui` |
 | `docker-build.yml` | Builds the flattened `compose/Dockerfile` and the `compose/zenoh-admin` image (no push) |
+| `python-tests.yml` | Runs the Python test suite and compile checks |
+| `security.yml` | gitleaks over the full git history; trivy (dependencies, secrets, Dockerfiles), pip-audit and pnpm audit |
 
 This catches syntax errors, TypeScript errors, and Dockerfile breakage before merge — it does **not** run the bridges themselves (most need real API keys/network access CI doesn't have).
 

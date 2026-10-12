@@ -2,7 +2,7 @@
 
 ## Continuous Integration
 
-Five workflows in `.github/workflows/` run on every push/PR to `main`:
+Seven workflows in `.github/workflows/` run on every push/PR to `main`:
 
 | Workflow | Checks |
 | --- | --- |
@@ -11,6 +11,8 @@ Five workflows in `.github/workflows/` run on every push/PR to `main`:
 | `bridge-syntax.yml` | `py_compile` on every file in `compose/bridges/`, `compose/protocols/`, and `compose/layers/` |
 | `zenoh-admin-frontend.yml` | `pnpm type-check` + `pnpm build` for `compose/zenoh-admin/ui` |
 | `docker-build.yml` | Builds the flattened `compose/Dockerfile` and the `compose/zenoh-admin` image (no push) |
+| `python-tests.yml` | Runs the Python test suite and compile checks |
+| `security.yml` | gitleaks over the full git history; trivy (dependencies, secrets, Dockerfiles), pip-audit and pnpm audit |
 
 This catches syntax errors, TypeScript errors, and Dockerfile breakage before merge — it does **not** run the bridges themselves (most need real API keys/network access CI doesn't have).
 

@@ -8,10 +8,6 @@ from .topology import _TOPOLOGY, _TOPOLOGY_LOCK
 _OWN_NAMESPACE = os.environ.get("PARTNER_NAMESPACE", "")
 
 
-def own_namespace() -> str:
-    return _OWN_NAMESPACE
-
-
 def path_to(target_namespace: str) -> list[str] | None:
     """Return descendants from the first child through the requested target.
 

@@ -62,13 +62,6 @@ def remove_child_secret(authority_id: str) -> None:
         _write(value)
 
 
-def set_parent_secret(username: str, password: str) -> None:
-    with _LOCK:
-        value = _read()
-        value["parent"] = {"username": username, "password": password}
-        _write(value)
-
-
 def ensure_local_secret() -> dict:
     with _LOCK:
         value = _read()

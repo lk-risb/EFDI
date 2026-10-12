@@ -2,7 +2,7 @@
 
 ## Tęstinė integracija (CI)
 
-`.github/workflows/ci.yml` paleidžiamas kas kartą pushinant/darant PR į `main`:
+Septyni workflow'ai `.github/workflows/` aplanke paleidžiami kas kartą pushinant/darant PR į `main`:
 
 | Job | Tikrina |
 | --- | --- |
@@ -11,6 +11,8 @@
 | `bridge-syntax` | `py_compile` kiekvienam failui `compose/bridges/`, `compose/protocols/` ir `compose/layers/` |
 | `zenoh-admin-frontend` | `pnpm type-check` + `pnpm build` `compose/zenoh-admin/ui` |
 | `docker-build` | Sukuria `compose/Dockerfile` ir `compose/zenoh-admin` image'us, be push |
+| `python-tests` | Paleidžia Python testus ir kompiliavimo patikras |
+| `security` | gitleaks visai git istorijai; trivy (priklausomybės, paslaptys, Dockerfile), pip-audit ir pnpm audit |
 
 Tai pagauna sintaksės klaidas, TypeScript klaidas ir Dockerfile lūžimus prieš merge — **nepaleidžia** pačių bridge'ų (dauguma reikalauja tikrų API raktų/tinklo prieigos, kurios CI neturi).
 

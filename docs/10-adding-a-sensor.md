@@ -37,7 +37,7 @@ a domain-specific compound value). If so:
    (an actual vendored/licensed third-party schema, like the SAPIENT or
    Sparkplug B wire contracts, is the one exception and stays under
    `compose/protocols/vendors/<name>/` next to its own LICENSE) —
-   modeled on an existing one — `geojson_features.proto` is a short example.
+   modeled on an existing one — `cap.proto` is a short example.
 2. Regenerate the Python bindings: `scripts/generate-protobuf.sh` (needs
    `grpc_tools.protoc` + `protobuf` — already in `compose/requirements.txt`).
    This writes into `compose/generated/`, which is gitignored — every
@@ -47,7 +47,7 @@ a domain-specific compound value). If so:
 ## 10.2 Write the script
 
 Every bridge/protocol script follows the same shape. This is the complete,
-working reference — `compose/protocols/vendors/random/geojson_features.py` (127
+working reference — `compose/protocols/vendors/random/geojson.py` (118
 lines) — trimmed to the parts that matter:
 
 ```python
