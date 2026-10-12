@@ -119,3 +119,13 @@ def test_generic_json_drone_telemetry_is_named_by_its_drone_field_not_the_slot_h
         "df7b0baaa7e56b4fc9d0f1f0564d6692/telemetry/v1/deltaquad-nvrec5")
     assert (dimension, record["target_type"], record["callsign"]) == ("air", "uav", "deltaquad-nvrec5")
     assert record["uid"] == "BACKBONE-deltaquad-nvrec5"
+
+
+def test_generic_json_reads_the_cot_type_a_source_states_and_knows_dji():
+    _, dimension, slot = generic_json.normalize(
+        {"id": "minerva:teil-s-10:dji", "lat": 48.68, "lon": 9.04, "cot_type": "a-f-A-M-F-Q", "affiliation": "friend"}, "x")
+    assert (dimension, slot) == ("air", "friendly")
+    record, dimension, _ = generic_json.normalize({"id": "minerva:teil-s-10:dji", "lat": 48.68, "lon": 9.04}, "x")
+    assert (dimension, record["target_type"]) == ("air", "uav")        # no cot_type: the name alone says DJI
+    land, dimension, _ = generic_json.normalize({"id": "alpha", "lat": 48.68, "lon": 9.04, "cot_type": "a-h-G-U-C"}, "x")
+    assert dimension == "land" and "target_type" not in land

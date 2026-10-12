@@ -48,7 +48,7 @@ def test_echo_filter_drop_regex_and_own_topics(monkeypatch):
         assert not echoes.is_echo({"uid": "BACKBONE-1", "callsign": "OMCBS"})
         calls = []
         reloaded.subscribe_own(None, "ORG", echoes, lambda s, topic, cb: calls.append(topic) or topic)
-        assert calls == ["ORG/land/**", "ORG/air/*/hostile/**"]
+        assert calls == ["ORG/land/**", "ORG/air/*/hostile/**", "ORG/air/*/trail/**"]
     finally:
         monkeypatch.delenv("BACKBONE_DROP_REGEX")
         importlib.reload(echo_filter)

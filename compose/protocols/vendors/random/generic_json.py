@@ -92,7 +92,15 @@ def _identity(payload: dict) -> dict:
     return node if isinstance(node, dict) else {}
 
 
+def _cot_type(payload: dict) -> str:
+    """The CoT type the source itself states, at the top level (goat.geo.track) or in the SOC-BX identity block."""
+    return str(payload.get("cot_type") or _identity(payload).get("object_subtype") or "")
+
+
 def _dimension(payload: dict) -> str:
+    cot = _cot_type(payload)
+    if cot.startswith("a-") and cot.count("-") >= 2 and cot.split("-")[2] in ("A", "S", "G", "P"):
+        return {"A": "air", "S": "sea", "G": "land", "P": "space"}[cot.split("-")[2]]
     domain = str(_identity(payload).get("domain", "")).lower()
     if domain in _DIMENSIONS:
         return domain
@@ -146,7 +154,7 @@ def normalize(payload: dict, origin: str) -> dict | None:
         record["target_type"] = "aircraft"
         dimension = "air"
     elif dimension == "air" and (
-            str(_identity(payload).get("object_subtype", "")).endswith("-Q")   # CoT: unmanned
+            _cot_type(payload).endswith("-Q")   # CoT: unmanned
             or names_airframe(raw_id, label, payload.get("type"), (payload.get("device") or {}).get("type"))):
         record["target_type"] = "uav"
     slot = _affiliation_slot(payload)

@@ -2,12 +2,12 @@
 
 import re
 
-_AIRFRAME_WORDS = re.compile(r"drone|uav|copter|(?<!s)quad")   # not "squad"
+_AIRFRAME_WORDS = re.compile(r"drone|uav|copter|(?<!s)quad|mavic|matrice")   # not "squad"
 
 
 def names_airframe(*names) -> bool:
     for name in names:
         for token in re.split(r"[^a-z0-9]+", str(name or "").lower()):
-            if token == "uas" or _AIRFRAME_WORDS.search(token):
+            if token in ("uas", "dji") or _AIRFRAME_WORDS.search(token):
                 return True
     return False

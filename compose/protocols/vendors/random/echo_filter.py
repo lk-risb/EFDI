@@ -35,8 +35,9 @@ _DROP = re.compile(os.environ["BACKBONE_DROP_REGEX"], re.I) if os.environ.get("B
 
 
 # Topics whose tracks this pod publishes and a partner could send back: every land track, and the
-# drones, missiles and bombs from the open-data bridges (they have no ICAO address to merge on).
-OWN_TOPICS = ("land/**", "air/*/hostile/**")
+# drones, missiles and bombs from the open-data bridges (they have no ICAO address to merge on), and their
+# trail lines (a partner's copy of a trail arrives as a point marker).
+OWN_TOPICS = ("land/**", "air/*/hostile/**", "air/*/trail/**")
 
 
 def subscribe_own(session, topic_root: str, echoes: "EchoFilter", subscribe) -> list:

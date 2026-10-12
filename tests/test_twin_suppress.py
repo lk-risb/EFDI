@@ -66,3 +66,10 @@ def test_layer_holds_back_only_the_announced_loose_copy():
 
 def test_topic_is_a_safe_key_expression():
     assert twin_topic("ORG", "STATES:48 A5/C6") == "ORG/air/trackfusion/suppress/twin/STATES_48_A5_C6"
+
+
+def test_an_adsb_track_with_no_uid_still_counts_as_the_keyed_copy():
+    # dangausakis publishes ADS-B with icao24 and callsign but no uid
+    index = TwinIndex()
+    assert index.observe({"icao24": "32001a", "callsign": "GCI1885", "lat_deg": 45.64, "lon_deg": 13.09}, 100.0) == []
+    assert index.observe({"uid": "32001a", "callsign": "GCI1885", "lat_deg": 45.67, "lon_deg": 13.14}, 101.0) == ["32001a"]

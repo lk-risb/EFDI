@@ -87,7 +87,8 @@ class TwinIndex:
 
     def observe(self, track: dict, now: float | None = None, topic: str | None = None) -> list:
         now = time.time() if now is None else now
-        lat, lon, uid = track.get("lat_deg"), track.get("lon_deg"), track.get("uid")
+        lat, lon = track.get("lat_deg"), track.get("lon_deg")
+        uid = track.get("uid") or track.get("icao24")      # an ADS-B track is keyed by its address and may carry no uid
         if (track.get("_delete") or lat is None or lon is None or not uid or track.get("geometry")
                 or str(uid).endswith("-TRAIL")):
             return []
