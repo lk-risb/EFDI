@@ -45,6 +45,17 @@ def _has_position(item: dict) -> bool:
     return isinstance(lat, (int, float)) and isinstance(lon, (int, float)) and not (lat == 0 and lon == 0)
 
 
+# CoT affiliation letter (a-<letter>-...) -> the fabric's affiliation slot. A friend, assumed friend, joker or
+# faker is not told apart here: the slot only decides how the C2 draws the marker.
+_AFFILIATION_SLOT = {"f": "friendly", "a": "friendly", "h": "hostile", "s": "hostile", "j": "hostile", "k": "hostile",
+                     "n": "neutral"}
+
+
+def _slot(cot_type) -> str:
+    parts = str(cot_type or "").split("-")
+    return _AFFILIATION_SLOT.get(parts[1], "unknown") if len(parts) > 1 and parts[0] == "a" else "unknown"
+
+
 def tak_records(batch: dict) -> list[dict]:
     out = []
     for item in batch.get("tak", []) or []:
@@ -57,8 +68,10 @@ def tak_records(batch: dict) -> list[dict]:
             "lat_deg": item["lat"],
             "lon_deg": item["lon"],
             "label": item.get("callsign") or item.get("summary") or "tacvox TAK",
+            "callsign": str(item.get("callsign") or item.get("summary") or "tacvox TAK").strip()[:120],
             "cot_type": item.get("type"),
             "cot_state": item.get("state"),
+            "_slot": _slot(item.get("type")),
         })
     return out
 
@@ -75,6 +88,8 @@ def entry_records(batch: dict) -> list[dict]:
             "lat_deg": item["lat"],
             "lon_deg": item["lon"],
             "label": item.get("from") or "tacvox radio",
+            "callsign": str(item.get("from") or "tacvox radio").strip()[:120],
+            "_slot": "unknown",
         }
         if isinstance(item.get("altM"), (int, float)):
             record["alt_m"] = item["altM"]
@@ -107,7 +122,7 @@ def run() -> None:
             return
         try:
             for record in tak_records(batch) + entry_records(batch):
-                topic = TOPIC_ROOT + "/land/backbone/unknown/unit/tracks/v1"
+                topic = "{}/land/backbone/{}/unit/tracks/v1".format(TOPIC_ROOT, record.pop("_slot"))
                 session.put(topic, json.dumps(record).encode())
         except Exception as exc:
             print("tacvox decode error: {}".format(exc), flush=True)

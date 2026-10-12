@@ -1,0 +1,126 @@
+name: security
+
+# Two jobs with different jobs to do:
+#   secrets       blocks. A credential in the history is never noise. Mark it a required check on main.
+#   dependencies  reports. New advisories appear without any push, so this runs on pull requests, weekly and
+#                 on demand, and is not a required check: a red run is a ticket, not a reason to stop shipping.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  GITLEAKS_VERSION: "v8.30.0"
+  TRIVY_VERSION: "v0.70.0"
+  PNPM_VERSION: "11.9.0"
+  PIP_AUDIT_VERSION: "2.10.1"
+
+jobs:
+  secrets:
+    name: secret scan (full history)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0              # the whole history: a secret removed in a later commit is still leaked
+          persist-credentials: false
+
+      - name: Install gitleaks
+        run: |
+          set -euo pipefail
+          plain="${GITLEAKS_VERSION#v}"
+          archive="gitleaks_${plain}_linux_x64.tar.gz"
+          base="https://github.com/gitleaks/gitleaks/releases/download/${GITLEAKS_VERSION}"
+          curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location --retry 5 --retry-delay 3 --retry-all-errors -o "/tmp/${archive}" "${base}/${archive}"
+          curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location --retry 5 --retry-delay 3 --retry-all-errors -o /tmp/checksums.txt "${base}/gitleaks_${plain}_checksums.txt"
+          expected="$(awk -v f="${archive}" '$NF == f {print $1; exit}' /tmp/checksums.txt)"
+          actual="$(sha256sum "/tmp/${archive}" | awk '{print $1}')"
+          if [[ -z "$expected" || "$actual" != "$expected" ]]; then
+            echo "::error::Checksum mismatch for gitleaks ${GITLEAKS_VERSION}"
+            exit 1
+          fi
+          mkdir -p "$HOME/.local/bin"
+          tar -xzf "/tmp/${archive}" -C "$HOME/.local/bin" gitleaks
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Scan history
+        run: gitleaks git . --config .gitleaks.toml --no-banner --redact=100 --log-level warn --exit-code 1
+
+  dependencies:
+    name: dependency, image and config audit
+    if: github.event_name != 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Install trivy
+        run: |
+          set -euo pipefail
+          plain="${TRIVY_VERSION#v}"
+          archive="trivy_${plain}_Linux-64bit.tar.gz"
+          base="https://github.com/aquasecurity/trivy/releases/download/${TRIVY_VERSION}"
+          curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location --retry 5 --retry-delay 3 --retry-all-errors -o "/tmp/${archive}" "${base}/${archive}"
+          curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location --retry 5 --retry-delay 3 --retry-all-errors -o /tmp/checksums.txt "${base}/trivy_${plain}_checksums.txt"
+          expected="$(awk -v f="${archive}" '$NF == f {print $1; exit}' /tmp/checksums.txt)"
+          actual="$(sha256sum "/tmp/${archive}" | awk '{print $1}')"
+          if [[ -z "$expected" || "$actual" != "$expected" ]]; then
+            echo "::error::Checksum mismatch for trivy ${TRIVY_VERSION}"
+            exit 1
+          fi
+          mkdir -p "$HOME/.local/bin"
+          tar -xzf "/tmp/${archive}" -C "$HOME/.local/bin" trivy
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Trivy (dependencies, secrets, Dockerfiles)
+        # --ignore-unfixed: an advisory with no patched release is nothing anyone can act on yet.
+        # Accepted findings live in .trivyignore.yaml, each with a reason and an expiry.
+        run: trivy fs --scanners vuln,secret,misconfig --severity HIGH,CRITICAL --ignore-unfixed --ignorefile .trivyignore.yaml --skip-dirs compose/state --exit-code 1 .
+
+      - name: Python dependencies (pip-audit)
+        run: |
+          set -euo pipefail
+          for requirements in compose/requirements.txt compose/zenoh-admin/requirements.txt; do
+            echo "::group::${requirements}"
+            pipx run --spec "pip-audit==${PIP_AUDIT_VERSION}" pip-audit -r "${requirements}"
+            echo "::endgroup::"
+          done
+
+      - name: Admin console dependencies (pnpm audit)
+        working-directory: compose/zenoh-admin/ui
+        run: |
+          set -euo pipefail
+          npm install --global "pnpm@${PNPM_VERSION}"
+          pnpm install --frozen-lockfile --ignore-scripts
+          pnpm audit --audit-level high
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## Dependency, image and config audit"
+            echo ""
+            echo "Trivy (HIGH/CRITICAL, fixed advisories only), pip-audit and pnpm audit. Accepted findings: .trivyignore.yaml."
+          } >> "$GITHUB_STEP_SUMMARY"

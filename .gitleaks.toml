@@ -19,4 +19,9 @@ paths = [
   # shape is what a secret-name heuristic keys on, giving 30+ false positives
   # in this one file.
   '''compose/zenoh-admin/ui/src/components/IntegrationSettings\.tsx''',
+  '''compose/zenoh-admin/ui/src/routes/runtime\.tsx''',   # same: form fields named by env var, no values
+  # Placeholders (<password>, <runtime-only-token>) and empty variable names in the examples and install docs.
+  '''compose/\.env\.example''',
+  '''INTEGRATIONS\.md''',
+  '''INSTALL\.md''',
 ]

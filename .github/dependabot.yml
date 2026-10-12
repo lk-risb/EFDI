@@ -1,0 +1,45 @@
+# Automated update pull requests. They are what turns a published advisory into a fix without anyone having to
+# look: the security workflow reports, these propose. Updates are grouped so one week is one review, not twenty.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /compose
+    schedule: { interval: weekly, day: monday }
+    open-pull-requests-limit: 5
+    groups:
+      python-runtime:
+        patterns: ["*"]
+        update-types: [minor, patch]
+
+  - package-ecosystem: pip
+    directory: /compose/zenoh-admin
+    schedule: { interval: weekly, day: monday }
+    open-pull-requests-limit: 5
+    groups:
+      admin-api:
+        patterns: ["*"]
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: /compose/zenoh-admin/ui
+    schedule: { interval: weekly, day: monday }
+    open-pull-requests-limit: 5
+    groups:
+      admin-console:
+        patterns: ["*"]
+        update-types: [minor, patch]
+
+  - package-ecosystem: docker
+    directories: [/compose, /compose/zenoh-admin]
+    schedule: { interval: weekly, day: monday }
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly, day: monday }
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: cargo
+    directory: /clients/examples/modern/rust
+    schedule: { interval: monthly }

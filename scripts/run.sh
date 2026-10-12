@@ -347,16 +347,16 @@ start_layers() {
     echo ""
     echo "=== TAK and SitaWare layers ==="
 
-    # CoT → TAK Server TCP (Option A: plaintext :8087, Option B: mTLS :8089)
+    # CoT → TAK Server TCP (mTLS :8089; the plaintext :8087 input is anonymous and TAK publishes it on loopback only)
     if [[ "${TAK_HOST:-127.0.0.1}" != "127.0.0.1" ]] || \
-       nc -z "${TAK_HOST:-127.0.0.1}" "${TAK_PORT:-8087}" 2>/dev/null; then
-        _cot_args=(--host "${TAK_HOST:-127.0.0.1}" --port "${TAK_PORT:-8087}")
+       nc -z "${TAK_HOST:-127.0.0.1}" "${TAK_PORT:-8089}" 2>/dev/null; then
+        _cot_args=(--host "${TAK_HOST:-127.0.0.1}" --port "${TAK_PORT:-8089}")
         if [[ "${TAK_TLS:-}" == "1" ]]; then
             _cot_args+=(--tls --cert "${TAK_CERT}" --key "${TAK_KEY}" --ca "${TAK_CA}")
         fi
         start tak-layer layers/vendors/tak/tak_layer.py "${_cot_args[@]}"
     else
-        echo "  [skip] tak-layer — TAK Server not reachable at ${TAK_HOST:-127.0.0.1}:${TAK_PORT:-8087}"
+        echo "  [skip] tak-layer — TAK Server not reachable at ${TAK_HOST:-127.0.0.1}:${TAK_PORT:-8089}"
     fi
 
     # SitaWare HQ NVG Import Subscription polls this native HTTP(S) feed.
@@ -385,16 +385,16 @@ start_giraffe_layers() {
     echo ""
     echo "=== Protocol layers (radar → CoT) ==="
 
-    # CoT → TAK Server TCP (Option A: plaintext :8087, Option B: mTLS :8089)
+    # CoT → TAK Server TCP (mTLS :8089; the plaintext :8087 input is anonymous and TAK publishes it on loopback only)
     if [[ "${TAK_HOST:-127.0.0.1}" != "127.0.0.1" ]] || \
-       nc -z "${TAK_HOST:-127.0.0.1}" "${TAK_PORT:-8087}" 2>/dev/null; then
-        _cot_args=(--host "${TAK_HOST:-127.0.0.1}" --port "${TAK_PORT:-8087}")
+       nc -z "${TAK_HOST:-127.0.0.1}" "${TAK_PORT:-8089}" 2>/dev/null; then
+        _cot_args=(--host "${TAK_HOST:-127.0.0.1}" --port "${TAK_PORT:-8089}")
         if [[ "${TAK_TLS:-}" == "1" ]]; then
             _cot_args+=(--tls --cert "${TAK_CERT}" --key "${TAK_KEY}" --ca "${TAK_CA}")
         fi
         start tak-layer layers/vendors/tak/tak_layer.py "${_cot_args[@]}"
     else
-        echo "  [skip] tak-layer — TAK Server not reachable at ${TAK_HOST:-127.0.0.1}:${TAK_PORT:-8087}"
+        echo "  [skip] tak-layer — TAK Server not reachable at ${TAK_HOST:-127.0.0.1}:${TAK_PORT:-8089}"
     fi
 
     # Track fusion — always start in giraffe mode (correlates radar + any ADS-B)

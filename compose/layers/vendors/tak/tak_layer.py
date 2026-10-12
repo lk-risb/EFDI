@@ -696,7 +696,8 @@ def _callsign(track: dict, uid: str) -> str:
     # Aircraft label priority: REG > TRK-# > callsign
     reg       = (track.get("registration") or "").strip()
     atype     = (track.get("aircraft_type") or "").strip()
-    cs        = (track.get("callsign")      or "").strip()
+    # A decoder that only sets `label` (tytan, fpv, palantir, usareur, tacvox, ...) still names its marker.
+    cs        = (track.get("callsign") or track.get("label") or "").strip()
     track_num = track.get("track_num")
     if reg:
         label = reg
@@ -2004,6 +2005,9 @@ def run(args):
                        cafile=getattr(args, "ca", None),
                        server_name=getattr(args, "tls_server_name", None))
     mode = "TLS mTLS" if tls else "TCP plaintext"
+    if not tls:
+        print("WARNING: sending CoT to TAK Server over plaintext TCP. Port 8087 is the anonymous input: no TLS and no "
+              "client certificate. Use --tls on port 8089.", flush=True)
     print("CoT → {} candidates: {} (TAK Server, first reachable wins)".format(
         mode, ", ".join("{}:{}".format(h, p) for h, p in hosts)), flush=True)
 

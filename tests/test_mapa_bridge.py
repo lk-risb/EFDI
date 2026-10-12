@@ -89,3 +89,10 @@ def test_ambiguous_pairings_are_left_as_two_markers():
     assert mapa_bridge.merge_with_neptun(two_mapa, {"N": _neptun("N", 50.0, 30.0)}) == {}
     two_neptun = {"N1": _neptun("N1", 50.0, 30.0), "N2": _neptun("N2", 50.01, 30.0)}
     assert mapa_bridge.merge_with_neptun({"M": _mapa("M", 50.0, 30.0)}, two_neptun) == {}
+
+
+def test_near_misses_list_close_same_class_pairs_that_were_not_merged():
+    markers = {"M1": _mapa("M1", 50.0, 30.0), "M2": _mapa("M2", 50.0, 30.0, slot="missile")}
+    neptun = {"N1": _neptun("N1", 50.3, 30.0, uncertainty_m=1000), "N2": _neptun("N2", 53.0, 30.0)}
+    assert mapa_bridge.near_misses(markers, neptun, merged={}) == [("M1", "N1", 33.4)]
+    assert mapa_bridge.near_misses(markers, neptun, merged={"M1": "N1"}) == []

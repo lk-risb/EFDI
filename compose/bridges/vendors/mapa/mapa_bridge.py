@@ -163,6 +163,25 @@ def _same_threat(mapa: dict, neptun: dict) -> bool:
     return heading_a is None or heading_b is None or _heading_diff(heading_a, heading_b) <= HEADING_TOL_DEG
 
 
+def near_misses(markers: dict, neptun: dict, merged: dict, within_km: float = 50.0) -> list:
+    """(mapa uid, neptun uid, km) for same-class pairs that are close but were not merged. The log of these
+    is what the match radius can be tuned from."""
+    out = []
+    for m_uid, m in markers.items():
+        if m_uid in merged:
+            continue
+        for n_uid, n in neptun.items():
+            if _NEPTUN_SLOT.get(str(n.get("type") or "").lower()) != m.get("target_type"):
+                continue
+            try:
+                km = _km(m["lat_deg"], m["lon_deg"], n["lat_deg"], n["lon_deg"])
+            except (KeyError, TypeError):
+                continue
+            if km <= within_km:
+                out.append((m_uid, n_uid, round(km, 1)))
+    return sorted(out, key=lambda row: row[2])
+
+
 def merge_with_neptun(markers: dict, neptun: dict) -> dict:
     """{mapa uid: neptun uid} for the pairs that are certainly the same threat. markers is
     {uid: track} of mapa markers, neptun {uid: track} of fresh NEPTUN threats. One-to-one only:
@@ -255,9 +274,15 @@ def main():
                     with neptun_lock:
                         fresh = {u: t for u, (t, seen) in neptun.items() if now - seen <= NEPTUN_MAX_AGE_S}
                     markers = {u: t for u, (_, t) in current.items() if not u.endswith(TRAIL_SUFFIX)}
-                    for mapa_uid in merge_with_neptun(markers, fresh):
+                    merged = merge_with_neptun(markers, fresh)
+                    for mapa_uid in merged:
                         current.pop(mapa_uid)                 # NEPTUN's marker stays; ours would draw it twice
                         current.pop(mapa_uid + TRAIL_SUFFIX, None)   # a trail goes with its marker
+                    missed = near_misses(markers, fresh, merged)
+                    if merged or missed:
+                        print("mapa: merged {} with NEPTUN, {} same-class pairs within 50 km not merged{}".format(
+                            len(merged), len(missed),
+                            " (closest {} ~ {} at {} km)".format(*missed[0]) if missed else ""), flush=True)
                 for prefix, track in current.values():
                     _put(session, prefix, track)
                 for uid in set(published) - set(current):

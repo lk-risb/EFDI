@@ -30,6 +30,11 @@ repos:
         # (single-line if/for, E701/E702) that CLAUDE.md explicitly keeps.
         args: ["--select=F,E9", "--no-fix"]
 
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.0
+    hooks:
+      - id: gitleaks          # staged changes only; reads .gitleaks.toml. CI scans the whole history.
+
   - repo: https://github.com/koalaman/shellcheck-precommit
     rev: v0.11.0
     hooks:

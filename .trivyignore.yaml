@@ -1,0 +1,20 @@
+# Findings that are accepted on purpose. Each entry says why and expires, so it is looked at again instead of
+# staying forever. Anything not listed here fails the dependency scan.
+vulnerabilities:
+  - id: CVE-2026-32829
+    paths:
+      - "clients/examples/modern/rust/Cargo.lock"
+    statement: lz4_flex 0.10.0 is pinned by the zenoh crate this example client uses; fixing it needs a zenoh upgrade. Example code, not shipped in the pod.
+    expired_at: 2027-01-10
+
+misconfigurations:
+  - id: DS-0002
+    paths:
+      - "clients/examples/bridges/rest-http/Dockerfile"
+    statement: Example image for partners to copy, run unprivileged by whoever deploys it.
+    expired_at: 2027-01-10
+  - id: DS-0002
+    paths:
+      - "compose/zenoh-admin/Dockerfile"
+    statement: The admin container writes the pod state mounts as root. Dropping to a non-root user needs those mounts re-owned first; tracked as a follow-up.
+    expired_at: 2027-01-10

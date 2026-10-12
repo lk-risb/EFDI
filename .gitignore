@@ -80,3 +80,12 @@ compose/zenoh-admin/.venv/
 # Scratch commit-message drafts — working state, not project content
 commit_msg.txt
 COMMIT_MSG.txt
+
+# secrets and local backups (added 2026-10-08)
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.bak-*
+*.orig
