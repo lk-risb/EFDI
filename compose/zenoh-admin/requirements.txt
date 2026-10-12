@@ -6,7 +6,7 @@ asyncpg==0.31.0
 # Kept only for scripts/migrate_mariadb_to_postgres.py to read the old MariaDB
 # database during the one-time cutover; drop once every deployment has migrated.
 aiomysql==0.3.2
-bcrypt==4.0.1
+bcrypt==5.0.0
 PyJWT[crypto]==2.15.0
 cryptography==50.0.0
 passlib[bcrypt]==1.7.4
