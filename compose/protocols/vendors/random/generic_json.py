@@ -28,6 +28,7 @@ import json
 import re
 import time
 
+from airframe import names_airframe
 from echo_filter import EchoFilter, subscribe_own
 from icao_ghosts import GhostFilter, TwinFilter
 from gateway import TOPIC_ROOT, open_session, payload_bytes, subscribe
@@ -82,19 +83,6 @@ def _position(payload: dict) -> tuple[float, float] | None:
     return lat, lon
 
 
-# A participant that declares no dimension or type may still name its object after the airframe
-# ("minerva:teil-s-10:deltaquad-nvrec5"); read the name for the obvious airframe words.
-_AIRFRAME_WORDS = re.compile(r"drone|uav|copter|(?<!s)quad")   # not "squad"
-
-
-def _names_airframe(*names) -> bool:
-    for name in names:
-        for token in re.split(r"[^a-z0-9]+", str(name or "").lower()):
-            if token == "uas" or _AIRFRAME_WORDS.search(token):
-                return True
-    return False
-
-
 def _identity(payload: dict) -> dict:
     """The identity block a SOC-BX unified wrapper carries (metadata.soc_bx_unified.original.features.identity),
     where the real source states its domain, affiliation and CoT subtype; the wrapper's own device.type is just "Sensor"."""
@@ -118,7 +106,7 @@ def _dimension(payload: dict) -> str:
         return "air"
     if "vessel" in kind or "ship" in kind or "boat" in kind:
         return "sea"
-    if _names_airframe(*(payload.get(k) for k in _ID_KEYS + _LABEL_KEYS)):
+    if names_airframe(*(payload.get(k) for k in _ID_KEYS + _LABEL_KEYS)):
         return "air"
     return "land"
 
@@ -159,7 +147,7 @@ def normalize(payload: dict, origin: str) -> dict | None:
         dimension = "air"
     elif dimension == "air" and (
             str(_identity(payload).get("object_subtype", "")).endswith("-Q")   # CoT: unmanned
-            or _names_airframe(raw_id, label, payload.get("type"), (payload.get("device") or {}).get("type"))):
+            or names_airframe(raw_id, label, payload.get("type"), (payload.get("device") or {}).get("type"))):
         record["target_type"] = "uav"
     slot = _affiliation_slot(payload)
     if record.get("icao24") and slot == "unknown":

@@ -72,11 +72,20 @@ def test_a_partner_drone_tagged_only_by_its_telemetry_source_is_an_aircraft_not_
     message.node_id = "n1"
     features = message.objects["drone_telemetry:deltaquad-nvrec5"].features
     features.location.latitude, features.location.longitude = 49.2, 11.9
-    features.identity.object_id = "drone_telemetry:deltaquad-nvrec5"
+    features.identity.object_id = "deltaquad-nvrec5"      # as sent: the "drone_" tag is only in the map key
     (record,) = socbx.unified_records(message.SerializeToString())
     assert record["_dimension"] == "air" and record["target_type"] == "uav"
     topic = _topic(record.pop("_dimension"), record.pop("_slot"), record.pop("_entity", "unit"))
     assert _tak(topic, record) == ["a-u-A-M-F-Q"]
+
+
+def test_a_partner_drone_known_only_by_an_airframe_label_and_friend_affiliation_is_a_friendly_uav():
+    message = UnifiedSchema()
+    features = message.objects["8202ee7e-d2aa-5eac-8e69-de29ad4ad8d7"].features
+    features.location.latitude, features.location.longitude = 49.2, 11.9
+    features.identity.label, features.identity.affiliation = "deltaquad-nvrec5", "friend"
+    (record,) = socbx.unified_records(message.SerializeToString())
+    assert (record["_dimension"], record["_slot"], record["target_type"]) == ("air", "friendly", "uav")
 
 
 def _sample(key: str, track: dict):

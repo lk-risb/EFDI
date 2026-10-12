@@ -39,6 +39,7 @@ import re
 import time
 
 from google.protobuf.message import DecodeError
+from protocols.vendors.random.airframe import names_airframe
 from protocols.vendors.random.echo_filter import EchoFilter, subscribe_own
 from protocols.vendors.random.icao_ghosts import GhostFilter, TwinFilter
 from protocols.vendors.random.gateway import TOPIC_ROOT, open_session, payload_bytes, subscribe
@@ -74,21 +75,17 @@ _DOMAIN_AIR = ("uav", "aircraft", "drone", "air", "helicopter", "rotary")
 _DOMAIN_SEA = ("vessel", "ship", "boat", "sea", "maritime", "surface")
 
 
-_DRONE_WORDS = ("drone", "uav", "uas")
-
-
-def _names_a_drone(identity) -> bool:
+def _names_a_drone(identity, key: str = "") -> bool:
     """A partner that tags telemetry by source ("drone_telemetry:deltaquad-nvrec5") and declares no domain."""
-    text = " ".join(filter(None, [identity.object_id, identity.name, identity.label, identity.callsign])).lower()
-    return any(word in text for word in _DRONE_WORDS)
+    return names_airframe(key, identity.object_id, identity.name, identity.label, identity.callsign)
 
 
-def _dimension(identity) -> str:
+def _dimension(identity, key: str = "") -> str:
     haystack = " ".join(filter(None, [
         identity.domain, identity.object_type, identity.object_subtype,
         identity.platform_type, identity.vehicle_type,
     ])).lower()
-    if any(tok in haystack for tok in _DOMAIN_AIR) or _names_a_drone(identity):
+    if any(tok in haystack for tok in _DOMAIN_AIR) or _names_a_drone(identity, key):
         return "air"
     if any(tok in haystack for tok in _DOMAIN_SEA):
         return "sea"
@@ -97,7 +94,7 @@ def _dimension(identity) -> str:
 
 def _slot(identity) -> str:
     affiliation = (identity.affiliation or "").strip().lower()
-    return affiliation if affiliation else "unknown"
+    return {"friend": "friendly"}.get(affiliation, affiliation) if affiliation else "unknown"   # the topic slot the layers map
 
 
 def unified_records(payload: bytes) -> list[dict]:
@@ -138,8 +135,8 @@ def unified_records(payload: bytes) -> list[dict]:
             record["speed_mps"] = kinematics.speed
         elif kinematics.HasField("ground_speed"):
             record["speed_mps"] = kinematics.ground_speed
-        record["_dimension"] = _dimension(identity)
-        if record["_dimension"] == "air" and _names_a_drone(identity):
+        record["_dimension"] = _dimension(identity, object_id)
+        if record["_dimension"] == "air" and _names_a_drone(identity, object_id):
             record["target_type"] = "uav"
         icao = _ICAO_HEX.match(str(record["uid"]))
         if icao and _generic(identity):
