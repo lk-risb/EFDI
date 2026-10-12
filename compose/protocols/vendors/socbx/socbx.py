@@ -74,12 +74,21 @@ _DOMAIN_AIR = ("uav", "aircraft", "drone", "air", "helicopter", "rotary")
 _DOMAIN_SEA = ("vessel", "ship", "boat", "sea", "maritime", "surface")
 
 
+_DRONE_WORDS = ("drone", "uav", "uas")
+
+
+def _names_a_drone(identity) -> bool:
+    """A partner that tags telemetry by source ("drone_telemetry:deltaquad-nvrec5") and declares no domain."""
+    text = " ".join(filter(None, [identity.object_id, identity.name, identity.label, identity.callsign])).lower()
+    return any(word in text for word in _DRONE_WORDS)
+
+
 def _dimension(identity) -> str:
     haystack = " ".join(filter(None, [
         identity.domain, identity.object_type, identity.object_subtype,
         identity.platform_type, identity.vehicle_type,
     ])).lower()
-    if any(tok in haystack for tok in _DOMAIN_AIR):
+    if any(tok in haystack for tok in _DOMAIN_AIR) or _names_a_drone(identity):
         return "air"
     if any(tok in haystack for tok in _DOMAIN_SEA):
         return "sea"
@@ -130,6 +139,8 @@ def unified_records(payload: bytes) -> list[dict]:
         elif kinematics.HasField("ground_speed"):
             record["speed_mps"] = kinematics.ground_speed
         record["_dimension"] = _dimension(identity)
+        if record["_dimension"] == "air" and _names_a_drone(identity):
+            record["target_type"] = "uav"
         icao = _ICAO_HEX.match(str(record["uid"]))
         if icao and _generic(identity):
             # Key it by icao24 like every other ADS-B source, so the same aircraft from

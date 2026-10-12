@@ -87,3 +87,15 @@ def test_partner_adsb_aircraft_use_the_same_civ_aircraft_slot_as_dangausakis():
     other, _, other_slot = generic_json.normalize({"ci_uuid": "u1", "ci_name": "radar-1", "lat": 50, "lon": 30}, "o")
     assert declared_slot == "hostile" and "_entity" not in declared
     assert other_slot == "unknown" and "_entity" not in other
+
+
+def test_generic_json_object_named_after_an_airframe_is_a_uav_not_a_ground_unit():
+    record, dimension, _ = generic_json.normalize(
+        {"ci_name": "minerva:teil-s-10:deltaquad-nvrec5", "lat": 55.1, "lon": 23.9}, "consilium/sa-event/out/x")
+    assert dimension == "air"
+    assert record["target_type"] == "uav"
+
+
+def test_generic_json_ground_unit_with_a_plain_name_stays_land():
+    _, dimension, _ = generic_json.normalize({"ci_name": "squad-3 casual", "lat": 55.1, "lon": 23.9}, "x")
+    assert dimension == "land"

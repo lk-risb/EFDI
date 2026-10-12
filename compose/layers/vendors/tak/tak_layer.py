@@ -166,10 +166,15 @@ def _unknown_air_type(track: dict) -> str:
         or track.get("remote_id_ua_type")
         or track.get("utm_vehicle_type")
         or track.get("aartos_category")
+        or track.get("target_type")
         or ""
     ).lower()
     if any(token in object_class for token in ("drone", "uas", "uav", "quadcopter")):
         return "a-u-A-M-F-Q"
+    if track.get("icao24"):
+        # Mode-S traffic with no declared affiliation, from a partner feed: the same aircraft that
+        # dangausakis reports as civil. One type for it, or the marker flips between the two feeds.
+        return _CIV_AIR_TYPE
     return "a-u-A-C-F"
 
 _CIV_SEA_TYPE = "a-n-S-X-L"

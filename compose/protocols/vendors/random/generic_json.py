@@ -82,6 +82,19 @@ def _position(payload: dict) -> tuple[float, float] | None:
     return lat, lon
 
 
+# A participant that declares no dimension or type may still name its object after the airframe
+# ("minerva:teil-s-10:deltaquad-nvrec5"); read the name for the obvious airframe words.
+_AIRFRAME_WORDS = re.compile(r"drone|uav|copter|(?<!s)quad")   # not "squad"
+
+
+def _names_airframe(*names) -> bool:
+    for name in names:
+        for token in re.split(r"[^a-z0-9]+", str(name or "").lower()):
+            if token == "uas" or _AIRFRAME_WORDS.search(token):
+                return True
+    return False
+
+
 def _dimension(payload: dict) -> str:
     explicit = str(payload.get("dimension", "")).lower()
     if explicit in _DIMENSIONS:
@@ -93,6 +106,8 @@ def _dimension(payload: dict) -> str:
         return "air"
     if "vessel" in kind or "ship" in kind or "boat" in kind:
         return "sea"
+    if _names_airframe(*(payload.get(k) for k in _ID_KEYS + _LABEL_KEYS)):
+        return "air"
     return "land"
 
 
@@ -129,6 +144,9 @@ def normalize(payload: dict, origin: str) -> dict | None:
         record["icao24"] = icao.group(1).lower()
         record["target_type"] = "aircraft"
         dimension = "air"
+    elif dimension == "air" and (
+            _names_airframe(raw_id, label, payload.get("type"), (payload.get("device") or {}).get("type"))):
+        record["target_type"] = "uav"
     slot = _affiliation_slot(payload)
     if record.get("icao24") and slot == "unknown":
         # ADS-B traffic: same topic slot as dangausakis' ADS-B (civ/aircraft), see socbx.py.

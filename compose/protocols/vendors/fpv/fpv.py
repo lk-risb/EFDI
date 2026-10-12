@@ -38,6 +38,7 @@ def gps_record(payload: bytes) -> dict | None:
         "lon_deg": gps.longitude_deg,
         "alt_m": gps.altitude_m,
         "label": msg.source_id or "FPV drone",
+        "target_type": "uav",
         "affiliation": "unknown",
     }
     if gps.groundspeed_kmh:

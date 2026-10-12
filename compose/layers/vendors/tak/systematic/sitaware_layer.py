@@ -99,10 +99,13 @@ def _unknown_air_sidc(track: dict) -> str:
         track.get("sapient_class")
         or track.get("remote_id_ua_type")
         or track.get("utm_vehicle_type")
+        or track.get("target_type")
         or ""
     ).lower()
     if any(token in object_class for token in ("drone", "uas", "uav", "quadcopter")):
         return "SUAPMFQ---*****"
+    if track.get("icao24"):
+        return _civil_air_sidc(track)           # same aircraft dangausakis reports as civil; see tak_layer
     return "SUAPMF----*****"
 
 
