@@ -95,7 +95,19 @@ def _names_airframe(*names) -> bool:
     return False
 
 
+def _identity(payload: dict) -> dict:
+    """The identity block a SOC-BX unified wrapper carries (metadata.soc_bx_unified.original.features.identity),
+    where the real source states its domain, affiliation and CoT subtype; the wrapper's own device.type is just "Sensor"."""
+    node = payload
+    for key in ("metadata", "soc_bx_unified", "original", "features", "identity"):
+        node = node.get(key) if isinstance(node, dict) else None
+    return node if isinstance(node, dict) else {}
+
+
 def _dimension(payload: dict) -> str:
+    domain = str(_identity(payload).get("domain", "")).lower()
+    if domain in _DIMENSIONS:
+        return domain
     explicit = str(payload.get("dimension", "")).lower()
     if explicit in _DIMENSIONS:
         return explicit
@@ -112,8 +124,9 @@ def _dimension(payload: dict) -> str:
 
 
 def _affiliation_slot(payload: dict) -> str:
-    raw = str(payload.get("affiliation") or (payload.get("metadata") or {}).get("affiliation", "")).lower()
-    return _AFFILIATION_SLOT.get(raw, "unknown")
+    raw = str(payload.get("affiliation") or _identity(payload).get("affiliation")
+              or (payload.get("metadata") or {}).get("affiliation", "")).lower()
+    return _AFFILIATION_SLOT.get({"friend": "friendly"}.get(raw, raw), "unknown")
 
 
 def normalize(payload: dict, origin: str) -> dict | None:
@@ -145,7 +158,8 @@ def normalize(payload: dict, origin: str) -> dict | None:
         record["target_type"] = "aircraft"
         dimension = "air"
     elif dimension == "air" and (
-            _names_airframe(raw_id, label, payload.get("type"), (payload.get("device") or {}).get("type"))):
+            str(_identity(payload).get("object_subtype", "")).endswith("-Q")   # CoT: unmanned
+            or _names_airframe(raw_id, label, payload.get("type"), (payload.get("device") or {}).get("type"))):
         record["target_type"] = "uav"
     slot = _affiliation_slot(payload)
     if record.get("icao24") and slot == "unknown":

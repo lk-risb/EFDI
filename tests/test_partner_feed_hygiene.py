@@ -99,3 +99,14 @@ def test_generic_json_object_named_after_an_airframe_is_a_uav_not_a_ground_unit(
 def test_generic_json_ground_unit_with_a_plain_name_stays_land():
     _, dimension, _ = generic_json.normalize({"ci_name": "squad-3 casual", "lat": 55.1, "lon": 23.9}, "x")
     assert dimension == "land"
+
+
+def test_generic_json_soc_bx_wrapper_identity_decides_domain_and_affiliation():
+    # shape of a real consilium sa-event record whose device.type is only "Sensor"
+    record, dimension, slot = generic_json.normalize({
+        "ci_name": "minerva:teil-s-10:deltaquad-nvrec5", "device": {"type": "Sensor"},
+        "location": {"latitude": 49.2, "longitude": 11.87},
+        "metadata": {"soc_bx_unified": {"original": {"features": {"identity": {
+            "domain": "air", "affiliation": "friend", "object_subtype": "a-f-A-M-F-Q"}}}}},
+    }, "consilium/sa-event/out/x/v2")
+    assert (dimension, slot, record["target_type"]) == ("air", "friendly", "uav")
