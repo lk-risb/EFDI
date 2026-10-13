@@ -1,4 +1,4 @@
-"""nffi_layer: TAK clients become NFFI 1.4 tracks that follow the NC3A schema's patterns, and a client gets the table on connect."""
+"""nffi_layer: TAK clients become NFFI 1.3 tracks that follow the NC3A schema's patterns, and a client gets the table on connect."""
 
 import importlib.util
 import pathlib
@@ -134,3 +134,4 @@ def test_the_framing_can_be_changed_by_the_environment_variable(monkeypatch):
     assert nffi.track_message(CLIENT).endswith(b"\x00")
     monkeypatch.setattr(nffi, "FRAMING", "xml")
     assert nffi.track_message(CLIENT).startswith(b"<?xml") and nffi.track_message(CLIENT).endswith(b"\n")
+

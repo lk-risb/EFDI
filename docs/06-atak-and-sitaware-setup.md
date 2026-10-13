@@ -213,6 +213,13 @@ The documents are NFFI 1.3 (`NFFI_LAYER_VERSION`), each behind the 16-byte heade
 (`NFFI_LAYER_FRAMING=ip1`). How that was found out, and what is still unconfirmed, is in
 [`references/nffi/NFFI.md`](references/nffi/NFFI.md).
 
+**FFI instead of NFFI (`ffi_layer`, being tried).** SitaWare's manager also has the FFI payload (APP-11 Edition D), the newer format; its
+`UnitSymbol` comes with a `SymbolStandard`, so it may carry the numeric APP-6(D) dismounted individual that NFFI cannot. `ffi_layer` is a
+separate layer from `nffi_layer`, so the NFFI route that works on 6.21 stays as it is: set `FFI_LAYER_CONNECT` (the same IP1 Client
+address) and `FFI_LAYER_SYMBOL_STANDARD` (`APP-6(B)`, the letter symbol, or `APP-6(D)`, the 20-digit individual), start `ffi_layer` and stop
+`nffi_layer`. Run one of the two against a client, not both. The IP1 Client form has no payload setting, so whether it accepts FFI is what the
+trial shows; the message structure is copied from what a SitaWare 6.21 server writes as FFI ([`references/nffi/NFFI.md`](references/nffi/NFFI.md)).
+
 **When SitaWare is upgraded (6.22 or later).** Try the NVG route first: set `SITAWARE_TAK_USERS_NVG=true` and
 `SITAWARE_TAK_INDIVIDUAL_SCHEME` to the scheme tag the new version draws (for example `app6d`), remove `NFFI_LAYER_CONNECT`, and check that
 a TAK user appears as the person symbol. If the new version wants NFFI 1.4, set `NFFI_LAYER_VERSION=1.4` and keep the NFFI route.

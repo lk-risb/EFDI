@@ -57,7 +57,6 @@ TOPIC_ROOT = topic_root()
 NFFI_VERSION = os.environ.get("NFFI_LAYER_VERSION", "1.3").strip()
 NFFI_NS = "urn:nato:fft:protocols:nffi" + ("14" if NFFI_VERSION == "1.4" else "13")
 COUNTRY = (os.environ.get("NFFI_COUNTRY") or "LTU").strip().upper()[:3]
-ALLOW = {a.strip() for a in os.environ.get("NFFI_LAYER_ALLOW", "").split(",") if a.strip()}
 FRAMING = os.environ.get("NFFI_LAYER_FRAMING", "ip1").strip().lower()
 STALE_S = float(os.environ.get("NFFI_LAYER_STALE_S", "600"))
 REFRESH_S = float(os.environ.get("NFFI_LAYER_REFRESH_S", "30"))
@@ -140,11 +139,16 @@ def track_message(track: dict, now: float | None = None) -> bytes | None:
     return frame((b"" if FRAMING == "nodecl" else b'<?xml version="1.0" encoding="UTF-8"?>\n') + body + b"\n", now=when)
 
 
+def ip1_header(message_type: int, length: int, now: float | None = None) -> bytes:
+    """The 16-byte header SitaWare 6.21 writes in front of each NFFI (type 0x04) or FFI (type 0x14, ffi_layer.py) document."""
+    return (bytes([message_type]) + b"\x00\x00\x00" + int(now or time.time()).to_bytes(4, "big") + b"\x00\x00\x00\x00\x01\x00"
+            + length.to_bytes(2, "big"))
+
+
 def frame(document: bytes, now: float | None = None) -> bytes:
     """One document as it is written on the socket, by NFFI_LAYER_FRAMING."""
     if FRAMING == "ip1":
-        return (b"\x04\x00\x00\x00" + int(now or time.time()).to_bytes(4, "big") + b"\x00\x00\x00\x00\x01\x00"
-                + len(document).to_bytes(2, "big") + document)
+        return ip1_header(0x04, len(document), now) + document
     if FRAMING == "length":
         return len(document).to_bytes(4, "big") + document
     if FRAMING == "nul":
@@ -155,14 +159,16 @@ def frame(document: bytes, now: float | None = None) -> bytes:
 class NffiFeed:
     """The table of tracks and the clients connected to the listening socket."""
 
-    def __init__(self):
+    def __init__(self, builder=None, stale_s: float | None = None):
+        self._build = builder or track_message          # ffi_layer.py passes its own message builder
+        self._stale_s = STALE_S if stale_s is None else stale_s
         self._tracks: dict = {}                 # uid -> (time last reported, message)
         self._clients: list = []
         self._lock = threading.Lock()
 
     def update(self, track: dict, now: float | None = None) -> None:
         now = time.time() if now is None else now
-        message = track_message(track, now)
+        message = self._build(track, now)
         uid = str(track.get("uid") or "")
         with self._lock:
             if track.get("_delete"):
@@ -176,7 +182,7 @@ class NffiFeed:
     def messages(self, now: float | None = None) -> list:
         now = time.time() if now is None else now
         with self._lock:
-            for uid in [u for u, (seen, _) in self._tracks.items() if now - seen > STALE_S]:
+            for uid in [u for u, (seen, _) in self._tracks.items() if now - seen > self._stale_s]:
                 self._tracks.pop(uid)
             return [message for _, message in self._tracks.values()]
 
@@ -256,7 +262,7 @@ class NffiFeed:
                 except OSError:
                     return
                 if allow and address[0] not in allow:
-                    print("NFFI connection from {} refused (not in NFFI_LAYER_ALLOW)".format(address[0]), flush=True)
+                    print("NFFI connection from {} refused (not in the allowed sources)".format(address[0]), flush=True)
                     client.close()
                     continue
                 print("NFFI client connected: {}:{}".format(*address[:2]), flush=True)
@@ -266,23 +272,26 @@ class NffiFeed:
         return server
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="TAK users -> NFFI feed for SitaWare force tracking")
-    parser.add_argument("--connect", action="append", default=[h for h in os.environ.get("NFFI_LAYER_CONNECT", "").replace(" ", "").split(",") if h],
-                        help="host:port of SitaWare's NFFI client to connect out to (repeatable)")
-    parser.add_argument("--port", type=int, default=int(os.environ.get("NFFI_LAYER_PORT") or 0))
-    parser.add_argument("--bind", default=os.environ.get("NFFI_LAYER_BIND", "127.0.0.1"))
+def run(prefix: str = "NFFI_LAYER", builder=None, label: str = "NFFI", description: str = "TAK users -> NFFI feed for SitaWare force tracking") -> None:
+    """The layer's main loop; ffi_layer.py calls it with its own env prefix, message builder and label."""
+    env = lambda name, default="": os.environ.get("{}_{}".format(prefix, name), default)
+    parser = argparse.ArgumentParser(description=description)
+    parser.add_argument("--connect", action="append", default=[h for h in env("CONNECT").replace(" ", "").split(",") if h],
+                        help="host:port of SitaWare's client to connect out to (repeatable)")
+    parser.add_argument("--port", type=int, default=int(env("PORT") or 0))
+    parser.add_argument("--bind", default=env("BIND", "127.0.0.1"))
     args = parser.parse_args()
     if not args.port and not args.connect:
-        raise SystemExit("NFFI_LAYER_CONNECT (host:port) or NFFI_LAYER_PORT is required")
-    feed, stop = NffiFeed(), threading.Event()
+        raise SystemExit("{0}_CONNECT (host:port) or {0}_PORT is required".format(prefix))
+    allow = {a.strip() for a in env("ALLOW").split(",") if a.strip()}
+    feed, stop = NffiFeed(builder, float(env("STALE_S", "600"))), threading.Event()
     signal.signal(signal.SIGTERM, lambda *_: stop.set())
     while True:
         try:
             session = open_session()
             break
         except Exception as exc:
-            print("nffi_layer Zenoh connect failed: {} - retry in 10s".format(exc), flush=True)
+            print("{} layer Zenoh connect failed: {} - retry in 10s".format(label, exc), flush=True)
             time.sleep(10)
 
     def on_sample(sample) -> None:
@@ -294,23 +303,27 @@ def main() -> None:
             feed.update(track)
 
     subscribe(session, TOPIC, on_sample)
-    retry_s = float(os.environ.get("NFFI_LAYER_RECONNECT_S", "10"))
+    retry_s = float(env("RECONNECT_S", "10"))
     for target in args.connect:
         host, _, port = target.rpartition(":")
         if host and port.isdigit():
             feed.connect_out(host, int(port), stop, retry_s)
-            print("NFFI feed connects out to {}:{} (TAK users from {})".format(host, port, TOPIC), flush=True)
+            print("{} feed connects out to {}:{} (TAK users from {})".format(label, host, port, TOPIC), flush=True)
         else:
-            print("NFFI_LAYER_CONNECT entry {!r} is not host:port, ignored".format(target), flush=True)
+            print("{}_CONNECT entry {!r} is not host:port, ignored".format(prefix, target), flush=True)
     if args.port:
-        feed.serve(args.bind, args.port, stop, ALLOW)
-        print("NFFI feed listening on {}:{} (TAK users from {}); allowed sources: {}".format(
-            args.bind, args.port, TOPIC, ", ".join(sorted(ALLOW)) or "any that reach the port"), flush=True)
+        feed.serve(args.bind, args.port, stop, allow)
+        print("{} feed listening on {}:{} (TAK users from {}); allowed sources: {}".format(
+            label, args.bind, args.port, TOPIC, ", ".join(sorted(allow)) or "any that reach the port"), flush=True)
     try:
-        while not stop.wait(REFRESH_S):
+        while not stop.wait(float(env("REFRESH_S", "30"))):
             feed.refresh()
     finally:
         session.close()
+
+
+def main() -> None:
+    run()
 
 
 if __name__ == "__main__":

@@ -159,6 +159,7 @@ SERVICE_SPECS = [
     # detail: SitaWare polls sitaware_layer's feed, and that still makes it egress.
     ("sitaware_layer", "C2 outputs", "NVG feed → SitaWare (SitaWare polls)"),
     ("nffi_layer", "C2 outputs", "TAK users → SitaWare force tracking (NFFI feed, connects out to SitaWare's IP1 Client)"),
+    ("ffi_layer", "C2 outputs", "TAK users → SitaWare force tracking (FFI APP-11(D) feed, connects out to SitaWare's IP1 Client)"),
     ("intcore_layer", "C2 outputs", "EFDI tracks → INT-CORE (NVG 2.0.2 via TopicApi)"),
     ("intcore-bridge", "C2 inputs", "INT-CORE Topic dissemination (RabbitMQ) → Zenoh"),
     ("backbone-bridge", "Backbone", "EFDI Backbone trial fabric → EFDI tracks (feeds tak_layer + sitaware_layer)"),
@@ -226,6 +227,7 @@ SERVICE_SOURCES = {
     "sitaware": "bridges/vendors/sitaware/sitaware_bridge.py",
     "sitaware_layer": "layers/vendors/tak/systematic/sitaware_layer.py",
     "nffi_layer": "layers/vendors/tak/systematic/nffi_layer.py",
+    "ffi_layer": "layers/vendors/tak/systematic/ffi_layer.py",
     "intcore_layer": "layers/vendors/tak/random/intcore_layer.py",
     "intcore-bridge": "bridges/vendors/intcore/intcore_bridge.py",
     "backbone-bridge": "bridges/vendors/random/backbone_bridge.py",
@@ -271,6 +273,7 @@ _SERVICE_REQUIRED_KEYS = {
     "sitaware": ("SITAWARE_URL", "SITAWARE_API_PATH"),
     "intcore_layer": ("INTCORE_URL", "INTCORE_API_KEY", "INTCORE_TOPIC_ID"),
     "nffi_layer": ("NFFI_LAYER_CONNECT",),
+    "ffi_layer": ("FFI_LAYER_CONNECT",),
 }
 
 
@@ -322,7 +325,7 @@ EDITABLE_EXACT = {
     "INTCORE_BRIDGE_BIND", "INTCORE_BRIDGE_PORT", "INTCORE_BRIDGE_PATH", "INTCORE_BRIDGE_TOKEN",
     "INTCORE_SOURCE",
 }
-EDITABLE_PREFIXES = ("CAT10_", "CAT20_", "CAT21_", "CAT34_", "CAT48_", "CAT62_", "NFFI_")
+EDITABLE_PREFIXES = ("CAT10_", "CAT20_", "CAT21_", "CAT34_", "CAT48_", "CAT62_", "NFFI_", "FFI_LAYER_")
 SECRET_MARKERS = ("PASS", "PASSWORD", "TOKEN", "SECRET", "_KEY", "PRIVATE_KEY")
 KEY_RE = re.compile(r"^[A-Z][A-Z0-9_]{0,63}$")
 

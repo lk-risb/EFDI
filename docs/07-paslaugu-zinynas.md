@@ -30,6 +30,7 @@
 | `tak-bridge` | `bridges/vendors/tak/tak_bridge.py` | Prenumeratorius — visos temos | TAK matomo CoT srauto priėmimas |
 | `sitaware-hq-nvg` | `layers/vendors/tak/systematic/sitaware_layer.py` | Prenumeratorius — visos takelių temos | HQ periodiškai ima NVG būseną |
 | `nffi_layer` | `layers/vendors/tak/systematic/nffi_layer.py` | Prenumeratorius — `…/land/tak/**` | Įvykio valdomas; jungiasi prie SitaWare NFFI IP1 Client ir siunčia TAK naudotojus kaip pajėgų takelius (žr. [06](06-atak-ir-sitaware-saranka.md)) |
+| `ffi_layer` | `layers/vendors/tak/systematic/ffi_layer.py` | Prenumeratorius — `…/land/tak/**` | Įvykio valdomas; tas pats srautas kaip `nffi_layer`, bet APP-11(D) FFI pranešimais (bandoma; su vienu klientu naudokite vieną iš dviejų) |
 | `track-fusion` | `protocols/fusion.py` | CAT-48 + CAT-21 prenumeratorius; sujungia Drone Strike Map ir GeoConfirmed smūgių žymeklius, apie tą patį išpuolį (ta pati pusė, ta pati diena, per `FUSION_STRIKE_M` = 100 m; paliekama tikslesnė pozicija, kitos atšaukiamos žyme „ištrinta“) | Įvykio valdomas |
 
 ### TAK naudotojai ir išoriniai CoT šaltiniai

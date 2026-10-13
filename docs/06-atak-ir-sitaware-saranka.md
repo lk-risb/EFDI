@@ -192,6 +192,14 @@ kai išsiunčiamas pirmas naudotojas. Dokumentai yra NFFI 1.3 (`NFFI_LAYER_VERSI
 SitaWare 6.21 rašo (`NFFI_LAYER_FRAMING=ip1`). Kaip tai išsiaiškinta ir kas dar nepatvirtinta, aprašyta
 [`references/nffi/NFFI.md`](references/nffi/NFFI.md).
 
+**FFI vietoje NFFI (`ffi_layer`, bandoma).** SitaWare tvarkyklė turi ir FFI formatą (APP-11 Edition D), naujesnį; jo `UnitSymbol` eina su
+`SymbolStandard`, todėl gali nešti skaitmeninį APP-6(D) pėsčiojo simbolį, kurio NFFI nepaima. `ffi_layer` yra atskiras sluoksnis nuo
+`nffi_layer`, todėl NFFI kelias, veikiantis 6.21, lieka nepakeistas: nustatykite `FFI_LAYER_CONNECT` (to paties IP1 Client adresas) ir
+`FFI_LAYER_SYMBOL_STANDARD` (`APP-6(B)`, raidinis simbolis, arba `APP-6(D)`, 20 skaitmenų pėsčiasis), paleiskite `ffi_layer` ir sustabdykite
+`nffi_layer`. Su vienu klientu naudokite vieną iš dviejų, ne abu. IP1 Client formoje nėra duomenų formato nustatymo, todėl ar jis priima FFI,
+parodys bandymas; pranešimo struktūra nukopijuota iš to, ką SitaWare 6.21 serveris rašo kaip FFI
+([`references/nffi/NFFI.md`](references/nffi/NFFI.md)).
+
 **Kai SitaWare atnaujinama (6.22 ar naujesnė).** Pirmiausia išbandykite NVG kelią: nustatykite `SITAWARE_TAK_USERS_NVG=true` ir
 `SITAWARE_TAK_INDIVIDUAL_SCHEME` į schemos žymę, kurią piešia nauja versija (pavyzdžiui, `app6d`), pašalinkite `NFFI_LAYER_CONNECT` ir
 patikrinkite, ar TAK naudotojas rodomas kaip žmogaus simbolis. Jei nauja versija reikalauja NFFI 1.4, nustatykite

@@ -30,6 +30,7 @@
 | `tak-bridge` | `bridges/vendors/tak/tak_bridge.py` | Subscriber — all topics | TAK-visible CoT ingress |
 | `sitaware-hq-nvg` | `layers/vendors/tak/systematic/sitaware_layer.py` | Subscriber — all track topics | Pull-based NVG snapshot |
 | `nffi_layer` | `layers/vendors/tak/systematic/nffi_layer.py` | Subscriber — `…/land/tak/**` | Event-driven; connects out to SitaWare's NFFI IP1 Client and sends the TAK users as force tracks (see [06](06-atak-and-sitaware-setup.md)) |
+| `ffi_layer` | `layers/vendors/tak/systematic/ffi_layer.py` | Subscriber — `…/land/tak/**` | Event-driven; the same feed as `nffi_layer` as APP-11(D) FFI messages (being tried; run one of the two against a client) |
 | `intcore_layer` | `layers/vendors/tak/random/intcore_layer.py` | Subscriber — all track topics | Event-driven; POSTs NVG 2.0.2 to INT-CORE's `Topic/SaveItems` |
 | `intcore-bridge` | `bridges/vendors/intcore/intcore_bridge.py` | `…/{domain}/intcore/c2/{affiliation}/{entity}/{type}/{id}/sapient` | HTTP Post ADT listener — INT-CORE's own Dissemination service pushes here |
 | `track-fusion` | `protocols/fusion.py` | CAT-48 + CAT-21 subscriber; also matches NEPTUN threats to non-cooperative radar tracks (`FUSION_NEPTUN_MIN_NM`/`MAX_NM`); merges strike markers of Drone Strike Map and GeoConfirmed that report one attack (same side, same day, within `FUSION_STRIKE_M` = 100 m, the more precise position is kept, the rest are retracted with a tombstone) | Event-driven |

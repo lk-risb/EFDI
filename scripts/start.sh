@@ -119,7 +119,7 @@ SERVICES=(
     cap mqtt sparkplug sensor-health mission-route aartos
     generic_json geojson camera_sites socbx palantir tacvox tytan usareur skylord kyber fpv ita_efdi
     # Output layers
-    tak_layer sitaware_layer nffi_layer tak_alert_layer intcore_layer
+    tak_layer sitaware_layer nffi_layer ffi_layer tak_alert_layer intcore_layer
     # C2 inputs
     tak-bridge nffi-bridge intcore-bridge
     # Backbone
@@ -208,7 +208,7 @@ declare -A SVC_CAT=(
     [stanag4586-raw]="Sensor bridges" [stanag4609-raw]="Sensor bridges" [stanag5516-raw]="Sensor bridges"
     [cap]="Protocols"
     [sensor-health]="Protocols" [mission-route]="Protocols"
-    [tak_layer]="Output layers"   [sitaware_layer]="Output layers" [nffi_layer]="Output layers"
+    [tak_layer]="Output layers"   [sitaware_layer]="Output layers" [nffi_layer]="Output layers" [ffi_layer]="Output layers"
     [tak_alert_layer]="Output layers" [intcore_layer]="Output layers"
     [intcore-bridge]="C2 inputs"
     [track-fusion]="Sensor bridges"
@@ -272,7 +272,8 @@ declare -A SVC_DESC=(
     [tak-bridge]="TAK Server CoT ingress"
     [nffi-bridge]="NFFI (STANAG 5527) TCP ingress → Zenoh raw"
     [sitaware_layer]="EFDI tracks → SitaWare (NVG feed, SitaWare polls)"
-    [nffi_layer]="TAK users → SitaWare force tracking (NFFI 1.4 feed, SitaWare connects)"
+    [nffi_layer]="TAK users → SitaWare force tracking (NFFI feed, connects out to SitaWare's IP1 Client)"
+    [ffi_layer]="TAK users → SitaWare force tracking (FFI APP-11(D) feed, connects out to SitaWare's IP1 Client)"
     [intcore_layer]="EFDI tracks → INT-CORE (NVG 2.0.2 via TopicApi SaveItems)"
     [intcore-bridge]="INT-CORE Dissemination (HTTP Post ADT) → Zenoh"
     [track-fusion]="Radar/ADS-B track correlation"
@@ -346,6 +347,7 @@ svc_ready() {
         # sitaware_layer serves a feed, so it needs a port to listen on.
         sitaware_layer) [[ -n "${SITAWARE_HQ_NVG_PORT:-}" ]] ;;
         nffi_layer) [[ -n "${NFFI_LAYER_PORT:-}" || -n "${NFFI_LAYER_CONNECT:-}" ]] ;;
+        ffi_layer) [[ -n "${FFI_LAYER_PORT:-}" || -n "${FFI_LAYER_CONNECT:-}" ]] ;;
         intcore_layer) [[ -n "${INTCORE_URL:-}" && -n "${INTCORE_API_KEY:-}" && -n "${INTCORE_TOPIC_ID:-}" ]] ;;
         intcore-bridge) return 0 ;;  # always ready; binds INTCORE_BRIDGE_PORT (default 8092)
         mediamtx) return 0 ;;  # binds default RTMP :1935 / RTSP :8554, no config required
@@ -437,6 +439,14 @@ svc_hint() {
                 echo "serving NFFI on ${NFFI_LAYER_BIND:-127.0.0.1}:${NFFI_LAYER_PORT}"
             else
                 echo "NFFI_LAYER_CONNECT or NFFI_LAYER_PORT not set"
+            fi ;;
+        ffi_layer)
+            if [[ -n "${FFI_LAYER_CONNECT:-}" ]]; then
+                echo "connecting out to ${FFI_LAYER_CONNECT}"
+            elif [[ -n "${FFI_LAYER_PORT:-}" ]]; then
+                echo "serving FFI on ${FFI_LAYER_BIND:-127.0.0.1}:${FFI_LAYER_PORT}"
+            else
+                echo "FFI_LAYER_CONNECT or FFI_LAYER_PORT not set"
             fi ;;
         intcore_layer)
             if [[ -n "${INTCORE_URL:-}" && -n "${INTCORE_API_KEY:-}" && -n "${INTCORE_TOPIC_ID:-}" ]]; then
@@ -1241,6 +1251,15 @@ launch() {
                 return
             fi
             _start nffi_layer layers/vendors/tak/systematic/nffi_layer.py
+            ;;
+
+        ffi_layer)
+            # The same feed as nffi_layer as APP-11(D) FFI messages; run one of the two against a client.
+            if [[ -z "${FFI_LAYER_PORT:-}" && -z "${FFI_LAYER_CONNECT:-}" ]]; then
+                printf "  ${YELLOW}[skip]${R}  ffi_layer               set FFI_LAYER_CONNECT or FFI_LAYER_PORT\n"
+                return
+            fi
+            _start ffi_layer layers/vendors/tak/systematic/ffi_layer.py
             ;;
 
         intcore_layer)

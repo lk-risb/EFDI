@@ -310,3 +310,26 @@ Not confirmed: whether the 16-byte header and nffi13 are also what SitaWare's IP
 same protocol, so it is assumed); the layer's earlier attempts (no header, nffi14) left the client at Connected with 0 objects.
 
 The CoT fields NFFI has no place for (team colour, platform) are carried in the remarks.
+
+## Verified 2026-10-13: what a live SitaWare 6.21 writes as FFI (APP-11 Edition D), and `ffi_layer.py`
+
+The same NFFI IP1 Classic Server, set to Payload Message "FFI (APP-11 Edition D Version 1)" with Joint Symbology Type APP-6(B), was read
+through its port with a contract for the reading host (28,066 bytes, 2 messages of 9 tracks). Findings:
+
+- Each message is behind the same 16-byte header as NFFI, but the first byte is `0x14` instead of `0x04`; the length at bytes 14-15 and the
+  epoch seconds at bytes 4-7 are as for NFFI.
+- The XML has the root `mtf:FriendlyForceInformation` (namespace `urn:nato:mtf:app-11(d):1:ffi`, `mtfid="FFI"`), then `MessageIdentifier`
+  (`MessageTextFormatIdentifier` FFI, `Standard` APP-11(D), `Version` 1, `Originator` the country code, `ReferenceTimeOfPublication/DateTimeIso`
+  with year, month, day, `T`, hour, minute, second, `Z`, the security policy, classification and category), `GeodeticDatum/GeodeticDatum` WGE, and
+  one or more `TrackInformation`. SitaWare put all 9 tracks of the layer into one message; `ffi_layer.py` sends one track per message.
+- A `TrackInformation` holds `TrackSource` (`TransponderId`, `System`, `Subsystem`), `TrackSecurityLabel` (policy, classification, category, and
+  the same for BlueDot and Details), `TrackPositionalData` (`Time` as year to second, and `Location` in degrees and minutes: `LatitudeDegrees`,
+  `LatitudeMinutes04DecimalPlaces` such as `46.004`, `LatitudinalHemisphere`, `Hyphen` `-`, `LongitudeDegrees` three digits, minutes,
+  hemisphere) and `TrackIdentificationData` (`UnitSymbol`, `SymbolStandard` `APP-6(B)`, `UnitShortName`). No speed, bearing or altitude appeared
+  in this capture.
+- With APP-6(B) the `UnitSymbol` is the same 15-character letter code as in NFFI. The dropdown of other symbology types was not looked at yet,
+  so which `SymbolStandard` values SitaWare accepts (APP-6(D) among them) and what the 20-digit symbol looks like in `UnitSymbol` is unverified.
+
+`ffi_layer.py` writes this structure for the TAK users (a separate layer from `nffi_layer.py`; `FFI_LAYER_SYMBOL_STANDARD=APP-6(D)` puts the
+20-digit APP-6D dismounted individual in `UnitSymbol`). Whether the IP1 *Client* (which has no payload setting) accepts FFI, and whether it draws
+the numeric symbol, was not tested when this was written.

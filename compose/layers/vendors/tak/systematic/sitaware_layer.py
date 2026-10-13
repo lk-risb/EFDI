@@ -1209,8 +1209,8 @@ _twins = TwinSuppressions()   # loose copies of ICAO-keyed aircraft that track f
 # Two ways to put a TAK user into SitaWare force tracking. NFFI (nffi_layer.py) is the one SitaWare 6.21 accepts: it draws the user from
 # a 15-character letter SIDC. The NVG feed here can carry the APP-6D dismounted individual (SITAWARE_TAK_INDIVIDUAL_SCHEME) for a
 # SitaWare that draws it, 6.22 or later perhaps. SITAWARE_TAK_USERS_NVG=true|false chooses whether this feed draws the TAK users; unset,
-# it draws them unless the NFFI feed is configured (NFFI_LAYER_CONNECT or NFFI_LAYER_PORT), so a user is not drawn twice.
-_NFFI_ON = bool(os.environ.get("NFFI_LAYER_CONNECT", "").strip() or os.environ.get("NFFI_LAYER_PORT", "").strip())
+# it draws them unless the NFFI or FFI feed is configured (NFFI_LAYER_* or FFI_LAYER_CONNECT / FFI_LAYER_PORT), so a user is not drawn twice.
+_NFFI_ON = any(os.environ.get(key, "").strip() for key in ("NFFI_LAYER_CONNECT", "NFFI_LAYER_PORT", "FFI_LAYER_CONNECT", "FFI_LAYER_PORT"))
 _TAK_USERS_NVG = os.environ.get("SITAWARE_TAK_USERS_NVG", "").strip().lower() in ("1", "true", "yes", "on") \
     if os.environ.get("SITAWARE_TAK_USERS_NVG", "").strip() else not _NFFI_ON
 
