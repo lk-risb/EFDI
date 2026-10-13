@@ -25,6 +25,8 @@ Published (JSON tracks):
       active air-raid alert, yellow with a place hit today or yesterday. Drawn on top of the orange regions that
       dangausakis_bridge.py publishes for all of Russia (a country at war: nowhere is safe), as the Ukrainian oblasts
       are coloured all over with the alert districts on top.
+It also announces, on <ORG>/land/dronestrikemap/status/war, the countries it records strikes on (the two above, and
+a NATO country with a recent incident of kind "strike"); dangausakis_bridge.py draws an announced country orange.
 Strikes of today and yesterday (Kyiv dates) are shown; one marker per place per day. Anything that leaves
 the record is retracted with a JSON tombstone.
 
@@ -35,6 +37,8 @@ Env:
   DSM_DAYS           days shown, today first (default 2)
   DSM_COUNTRIES      places to draw, comma separated (default RU,UA)
   DSM_ALERT_ZONES    0 turns the yellow and red Russian regions off (default on)
+  DSM_DROP_REGEX     skip a strike whose place, region, summary or article titles match this regex (default none):
+                     the site's own extraction sometimes reads an opinion piece as an attack
 """
 
 import argparse
@@ -53,6 +57,7 @@ from protocols.vendors.random import region_geometry
 from protocols.vendors.random.gateway import open_session
 from protocols.vendors.random.geo_simplify import ring_area, simplify_ring
 from protocols.vendors.random.track_views import add_version, semantic_topic
+from protocols.vendors.random.war_status import war_topic
 
 TOPIC_ROOT = topic_root()
 URL = os.environ.get("DSM_URL", "https://dronestrikemap.com").rstrip("/")
@@ -61,6 +66,7 @@ STALE_S = int(os.environ.get("DSM_STALE_S", "1800"))
 DAYS = max(1, int(os.environ.get("DSM_DAYS", "2")))
 COUNTRIES = {c.strip().upper() for c in os.environ.get("DSM_COUNTRIES", "RU,UA").split(",") if c.strip()}
 ALERT_ZONES = os.environ.get("DSM_ALERT_ZONES", "1") not in {"0", "false", "no"}
+_DROP = re.compile(os.environ["DSM_DROP_REGEX"], re.I) if os.environ.get("DSM_DROP_REGEX") else None
 STRIKE_PREFIX = "{}/land/dronestrikemap/strike".format(TOPIC_ROOT)
 ZONE_PREFIX = "{}/land/dronestrikemap/airzone/neutral/zone".format(TOPIC_ROOT)
 ZONE_MAX_PARTS = 3
@@ -70,6 +76,8 @@ SCHEMA = "efdi:dronestrikemap_feature"
 CREDIT = "Source: Drone Strike Map (dronestrikemap.com, CC BY 4.0); the reporting belongs to the outlets named"
 _HEADERS = {"User-Agent": "EFDI-dronestrikemap-bridge (+open data, CC BY 4.0, credit Drone Strike Map)",
             "Accept": "application/json"}
+INCIDENT_POLL_S = 3600           # /api/incidents is 120 KB and changes slowly
+INCIDENT_DAYS = 3
 _UNSAFE = re.compile(r"[^A-Za-z0-9]+")
 _ZONE_RINGS: dict = {}      # region id -> simplified rings: simplifying a Russian region is slow and it never changes
 
@@ -96,6 +104,12 @@ def _short_date(date: str) -> str:
         return date
 
 
+def _titles(strike: dict, limit: int = 2) -> str:
+    """The first article titles, so a reader can judge the evidence: the site's extraction can misread a story."""
+    return "; ".join('"{}"'.format(str(a.get("title") or "").strip()[:110]) for a in (strike.get("articles") or [])[:limit]
+                     if a.get("title"))
+
+
 def _outlets(strike: dict) -> str:
     names = []
     for article in strike.get("articles") or []:
@@ -118,6 +132,10 @@ def strike_tracks(day: dict, now: float, countries=COUNTRIES) -> dict:
             continue
         if country not in countries or not place or not (-90 <= lat <= 90 and -180 <= lon <= 180):
             continue
+        if _DROP is not None and _DROP.search(" ".join(
+                [place, str(strike.get("region") or ""), str(strike.get("summary") or "")]
+                + [str(a.get("title") or "") for a in strike.get("articles") or []])):
+            continue
         confidence = str(strike.get("confidence") or "claimed")
         occupied = "occupied" in str(strike.get("region") or "").lower()
         uid = "DSM-{}-{}-{}".format(date, country, _slug(place)).upper()
@@ -133,7 +151,8 @@ def strike_tracks(day: dict, now: float, countries=COUNTRIES) -> dict:
             "remarks": "{}{} - reported by {}. {} strike, inferred from where it landed; the position is the place, "
                        "not the impact point. {}".format(
                 summary or "strike reported", " ({})".format(", ".join(weapons)) if weapons else "",
-                _outlets(strike), "Ukrainian" if country == "RU" else "Russian", CREDIT),
+                _outlets(strike) + (" (" + _titles(strike) + ")" if _titles(strike) else ""),
+                "Ukrainian" if country == "RU" else "Russian", CREDIT),
         })
     return out
 
@@ -203,6 +222,19 @@ def _warn_unmatched(name) -> None:
         print("dronestrikemap: no outline for the Russian region {!r}".format(name), flush=True)
 
 
+def war_countries(strikes: dict, incidents: list, today: str) -> list:
+    """Countries to announce as under attack: every country with a place hit in `strikes` (strike_tracks() output) and
+    every country of a NATO-border incident of kind "strike" in the last INCIDENT_DAYS days. A shot-down drone or a crash
+    is not an attack on that country. dangausakis_bridge.py turns the announced countries orange (war_status.py)."""
+    countries = {track.get("country") for _, track in strikes.values()}
+    try:
+        since = (datetime.strptime(today, "%Y-%m-%d") - timedelta(days=INCIDENT_DAYS)).strftime("%Y-%m-%d")
+    except ValueError:
+        since = "0000-00-00"
+    countries |= {i.get("country") for i in incidents if i.get("kind") == "strike" and str(i.get("date") or "") >= since}
+    return sorted(c for c in countries if c)
+
+
 def _get_json(path: str):
     try:
         with urllib.request.urlopen(urllib.request.Request(URL + path, headers=_HEADERS), timeout=30) as resp:
@@ -215,6 +247,11 @@ def _get_json(path: str):
 def fetch_day(date: str) -> dict | None:
     data = _get_json("/api/day/" + date)
     return data if isinstance(data, dict) and isinstance(data.get("strikes"), list) else None
+
+
+def fetch_incidents() -> list | None:
+    data = _get_json("/api/incidents")
+    return data["incidents"] if isinstance(data, dict) and isinstance(data.get("incidents"), list) else None
 
 
 def fetch_alerts() -> dict | None:
@@ -243,6 +280,7 @@ def main():
 
     index = region_geometry.region_index(region_geometry.regions("RUS")) if ALERT_ZONES else {}
     published: dict = {}        # uid -> (prefix, track) now on the fabric
+    incidents, next_incidents = [], 0.0
     try:
         while True:
             now = time.time()
@@ -267,6 +305,15 @@ def main():
                 current = dict(published)           # the site is down: keep what is drawn, it expires by itself
                 for _, track in current.values():
                     track["_ts"] = now
+            if now >= next_incidents:
+                fetched = fetch_incidents()
+                if fetched is not None:
+                    incidents = fetched
+                next_incidents = now + (INCIDENT_POLL_S if fetched is not None else POLL_S)
+            countries = war_countries({u: v for u, v in current.items() if v[1].get("type") == "strike"}, incidents,
+                                      _kyiv_days(now, 1)[0])
+            if countries:
+                session.put(war_topic(TOPIC_ROOT), json.dumps({"countries": countries, "ts": now}).encode())
             for uid, (prefix, track) in current.items():
                 _put(session, prefix, track)
             for uid in set(published) - set(current):

@@ -20,8 +20,9 @@ import re
 import threading
 import time
 
-# Shorter ids could appear inside an unrelated uid by accident.
-MIN_ID_LEN = 12
+# Shorter ids could appear inside an unrelated uid by accident. 10 keeps our shortest real ids (MAPA-323725,
+# 11 characters) while an ICAO address (6) or a bare number still cannot match by accident.
+MIN_ID_LEN = 10
 # Shorter names are too generic to treat as ours, and the bridge's own fallback name
 # ("dronu-sensor") says nothing about which sensor it is.
 MIN_NAME_LEN = 8

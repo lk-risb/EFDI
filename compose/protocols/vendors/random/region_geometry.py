@@ -118,3 +118,18 @@ def overlaps(ring: list, bbox: tuple) -> bool:
     """True when the ring's bounding box meets bbox = (lon min, lat min, lon max, lat max)."""
     xs, ys = [p[0] for p in ring], [p[1] for p in ring]
     return max(xs) >= bbox[0] and min(xs) <= bbox[2] and max(ys) >= bbox[1] and min(ys) <= bbox[3]
+
+
+def _in_ring(ring: list, lon: float, lat: float) -> bool:
+    inside = False
+    for (x1, y1), (x2, y2) in zip(ring, ring[1:]):
+        if (y1 > lat) != (y2 > lat) and lon < (x2 - x1) * (lat - y1) / (y2 - y1) + x1:
+            inside = not inside
+    return inside
+
+
+def contains(region: dict, lon: float, lat: float) -> bool:
+    """True when the point is inside one of the region's outer rings."""
+    return any(_in_ring(ring, lon, lat) for ring in region["rings"]
+               if min(p[0] for p in ring) <= lon <= max(p[0] for p in ring)
+               and min(p[1] for p in ring) <= lat <= max(p[1] for p in ring))

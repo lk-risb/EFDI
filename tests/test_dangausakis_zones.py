@@ -86,7 +86,7 @@ def test_cot_zone_has_polygon_and_colours_only_when_requested():
     xml = tak_layer.track_to_cot(track, "a-n-G-I-R")
     assert "<polygon>" not in xml                       # drawn from the links; a second copy of every vertex doubles the size
     stroke = int(re.search(r'strokeColor value="(-?\d+)"', xml).group(1)) & 0xFFFFFFFF
-    assert stroke == 0xFFFF8C00
+    assert stroke == 0xFFFFD000                         # the site's orange level is drawn yellow: orange is a country at war
     assert "fillColor" in xml and "strokeWeight" in xml
     assert 'type="u-d-f"' in xml                        # WinTAK/ATAK draw only drawing-tool events
     assert xml.count("<link point=") == len(SQUARE) + (SQUARE[0] != SQUARE[-1])
@@ -147,7 +147,7 @@ def _region(name, rings):
     return {"name": name, "rings": rings}
 
 
-def test_oblast_wash_uses_the_worst_district_level_defaults_to_yellow_and_skips_oblasts_with_their_own_alert():
+def test_oblast_wash_uses_the_worst_district_level_defaults_to_the_war_colour_and_skips_oblasts_with_their_own_alert():
     big = [[x, y] for x, y in [(30, 50), (34, 50), (34, 54), (30, 54), (30, 50)]]
     bounds = {"UA-O:a": _region("Alpha Oblast", [big]), "UA-O:b": _region("Beta Oblast", [big]),
               "UA-O:c": _region("Gamma Oblast", [big])}
@@ -158,10 +158,11 @@ def test_oblast_wash_uses_the_worst_district_level_defaults_to_yellow_and_skips_
         "UA-O:b": dict(_alert("UA-O:b", level="red"), country="UA"),            # Beta has its own full zone
         "UA-R:4": dict(_alert("UA-R:4", level="red", stale=True), country="UA", oblast="Gamma Oblast"),
     }
-    out = bridge.wash_tracks(current, bounds, {}, NOW)
-    # Alpha: worst district. Beta: has its own full zone. Gamma: only a stale alert, so the yellow default.
+    out = bridge.wash_tracks(current, bounds, {}, NOW, war={"UA"})
+    # Alpha: worst district. Beta: has its own full zone. Gamma: only a stale alert, so the war colour, orange.
     assert sorted(out) == ["DA-WASH-UA-O:a", "DA-WASH-UA-O:c"]
-    assert out["DA-WASH-UA-O:c"][1]["shape_color"] == "yellow" and out["DA-WASH-UA-O:c"][1]["callsign"] == "UA Gamma Oblast YELLOW"
+    assert out["DA-WASH-UA-O:c"][1]["shape_color"] == "orange" and out["DA-WASH-UA-O:c"][1]["callsign"] == "UA Gamma Oblast ORANGE"
+    assert bridge.wash_tracks(current, bounds, {}, NOW)["DA-WASH-UA-O:c"][1]["shape_color"] == "white"      # not at war: white
     track = out["DA-WASH-UA-O:a"][1]
     assert track["shape_color"] == "red" and track["shape_style"] == "wash"
     assert track["callsign"] == "UA Alpha Oblast RED" and track["geometry"]["type"] == "Polygon"
@@ -176,7 +177,8 @@ def test_standing_country_zones_keep_the_mainland_and_kaliningrad_but_not_far_is
                 "BY": {"name": "Belarus", "tone": "warning", "rings": [[[24, 52], [32, 52], [32, 56], [24, 56], [24, 52]]]}}
     out = bridge.wash_tracks({}, {}, standing, NOW)
     assert sorted(out) == ["DA-COUNTRY-BY", "DA-COUNTRY-RU", "DA-COUNTRY-RU-p1"]
-    assert out["DA-COUNTRY-RU"][1]["shape_color"] == "red" and out["DA-COUNTRY-BY"][1]["shape_color"] == "orange"
+    # a country the site draws in a standing tone is at war: orange, whatever the tone
+    assert out["DA-COUNTRY-RU"][1]["shape_color"] == "orange" and out["DA-COUNTRY-BY"][1]["shape_color"] == "orange"
     assert out["DA-COUNTRY-RU"][1]["callsign"] == "RU Russia (danger)"
     assert out["DA-COUNTRY-RU"][1]["shape_style"] == "country"
     assert all(t["shape_style"] == "country" for _, t in out.values())
@@ -257,12 +259,14 @@ def test_other_countries_regions_get_a_faint_white_wash_unless_they_have_an_aler
     bounds = {"LT:LT-VL": _region("Vilnius County", [ring]), "LT:LT-KU": _region("Kaunas County", [ring]),
               "PL:slaskie": _region("Silesia", [ring]), "UA-O:a": _region("Alpha Oblast", [ring])}
     current = {"LT:LT-KU": _alert("LT:LT-KU", level="red")}                       # Kaunas has its own red zone
-    out = bridge.wash_tracks(current, bounds, {}, NOW)
+    out = bridge.wash_tracks(current, bounds, {}, NOW, war={"UA"})
     assert sorted(out) == ["DA-WASH-LT:LT-VL", "DA-WASH-PL:slaskie", "DA-WASH-UA-O:a"]
     white = out["DA-WASH-LT:LT-VL"][1]
     assert white["shape_color"] == "white" and white["shape_style"] == "wash" and white["country"] == "LT"
     assert white["callsign"] == "LT Vilnius County (monitored)"
-    assert out["DA-WASH-UA-O:a"][1]["shape_color"] == "yellow"                     # Ukraine keeps its yellow default
+    assert out["DA-WASH-UA-O:a"][1]["shape_color"] == "orange"                     # Ukraine is at war
+    attacked = bridge.wash_tracks(current, bounds, {}, NOW, war={"UA", "PL"})       # a NATO country turns orange by itself
+    assert attacked["DA-WASH-PL:slaskie"][1]["shape_color"] == "orange" and attacked["DA-WASH-LT:LT-VL"][1]["shape_color"] == "white"
 
 
 def test_fill_opacity_rises_with_the_level_in_tak_and_sitaware():
@@ -410,7 +414,7 @@ def test_a_standing_country_with_regions_is_drawn_as_its_regions_not_as_one_outl
     out = bridge.wash_tracks({}, {}, standing, NOW, regions)
     assert sorted(out) == ["DA-REGION-BY-BY-BR", "DA-REGION-RU-RU-BEL"]      # Chukotka is beyond the theatre
     prefix, track = out["DA-REGION-RU-RU-BEL"]
-    # Russia is a country at war: every region starts orange (not an air-raid status), not in the site's standing tone
+    # a country the site draws in a standing tone is at war: every region is orange, an area at war, not an alert level
     assert (track["shape_color"], track["shape_style"], track["callsign"]) == ("orange", "wash", "RU Belgorod Oblast (at war)")
     assert out["DA-REGION-BY-BY-BR"][1]["shape_color"] == "orange"
     assert "geoBoundaries" in track["remarks"] and "not an official warning" in track["remarks"]
@@ -431,12 +435,21 @@ def test_region_tracks_are_built_once_and_stamped_each_time():
     assert (first["_ts"], second["_ts"]) == (100.0, 200.0) and first["geometry"] == second["geometry"]
 
 
-def test_only_standing_countries_listed_in_the_split_are_loaded(monkeypatch):
+def test_every_country_in_the_split_is_loaded_once(monkeypatch):
     seen = []
     monkeypatch.setattr(bridge.region_geometry, "regions", lambda iso3: seen.append(iso3) or [_geo_region("X", "X", 1, 1)])
-    got = bridge.load_country_regions({"RU": {}, "BY": {}, "XX": {}}, {})
-    assert sorted(got) == ["BY", "RU"] and sorted(seen) == ["BLR", "RUS"]
-    assert bridge.load_country_regions({"RU": {}}, got) == got and len(seen) == 2     # already loaded: not asked again
+    got = bridge.load_country_regions({})
+    assert sorted(got) == ["BY", "MD", "RU"] and sorted(seen) == ["BLR", "MDA", "RUS"]
+    assert bridge.load_country_regions(got) == got and len(seen) == 3          # already loaded: not asked again
+
+
+def test_moldova_is_white_until_russian_units_stand_in_it_then_orange_with_that_region_yellow():
+    regions = {"MD": [_geo_region("MD-SN", "Transnistria", 29.0, 46.6), _geo_region("MD-CU", "Chisinau", 28.6, 46.9)]}
+    quiet = bridge.wash_tracks({}, {}, {}, NOW, regions, war=frozenset())
+    assert {t["shape_color"] for _, t in quiet.values()} == {"white"}
+    present = bridge.wash_tracks({}, {}, {}, NOW, regions, war={"MD"}, activity={"MD": {"MD-SN"}})
+    colours = {t["callsign"]: t["shape_color"] for _, t in present.values()}
+    assert colours == {"MD Transnistria (Russian forces present)": "yellow", "MD Chisinau (at war)": "orange"}
 
 
 def test_a_read_timeout_in_the_middle_of_a_response_is_a_failed_fetch_not_a_crash(monkeypatch):
@@ -455,3 +468,38 @@ def test_a_read_timeout_in_the_middle_of_a_response_is_a_failed_fetch_not_a_cras
 
     monkeypatch.setattr(bridge.urllib.request, "urlopen", lambda *a, **k: Slow())
     assert bridge._fetch("region-alerts") is None
+
+
+def test_a_hostile_unit_marker_puts_its_region_in_the_presence_set_until_it_is_retracted():
+    from protocols.vendors.random.war_status import Presence
+    from protocols.vendors.random import region_geometry
+    transnistria = {"id": "MD-SN", "rings": [[[29.4, 46.7], [29.9, 46.7], [29.9, 46.9], [29.4, 46.9], [29.4, 46.7]]]}
+    chisinau = {"id": "MD-CU", "rings": [[[28.6, 46.9], [29.1, 46.9], [29.1, 47.1], [28.6, 47.1], [28.6, 46.9]]]}
+    presence = Presence()
+
+    def sample(**track):
+        return mock.Mock(payload=json.dumps(track).encode())
+
+    presence.on_sample(sample(uid="DS-UNIT-1", lat_deg=46.765, lon_deg=29.6975))
+    assert presence.inside([transnistria, chisinau], region_geometry.contains) == {"MD-SN"}
+    presence.on_sample(sample(uid="DS-UNIT-1", _delete=True, lat_deg=46.765, lon_deg=29.6975))
+    assert presence.inside([transnistria, chisinau], region_geometry.contains) == set()
+    presence.on_sample(sample(uid="DS-UNIT-2", lat_deg=46.8, lon_deg=29.5))
+    assert presence.inside([transnistria], region_geometry.contains, now=time.time() + 4000) == set()      # not seen for an hour
+
+
+def test_a_country_is_at_war_from_its_standing_tone_or_red_alerts_in_several_regions_not_from_one_red_alert(tmp_path):
+    from protocols.vendors.random.war_status import WarStatus
+    path = str(tmp_path / "war.json")
+    war = WarStatus(hold_s=1000, path=path)
+    one = {"LT:a": {"country": "LT", "level": "red"}, "UA-R:1": {"country": "UA", "level": "red"}}
+    war.observe_alerts(one, 100.0)
+    assert war.countries(100.0) == frozenset()                                  # a stray balloon is not a war
+    many = {"UA-R:%d" % i: {"country": "UA", "level": "red"} for i in range(3)}
+    war.observe_alerts(many, 100.0)
+    war.observe_standing({"RU": {}}, 100.0)
+    assert war.countries(100.0) == {"UA", "RU"} and war.countries(1200.0) == frozenset()     # held for hold_s, then peace
+    assert WarStatus(hold_s=1000, path=path).countries(100.0) == {"UA", "RU"}                 # kept across a restart
+    stale = {"UA-R:%d" % i: {"country": "PL", "level": "red", "stale": True} for i in range(5)}
+    war.observe_alerts(stale, 100.0)
+    assert "PL" not in war.countries(100.0)

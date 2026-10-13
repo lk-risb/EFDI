@@ -62,3 +62,15 @@ def test_echo_filter_still_recognises_a_copy_of_a_track_of_ours_that_expired_an_
     echoes.on_sample(mock.Mock(payload=json.dumps(ours).encode()))
     copy = {"uid": "BACKBONE-DODE42DD", "callsign": "NEPTUN-trk_00258879"}
     assert echoes.is_echo(copy, now=__import__("time").time() + 3600)
+
+
+def test_a_partner_copy_of_a_mapa_track_is_recognised_by_its_eleven_character_id():
+    import json
+    from unittest import mock
+    echoes = echo_filter.EchoFilter()
+    ours = {"_src": "mapa.ua", "uid": "MAPA-323725", "callsign": "MAPA MISSILE x2 Lutsk", "lat_deg": 51.0, "lon_deg": 25.0}
+    echoes.on_sample(mock.Mock(payload=json.dumps(ours).encode()))
+    # seen live: the soc-bx feed returns it as track:MAPA-323725 with a "(STALE)" callsign, drawn as an unknown ground unit
+    copy = {"uid": "MAPA-323725", "label": "MAPA MISSILE x2 Lutsk (STALE)", "callsign": "MAPA MISSILE x2 Lutsk (STALE)"}
+    assert echoes.is_echo(copy)
+    assert not echoes.is_echo({"uid": "ABC-323725", "callsign": "UNRELATED"})

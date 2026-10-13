@@ -65,6 +65,18 @@ def test_the_side_is_the_striker_a_place_hit_in_russia_is_a_friendly_incident_an
     assert dnipro[0].endswith("/strike/hostile/incident") and "Russian strike" in dnipro[1]["remarks"]
 
 
+def test_the_remarks_quote_the_article_titles_so_a_misread_story_can_be_spotted():
+    # the site marked Kaliningrad "confirmed" from two pieces about how NATO would respond to an attack
+    track = dsm.strike_tracks(DAY, NOW)["DSM-2026-10-12-RU-KALININGRAD"][1]
+    assert "How would NATO defeat" in track["remarks"] and "Meduza (EN)" in track["remarks"]
+
+
+def test_a_strike_matching_the_drop_regex_is_left_out(monkeypatch):
+    monkeypatch.setattr(dsm, "_DROP", re.compile(r"NATO defeat|Kaliningrad", re.I))
+    out = dsm.strike_tracks(DAY, NOW)
+    assert "DSM-2026-10-12-RU-KALININGRAD" not in out and "DSM-2026-10-12-RU-BELGOROD" in out
+
+
 def test_a_place_in_russian_held_ukraine_is_a_ukrainian_strike_named_as_occupied():
     prefix, track = dsm.strike_tracks(DAY, NOW)["DSM-2026-10-12-RU-STAROBILSK"]
     assert prefix.endswith("/friendly/incident")
@@ -159,3 +171,12 @@ def test_regions_are_downloaded_once_cached_and_the_old_copy_serves_when_the_sit
 
     assert [r["name"] for r in region_geometry.regions("BLR", str(tmp_path), read=down)] == ["Brest"]
     assert region_geometry.regions("RUS", str(tmp_path), read=down) == []
+
+
+def test_the_countries_under_attack_are_those_with_a_place_hit_or_a_recent_strike_incident():
+    strikes = dsm.strike_tracks(DAY, NOW)
+    incidents = [{"country": "PL", "kind": "strike", "date": "2026-10-11"},
+                 {"country": "RO", "kind": "shootdown", "date": "2026-10-12"},       # a drone shot down is not an attack
+                 {"country": "LT", "kind": "strike", "date": "2026-09-01"}]         # too old
+    assert dsm.war_countries(strikes, incidents, "2026-10-13") == ["PL", "RU", "UA"]
+    assert dsm.war_countries({}, [], "2026-10-13") == []
