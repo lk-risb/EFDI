@@ -345,7 +345,7 @@ svc_ready() {
         stanag5516) return 0 ;;  # UDP listener, default port 3010
         # sitaware_layer serves a feed, so it needs a port to listen on.
         sitaware_layer) [[ -n "${SITAWARE_HQ_NVG_PORT:-}" ]] ;;
-        nffi_layer) [[ -n "${NFFI_LAYER_PORT:-}" ]] ;;
+        nffi_layer) [[ -n "${NFFI_LAYER_PORT:-}" || -n "${NFFI_LAYER_CONNECT:-}" ]] ;;
         intcore_layer) [[ -n "${INTCORE_URL:-}" && -n "${INTCORE_API_KEY:-}" && -n "${INTCORE_TOPIC_ID:-}" ]] ;;
         intcore-bridge) return 0 ;;  # always ready; binds INTCORE_BRIDGE_PORT (default 8092)
         mediamtx) return 0 ;;  # binds default RTMP :1935 / RTSP :8554, no config required
@@ -431,10 +431,12 @@ svc_hint() {
                 echo "SITAWARE_HQ_NVG_PORT not set"
             fi ;;
         nffi_layer)
-            if [[ -n "${NFFI_LAYER_PORT:-}" ]]; then
+            if [[ -n "${NFFI_LAYER_CONNECT:-}" ]]; then
+                echo "connecting out to ${NFFI_LAYER_CONNECT}"
+            elif [[ -n "${NFFI_LAYER_PORT:-}" ]]; then
                 echo "serving NFFI on ${NFFI_LAYER_BIND:-127.0.0.1}:${NFFI_LAYER_PORT}"
             else
-                echo "NFFI_LAYER_PORT not set"
+                echo "NFFI_LAYER_CONNECT or NFFI_LAYER_PORT not set"
             fi ;;
         intcore_layer)
             if [[ -n "${INTCORE_URL:-}" && -n "${INTCORE_API_KEY:-}" && -n "${INTCORE_TOPIC_ID:-}" ]]; then
@@ -1233,9 +1235,9 @@ launch() {
             ;;
 
         nffi_layer)
-            # An NFFI server for SitaWare's NFFI and FFI Manager (client mode): it takes a port to listen on and has nothing to prompt for.
-            if [[ -z "${NFFI_LAYER_PORT:-}" ]]; then
-                printf "  ${YELLOW}[skip]${R}  nffi_layer              set NFFI_LAYER_PORT\n"
+            # Feeds SitaWare's NFFI and FFI Manager (its IP1 client waits on a port, so this connects out to it; or listens): nothing to prompt for.
+            if [[ -z "${NFFI_LAYER_PORT:-}" && -z "${NFFI_LAYER_CONNECT:-}" ]]; then
+                printf "  ${YELLOW}[skip]${R}  nffi_layer              set NFFI_LAYER_CONNECT or NFFI_LAYER_PORT\n"
                 return
             fi
             _start nffi_layer layers/vendors/tak/systematic/nffi_layer.py

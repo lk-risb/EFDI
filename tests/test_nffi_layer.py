@@ -84,3 +84,27 @@ def test_only_the_allowed_source_addresses_get_the_feed():
         assert feed._clients == []
     finally:
         stop.set()
+
+
+def test_the_layer_connects_out_to_a_listening_client_and_reconnects():
+    feed = nffi.NffiFeed()
+    feed.update(CLIENT)
+    peer = socket.socket()
+    peer.bind(("127.0.0.1", 0))
+    peer.listen(1)
+    stop = threading.Event()
+    feed.connect_out("127.0.0.1", peer.getsockname()[1], stop, retry_s=0.2)
+    try:
+        conn, _ = peer.accept()
+        conn.settimeout(3)
+        assert b"ANDROID-7e82" in conn.recv(65536)                        # the table on connect
+        feed.update(dict(CLIENT, lat_deg=54.78))
+        assert b"54.78" in conn.recv(65536)                               # then the updates
+        conn.close()                                                      # the peer goes away: the layer dials again
+        peer.settimeout(5)
+        again, _ = peer.accept()
+        again.settimeout(3)
+        assert b"NFFIMessage" in again.recv(65536)
+    finally:
+        stop.set()
+        peer.close()

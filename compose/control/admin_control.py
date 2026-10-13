@@ -270,7 +270,7 @@ def _service_kind(name: str, source: str) -> str:
 _SERVICE_REQUIRED_KEYS = {
     "sitaware": ("SITAWARE_URL", "SITAWARE_API_PATH"),
     "intcore_layer": ("INTCORE_URL", "INTCORE_API_KEY", "INTCORE_TOPIC_ID"),
-    "nffi_layer": ("NFFI_LAYER_PORT",),
+    "nffi_layer": ("NFFI_LAYER_CONNECT",),
 }
 
 

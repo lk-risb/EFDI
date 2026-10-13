@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """nffi_layer.py - TAK users as an NFFI (STANAG 5527) feed for SitaWare force tracking.
 
-SitaWare Headquarters has an "NFFI and FFI Manager" (Coalition Gateway) that can run as an NFFI client or server. This layer is the
-server side: it listens on a TCP port, and the SitaWare manager is pointed at this gateway and port. Every client that connects gets
+SitaWare Headquarters has an "NFFI and FFI Manager" (Coalition Gateway) that can run as an NFFI client or server. Its "IP1 Client" form
+asks for a name, a destination layer and ONE port number (no host, plus a reconnect delay), so that client waits on its own port for
+the data to be sent to it: this layer connects out to it (NFFI_LAYER_CONNECT=host:port, and keeps reconnecting). The other way round is
+also built, a listening port the SitaWare manager is pointed at (NFFI_LAYER_PORT), for a profile that dials in. Whoever is connected gets
 the current tracks at once and then every update, as NFFI 1.4 XML documents (namespace urn:nato:fft:protocols:nffi14, one
 NFFIMessage with one track each) written back to back; the whole table is re-sent every NFFI_LAYER_REFRESH_S.
 
@@ -14,13 +16,15 @@ track that reports its TAK device, so a marker a user placed is not a force trac
   bearing/speed heading, speed in km/h
   unitSymbol    a 15-character APP-6 SIDC (letters, no wildcards): friendly ground unit, Team/Crew echelon, the function of the role
   unitShortName the callsign;  operStatusData/remarks  "<team> <role>"
-The feed carries live positions of the TAK users and has no login or encryption (the NFFI profiles do not ask for any here), so bind it
-to the VPN address only and list the SitaWare machine in NFFI_LAYER_ALLOW; other sources are closed at once.
+The feed carries live positions of the TAK users and has no login or encryption (the NFFI profiles do not ask for any here). Connecting
+out opens no port here; a listening port should be bound to the VPN address only, with the SitaWare machine in NFFI_LAYER_ALLOW.
 Only the NFFI profile of SitaWare's manager is unknown: which transport variant (IP1, IP1 Classic, IP2, SIP3) and what framing it
 expects on the socket has not been confirmed against a live SitaWare, so the documents are simply written back to back.
 
-Env:
-  NFFI_LAYER_PORT        TCP port to listen on (required; the layer does not start without it)
+Env (at least one of NFFI_LAYER_CONNECT and NFFI_LAYER_PORT is required; the layer does not start without one):
+  NFFI_LAYER_CONNECT     host:port of SitaWare's NFFI client to connect out to (comma-separated for several)
+  NFFI_LAYER_RECONNECT_S seconds between connection attempts (default 10)
+  NFFI_LAYER_PORT        TCP port to listen on, if SitaWare dials in instead
   NFFI_LAYER_BIND        address to listen on (default 127.0.0.1: set the one address SitaWare reaches, e.g. the VPN address)
   NFFI_LAYER_ALLOW       comma-separated source addresses that may connect (default: any that can reach the port)
   NFFI_COUNTRY           3-letter country code in trackSource (default LTU)
@@ -184,6 +188,34 @@ class NffiFeed:
         for message in self.messages():
             self._send(message)
 
+    def connect_out(self, host: str, port: int, stop: threading.Event, retry_s: float = 10.0):
+        """Keep a connection to host:port (SitaWare's NFFI client): send the table when it is made and then every update."""
+        def loop():
+            while not stop.is_set():
+                try:
+                    client = socket.create_connection((host, port), timeout=10)
+                except OSError as exc:
+                    print("NFFI connect to {}:{} failed: {} - retry in {:.0f}s".format(host, port, exc, retry_s), flush=True)
+                    stop.wait(retry_s)
+                    continue
+                print("NFFI connected to {}:{}".format(host, port), flush=True)
+                self.add_client(client)
+                while not stop.is_set():                  # until the peer closes: a read that returns nothing
+                    try:
+                        client.settimeout(1.0)
+                        if client.recv(4096) == b"":
+                            break
+                    except socket.timeout:
+                        continue
+                    except OSError:
+                        break
+                self._drop(client)
+                print("NFFI connection to {}:{} lost - reconnecting".format(host, port), flush=True)
+                stop.wait(retry_s)
+        thread = threading.Thread(target=loop, daemon=True)
+        thread.start()
+        return thread
+
     def serve(self, host: str, port: int, stop: threading.Event, allow=None):
         server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -212,11 +244,13 @@ class NffiFeed:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="TAK users -> NFFI feed for SitaWare force tracking")
+    parser.add_argument("--connect", action="append", default=[h for h in os.environ.get("NFFI_LAYER_CONNECT", "").replace(" ", "").split(",") if h],
+                        help="host:port of SitaWare's NFFI client to connect out to (repeatable)")
     parser.add_argument("--port", type=int, default=int(os.environ.get("NFFI_LAYER_PORT") or 0))
     parser.add_argument("--bind", default=os.environ.get("NFFI_LAYER_BIND", "127.0.0.1"))
     args = parser.parse_args()
-    if not args.port:
-        raise SystemExit("NFFI_LAYER_PORT (or --port) is required")
+    if not args.port and not args.connect:
+        raise SystemExit("NFFI_LAYER_CONNECT (host:port) or NFFI_LAYER_PORT is required")
     feed, stop = NffiFeed(), threading.Event()
     signal.signal(signal.SIGTERM, lambda *_: stop.set())
     while True:
@@ -236,9 +270,18 @@ def main() -> None:
             feed.update(track)
 
     subscribe(session, TOPIC, on_sample)
-    feed.serve(args.bind, args.port, stop, ALLOW)
-    print("NFFI feed listening on {}:{} (TAK users from {}); allowed sources: {}".format(
-        args.bind, args.port, TOPIC, ", ".join(sorted(ALLOW)) or "any that reach the port"), flush=True)
+    retry_s = float(os.environ.get("NFFI_LAYER_RECONNECT_S", "10"))
+    for target in args.connect:
+        host, _, port = target.rpartition(":")
+        if host and port.isdigit():
+            feed.connect_out(host, int(port), stop, retry_s)
+            print("NFFI feed connects out to {}:{} (TAK users from {})".format(host, port, TOPIC), flush=True)
+        else:
+            print("NFFI_LAYER_CONNECT entry {!r} is not host:port, ignored".format(target), flush=True)
+    if args.port:
+        feed.serve(args.bind, args.port, stop, ALLOW)
+        print("NFFI feed listening on {}:{} (TAK users from {}); allowed sources: {}".format(
+            args.bind, args.port, TOPIC, ", ".join(sorted(ALLOW)) or "any that reach the port"), flush=True)
     try:
         while not stop.wait(REFRESH_S):
             feed.refresh()
