@@ -33,3 +33,13 @@ Rule: NATO APP-6 is preferred over MIL-STD-2525 where they differ, and codes are
 - The headquarters / task-force amplifier (symbol modifier 1) has no checked letter, so it is not used: the TAK role HQ is drawn as the C2 headquarters component. Sniper and forward observer were not found in the unit list and stay the plain unit.
 - Sources disagree on SIDC index positions of the modifiers (modifiers at positions 11-12 in 1-based counting, echelon the second); the code uses index 10-11 zero-based and the echelon at index 11.
 - Whether the SitaWare in use accepts the `app6d:` scheme in the NVG feed, and draws set 27, was not checked; the code that sends it (a TAK client's 20-digit SIDC) has no letter fallback.
+
+## TAK users in SitaWare force tracking (added 2026-10-13)
+
+SitaWare 6.21 draws a TAK user from the NFFI feed (`nffi_layer.py`) as a friendly ground unit with the Team echelon. The NFFI `unitSymbol`
+field is `[A-Z0-9-]{15}`, so it can hold only the letter code: the numeric APP-6D dismounted individual (symbol set 27, see above) does not
+fit. A user with no role is therefore sent as infantry (`SFGPUCI----A---`), the letter-code counterpart of the APP-6D infantry individual
+(`110101`); HQ, medic and signal roles keep their function ids. This pairing is a choice, not a table in either standard.
+
+The numeric individual stays available on the NVG route (`sitaware_layer.py`, `SITAWARE_TAK_INDIVIDUAL_SCHEME`), for a SitaWare that draws
+it; whether 6.22 does is not checked. `SITAWARE_TAK_USERS_NVG` switches that route on or off, see `06-atak-and-sitaware-setup.md`.

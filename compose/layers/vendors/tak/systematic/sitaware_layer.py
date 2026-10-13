@@ -1206,6 +1206,22 @@ _marker_memory = MarkerMemory()   # a marker does not flip back to unknown when 
 _twins = TwinSuppressions()   # loose copies of ICAO-keyed aircraft that track fusion asked us to hold back
 
 
+# Two ways to put a TAK user into SitaWare force tracking. NFFI (nffi_layer.py) is the one SitaWare 6.21 accepts: it draws the user from
+# a 15-character letter SIDC. The NVG feed here can carry the APP-6D dismounted individual (SITAWARE_TAK_INDIVIDUAL_SCHEME) for a
+# SitaWare that draws it, 6.22 or later perhaps. SITAWARE_TAK_USERS_NVG=true|false chooses whether this feed draws the TAK users; unset,
+# it draws them unless the NFFI feed is configured (NFFI_LAYER_CONNECT or NFFI_LAYER_PORT), so a user is not drawn twice.
+_NFFI_ON = bool(os.environ.get("NFFI_LAYER_CONNECT", "").strip() or os.environ.get("NFFI_LAYER_PORT", "").strip())
+_TAK_USERS_NVG = os.environ.get("SITAWARE_TAK_USERS_NVG", "").strip().lower() in ("1", "true", "yes", "on") \
+    if os.environ.get("SITAWARE_TAK_USERS_NVG", "").strip() else not _NFFI_ON
+
+
+def _left_out_of_nvg(track: dict) -> bool:
+    """A TAK client (a track that carries its TAK device or platform, the same test as nffi_layer.track_message) when the NVG
+    feed is not to draw the TAK users."""
+    return (not _TAK_USERS_NVG and track.get("_ingress") == "tak_server"
+            and bool(track.get("tak_platform") or track.get("tak_device")))
+
+
 def make_handler(
     sidc,
     cache: NVGFeedCache,
@@ -1235,6 +1251,9 @@ def make_handler(
             uid = cache.remove(track)
             if verbose:
                 print("NVG feed removed {}".format(uid), flush=True)
+            return
+        if _left_out_of_nvg(track):
+            cache.remove(track)
             return
         if _twins.is_civil_copy(track, str(sample.key_expr)):
             return                                  # the same aircraft is military by another feed: one marker, not civil

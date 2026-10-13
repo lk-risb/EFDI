@@ -156,3 +156,19 @@ def test_aircraft_type_picks_rotary_wing_and_for_military_the_role_in_both_c2s()
     assert _tak(civil, {"aircraft_type": "H60"}) == ["a-n-A-C-H"] and _sidc(civil, {"aircraft_type": "H60"}) == ["SNAPCH----*****"]
     assert _tak(civil, {"aircraft_type": "C295"}) == [tak_layer._CIV_AIR_TYPE]            # civil traffic has no role
     assert _sidc(civil, {"aircraft_type": "C295"}) == ["SNAPCF----*****"]
+
+
+def test_sitaware_draws_a_tak_client_in_nvg_only_when_the_toggle_says_so(monkeypatch):
+    cache = sitaware_layer.NVGFeedCache(stale_s=60, max_tracks=100)
+    handler = sitaware_layer.make_handler("SFGP-----------", cache, False)
+    key = tak_layer.TOPIC_ROOT + "/land/tak/cot/friendly/unit/unknown/android-1/tracks/v1"
+    client = {"uid": "ANDROID-1", "_ingress": "tak_server", "tak_platform": "ATAK-CIV", "lat_deg": 54.7, "lon_deg": 25.2}
+    marker = {"uid": "BTK", "_ingress": "tak_server", "lat_deg": 54.7, "lon_deg": 25.2}
+    monkeypatch.setattr(sitaware_layer, "_TAK_USERS_NVG", True)
+    handler(_sample(key, client))
+    assert len(cache._items) == 1
+    monkeypatch.setattr(sitaware_layer, "_TAK_USERS_NVG", False)
+    handler(_sample(key, client))
+    assert len(cache._items) == 0                                    # toggled off (the NFFI feed has it): removed from NVG
+    handler(_sample(key, marker))
+    assert len(cache._items) == 1                                    # a marker without a device stays in NVG

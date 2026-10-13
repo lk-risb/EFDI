@@ -190,6 +190,34 @@ To remove those legacy objects without mixing them with live tracks:
 
 Do not clear a shared operational layer to work around this limitation.
 
+### TAK users in SitaWare force tracking (two routes)
+
+A TAK client's position can reach SitaWare Headquarters in two ways. Both are built, and a switch chooses between them, so a SitaWare
+upgrade does not need new code.
+
+| | NFFI feed (`nffi_layer`) | NVG feed (`sitaware_layer`) |
+|---|---|---|
+| What SitaWare does | Draws the user in its force tracking, as a track from an NFFI IP1 Client | Draws the user as an NVG object in the layer that imports the feed |
+| Symbol | 15-character letter SIDC only: friendly ground unit, Team echelon, infantry (HQ, medical and signal roles have their own function) | The same letter code, or the 20-digit APP-6D dismounted individual when `SITAWARE_TAK_INDIVIDUAL_SCHEME` is set |
+| Works with | SitaWare 6.21 (confirmed on a live instance) | 6.21 draws the letter code; it drew the numeric APP-6D code as a `?`. Whether 6.22 or later draws it is not checked |
+| Switch | Set `NFFI_LAYER_CONNECT` (or `NFFI_LAYER_PORT`) | `SITAWARE_TAK_USERS_NVG=true` |
+
+Both are settings in the WebUI (Integrations). Unset, `SITAWARE_TAK_USERS_NVG` follows the NFFI feed: the NVG feed draws the TAK users
+unless the NFFI feed is configured, so a user is never drawn twice. A TAK marker without a device (a point a user placed) is not a force
+track and stays in the NVG feed either way.
+
+**Setting up the NFFI feed on SitaWare 6.21.** In the NFFI and FFI Manager (Coalition Gateway) create an **IP1 Client**: a name, a
+destination layer and one port (SitaWare listens on it; the form has no host). Put that machine and port in `NFFI_LAYER_CONNECT`
+(`host:port`); the layer connects out and keeps reconnecting. The object count of the client rises once the first user is sent.
+The documents are NFFI 1.3 (`NFFI_LAYER_VERSION`), each behind the 16-byte header SitaWare 6.21 writes itself
+(`NFFI_LAYER_FRAMING=ip1`). How that was found out, and what is still unconfirmed, is in
+[`references/nffi/NFFI.md`](references/nffi/NFFI.md).
+
+**When SitaWare is upgraded (6.22 or later).** Try the NVG route first: set `SITAWARE_TAK_USERS_NVG=true` and
+`SITAWARE_TAK_INDIVIDUAL_SCHEME` to the scheme tag the new version draws (for example `app6d`), remove `NFFI_LAYER_CONNECT`, and check that
+a TAK user appears as the person symbol. If the new version wants NFFI 1.4, set `NFFI_LAYER_VERSION=1.4` and keep the NFFI route.
+Nothing else in the layers changes.
+
 ### Icon reference
 
 | ATAK appearance | CoT type | Source |

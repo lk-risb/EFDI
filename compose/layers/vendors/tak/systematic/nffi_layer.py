@@ -80,8 +80,10 @@ def _sub(parent, name, text=None, **attrs):
 
 
 def unit_symbol(track: dict) -> str:
-    """A 15-character APP-6 SIDC without wildcards (the schema allows [A-Z0-9-]): friendly ground unit, Team/Crew, function of the role."""
-    function = ground_unit.tak_function(track.get("cot_type"), track.get("tak_role")) or "U-----"
+    """A 15-character APP-6 SIDC without wildcards (the schema allows [A-Z0-9-]): friendly ground unit, Team/Crew, function of the role.
+    The field cannot hold the numeric APP-6D "dismounted individual" symbol, so a user with no role is infantry, the letter-code
+    counterpart of the APP-6D infantry individual (see docs/references/symbology/SYMBOLOGY.md)."""
+    function = ground_unit.tak_function(track.get("cot_type"), track.get("tak_role")) or "UCI---"
     return "SFGP{}-{}---".format(function, ground_unit.ECHELON_TEAM)
 
 

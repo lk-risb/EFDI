@@ -169,6 +169,34 @@ Pause Subscription:        ne
 
 Adresas priima tik GET/HEAD, pagal nutylėjimą reikalauja Basic autentifikavimo — jei HQ prenumerata pasiekia srautą (nebe „connection refused"/timeout), bet srauto žurnale matote `rejected unauthorized request from <hq-ip>`, prenumeratos kredencialai neatitinka `SITAWARE_HQ_NVG_USER`/`_PASS`; ištaisykite juos ten, arba greitam izoliuoto laboratorinio tinklo testui nustatykite `SITAWARE_HQ_NVG_ALLOW_ANONYMOUS=1`. Riboja talpyklos dydį, pašalina ilgiau nei `SITAWARE_HQ_NVG_STALE_S` neatnaujintus takelius ir kiekvienam NVG objektui prideda tokios pačios trukmės `TimeSpan`, kad HQ paslėptų pasenusius objektus net nutrūkus srautui. Kai šaltinyje yra duomenų, standartiniai NVG modifikatoriai ir ribotas `ExtendedData` taip pat perduoda šaukinį, registraciją/ICAO, orlaivio ar laivo tipą, squawk, maršrutą, šaltinį, laivo ID bei sensoriaus tapatybę. Attributes kortelė naudoja tą patį domeno formatavimą kaip CoT/TAK, todėl rodomi tvarkingi skyriai, o ne neapdoroti Python laukų pavadinimai. Orlaiviams atskirai pateikiamas barometrinis ir geometrinis aukštis, pagrindinis aukštis metrais/pėdomis/skrydžio lygiu, kilimo ar leidimosi greitis, pasirinktas/tikslinis aukštis, greitis, kryptis, avarinė/autopiloto būsena ir ADS-B kokybės laukai. dronuradaras.lt aptikimai naudoja HQ palaikomą bendrą neutralaus įrangos sensoriaus simbolį, o orų stebėjimai — atskirą neutralaus stacionaraus sensoriaus simbolį, nes HQ 6.22 standartinius METOC simbolius rodo kaip nežinomus. Nei vienas jų neklasifikuojamas kaip karinės žvalgybos vienetas. Ne lokaliame adrese procesas atsisako startuoti per paprastą HTTP, nebent izoliuotai laboratorijai aiškiai nustatyta `SITAWARE_HQ_NVG_ALLOW_INSECURE_HTTP=1`. Nenaudokite Keycloak paskyros ar slaptažodžio šiam srautui.
 
+### TAK naudotojai SitaWare pajėgų sekime (du keliai)
+
+TAK kliento pozicija gali pasiekti SitaWare Headquarters dviem būdais. Abu įgyvendinti, o jungiklis parenka, kuris veikia, todėl
+atnaujinus SitaWare naujo kodo nereikia.
+
+| | NFFI srautas (`nffi_layer`) | NVG srautas (`sitaware_layer`) |
+|---|---|---|
+| Ką daro SitaWare | Naudotoją piešia savo pajėgų sekime kaip NFFI IP1 Client gautą takelį | Naudotoją piešia kaip NVG objektą sluoksnyje, į kurį importuojamas srautas |
+| Simbolis | Tik 15 ženklų raidinis SIDC: draugiškas sausumos vienetas, komandos (Team) lygmuo, pėstininkai (HQ, medikų ir ryšininkų vaidmenys turi savo funkciją) | Tas pats raidinis kodas arba 20 skaitmenų APP-6D pėsčiojo asmens simbolis, kai nustatytas `SITAWARE_TAK_INDIVIDUAL_SCHEME` |
+| Veikia su | SitaWare 6.21 (patvirtinta veikiančioje sistemoje) | 6.21 piešia raidinį kodą, o skaitmeninį APP-6D kodą piešė kaip `?`. Ar 6.22 ar naujesnė jį piešia, nepatikrinta |
+| Jungiklis | Nustatykite `NFFI_LAYER_CONNECT` (arba `NFFI_LAYER_PORT`) | `SITAWARE_TAK_USERS_NVG=true` |
+
+Abu nustatymai yra WebUI (Integrations). Kai `SITAWARE_TAK_USERS_NVG` nenustatytas, jis seka NFFI srautą: NVG srautas piešia TAK
+naudotojus, nebent sukonfigūruotas NFFI srautas, todėl naudotojas niekada nepiešiamas du kartus. TAK žymeklis be įrenginio (naudotojo
+padėtas taškas) nėra pajėgų takelis ir abiem atvejais lieka NVG sraute.
+
+**NFFI srauto nustatymas SitaWare 6.21.** NFFI and FFI Manager (Coalition Gateway) sukurkite **IP1 Client**: pavadinimas, paskirties
+sluoksnis ir vienas prievadas (jį klausosi SitaWare; formoje nėra serverio adreso). Tą kompiuterį ir prievadą įrašykite į
+`NFFI_LAYER_CONNECT` (`host:port`); sluoksnis jungiasi pats ir nuolat bando prisijungti iš naujo. Kliento objektų skaičius padidėja,
+kai išsiunčiamas pirmas naudotojas. Dokumentai yra NFFI 1.3 (`NFFI_LAYER_VERSION`), kiekvienas su 16 baitų antrašte, kokią pati
+SitaWare 6.21 rašo (`NFFI_LAYER_FRAMING=ip1`). Kaip tai išsiaiškinta ir kas dar nepatvirtinta, aprašyta
+[`references/nffi/NFFI.md`](references/nffi/NFFI.md).
+
+**Kai SitaWare atnaujinama (6.22 ar naujesnė).** Pirmiausia išbandykite NVG kelią: nustatykite `SITAWARE_TAK_USERS_NVG=true` ir
+`SITAWARE_TAK_INDIVIDUAL_SCHEME` į schemos žymę, kurią piešia nauja versija (pavyzdžiui, `app6d`), pašalinkite `NFFI_LAYER_CONNECT` ir
+patikrinkite, ar TAK naudotojas rodomas kaip žmogaus simbolis. Jei nauja versija reikalauja NFFI 1.4, nustatykite
+`NFFI_LAYER_VERSION=1.4` ir palikite NFFI kelią. Daugiau sluoksniuose nieko keisti nereikia.
+
 ### Piktogramų žinynas
 
 | ATAK piktograma | CoT tipas | Šaltinis |

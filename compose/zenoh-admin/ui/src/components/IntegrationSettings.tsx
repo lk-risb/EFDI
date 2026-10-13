@@ -68,6 +68,7 @@ const FIELD_GROUPS: FieldGroup[] = [
     { key: 'NFFI_COUNTRY', label: 'Country code in the track source (3 letters)', placeholder: 'LTU' },
     { key: 'NFFI_LAYER_STALE_S', label: 'Drop a track after (seconds)', placeholder: '600' },
     { key: 'NFFI_LAYER_REFRESH_S', label: 'Re-send every track every (seconds)', placeholder: '30' },
+    { key: 'SITAWARE_TAK_USERS_NVG', label: 'Draw TAK users in the SitaWare NVG feed', placeholder: 'blank = automatic', help: 'true or false. Blank draws them unless the NFFI feed is configured, so a user is not drawn twice: the NFFI feed is the route that works with SitaWare 6.21, the NVG feed (with the individual symbol below) is for a SitaWare that draws it, 6.22 or later perhaps.' },
     { key: 'SITAWARE_TAK_INDIVIDUAL_SCHEME', label: 'NVG scheme tag for the TAK user person icon (experimental)', placeholder: 'blank = unit frame', help: 'Blank draws a TAK user in the NVG feed as a unit frame with the team/crew marking. Set a scheme tag (app6d, 2525d) to send the 20-digit APP-6D dismounted individual instead; SitaWare 6.21 drew app6d as a "?".' },
   ] },
   { title: 'SitaWare HQ', icon: ShieldCheck, description: 'REST import (sitaware_bridge) and NVG 2.0.2 export feed (sitaware_layer). Per-endpoint URLs/bind ports and credentials are below as a list — add as many HQ instances as needed on each side. These fields are shared defaults every listed endpoint inherits.', fields: [

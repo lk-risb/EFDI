@@ -43,6 +43,10 @@ def test_a_tak_client_is_one_nffi_track_that_fits_the_schema_patterns():
     assert text("n:track/n:operStatusData/n:remarks") == "Cyan Medic"
 
 
+def test_a_tak_client_without_a_role_is_infantry_the_letter_code_counterpart_of_the_individual():
+    assert nffi.unit_symbol({"cot_type": "a-f-G-U-C"}) == "SFGPUCI----A---"
+
+
 def test_what_is_no_tak_client_or_has_no_position_is_not_a_track():
     assert nffi.track_message({k: v for k, v in CLIENT.items() if k != "tak_platform"}) is None      # a marker a user placed
     assert nffi.track_message(dict(CLIENT, lat_deg=0.0, lon_deg=0.0)) is None
