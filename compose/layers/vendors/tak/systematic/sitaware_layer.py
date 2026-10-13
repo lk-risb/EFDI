@@ -182,7 +182,7 @@ _TOPIC_SIDC = {
     "land/**/unknown/person/**":     "SUGPUCI---*****",
     "land/**/unknown/sensor/**":     "SUGPES----*****",
     "land/**/neutral/zone/**":       "SNGPES----*****",
-    "land/**/hostile/incident/**":   "SHGPIE----*****",  # a place hit (dronestrikemap_bridge.py): 2525B incident Explosion
+    "land/**/hostile/incident/**":   "SHGPIE----*****",  # a strike (dronestrikemap_bridge.py): 2525B incident Explosion, side = the striker
     "land/**/friendly/incident/**":  "SFGPIE----*****",
     "land/**/neutral/alert/**":      "SNGPES----*****",
     "sea/**/civ/vessel/**":          _civil_sea_sidc,

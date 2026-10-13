@@ -410,7 +410,8 @@ def test_a_standing_country_with_regions_is_drawn_as_its_regions_not_as_one_outl
     out = bridge.wash_tracks({}, {}, standing, NOW, regions)
     assert sorted(out) == ["DA-REGION-BY-BY-BR", "DA-REGION-RU-RU-BEL"]      # Chukotka is beyond the theatre
     prefix, track = out["DA-REGION-RU-RU-BEL"]
-    assert (track["shape_color"], track["shape_style"], track["callsign"]) == ("red", "wash", "RU Belgorod Oblast (danger)")
+    # Russia is a country at war: every region starts orange (not an air-raid status), not in the site's standing tone
+    assert (track["shape_color"], track["shape_style"], track["callsign"]) == ("orange", "wash", "RU Belgorod Oblast (at war)")
     assert out["DA-REGION-BY-BY-BR"][1]["shape_color"] == "orange"
     assert "geoBoundaries" in track["remarks"] and "not an official warning" in track["remarks"]
     assert not [uid for uid in out if uid.startswith("DA-COUNTRY")]

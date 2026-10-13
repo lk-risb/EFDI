@@ -14,12 +14,17 @@ The operator runs one small server: the bridge asks for two day files and one al
 (10 minutes) and says who it is in its User-Agent.
 
 Published (JSON tracks):
-  <ORG>/land/dronestrikemap/strike/hostile/incident/...   a place hit in Russia, or in Russian-held Ukraine
-  <ORG>/land/dronestrikemap/strike/friendly/incident/...  a place hit in Ukraine
-      drawn by tak_layer / sitaware_layer as the 2525B incident "Explosion" (a-h-G-I-E / SHGPIE----).
-      Confidence is in the name; the remarks carry the summary, weapons, outlets and the credit.
-  <ORG>/land/dronestrikemap/airzone/neutral/zone/...      a Russian region under an air-raid alert, red,
-      drawn on top of the faint standing-status regions that dangausakis_bridge.py publishes for Russia.
+  <ORG>/land/dronestrikemap/strike/friendly/incident/...  a place hit in Russia, or in Russian-held Ukraine: a
+                                                          Ukrainian strike
+  <ORG>/land/dronestrikemap/strike/hostile/incident/...   a place hit in Ukraine: a Russian strike
+      drawn by tak_layer / sitaware_layer as the 2525B incident "Explosion" (a-f-G-I-E / SFGPIE---- blue,
+      a-h-G-I-E / SHGPIE---- red). The colour says who struck, as Ukraine is the friendly side here; the site
+      records where something landed, so the striker is inferred from the place. Confidence is in the name;
+      the remarks carry the summary, weapons, outlets and the credit.
+  <ORG>/land/dronestrikemap/airzone/neutral/zone/...      a Russian region that is more than "at war": red with an
+      active air-raid alert, yellow with a place hit today or yesterday. Drawn on top of the orange regions that
+      dangausakis_bridge.py publishes for all of Russia (a country at war: nowhere is safe), as the Ukrainian oblasts
+      are coloured all over with the alert districts on top.
 Strikes of today and yesterday (Kyiv dates) are shown; one marker per place per day. Anything that leaves
 the record is retracted with a JSON tombstone.
 
@@ -29,7 +34,7 @@ Env:
   DSM_STALE_S        how long a marker lives between polls (default 1800)
   DSM_DAYS           days shown, today first (default 2)
   DSM_COUNTRIES      places to draw, comma separated (default RU,UA)
-  DSM_ALERT_ZONES    0 turns the Russian alert zones off (default on)
+  DSM_ALERT_ZONES    0 turns the yellow and red Russian regions off (default on)
 """
 
 import argparse
@@ -118,16 +123,17 @@ def strike_tracks(day: dict, now: float, countries=COUNTRIES) -> dict:
         uid = "DSM-{}-{}-{}".format(date, country, _slug(place)).upper()
         weapons = [str(w) for w in strike.get("weapons") or []]
         summary = str(strike.get("summary") or "").strip()
-        out[uid] = (STRIKE_PREFIX + ("/hostile/incident" if country == "RU" else "/friendly/incident"), {
+        out[uid] = (STRIKE_PREFIX + ("/friendly/incident" if country == "RU" else "/hostile/incident"), {
             "_src": "dronestrikemap.com", "_ts": now, "uid": uid, "type": "strike",
             "callsign": "{} hit {} ({}){}".format(place, _short_date(date), confidence,
                                                   " - occupied" if occupied else ""),
-            "lat_deg": lat, "lon_deg": lon, "target_type": "strike", "position_uncertainty_m": 5000,
+            "lat_deg": lat, "lon_deg": lon, "target_type": "strike", "position_uncertainty_m": 5000, "place": place,
             "stale_s": STALE_S, "country": country, "region": strike.get("region") or "",
             "confidence": confidence, "weapons": weapons,
-            "remarks": "{}{} - reported by {}. Position is the place, not the impact point. {}".format(
+            "remarks": "{}{} - reported by {}. {} strike, inferred from where it landed; the position is the place, "
+                       "not the impact point. {}".format(
                 summary or "strike reported", " ({})".format(", ".join(weapons)) if weapons else "",
-                _outlets(strike), CREDIT),
+                _outlets(strike), "Ukrainian" if country == "RU" else "Russian", CREDIT),
         })
     return out
 
@@ -140,31 +146,61 @@ def _zone_rings(region: dict) -> list:
     return _ZONE_RINGS[region["id"]]
 
 
-def alert_zone_tracks(alerts: dict, index: dict, now: float) -> dict:
-    """uid -> (topic prefix, track): a red polygon per Russian region (not occupied Ukraine: dangausakis draws
-    those) with an active, not stale air-raid alert."""
-    out = {}
+def region_zone_tracks(alerts: dict, strikes: dict, index: dict, now: float) -> dict:
+    """uid -> (topic prefix, track): a polygon per Russian region that is more than "at war" (the orange every
+    region starts from, drawn by dangausakis_bridge.py): red when it has an active air-raid alert, yellow when a place
+    in it was hit today or yesterday and it has no alert. Occupied Ukrainian regions are left to the Ukrainian
+    zones. `strikes` is the uid -> (prefix, track) of strike_tracks()."""
+    levels: dict = {}                   # region id -> [level, region, places hit, alert]
+    for _, strike in strikes.values():
+        if strike.get("country") != "RU" or "occupied" in str(strike.get("region") or "").lower():
+            continue
+        region = region_geometry.match_region(index, strike.get("region"))
+        if region is None:
+            _warn_unmatched(strike.get("region"))
+            continue
+        entry = levels.setdefault(region["id"], ["yellow", region, [], None])
+        if strike.get("place") and strike["place"] not in entry[2]:
+            entry[2].append(strike["place"])
     for alert in alerts.get("active") or []:
         if alert.get("country") != "RU" or alert.get("occupied") or alert.get("stale") or alert.get("kind") != "air_raid":
             continue
         region = region_geometry.match_region(index, alert.get("region"))
         if region is None:
-            print("dronestrikemap: no outline for the alert region {!r}".format(alert.get("region")), flush=True)
+            _warn_unmatched(alert.get("region"))
             continue
+        entry = levels.setdefault(region["id"], ["red", region, [], None])
+        entry[0], entry[3] = "red", alert
+    out = {}
+    for level, region, places, alert in levels.values():
+        notes = []
+        if alert:
+            notes.append("Air-raid alert since {} - source: {} via Drone Strike Map".format(
+                alert.get("started_at") or "?", alert.get("source") or "?"))
+        if places:
+            notes.append("Places hit today or yesterday: {}".format(", ".join(places)))
         for part, ring in enumerate(_zone_rings(region)):
-            uid = "DSM-ALERT-{}{}".format(_slug(alert.get("region_key") or alert.get("region")).upper(),
-                                          "-p{}".format(part) if part else "")
+            uid = "DSM-REGION-{}{}".format(_slug(region["id"]).upper(), "-p{}".format(part) if part else "")
             out[uid] = (ZONE_PREFIX, {
                 "_src": "dronestrikemap.com", "_ts": now, "uid": uid, "type": "air_alert_zone",
-                "callsign": "RU {} RED".format(region["name"]),
+                "callsign": "RU {} {}".format(region["name"], level.upper()),
                 "lat_deg": round(sum(p[1] for p in ring[:-1]) / (len(ring) - 1), 5),
                 "lon_deg": round(sum(p[0] for p in ring[:-1]) / (len(ring) - 1), 5),
                 "geometry": {"type": "Polygon", "coordinates": [ring]}, "stale_s": 1800,
-                "shape_color": "red", "level": "red", "country": "RU", "alert_id": "DSM:" + str(region["id"]),
-                "remarks": "Air-raid alert since {} - source: {} via Drone Strike Map - not an official warning. {} - {}".format(
-                    alert.get("started_at") or "?", alert.get("source") or "?", CREDIT, region_geometry.CREDIT),
+                "shape_color": level, "level": level, "country": "RU", "alert_id": "DSM:" + str(region["id"]),
+                "remarks": "{} - not an official warning. {} - {}".format(
+                    ". ".join(notes), CREDIT, region_geometry.CREDIT),
             })
     return out
+
+
+_UNMATCHED: set = set()
+
+
+def _warn_unmatched(name) -> None:
+    if name not in _UNMATCHED:
+        _UNMATCHED.add(name)
+        print("dronestrikemap: no outline for the Russian region {!r}".format(name), flush=True)
 
 
 def _get_json(path: str):
@@ -202,7 +238,7 @@ def main():
         except Exception as exc:
             print("dronestrikemap Zenoh connect failed: {} — retry in 10s".format(exc), flush=True)
             time.sleep(10)
-    print("dronestrikemap bridge starting (poll {}s, {} day(s), countries {}, alert zones {})".format(
+    print("dronestrikemap bridge starting (poll {}s, {} day(s), countries {}, region zones {})".format(
         POLL_S, DAYS, ",".join(sorted(COUNTRIES)), "on" if ALERT_ZONES else "off"), flush=True)
 
     index = region_geometry.region_index(region_geometry.regions("RUS")) if ALERT_ZONES else {}
@@ -222,10 +258,11 @@ def main():
                         if uid.startswith("DSM-{}-".format(date)):
                             current[uid] = (prefix, dict(track, _ts=now))
             alerts = fetch_alerts() if ALERT_ZONES else None
-            if alerts is not None and not index:
-                index = region_geometry.region_index(region_geometry.regions("RUS"))
-            if alerts is not None:
-                current.update(alert_zone_tracks(alerts, index, now))
+            if ALERT_ZONES:
+                if not index:
+                    index = region_geometry.region_index(region_geometry.regions("RUS"))
+                strikes = {u: v for u, v in current.items() if v[1].get("type") == "strike"}
+                current.update(region_zone_tracks(alerts or {}, strikes, index, now))
             if fetched_days == 0 and alerts is None:
                 current = dict(published)           # the site is down: keep what is drawn, it expires by itself
                 for _, track in current.values():

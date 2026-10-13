@@ -52,19 +52,22 @@ def _sidc(topic: str):
     return [v for p, v in sitaware_layer._TOPIC_SIDC.items() if _match(p, rel)]
 
 
-def test_a_place_hit_in_russia_is_a_hostile_incident_and_one_in_ukraine_a_friendly_one():
+def test_the_side_is_the_striker_a_place_hit_in_russia_is_a_friendly_incident_and_one_in_ukraine_a_hostile_one():
     out = dsm.strike_tracks(DAY, NOW)
     belgorod = out["DSM-2026-10-12-RU-BELGOROD"]
-    assert belgorod[0].endswith("/land/dronestrikemap/strike/hostile/incident")
+    assert belgorod[0].endswith("/land/dronestrikemap/strike/friendly/incident")
     track = belgorod[1]
     assert track["callsign"] == "Belgorod hit 12 Oct (confirmed)"
     assert (track["lat_deg"], track["lon_deg"]) == (50.5977, 36.5858)
     assert "TASS (EN)" in track["remarks"] and "CC BY 4.0" in track["remarks"]
-    assert out["DSM-2026-10-12-UA-DNIPRO"][0].endswith("/strike/friendly/incident")
+    assert "Ukrainian strike" in track["remarks"]
+    dnipro = out["DSM-2026-10-12-UA-DNIPRO"]
+    assert dnipro[0].endswith("/strike/hostile/incident") and "Russian strike" in dnipro[1]["remarks"]
 
 
-def test_a_place_in_russian_held_ukraine_is_a_hostile_marker_named_as_occupied():
-    track = dsm.strike_tracks(DAY, NOW)["DSM-2026-10-12-RU-STAROBILSK"][1]
+def test_a_place_in_russian_held_ukraine_is_a_ukrainian_strike_named_as_occupied():
+    prefix, track = dsm.strike_tracks(DAY, NOW)["DSM-2026-10-12-RU-STAROBILSK"]
+    assert prefix.endswith("/friendly/incident")
     assert "occupied" in track["callsign"] and "(reported)" in track["callsign"]
 
 
@@ -78,25 +81,44 @@ def test_both_c2s_draw_a_marker_as_the_2525b_explosion_with_the_side_of_its_coun
     for uid, (prefix, track) in dsm.strike_tracks(DAY, NOW).items():
         topic = semantic_topic(prefix, track)
         hostile = "/hostile/" in topic
+        assert hostile == (track["country"] == "UA"), topic       # a Russian strike lands in Ukraine
         assert _cot(topic) == (["a-h-G-I-E"] if hostile else ["a-f-G-I-E"]), topic
         assert _sidc(topic) == (["SHGPIE----*****"] if hostile else ["SFGPIE----*****"]), topic
         xml = tak_layer.track_to_cot(track, _cot(topic)[0], stale_s=tak_layer._track_stale_s(track, 120))
         assert xml and 'type="a-{}-G-I-E"'.format("h" if hostile else "f") in xml and track["callsign"] in xml
 
 
-def test_a_russian_region_in_alert_becomes_a_red_zone_and_occupied_ukraine_or_a_stale_alert_does_not():
+def _strikes(*regions_and_places):
+    day = {"date": "2026-10-12", "strikes": [
+        {"country": "RU", "place": place, "region": region, "lat": 50.0, "lon": 36.0, "confidence": "confirmed"}
+        for region, place in regions_and_places]}
+    return dsm.strike_tracks(day, NOW)
+
+
+def test_a_russian_region_in_alert_is_red_one_with_a_place_hit_is_yellow_and_the_rest_are_not_drawn_here():
     index = region_geometry.region_index(_regions())
-    zones = dsm.alert_zone_tracks(ALERTS, index, NOW)
-    assert list(zones) == ["DSM-ALERT-RU-MOSCOW-OBLAST"]
-    prefix, track = zones["DSM-ALERT-RU-MOSCOW-OBLAST"]
+    strikes = _strikes(("Belgorod Oblast", "Belgorod"), ("Moscow Oblast", "Zhukovsky"))
+    zones = dsm.region_zone_tracks(ALERTS, strikes, index, NOW)
+    assert sorted(zones) == ["DSM-REGION-RU-BEL", "DSM-REGION-RU-MOS"]
+    prefix, belgorod = zones["DSM-REGION-RU-BEL"]
     assert prefix.endswith("/land/dronestrikemap/airzone/neutral/zone")
-    assert track["shape_color"] == "red" and track["geometry"]["type"] == "Polygon"
-    assert "not an official warning" in track["remarks"]
-    assert _cot(semantic_topic(prefix, track)) == ["a-n-G-I-R"]       # drawn by the existing zone path
+    assert (belgorod["shape_color"], belgorod["callsign"]) == ("yellow", "RU Belgorod Oblast YELLOW")
+    assert "Belgorod" in belgorod["remarks"] and "not an official warning" in belgorod["remarks"]
+    moscow = zones["DSM-REGION-RU-MOS"][1]                      # the fixture has an active alert in Moscow Oblast
+    assert moscow["shape_color"] == "red" and "Air-raid alert since" in moscow["remarks"] and "Zhukovsky" in moscow["remarks"]
+    assert moscow["geometry"]["type"] == "Polygon"
+    assert _cot(semantic_topic(prefix, belgorod)) == ["a-n-G-I-R"]       # drawn by the existing zone path
 
 
-def test_an_alert_for_a_region_with_no_outline_is_left_out():
-    assert dsm.alert_zone_tracks(ALERTS, region_geometry.region_index([]), NOW) == {}
+def test_occupied_ukraine_ukrainian_regions_and_stale_alerts_get_no_russian_zone():
+    index = region_geometry.region_index(_regions())
+    strikes = _strikes(("Luhansk Oblast (occupied)", "Starobilsk"))
+    assert dsm.region_zone_tracks({"active": [a for a in ALERTS["active"] if a.get("stale") or a["country"] != "RU" or a["occupied"]]},
+                                  strikes, index, NOW) == {}
+
+
+def test_a_region_with_no_outline_is_left_out():
+    assert dsm.region_zone_tracks(ALERTS, _strikes(("Belgorod Oblast", "Belgorod")), region_geometry.region_index([]), NOW) == {}
 
 
 def test_kyiv_days_are_counted_back_from_today():

@@ -56,6 +56,8 @@ Env:
   DANGAUSAKIS_ZONE_REFRESH_S    re-send an unchanged zone this often (default 600; a zone lives 1800 s)
   DANGAUSAKIS_COUNTRY_ZONES     set 0 to skip the faint oblast fills and the standing Belarus/Russia
                                 colours the site draws (default on; needs DANGAUSAKIS_ZONES)
+  DANGAUSAKIS_REGION_BASE       "RU:orange" (default): the colour a split country's regions start from, instead of
+                                the site's standing tone (dronestrikemap_bridge.py draws strikes and alerts on top)
   DANGAUSAKIS_REGION_SPLIT      "RU:RUS,BY:BLR" (default): draw those standing countries as their regions
                                 (geoBoundaries) instead of one outline; empty keeps the single outline
   DANGAUSAKIS_COMMUNITY         set 0 to disable the community drone reports and incident
@@ -130,6 +132,12 @@ WASH_ENABLED = os.environ.get("DANGAUSAKIS_COUNTRY_ZONES", "1") != "0"
 # keeps the single country outline. A country whose regions cannot be loaded keeps its outline too.
 REGION_SPLIT = dict(pair.split(":", 1) for pair in
                     os.environ.get("DANGAUSAKIS_REGION_SPLIT", "RU:RUS,BY:BLR").replace(" ", "").split(",") if ":" in pair)
+# The colour the regions of a country start from, instead of the standing tone the site draws it in: Russia is a
+# country at war, so every region is orange (not one of the air-raid statuses white / yellow / red, which the zones
+# use), and dronestrikemap_bridge.py draws the regions with strikes (yellow) and air-raid alerts (red) on top.
+# "RU:orange" (default); empty keeps the tone.
+REGION_BASE_LEVEL = dict(pair.split(":", 1) for pair in
+                         os.environ.get("DANGAUSAKIS_REGION_BASE", "RU:orange").replace(" ", "").split(",") if ":" in pair)
 REGION_THEATRE = (10.0, 40.0, 70.0, 72.0)    # lon min, lat min, lon max, lat max: regions beyond the Urals are not drawn
 REGION_MAX_VERTICES = 400                    # per region part: 60 regions stay far below TAK Server's event size limit
 COMMUNITY_ENABLED = os.environ.get("DANGAUSAKIS_COMMUNITY", "1") != "0"
@@ -277,7 +285,9 @@ def _region_wash_tracks(code: str, standing_region: dict, level: str, country_re
     """uid -> (topic prefix, track): one faint fill per region of a country the site draws as one standing colour."""
     out = {}
     for region in country_regions:
-        key = (code, region["id"], standing_region["tone"])
+        base = REGION_BASE_LEVEL.get(code)
+        level = base if base in _WASH_RANK else level
+        key = (code, region["id"], level)
         if key not in _REGION_TRACKS:
             rings = [r for r in region["rings"] if region_geometry.overlaps(r, REGION_THEATRE)][:ZONE_MAX_PARTS]
             rings = [r for r in rings if _ring_area(r) >= 0.02 * _ring_area(rings[0])]
@@ -285,9 +295,10 @@ def _region_wash_tracks(code: str, standing_region: dict, level: str, country_re
             for index, ring in enumerate(rings):
                 uid = "DA-REGION-{}-{}{}".format(code, region["id"], "-p{}".format(index) if index else "")
                 built.append((uid, _wash_track(
-                    uid, region, level, "{} {} ({})".format(code, region["name"], standing_region["tone"]),
-                    "Standing status shown by dangausakis.lt: {} - not an official warning - {}".format(
-                        standing_region["tone"], region_geometry.CREDIT),
+                    uid, region, level, "{} {} ({})".format(code, region["name"], "at war" if base else standing_region["tone"]),
+                    ("Country at war: every region is drawn in the colour of an area at war - not an official warning - {}" if base
+                     else "Standing status shown by dangausakis.lt: " + standing_region["tone"] +
+                     " - not an official warning - {}").format(region_geometry.CREDIT),
                     [ring], now, max_vertices=REGION_MAX_VERTICES, country=code,
                     alert_id="REGION:" + str(region["id"]))))
             _REGION_TRACKS[key] = built
