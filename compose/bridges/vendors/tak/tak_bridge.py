@@ -27,6 +27,7 @@ import json
 import os
 import socket
 import ssl
+import threading
 import time
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
@@ -367,6 +368,25 @@ def _extract_events(buffer: list[str]) -> list[str]:
         buffer[0] = text
 
 
+_REPUBLISH_S = float(os.environ.get("TAK_INGEST_REPUBLISH_S", "30"))
+_DEFAULT_STALE_S = 300.0
+
+
+def _due_republish(known: dict, now: float) -> list:
+    """(topic, record) of every remembered client position that is not stale yet, as a fresh sample: TAK sends a position only every
+    few minutes, and the layers (and the NFFI feed) expire what they have not seen for a short while, so what TAK last said is
+    repeated until its own stale time. known is uid -> (topic, record, received at); a spent entry is dropped."""
+    out = []
+    for uid in list(known):
+        topic, record, received = known[uid]
+        left = received + float(record.get("stale_s") or _DEFAULT_STALE_S) - now
+        if left <= 0:
+            known.pop(uid, None)
+            continue
+        out.append((topic, dict(record, _ts=now, stale_s=left)))
+    return out
+
+
 def run(args) -> None:
     hosts = [h for h in args.host if h]
     if not hosts:
@@ -401,6 +421,21 @@ def run(args) -> None:
     print("  TLS    : {}".format("on" if args.tls else "off"), flush=True)
     print("  Raw    : {}".format(_RAW_TOPIC), flush=True)
 
+    known: dict = {}                   # uid -> (topic, record, received at), repeated until the CoT's own stale time
+    known_lock = threading.Lock()
+
+    def republish():
+        while True:
+            time.sleep(_REPUBLISH_S)
+            with known_lock:
+                due = _due_republish(known, time.time())
+            for topic, record in due:
+                try:
+                    publish_dual(session, topic, record, NormalizedTrack, zenoh)
+                except Exception as exc:
+                    print("TAK republish failed: {}".format(exc), flush=True)
+    threading.Thread(target=republish, daemon=True).start()
+
     idx = 0
     while True:
         host = hosts[idx % len(hosts)]
@@ -434,6 +469,8 @@ def run(args) -> None:
                     normalized = _normalize_event(elem)
                     if normalized is not None:
                         topic, record = normalized
+                        with known_lock:
+                            known[str(record.get("uid"))] = (topic, record, time.time())
                         publish_dual(session, topic, record, NormalizedTrack, zenoh)
                         if args.verbose:
                             print("TAK PUB {} uid={} type={}".format(

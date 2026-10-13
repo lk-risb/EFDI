@@ -86,3 +86,15 @@ def test_a_client_with_no_gps_fix_reports_0_0_and_is_not_a_track():
     event.find("point").set("lat", "0.0")
     event.find("point").set("lon", "0.0")
     assert bridge._normalize_event(event) is None
+
+
+def test_a_clients_last_position_is_repeated_until_its_own_stale_time():
+    now = 1000.0
+    known = {"A": ("t/a", {"uid": "A", "stale_s": 120.0, "lat_deg": 1.0}, now),
+             "B": ("t/b", {"uid": "B", "stale_s": 30.0}, now - 100.0),          # spent 70 s ago
+             "C": ("t/c", {"uid": "C"}, now - 10.0)}                              # no stale time: the default of 5 minutes
+    due = {topic: record for topic, record in bridge._due_republish(known, now)}
+    assert set(due) == {"t/a", "t/c"} and "B" not in known
+    assert due["t/a"]["_ts"] == now and due["t/a"]["stale_s"] == 120.0 and due["t/a"]["lat_deg"] == 1.0
+    assert due["t/c"]["stale_s"] == 290.0
+    assert bridge._due_republish(known, now + 400.0) == [] and known == {}
