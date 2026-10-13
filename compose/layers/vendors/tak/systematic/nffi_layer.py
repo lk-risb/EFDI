@@ -5,8 +5,8 @@ SitaWare Headquarters has an "NFFI and FFI Manager" (Coalition Gateway) that can
 asks for a name, a destination layer and ONE port number (no host, plus a reconnect delay), so that client waits on its own port for
 the data to be sent to it: this layer connects out to it (NFFI_LAYER_CONNECT=host:port, and keeps reconnecting). The other way round is
 also built, a listening port the SitaWare manager is pointed at (NFFI_LAYER_PORT), for a profile that dials in. Whoever is connected gets
-the current tracks at once and then every update, as NFFI 1.4 XML documents (namespace urn:nato:fft:protocols:nffi14, one
-NFFIMessage with one track each) written back to back; the whole table is re-sent every NFFI_LAYER_REFRESH_S.
+the current tracks at once and then every update, as NFFI XML documents (NFFI_LAYER_VERSION: 1.3 by default, the version SitaWare 6.21 itself writes; namespace
+urn:nato:fft:protocols:nffi13 or nffi14, one NFFIMessage with one track each, each behind SitaWare's 16-byte IP1 header); the whole table is re-sent every NFFI_LAYER_REFRESH_S.
 
 What is sent: the friendly unit tracks of TAK clients, which tak_bridge.py publishes under <ORG>/land/tak/**/friendly/unit/** (only a
 track that reports its TAK device, so a marker a user placed is not a force track). The NFFI fields follow the NC3A schema:
@@ -18,8 +18,10 @@ track that reports its TAK device, so a marker a user placed is not a force trac
   unitShortName the callsign;  operStatusData/remarks  "<team> <role>"
 The feed carries live positions of the TAK users and has no login or encryption (the NFFI profiles do not ask for any here). Connecting
 out opens no port here; a listening port should be bound to the VPN address only, with the SitaWare machine in NFFI_LAYER_ALLOW.
-Only the NFFI profile of SitaWare's manager is unknown: which transport variant (IP1, IP1 Classic, IP2, SIP3) and what framing it
-expects on the socket has not been confirmed against a live SitaWare, so the documents are simply written back to back.
+The version, namespace and framing were taken from what a live SitaWare 6.21 itself sends: an NFFI IP1 Classic Server with a contract
+for this host, read from its port, writes nffi13 documents, each behind a 16-byte header (04 00 00 00, the time in epoch seconds
+big-endian, 4 zero bytes, 01 00, the document length big-endian in 2 bytes). A newer SitaWare may write another version: set
+NFFI_LAYER_VERSION=1.4 and NFFI_LAYER_FRAMING to match.
 
 Env (at least one of NFFI_LAYER_CONNECT and NFFI_LAYER_PORT is required; the layer does not start without one):
   NFFI_LAYER_CONNECT     host:port of SitaWare's NFFI client to connect out to (comma-separated for several)
@@ -28,9 +30,10 @@ Env (at least one of NFFI_LAYER_CONNECT and NFFI_LAYER_PORT is required; the lay
   NFFI_LAYER_BIND        address to listen on (default 127.0.0.1: set the one address SitaWare reaches, e.g. the VPN address)
   NFFI_LAYER_ALLOW       comma-separated source addresses that may connect (default: any that can reach the port)
   NFFI_COUNTRY           3-letter country code in trackSource (default LTU)
-  NFFI_LAYER_FRAMING     how each document is written on the socket: xml (default: with an XML declaration, newline after), nodecl
-                         (no declaration), length (4-byte big-endian length in front) or nul (a 0 byte after); the framing the
-                         SitaWare manager expects is not confirmed, so this can be changed without a code change
+  NFFI_LAYER_VERSION     NFFI version of the documents: 1.3 (default, SitaWare 6.21) or 1.4
+  NFFI_LAYER_FRAMING     how each document is written on the socket: ip1 (default: SitaWare's 16-byte header in front), xml (XML
+                         declaration, newline after), nodecl (no declaration), length (4-byte big-endian length in front) or nul
+                         (a 0 byte after)
   NFFI_LAYER_STALE_S     drop a track this long after its last report (default 600)
   NFFI_LAYER_REFRESH_S   re-send every track this often (default 30)
 """
@@ -51,15 +54,17 @@ from protocols.vendors.random import ground_unit
 from protocols.vendors.random.gateway import open_session, subscribe
 
 TOPIC_ROOT = topic_root()
-NFFI_NS = "urn:nato:fft:protocols:nffi14"
+NFFI_VERSION = os.environ.get("NFFI_LAYER_VERSION", "1.3").strip()
+NFFI_NS = "urn:nato:fft:protocols:nffi" + ("14" if NFFI_VERSION == "1.4" else "13")
 COUNTRY = (os.environ.get("NFFI_COUNTRY") or "LTU").strip().upper()[:3]
 ALLOW = {a.strip() for a in os.environ.get("NFFI_LAYER_ALLOW", "").split(",") if a.strip()}
-FRAMING = os.environ.get("NFFI_LAYER_FRAMING", "xml").strip().lower()
+FRAMING = os.environ.get("NFFI_LAYER_FRAMING", "ip1").strip().lower()
 STALE_S = float(os.environ.get("NFFI_LAYER_STALE_S", "600"))
 REFRESH_S = float(os.environ.get("NFFI_LAYER_REFRESH_S", "30"))
 SYSTEM = "EFDI"
 SUBSYSTEM = "TAK"
 TOPIC = "{}/land/tak/**".format(TOPIC_ROOT)
+_SECURITY = {"secPolicyName": "0", "secClassification": "UNCLASSIFIED", "secCategory": "0"}     # as SitaWare writes them
 
 
 def _clean(text, allowed: str, limit: int) -> str:
@@ -97,7 +102,7 @@ def track_message(track: dict, now: float | None = None) -> bytes | None:
     ET.register_namespace("", NFFI_NS)
     root = ET.Element("{%s}NFFIMessage" % NFFI_NS)
     node = _sub(root, "track")
-    positional = _sub(node, "positionalData")
+    positional = _sub(node, "positionalData", **_SECURITY)
     source = _sub(positional, "trackSource")
     system = _sub(source, "sourceSystem")
     if re.fullmatch("[A-Z]{3}", COUNTRY):
@@ -121,7 +126,7 @@ def track_message(track: dict, now: float | None = None) -> bytes | None:
             _sub(positional, "speed", round(max(0.0, float(track["speed_ms"])) * 3.6, 1))
     except (TypeError, ValueError):
         pass
-    ident = _sub(node, "identificationData")
+    ident = _sub(node, "identificationData", **_SECURITY)
     _sub(ident, "unitSymbol", unit_symbol(track))
     name = _clean(track.get("callsign") or track.get("uid"), r"A-Za-z0-9.,:*\- ", 21).strip()
     if name:
@@ -129,16 +134,20 @@ def track_message(track: dict, now: float | None = None) -> bytes | None:
     remarks = _clean(" ".join(str(track.get(k) or "") for k in ("tak_team", "tak_role")), r"A-Za-z0-9.,:*\- ", 60).strip()
     if remarks:
         _sub(_sub(node, "operStatusData"), "remarks", remarks)
-    return frame(ET.tostring(root, encoding="utf-8", xml_declaration=FRAMING != "nodecl"))
+    body = ET.tostring(root, encoding="utf-8")
+    return frame((b"" if FRAMING == "nodecl" else b'<?xml version="1.0" encoding="UTF-8"?>\n') + body + b"\n", now=when)
 
 
-def frame(document: bytes) -> bytes:
+def frame(document: bytes, now: float | None = None) -> bytes:
     """One document as it is written on the socket, by NFFI_LAYER_FRAMING."""
+    if FRAMING == "ip1":
+        return (b"\x04\x00\x00\x00" + int(now or time.time()).to_bytes(4, "big") + b"\x00\x00\x00\x00\x01\x00"
+                + len(document).to_bytes(2, "big") + document)
     if FRAMING == "length":
         return len(document).to_bytes(4, "big") + document
     if FRAMING == "nul":
         return document + b"\x00"
-    return document + b"\n"
+    return document
 
 
 class NffiFeed:

@@ -23,7 +23,7 @@ CLIENT = {"uid": "ANDROID-7e82", "callsign": "Alpha (1)", "lat_deg": 54.76, "lon
 
 
 def _doc(track):
-    return ET.fromstring(nffi.track_message(track))
+    return ET.fromstring(nffi.track_message(track)[16:])      # behind the 16-byte header
 
 
 def test_a_tak_client_is_one_nffi_track_that_fits_the_schema_patterns():
@@ -108,6 +108,15 @@ def test_the_layer_connects_out_to_a_listening_client_and_reconnects():
     finally:
         stop.set()
         peer.close()
+
+
+def test_the_default_is_what_sitaware_621_writes_itself_a_16_byte_header_and_nffi13():
+    framed = nffi.track_message(CLIENT)
+    assert nffi.NFFI_NS == "urn:nato:fft:protocols:nffi13"
+    assert framed[:4] == b"\x04\x00\x00\x00" and int.from_bytes(framed[4:8], "big") == 1791885326     # the position time, epoch seconds
+    assert framed[8:14] == b"\x00\x00\x00\x00\x01\x00" and int.from_bytes(framed[14:16], "big") == len(framed) - 16
+    assert framed[16:].startswith(b'<?xml version="1.0" encoding="UTF-8"?>\n<NFFIMessage') and framed.endswith(b"</NFFIMessage>\n")
+    assert b'secClassification="UNCLASSIFIED"' in framed
 
 
 def test_the_framing_can_be_changed_by_the_environment_variable(monkeypatch):

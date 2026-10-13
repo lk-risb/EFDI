@@ -267,10 +267,10 @@ a live-traffic test. `nffi_bridge.py` (above) is closer to closing that
 gap but isn't there yet — it has never connected to a real NFFI/FFI server.
 
 
-## Added 2026-10-13: layers/vendors/tak/systematic/nffi_layer.py (EFDI -> SitaWare, NFFI 1.4 server)
+## Added 2026-10-13: layers/vendors/tak/systematic/nffi_layer.py (EFDI -> SitaWare)
 
-`nffi_layer.py` is the reverse direction of `nffi.py`: it writes the TAK users as NFFI 1.4 XML to SitaWare's NFFI and FFI Manager
-(client mode), which connects to a TCP port the layer listens on.
+`nffi_layer.py` is the reverse direction of `nffi.py`: it writes the TAK users as NFFI XML to SitaWare's NFFI and FFI Manager
+(IP1 Client, connected out to its port; the layer can also listen).
 
 Sources used and how far each is trusted:
 
@@ -288,6 +288,25 @@ Sources used and how far each is trusted:
   track id per CoT uid and using the stale time to drop tracks; no code or field was taken from it.
 - **Systematic's SitaWare Headquarters datasheet**, only for the statement that NFFI is a supported standard.
 
-Not confirmed, and the reason this is a first attempt: which transport variant the SitaWare manager uses, whether it dials a server or
-accepts a connection, and the framing on the socket. The documents are written back to back, the same untested assumption as in
-`nffi_bridge.py`. The CoT fields NFFI has no place for (team colour, platform) are carried in the remarks.
+## Verified 2026-10-13 against a live SitaWare Headquarters 6.21: what SitaWare itself writes
+
+An NFFI IP1 Classic Server was created in the manager (payload NFFI, source layer with 9 objects, port 8095) with a contract whose
+host was the gateway's address. A passive TCP connection from that host to the server port was then answered with a stream. What it
+showed (21,300 bytes, 4 messages of 9 tracks, 10 s apart):
+
+- Namespace `urn:nato:fft:protocols:nffi13`, not nffi14: SitaWare 6.21 writes NFFI 1.3. A newer SitaWare may write 1.4 (not checked),
+  so `NFFI_LAYER_VERSION` selects the namespace and defaults to 1.3.
+- Each document is behind a 16-byte header: `04 00 00 00`, the time in epoch seconds (4 bytes, big-endian), `00 00 00 00`, `01 00`
+  (the contract's header priority is 1, so possibly that), and the document length in bytes (2 bytes, big-endian). The XML follows with
+  a declaration (`<?xml version="1.0" encoding="UTF-8"?>` and a newline) and ends with a newline. The meaning of the first four bytes and
+  of `01 00` is a guess; the layer writes the same values.
+- `positionalData` and `identificationData` carry `secPolicyName="0" secClassification="UNCLASSIFIED" secCategory="0"`; element order is
+  trackSource (country, system, subsystem, transponderId), dateTime, coordinates, then identificationData with unitSymbol and unitShortName.
+- The server closes a connection from a host that has no contract (tried before the contract existed: closed at once, no data).
+- The IP1 Server form (the non-Classic one) asks for no port and its contract asks for the client's host and port; the IP1 Classic Server
+  asks for a port and its contract only for a host. Which direction the IP1 Client form (port only) expects is still not verified.
+
+Not confirmed: whether the 16-byte header and nffi13 are also what SitaWare's IP1 *Client* expects (it is the receiving side of the
+same protocol, so it is assumed); the layer's earlier attempts (no header, nffi14) left the client at Connected with 0 objects.
+
+The CoT fields NFFI has no place for (team colour, platform) are carried in the remarks.
