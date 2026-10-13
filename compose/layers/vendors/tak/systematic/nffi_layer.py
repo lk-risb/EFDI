@@ -28,6 +28,9 @@ Env (at least one of NFFI_LAYER_CONNECT and NFFI_LAYER_PORT is required; the lay
   NFFI_LAYER_BIND        address to listen on (default 127.0.0.1: set the one address SitaWare reaches, e.g. the VPN address)
   NFFI_LAYER_ALLOW       comma-separated source addresses that may connect (default: any that can reach the port)
   NFFI_COUNTRY           3-letter country code in trackSource (default LTU)
+  NFFI_LAYER_FRAMING     how each document is written on the socket: xml (default: with an XML declaration, newline after), nodecl
+                         (no declaration), length (4-byte big-endian length in front) or nul (a 0 byte after); the framing the
+                         SitaWare manager expects is not confirmed, so this can be changed without a code change
   NFFI_LAYER_STALE_S     drop a track this long after its last report (default 600)
   NFFI_LAYER_REFRESH_S   re-send every track this often (default 30)
 """
@@ -51,6 +54,7 @@ TOPIC_ROOT = topic_root()
 NFFI_NS = "urn:nato:fft:protocols:nffi14"
 COUNTRY = (os.environ.get("NFFI_COUNTRY") or "LTU").strip().upper()[:3]
 ALLOW = {a.strip() for a in os.environ.get("NFFI_LAYER_ALLOW", "").split(",") if a.strip()}
+FRAMING = os.environ.get("NFFI_LAYER_FRAMING", "xml").strip().lower()
 STALE_S = float(os.environ.get("NFFI_LAYER_STALE_S", "600"))
 REFRESH_S = float(os.environ.get("NFFI_LAYER_REFRESH_S", "30"))
 SYSTEM = "EFDI"
@@ -125,7 +129,16 @@ def track_message(track: dict, now: float | None = None) -> bytes | None:
     remarks = _clean(" ".join(str(track.get(k) or "") for k in ("tak_team", "tak_role")), r"A-Za-z0-9.,:*\- ", 60).strip()
     if remarks:
         _sub(_sub(node, "operStatusData"), "remarks", remarks)
-    return ET.tostring(root, encoding="utf-8", xml_declaration=True) + b"\n"
+    return frame(ET.tostring(root, encoding="utf-8", xml_declaration=FRAMING != "nodecl"))
+
+
+def frame(document: bytes) -> bytes:
+    """One document as it is written on the socket, by NFFI_LAYER_FRAMING."""
+    if FRAMING == "length":
+        return len(document).to_bytes(4, "big") + document
+    if FRAMING == "nul":
+        return document + b"\x00"
+    return document + b"\n"
 
 
 class NffiFeed:

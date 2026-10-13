@@ -108,3 +108,16 @@ def test_the_layer_connects_out_to_a_listening_client_and_reconnects():
     finally:
         stop.set()
         peer.close()
+
+
+def test_the_framing_can_be_changed_by_the_environment_variable(monkeypatch):
+    monkeypatch.setattr(nffi, "FRAMING", "nodecl")
+    plain = nffi.track_message(CLIENT)
+    assert plain.startswith(b"<") and not plain.startswith(b"<?xml") and plain.endswith(b"\n")
+    monkeypatch.setattr(nffi, "FRAMING", "length")
+    framed = nffi.track_message(CLIENT)
+    assert int.from_bytes(framed[:4], "big") == len(framed) - 4 and framed[4:].startswith(b"<?xml")
+    monkeypatch.setattr(nffi, "FRAMING", "nul")
+    assert nffi.track_message(CLIENT).endswith(b"\x00")
+    monkeypatch.setattr(nffi, "FRAMING", "xml")
+    assert nffi.track_message(CLIENT).startswith(b"<?xml") and nffi.track_message(CLIENT).endswith(b"\n")
