@@ -9,7 +9,7 @@ sys.path.insert(0, str(ROOT / "compose"))
 sys.path.insert(0, str(ROOT / "compose" / "control"))
 sys.path.insert(0, str(ROOT / "compose" / "layers" / "vendors" / "tak"))
 
-from protocols.vendors.random.icao_ghosts import GhostFilter  # noqa: E402
+from protocols.vendors.random.fusion import GhostFilter  # noqa: E402
 import tak_layer  # noqa: E402
 
 _spec = importlib.util.spec_from_file_location("generic_json_under_test", ROOT / "compose/protocols/vendors/random/generic_json.py")
@@ -66,7 +66,7 @@ def test_generic_json_object_id_with_a_word_prefix_is_still_the_icao_aircraft():
 
 
 def test_twin_filter_drops_a_non_icao_copy_of_an_icao_keyed_aircraft_only_when_near_and_recent():
-    from protocols.vendors.random.icao_ghosts import TwinFilter
+    from protocols.vendors.random.fusion import TwinFilter
     twins = TwinFilter()
     icao = {"icao24": "505ce9", "callsign": "OMCBS", "lat_deg": 49.22, "lon_deg": 19.62}
     assert not twins.is_twin(icao, now=1000.0)

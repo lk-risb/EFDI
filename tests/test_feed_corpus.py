@@ -15,7 +15,7 @@ for sub in ("compose", "compose/control", "compose/generated", "compose/generate
             "compose/protocols/vendors/random"):
     sys.path.insert(0, str(ROOT / sub))
 
-from protocols.vendors.random.twin_suppress import TwinIndex  # noqa: E402
+from protocols.vendors.random.fusion import TwinIndex  # noqa: E402
 from protocols.vendors.socbx import socbx  # noqa: E402
 from schemas.vendors.socbx.proto.socbx_unified_pb2 import UnifiedSchema  # noqa: E402
 
@@ -95,7 +95,7 @@ def test_a_named_copy_far_away_is_a_different_object():
 
 
 def test_a_marker_that_declared_its_affiliation_does_not_flip_back_to_unknown():
-    from protocols.vendors.random.marker_memory import MarkerMemory
+    from protocols.vendors.random.fusion import MarkerMemory
     memory = MarkerMemory(hold_s=300)
     assert memory.settle("U1", "a-u-A-M-F-Q", 100.0) == "a-u-A-M-F-Q"       # nothing declared yet
     assert memory.settle("U1", "a-f-A-M-F-Q", 110.0) == "a-f-A-M-F-Q"

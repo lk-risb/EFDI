@@ -12,10 +12,17 @@ No licence or terms for the API were found: every marker credits GeoConfirmed, a
 its website. Positions are geolocated places, much finer than a city.
 
 Published (JSON tracks): <ORG>/land/geoconfirmed/event/<side>/incident/event/<uid>, drawn by tak_layer and
-sitaware_layer as the 2525B incident "Explosion" (SxGPIE----) in the colour of the placemark's side: friendly
-(Ukraine, NATO), hostile (Russia, Belarus, North Korea), neutral (civilian, neutral) or unknown. The name is the kind
-of event and its date; the remarks carry the full kind and the credit. A placemark that leaves the window is
-retracted with a JSON tombstone.
+sitaware_layer as the 2525B incident "Explosion" (SxGPIE----). The side is the striker's, as in dronestrikemap_bridge.py:
+friendly (Ukraine, NATO) or hostile (Russia, Belarus, North Korea). GeoConfirmed colours a placemark by its faction, and
+what the colour means depends on the kind of event, which the bridge reads from the kind's name:
+  - a weapon in use or a shelling, a drone, missile or bomb, a civilian killed or wounded, a video or picture of an
+    attack: the colour is whoever attacked, so the side is the faction's;
+  - something destroyed or damaged (a tank, a truck, a radar, a bunker, a soldier killed or wounded): the colour is
+    the owner, who was struck, so the side is the opposite faction's;
+  - anything else (a tank driving, a prisoner, a bridge, an infrastructure fire of unknown origin): not a strike, so
+    the side is the faction's, or neutral for a civilian or neutral placemark, and the remarks say so.
+The name is the kind of event and its date; the remarks carry the full kind, who struck and the credit. A placemark that
+leaves the window is retracted with a JSON tombstone.
 
 Env:
   GC_URL        site root (default https://geoconfirmed.org)
@@ -64,6 +71,38 @@ def _side(faction_name: str) -> str:
     if base.endswith(" civilian"):
         return "neutral"                # a civilian is nobody's unit, whichever side's territory it is on
     return _SIDES.get(base, "unknown")
+
+
+_FACTION_LABEL = {"ukraine": "Ukrainian", "russia": "Russian", "belarus": "Belarusian", "nato": "NATO", "north korea": "North Korean"}
+_OPPOSITE = {"friendly": "hostile", "hostile": "friendly"}
+# kinds whose colour is whoever attacked: weapons in use or lost in an attack, shelling, civilian casualties, footage of an attack
+_STRIKER = re.compile(r"^shelling by artillery|^killed or wounded civilian|^(picture|video) -|owad|loitering|bomber drone|"
+                      r"cruise missile|suicide ugv", re.I)
+# kinds whose colour is the owner of what was struck
+_VICTIM = re.compile(r"destroyed|damaged|^wia/kia|^older kia", re.I)
+
+
+def _base_faction(faction_name: str) -> str:
+    base = re.sub(r"\s*\([A-Za-z0-9-]+\)\s*$", "", str(faction_name or "")).strip().lower()
+    return base[:-len(" civilian")] if base.endswith(" civilian") else base
+
+
+def striker(kind: str, faction_name: str):
+    """(side of whoever struck, role) for a placemark: role is "striker" (the colour is the attacker), "victim" (the colour
+    is the owner of what was hit, so the striker is the other side) or "other" (not a strike; the side is the faction's,
+    neutral for civilians). The side is friendly, hostile, neutral or unknown."""
+    side = _side(faction_name)
+    base = _base_faction(faction_name)
+    if re.search(r"unknown origin", kind or "", re.I):
+        return "neutral", "other"                   # an explosion nobody is credited with
+    if _STRIKER.search(kind or ""):
+        role = "striker"
+    elif _VICTIM.search(kind or ""):
+        role = "victim"
+    else:
+        return side, "other"
+    side = _SIDES.get(base, "unknown")
+    return (_OPPOSITE.get(side, side) if role == "victim" else side), role
 
 
 def _template(icon_path: str) -> str:
@@ -122,15 +161,19 @@ def event_tracks(world: dict, kinds: dict, now: float, days: int = DAYS, limit: 
     out = {}
     for stamp, props, faction, lat, lon in sorted(picked, key=lambda p: p[0], reverse=True)[:limit]:
         full = kinds.get(_template(props.get("icon"))) or "event"
-        side = _side(faction)
+        side, role = striker(full, faction)
+        who = _FACTION_LABEL.get(_base_faction(faction)) if role == "striker" else \
+            _FACTION_LABEL.get({"friendly": "ukraine", "hostile": "russia"}.get(side, ""), "") if role == "victim" else ""
+        note = ("{} strike{}".format(who, " (the owner was struck, inferred)" if role == "victim" else "") if who
+                else "not a strike" if role == "other" else "striker unknown")
         uid = "GC-{}".format(str(props["id"]).replace("-", "")[:12]).upper()
         out[uid] = ("{}/{}/incident".format(PREFIX, side), {
             "_src": "geoconfirmed.org", "_ts": now, "uid": uid, "type": "event",
             "callsign": "{} {}".format(_short(full), datetime.strptime(stamp[:10], "%Y-%m-%d").strftime("%d %b")),
             "lat_deg": lat, "lon_deg": lon, "target_type": "event", "position_uncertainty_m": 100,
-            "stale_s": STALE_S, "faction": faction, "event_date": stamp[:10],
-            "remarks": "{} - {} - geolocated placemark {}. {}".format(
-                full[:200], faction, props["id"], CREDIT),
+            "stale_s": STALE_S, "faction": faction, "event_date": stamp[:10], "role": role,
+            "remarks": "{} - {} - {} - geolocated placemark {}. {}".format(
+                full[:200], faction, note, props["id"], CREDIT),
         })
     return out
 

@@ -50,14 +50,54 @@ def test_only_placemarks_inside_the_window_become_markers_newest_first():
     assert list(gc.event_tracks(WORLD, kinds, NOW, days=4, limit=2).values())[0][1]["event_date"] == "2026-10-11"
 
 
-def test_a_placemark_takes_the_side_of_its_faction_and_names_its_kind_and_date():
+def test_a_placemark_names_its_kind_and_date_and_says_who_struck():
     kinds = gc.kind_names(ICONS)
     out = gc.event_tracks(WORLD, kinds, NOW, days=4)
-    sides = {track["faction"]: prefix.rsplit("/", 2)[-2] for prefix, track in out.values()}
-    assert sides == {"Russia (UKR)": "hostile", "Ukraine (UKR)": "friendly", "Neutral (UKR)": "neutral"}
-    prefix, track = next(v for v in out.values() if v[1]["faction"] == "Russia (UKR)")
-    assert re.fullmatch(r"GC-[0-9A-F]{12}", track["uid"]) and track["callsign"].endswith(("11 Oct", "09 Oct"))
-    assert "GeoConfirmed" in track["remarks"] and track["position_uncertainty_m"] == 100
+    by_kind = {kinds[gc._template(f["properties"]["icon"])][:30]: f for f in WORLD["geojson"]["features"]}
+    assert out and all(re.fullmatch(r"GC-[0-9A-F]{12}", t["uid"]) for _, t in out.values())
+    for prefix, track in out.values():
+        assert track["callsign"].endswith(("12 Oct", "11 Oct", "10 Oct", "09 Oct"))
+        assert "GeoConfirmed" in track["remarks"] and track["position_uncertainty_m"] == 100 and track["role"] in {"striker", "victim", "other"}
+    assert {t["role"] for _, t in out.values()} >= {"other"}
+
+
+def test_the_side_is_whoever_struck_read_from_what_the_colour_means_for_that_kind_of_event():
+    # kind names are GeoConfirmed's own icon names
+    shelling = "Shelling by artillery or aerial bombings - Location of the shelling, colour of who is shelling; Brown = UXO"
+    drone = "Short Range (<50km) OWAD (One Way Attack Drone), mostly rotary wing, Flying OR Attacking a target"
+    crashed = "Recently destroyed/Damaged [Intercepted/crashed] Longe Range (>50km) OWAD (One Way Attack Drone)"
+    destroyed = "Recently Destroyed/Damaged APC OR IFV / TRACKED or WHEELED / ARMOURED"
+    civilians = "Killed or wounded civilian. Potential Warcrime. In the colour of who is assessed as doing the attack/killing."
+    assert gc.striker(shelling, "Russia (UKR)") == ("hostile", "striker")             # the colour is the shooter
+    assert gc.striker(shelling, "Ukraine (UKR)") == ("friendly", "striker")
+    assert gc.striker(drone, "Russia (UKR)") == ("hostile", "striker")
+    assert gc.striker(crashed, "Ukraine (UKR)") == ("friendly", "striker")            # a drone lost in its own attack
+    assert gc.striker(civilians, "Russia Civilian (UKR)") == ("hostile", "striker")   # the colour is who killed them
+    assert gc.striker(destroyed, "Russia (UKR)") == ("friendly", "victim")            # a Russian APC destroyed: a Ukrainian strike
+    assert gc.striker(destroyed, "Ukraine (UKR)") == ("hostile", "victim")
+    assert gc.striker("WIA/KIA Soldier/Militant", "Russia (UKR)") == ("friendly", "victim")
+    assert gc.striker("Recently destroyed/Damaged[Visible in footage] or still burning infrastucture", "Neutral (UKR)") == ("neutral", "victim")
+    assert gc.striker("Tank (Driving or fighting)", "Russia (UKR)") == ("hostile", "other")          # not a strike
+    assert gc.striker("POW - Prisinor of War - In the colour of the faction of the POW", "Ukraine (UKR)") == ("friendly", "other")
+    assert gc.striker("Interception of a UAV - Colour of the force intercepting", "Ukraine (UKR)") == ("friendly", "other")
+    assert gc.striker("Controlled Demolition OR explosion of unknown origin", "Russia (UKR)") == ("neutral", "other")
+
+
+def test_the_remarks_say_who_struck_or_that_it_was_not_a_strike():
+    world = {"factionMeta": [{"id": 7, "name": "Russia (UKR)", "conflictCode": "UKR"}],
+             "geojson": {"features": [
+                 {"geometry": {"type": "Point", "coordinates": [37.0, 48.0]},
+                  "properties": {"id": "a" * 8 + "-1", "factionId": 7, "date": "2026-10-12T00:00:00", "icon": "x/172.png"}},
+                 {"geometry": {"type": "Point", "coordinates": [37.1, 48.1]},
+                  "properties": {"id": "b" * 8 + "-2", "factionId": 7, "date": "2026-10-12T00:00:00", "icon": "x/10.png"}},
+                 {"geometry": {"type": "Point", "coordinates": [37.2, 48.2]},
+                  "properties": {"id": "c" * 8 + "-3", "factionId": 7, "date": "2026-10-12T00:00:00", "icon": "x/41.png"}}]}}
+    kinds = {"172.png": "Recently Destroyed/Damaged APC OR IFV / TRACKED", "10.png": "Shelling by artillery or aerial bombings - Location",
+             "41.png": "Tank (Driving or fighting)"}
+    out = {t["role"]: (p, t) for p, t in gc.event_tracks(world, kinds, NOW).values()}
+    assert out["victim"][0].endswith("/friendly/incident") and "Ukrainian strike (the owner was struck, inferred)" in out["victim"][1]["remarks"]
+    assert out["striker"][0].endswith("/hostile/incident") and "Russian strike" in out["striker"][1]["remarks"]
+    assert out["other"][0].endswith("/hostile/incident") and "not a strike" in out["other"][1]["remarks"]
 
 
 def test_civilians_are_neutral_and_unknown_factions_unknown():
@@ -94,3 +134,4 @@ def test_a_placemark_without_a_position_or_in_another_conflict_is_skipped():
                  {"geometry": {"type": "Point", "coordinates": [30.0, 50.0]}, "properties": {"id": "b", "factionId": 99, "date": "2026-10-12T00:00:00", "icon": "x/1.png"}},
                  {"geometry": {"type": "Point", "coordinates": [30.0, 50.0]}, "properties": {"id": "c", "factionId": 7, "icon": "x/1.png"}}]}}
     assert gc.event_tracks(world, {}, NOW) == {}
+

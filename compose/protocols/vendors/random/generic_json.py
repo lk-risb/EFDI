@@ -29,8 +29,7 @@ import re
 import time
 
 from airframe import names_airframe
-from echo_filter import EchoFilter, subscribe_own
-from icao_ghosts import GhostFilter, TwinFilter
+from protocols.vendors.random.fusion import EchoFilter, GhostFilter, TwinFilter, subscribe_own
 from gateway import TOPIC_ROOT, open_session, payload_bytes, subscribe
 
 INPUT_TOPIC = TOPIC_ROOT + "/raw/backbone/**"

@@ -40,8 +40,7 @@ import time
 
 from google.protobuf.message import DecodeError
 from protocols.vendors.random.airframe import names_airframe
-from protocols.vendors.random.echo_filter import EchoFilter, subscribe_own
-from protocols.vendors.random.icao_ghosts import GhostFilter, TwinFilter
+from protocols.vendors.random.fusion import EchoFilter, GhostFilter, TwinFilter, subscribe_own
 from protocols.vendors.random.gateway import TOPIC_ROOT, open_session, payload_bytes, subscribe
 from schemas.vendors.socbx.proto.socbx_alerts_pb2 import Alert
 from schemas.vendors.socbx.proto.socbx_unified_pb2 import UnifiedSchema

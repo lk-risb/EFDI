@@ -51,8 +51,7 @@ import zenoh.ext
 from namespace_prefix import topic_root
 from protocols.vendors.random.gateway import open_session, subscribe
 from protocols.vendors.random.tak_transport import TcpSender, RECONNECT_S
-from protocols.vendors.random.marker_memory import MarkerMemory
-from protocols.vendors.random.twin_suppress import TwinSuppressions
+from protocols.vendors.random.fusion import MarkerMemory, TwinSuppressions
 
 # (Re)connect catch-up + mid-session gap-healing for this layer's subscriptions.
 # A network blip or this process's own restart (SIGTERM'd on every supervisor/

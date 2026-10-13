@@ -9,7 +9,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "compose"))
 sys.path.insert(0, str(ROOT / "compose" / "control"))
 
-from protocols.vendors.random.twin_suppress import TwinIndex, TwinSuppressions, twin_topic  # noqa: E402
+from protocols.vendors.random.fusion import TwinIndex, TwinSuppressions, twin_topic  # noqa: E402
 
 
 def _keyed(**kw):

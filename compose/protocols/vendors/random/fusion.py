@@ -38,6 +38,65 @@ NEPTUN corroboration (non-cooperative radar tracks vs the NEPTUN feed in dangaus
   suppression lapses and the NEPTUN marker returns. With fusion not running,
   NEPTUN simply publishes normally.
 
+Twin suppression (duplicate suppression, whatever feeds it):
+
+  An aircraft can reach the fabric twice with different identities: once keyed by its ICAO address
+  (`icao24`, drawn as an aircraft) and once as a unit whose id or callsign merely looks like that
+  address ("48A5C6" with no `icao24`, drawn as an unknown ground unit beside it). Fixing that in each
+  decoder only covers the feeds somebody has seen do it, and a decoder restarted cold has not yet seen the
+  keyed copy. Track fusion sees every source, so it looks for the pair and announces the loose copy on
+  <ORG>/air/trackfusion/suppress/twin/<uid>; the output layers (tak_layer, sitaware_layer) hold back a
+  track that has no icao24 and whose uid is announced, and retract it if it was already drawn.
+
+  A loose track is a twin when a fresh keyed track exists for the address read from its uid or callsign, or
+  carries the same callsign within TWIN_NEAR_KM. Nothing keyed by an address is ever suppressed.
+
+  Objects with no address at all (a drone reported by a camera feed, a telemetry feed and a partner's
+  situational-awareness feed, each under its own id) are matched by name instead: the distinctive last segment of
+  the callsign or label ("minerva:teil-s-10:deltaquad-nvrec5" and "drone_telemetry:deltaquad-nvrec5" both read
+  "deltaquad-nvrec5"), in the same dimension, within TWIN_NEAR_KM. Of such a group the copy that declares the most
+  (an affiliation, then a heading or speed) is kept, ties go to the smaller uid, and the others are announced. A
+  source that declares less never overrides one that declares more, and a kept copy that goes quiet is replaced
+  by the next best one after TWIN_FRESH_S.
+
+Echo filter - Recognise our own tracks (sensors, alert zones, markers) when a partner sends them back.
+
+  A participant on the backbone fabric can ingest what this pod exports and publish it
+  again under its own ids. The soc-bx feed uses object ids such as
+  "SENSOR:MAINLINE-DRONU-0478D5C6" for our sensor MAINLINE-DRONU-0478D5C6; a generic JSON
+  feed uses a UUID but keeps our display name ("radar-30684") as the callsign. Decoded as
+  normal tracks these get a uid unlike the original, so every such sensor shows twice. The
+  same happens to our alert zones: a partner's copy arrived as a ground marker called
+  "DA-ZONE-UA-R:..." (our uid as its callsign) or "UA Vyshhorodskyi District YELLOW" (our
+  callsign) beside the real polygon. EchoFilter remembers the ids (sensor id, uid) and names
+  (sensor name, callsign) of what this pod publishes under land/**, so a decoder can drop
+  those copies. A copy that carries none of our ids or names (a UUID with the tail of the UUID as
+  its callsign, seen live on top of MAINLINE-DRONU-595EFFB1) is still recognised by position: it sits
+  within a few metres of one of our fixed sensors.
+
+Ghost and twin filters (ICAO bit-flip copies) - Drop ghost aircraft: the same callsign (or registration) under an ICAO address one or two bits away.
+
+  A feed that decodes Mode-S without checking the CRC reports an occasional corrupted
+  address, so one flight shows up twice (seen live: ASL124 as 4C11EC and 4C01EC, CFC3455 as
+  C2C36D and 82C36D). The real address is the one seen first; a later, different address with
+  the same callsign that differs by at most MAX_BITS bits is treated as a bit-flip copy.
+  A registration is checked the same way as a second key: it stays the same across flights
+  (a callsign does not), so it also catches a copy that carries a different callsign.
+
+Marker memory - Keeps a marker from flipping between a declared and an undeclared identity.
+
+  Two feeds can describe one object with the same uid, one declaring its affiliation (friendly, hostile, neutral) and
+  one not. Whatever arrives last would redraw the marker as friendly, then unknown, then friendly again. MarkerMemory
+  remembers, per uid, the last symbol that declared an affiliation, and keeps returning it for HOLD_S after an
+  undeclared one arrives. A declared symbol always replaces the remembered one at once.
+
+Strike merging (ground strike markers from Drone Strike Map, GeoConfirmed and any later strike feed):
+  Two strike markers on the same side (the topic's friendly / hostile / ...), with the same day and within
+  FUSION_STRIKE_M (100 m) of each other, are one attack. The marker with the smallest position uncertainty is
+  kept (a geolocated placemark over a town centroid), ties go to the smaller uid, and the others are retracted
+  with a tombstone on their own topic, which the output layers handle like any delete. A marker with role "other"
+  (a tank driving, a POW) is never merged. The bridges only fetch and publish; merging and filtering is done here.
+
 Cross-radar handoff (same-protocol, PSR-only targets):
   When multiple radars of the same type (e.g., two CAT-48 sites) cover overlapping
   areas, a PSR-only target crossing the boundary would otherwise create two separate
@@ -90,6 +149,7 @@ import argparse
 import json
 import math
 import os
+import re
 import threading
 import time
 from protocols.vendors.random.proto.normalized_track_pb2 import NormalizedTrack
@@ -98,7 +158,6 @@ from google.protobuf.message import DecodeError
 from namespace_prefix import topic_root
 from protocols.vendors.random.gateway import open_session, publish_collection, subscribe
 from protocols.vendors.random.track_views import strip_version
-from protocols.vendors.random.twin_suppress import TwinIndex, twin_topic
 
 TOPIC_ROOT = topic_root()
 
@@ -117,6 +176,409 @@ _NEPTUN_HDG_TOL  = 60.0
 _NEPTUN_TOPIC    = "{}/air/neptun/hostile/**".format(TOPIC_ROOT)
 _SUPPRESS_TOPIC  = "{}/air/trackfusion/suppress/neptun/{{}}".format(TOPIC_ROOT)
 _SUPPRESS_REFRESH_S = 5.0   # re-announce a standing match at most this often
+
+TWIN_TTL_S = 20.0            # a layer keeps holding a loose copy back this long after the last announcement
+TWIN_FRESH_S = 120.0         # a keyed or loose track counts for this long after it was last seen
+TWIN_NEAR_KM = 10.0
+_NAME_MIN_LEN = 8            # shorter or digit-free names ("unit", "N21") are too generic to match two objects on
+_HEX = re.compile(r"^(?:[A-Za-z]+[:_-])*([0-9A-Fa-f]{6})$")      # "48A5C6", "STATES:48A5C6", "Entity:aircraft:48a5c6"
+_UNSAFE = re.compile(r"[^A-Za-z0-9._-]")
+
+
+def twin_topic(topic_root: str, uid: str) -> str:
+    return "{}/air/trackfusion/suppress/twin/{}".format(topic_root, _UNSAFE.sub("_", str(uid)))
+
+
+def _address(text) -> str | None:
+    match = _HEX.match(str(text or "").strip())
+    return match.group(1).lower() if match else None
+
+
+def _callsign(track: dict) -> str:
+    return str(track.get("callsign") or "").strip().upper()
+
+
+def _name_key(track: dict) -> str | None:
+    """The distinctive name of an object, or None when its names are too generic to match on."""
+    for field in ("callsign", "label", "uid"):
+        token = re.split(r"[:/]", str(track.get(field) or ""))[-1].strip().lower()
+        if len(token) >= _NAME_MIN_LEN and re.search(r"\d", token):
+            return token
+    return None
+
+
+def _dimension_of(topic: str | None) -> str:
+    for part in str(topic or "").split("/"):
+        if part in ("air", "land", "sea", "space"):
+            return part
+    return ""
+
+
+def _rank(track: dict, topic: str | None) -> int:
+    declared = any(part in ("friendly", "hostile", "neutral") for part in str(topic or "").split("/"))
+    moving = any(track.get(key) is not None for key in ("heading_deg", "speed_mps"))
+    return 2 * declared + moving
+
+
+def _km(lat1, lon1, lat2, lon2) -> float:
+    a = (math.sin(math.radians(lat2 - lat1) / 2) ** 2
+         + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(math.radians(lon2 - lon1) / 2) ** 2)
+    return 12742 * math.asin(math.sqrt(a))
+
+
+class TwinIndex:
+    """Fusion side: feed every track to observe(); it returns the uids of loose copies to announce."""
+
+    def __init__(self):
+        self._keyed: dict = {}      # icao24 -> (seen, lat, lon, callsign)
+        self._by_call: dict = {}    # callsign -> (seen, lat, lon, icao24)
+        self._loose: dict = {}      # uid -> (seen, address read from uid/callsign, lat, lon, callsign)
+        self._named: dict = {}      # (dimension, name) -> {uid: (seen, lat, lon, rank)}
+        self._lock = threading.Lock()
+
+    def observe(self, track: dict, now: float | None = None, topic: str | None = None) -> list:
+        now = time.time() if now is None else now
+        lat, lon = track.get("lat_deg"), track.get("lon_deg")
+        uid = track.get("uid") or track.get("icao24")      # an ADS-B track is keyed by its address and may carry no uid
+        if (track.get("_delete") or lat is None or lon is None or not uid or track.get("geometry")
+                or str(uid).endswith("-TRAIL")):
+            return []
+        callsign = _callsign(track)
+        icao = str(track.get("icao24") or "").strip().lower()
+        with self._lock:
+            if icao:
+                self._keyed[icao] = (now, lat, lon, callsign)
+                if len(callsign) >= 4:
+                    self._by_call[callsign] = (now, lat, lon, icao)
+                return [u for u, entry in list(self._loose.items()) if self._is_twin(entry, now)]
+            self._loose[str(uid)] = (now, _address(uid) or _address(track.get("callsign")), lat, lon, callsign)
+            self._forget(now)
+            if self._is_twin(self._loose[str(uid)], now):
+                return [str(uid)]
+            return self._named_twins(track, str(uid), lat, lon, topic, now)
+
+    def _named_twins(self, track: dict, uid: str, lat, lon, topic, now) -> list:
+        name = _name_key(track)
+        if name is None:
+            return []
+        group = self._named.setdefault((_dimension_of(topic), name), {})
+        group[uid] = (now, lat, lon, _rank(track, topic))
+        for member in [m for m, v in group.items() if now - v[0] > TWIN_FRESH_S]:
+            group.pop(member)
+        best = min(group, key=lambda m: (-group[m][3], m))
+        return [m for m, v in group.items()
+                if m != best and _km(v[1], v[2], group[best][1], group[best][2]) <= TWIN_NEAR_KM]
+
+    def _is_twin(self, entry, now) -> bool:
+        seen, address, lat, lon, callsign = entry
+        if now - seen > TWIN_FRESH_S:
+            return False
+        keyed = self._keyed.get(address) if address else None
+        if keyed and now - keyed[0] <= TWIN_FRESH_S:
+            return True
+        same = self._by_call.get(callsign) if len(callsign) >= 4 else None
+        return bool(same and now - same[0] <= TWIN_FRESH_S and _km(lat, lon, same[1], same[2]) <= TWIN_NEAR_KM)
+
+    def _forget(self, now) -> None:
+        for table in (self._keyed, self._by_call, self._loose):
+            for key in [k for k, v in table.items() if now - v[0] > 3600]:
+                table.pop(key, None)
+        for key in [k for k, group in self._named.items() if all(now - v[0] > 3600 for v in group.values())]:
+            self._named.pop(key, None)
+
+
+class TwinSuppressions:
+    """Layer side: on_sample() for the announcements, is_suppressed(track) before drawing a track."""
+
+    def __init__(self, ttl_s: float = TWIN_TTL_S):
+        self._ttl = ttl_s
+        self._until: dict = {}
+        self._lock = threading.Lock()
+
+    def on_sample(self, sample) -> None:
+        try:
+            uid = json.loads(bytes(sample.payload).decode()).get("uid")
+        except (ValueError, UnicodeDecodeError, AttributeError):
+            return
+        if uid:
+            with self._lock:
+                self._until[str(uid)] = time.time() + self._ttl
+
+    def is_suppressed(self, track: dict, now: float | None = None) -> bool:
+        if track.get("icao24") or not track.get("uid"):
+            return False
+        now = time.time() if now is None else now
+        with self._lock:
+            return self._until.get(str(track["uid"]), 0.0) > now
+
+
+# Strike markers (see "Strike merging" in the module docstring)
+STRIKE_NEAR_M = max(0, int(os.environ.get("FUSION_STRIKE_M", "100")))
+STRIKE_FRESH_S = 3 * 3600.0          # a marker counts this long after it was last seen (bridges re-send every poll)
+STRIKE_SOURCES = ("/land/dronestrikemap/strike/", "/land/geoconfirmed/event/")
+_SIDE = re.compile(r"/(friendly|hostile|neutral|unknown)/")
+_DAY = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+
+def is_strike_topic(topic: str) -> bool:
+    return any(source in topic for source in STRIKE_SOURCES)
+
+
+def _metres(a, b) -> float:
+    dlat = (a[0] - b[0]) * 111320.0
+    dlon = (a[1] - b[1]) * 111320.0 * math.cos(math.radians(a[0]))
+    return math.hypot(dlat, dlon)
+
+
+def _day(track: dict) -> str:
+    match = _DAY.search(str(track.get("event_date") or "")) or _DAY.search(str(track.get("uid") or ""))
+    return match.group(0) if match else time.strftime("%Y-%m-%d", time.gmtime(track.get("_ts") or time.time()))
+
+
+class StrikeIndex:
+    """observe(track, now, topic) → [(uid, topic, type)] of the strike markers to retract now (empty for anything else)."""
+
+    def __init__(self):
+        self._groups: dict = {}      # (side, day) -> {uid: (seen, lat, lon, uncertainty, topic, type)}
+        self._lock = threading.Lock()
+
+    def observe(self, track: dict, now: float | None = None, topic: str | None = None) -> list:
+        side = _SIDE.search(topic or "")
+        uid = str(track.get("uid") or "")
+        if not (topic and side and uid and is_strike_topic(topic)) or track.get("role") == "other":
+            return []
+        now = time.time() if now is None else now
+        with self._lock:
+            if track.get("_delete"):
+                for group in self._groups.values():
+                    group.pop(uid, None)
+                return []
+            try:
+                lat, lon = float(track["lat_deg"]), float(track["lon_deg"])
+                uncertainty = float(track.get("position_uncertainty_m") or 0)
+            except (KeyError, TypeError, ValueError):
+                return []
+            for key in [k for k, g in self._groups.items() if all(now - v[0] > STRIKE_FRESH_S for v in g.values())]:
+                self._groups.pop(key)
+            group = self._groups.setdefault((side.group(1), _day(track)), {})
+            group[uid] = (now, lat, lon, uncertainty, topic, str(track.get("type") or "strike"))
+            for member in [m for m, v in group.items() if now - v[0] > STRIKE_FRESH_S]:
+                group.pop(member)
+            kept, retract = [], []
+            for member in sorted(group, key=lambda m: (group[m][3], m)):
+                if any(_metres(group[member][1:3], group[k][1:3]) <= STRIKE_NEAR_M for k in kept):
+                    retract.append((member, group[member][4], group[member][5]))
+                else:
+                    kept.append(member)
+            return retract
+
+
+# --- Echo filter ---
+
+# Shorter ids could appear inside an unrelated uid by accident. 10 keeps our shortest real ids (MAPA-323725,
+# 11 characters) while an ICAO address (6) or a bare number still cannot match by accident.
+MIN_ID_LEN = 10
+# Shorter names are too generic to treat as ours, and the bridge's own fallback name
+# ("dronu-sensor") says nothing about which sensor it is.
+MIN_NAME_LEN = 8
+# A fixed sensor of ours and a partner's copy of it share coordinates, so a partner object within
+# POSITION_CELL_DEG (about 11 m, checked with its neighbouring cells) of one counts as its copy.
+POSITION_CELL_DEG = 1e-4
+# A partner can keep re-sending a copy of a threat of ours long after our own track expired (a missile frozen at its
+# last position, stamped fresh), so what we published is remembered for hours, not minutes.
+_MAX_REMEMBERED = 50000
+_GENERIC_NAMES = {"dronu-sensor", "sensor", "unknown"}
+# Operators can drop a partner's test or junk objects without a code change: a regex matched
+# against uid, callsign and label of each backbone record (restart socbx / generic_json after setting it).
+_DROP = re.compile(os.environ["BACKBONE_DROP_REGEX"], re.I) if os.environ.get("BACKBONE_DROP_REGEX") else None
+
+
+# Topics whose tracks this pod publishes and a partner could send back: every land track, and the
+# drones, missiles and bombs from the open-data bridges (they have no ICAO address to merge on), and their
+# trail lines (a partner's copy of a trail arrives as a point marker).
+OWN_TOPICS = ("land/**", "air/*/hostile/**", "air/*/trail/**")
+
+
+def subscribe_own(session, topic_root: str, echoes: "EchoFilter", subscribe) -> list:
+    """Declare the subscriptions that feed `echoes`; returns them so the caller can undeclare."""
+    return [subscribe(session, "{}/{}".format(topic_root, pattern), echoes.on_sample) for pattern in OWN_TOPICS]
+
+
+class EchoFilter:
+    def __init__(self, ttl_s: float = 12 * 3600.0):
+        self._ttl = ttl_s
+        self._ids: dict = {}
+        self._names: dict = {}
+        self._cells: dict = {}
+        self._lock = threading.Lock()
+
+    def on_sample(self, sample) -> None:
+        """Zenoh callback for this pod's own tracks under land/**. Records that came in from the
+        backbone are not ours, and tombstones carry nothing to remember."""
+        try:
+            data = json.loads(bytes(sample.payload).decode())
+        except (ValueError, UnicodeDecodeError):
+            return
+        if not isinstance(data, dict) or data.get("_delete"):
+            return
+        if str(data.get("_src") or "").startswith("backbone:"):
+            return
+        now = time.time()
+        ids = {str(data[k]).upper() for k in ("sensor_id", "uid") if data.get(k)}
+        names = {str(data[k]).strip().lower() for k in ("sensor_name", "callsign") if data.get(k)}
+        with self._lock:
+            if data.get("sensor_id") and data.get("lat_deg") is not None and data.get("lon_deg") is not None:
+                self._cells[self._cell(data["lat_deg"], data["lon_deg"])] = now
+            for identifier in ids:
+                self._ids[identifier] = now
+            for name in names:
+                if len(name) >= MIN_NAME_LEN and name not in _GENERIC_NAMES:
+                    self._names[name] = now
+            for table in (self._ids, self._names):
+                if len(table) > _MAX_REMEMBERED:        # forget the oldest first
+                    for stale in sorted(table, key=table.get)[:len(table) - _MAX_REMEMBERED]:
+                        del table[stale]
+
+    @staticmethod
+    def _cell(lat, lon) -> tuple:
+        return (int(float(lat) / POSITION_CELL_DEG), int(float(lon) / POSITION_CELL_DEG))
+
+    def _at_a_sensor(self, record: dict, now: float) -> bool:
+        if record.get("icao24") or record.get("lat_deg") is None or record.get("lon_deg") is None:
+            return False
+        try:
+            row, col = self._cell(record["lat_deg"], record["lon_deg"])
+        except (TypeError, ValueError):
+            return False
+        with self._lock:
+            return any(now - self._cells.get((row + dr, col + dc), float("-inf")) <= self._ttl
+                       for dr in (-1, 0, 1) for dc in (-1, 0, 1))
+
+    def is_echo(self, record: dict, now: float | None = None) -> bool:
+        """True when the record's uid, callsign or label embeds one of our ids (a partner copy often
+        uses our uid as its callsign), or its callsign or label is one of our names."""
+        if _DROP is not None and any(_DROP.search(str(record.get(k) or "")) for k in ("uid", "callsign", "label")):
+            return True
+        uid = str(record.get("uid") or "").upper()
+        labels = {str(record.get(k) or "").strip().lower() for k in ("callsign", "label")} - {""}
+        now = time.time() if now is None else now
+        with self._lock:
+            ids = [i for i, seen in self._ids.items() if now - seen <= self._ttl and len(i) >= MIN_ID_LEN]
+            names = {n for n, seen in self._names.items() if now - seen <= self._ttl}
+        texts = {uid} | {label.upper() for label in labels}
+        return any(i in text for i in ids for text in texts) or bool(labels & names) or self._at_a_sensor(record, now)
+
+
+# --- Ghost and twin filters (ICAO bit-flip copies) ---
+
+MAX_BITS = 2
+WINDOW_S = 600.0
+
+
+class GhostFilter:
+    def __init__(self, window_s: float = WINDOW_S):
+        self._window = window_s
+        self._seen: dict = {}           # "C:callsign" / "R:registration" -> {icao24: last seen}
+        self._lock = threading.Lock()
+
+    def is_ghost(self, icao24: str, callsign: str, now: float | None = None, registration: str | None = None) -> bool:
+        """Register (icao24, callsign, registration) and say whether it is a bit-flip copy of an
+        address already seen with the same callsign or the same registration. Records with
+        neither are never ghosts."""
+        keys = [prefix + value for prefix, value in (("C:", (callsign or "").strip().upper()),
+                                                     ("R:", (registration or "").strip().upper())) if value]
+        if not keys or not icao24:
+            return False
+        now = time.time() if now is None else now
+        address = int(icao24, 16)
+        ghost = False
+        with self._lock:
+            known_by_key = {k: {a: t for a, t in self._seen.get(k, {}).items() if now - t <= self._window} for k in keys}
+            for known in known_by_key.values():
+                if address not in known and any(bin(address ^ other).count("1") <= MAX_BITS for other in known):
+                    ghost = True
+            for key, known in known_by_key.items():
+                if address in known or not ghost:
+                    known[address] = now
+                self._seen[key] = known
+            if len(self._seen) > 20000:     # bound the memory on a long run
+                self._seen = {c: v for c, v in self._seen.items() if v}
+        return ghost
+
+
+class TwinFilter:
+    """Drop a second record for the same aircraft that has no ICAO address.
+
+    A partner feed also sends an aircraft under a UUID (seen live: "OMCBS" as a ground marker
+    beside the ICAO-keyed "OMCBS"). A record without icao24 whose callsign equals that of an
+    ICAO-keyed record seen in the last WINDOW_S seconds within RADIUS_KM is that aircraft's twin.
+    """
+
+    WINDOW_S = 180.0
+    RADIUS_KM = 50.0            # an airliner covers about 45 km in WINDOW_S, and the UUID copy is sent only every few minutes
+
+    def __init__(self):
+        self._seen: dict = {}           # callsign -> (lat, lon, time) of an ICAO-keyed record
+        self._lock = threading.Lock()
+
+    def is_twin(self, record: dict, now: float | None = None) -> bool:
+        callsign = str(record.get("callsign") or "").strip().upper()
+        lat, lon = record.get("lat_deg"), record.get("lon_deg")
+        if len(callsign) < 3 or lat is None or lon is None:
+            return False
+        now = time.time() if now is None else now
+        with self._lock:
+            if record.get("icao24"):
+                self._seen[callsign] = (lat, lon, now)
+                if len(self._seen) > 20000:
+                    self._seen = {c: v for c, v in self._seen.items() if now - v[2] <= self.WINDOW_S}
+                return False
+            seen = self._seen.get(callsign)
+        if not seen or now - seen[2] > self.WINDOW_S:
+            return False
+        km = ((lat - seen[0]) * 111.0) ** 2 + ((lon - seen[1]) * 111.0 * max(0.1, math.cos(math.radians(lat)))) ** 2
+        return km <= self.RADIUS_KM ** 2
+
+
+# --- Marker memory ---
+
+HOLD_S = 300.0
+_UNDECLARED_COT = "u", "p"            # a-<affiliation>-...: unknown, pending
+_UNDECLARED_SIDC = "U", "P"           # S<affiliation>...: unknown, pending
+
+
+def _declared(code: str) -> bool | None:
+    """Whether a CoT type (a-f-A) or 2525B SIDC (SFAP------*****) declares an affiliation; None if it is neither."""
+    if code.startswith("a-") and len(code) > 2:
+        return code[2] not in _UNDECLARED_COT
+    if len(code) >= 2 and code[0] == "S":
+        return code[1] not in _UNDECLARED_SIDC
+    return None
+
+
+class MarkerMemory:
+    def __init__(self, hold_s: float = HOLD_S):
+        self._hold = hold_s
+        self._last: dict = {}           # uid -> (seen, code that declared an affiliation)
+        self._lock = threading.Lock()
+
+    def settle(self, uid: str, code: str, now: float | None = None) -> str:
+        """The code to draw for uid, given the one its latest message resolved to."""
+        declared = _declared(code)
+        if declared is None:
+            return code
+        now = time.time() if now is None else now
+        with self._lock:
+            if declared:
+                self._last[uid] = (now, code)
+                return code
+            seen, kept = self._last.get(uid, (0.0, None))
+            if kept is not None and now - seen <= self._hold:
+                return kept
+            if len(self._last) > 20000:
+                self._last = {u: v for u, v in self._last.items() if now - v[0] <= self._hold}
+            return code
+
 
 TOPIC_FUSED = "{}/air/trackfusion/fused/{}/aircraft"
 
@@ -288,9 +750,11 @@ class TrackFuser:
         # NEPTUN threats seen on the fabric, and when each suppression was last announced
         self._neptun_tracks: dict[str, dict] = {}
         self._suppress_sent: dict[str, float] = {}
-        # Loose copies of an ICAO-keyed aircraft (see twin_suppress.py) and when each was last announced
+        # Loose copies of an ICAO-keyed aircraft (see "Twin suppression" above) and when each was last announced
         self._twins = TwinIndex()
         self._twin_sent: dict[str, float] = {}
+        # Strike markers reported twice (see strike_merge.py)
+        self._strikes = StrikeIndex()
         # Periodic age-out: ensures _radar_by_icao is cleaned even when radar goes
         # silent (no on_radar() calls), so ADS-B fallback kicks in automatically.
         self._start_age_timer()
@@ -484,6 +948,15 @@ class TrackFuser:
         if not isinstance(track, dict):
             return
         now = time.time()
+        for uid, strike_topic, strike_type in self._strikes.observe(track, now, topic):
+            with self._lock:
+                if now - self._twin_sent.get(uid, 0) < _SUPPRESS_REFRESH_S:
+                    continue
+                self._twin_sent[uid] = now
+            self._session.put(strike_topic, json.dumps({"uid": uid, "type": strike_type, "_delete": True,
+                                                        "_ts": now, "_src": "trackfusion"}).encode())
+            if self._verbose:
+                print("strike merged, retracted: {}".format(uid), flush=True)
         for uid in self._twins.observe(track, now, topic):
             with self._lock:
                 if now - self._twin_sent.get(uid, 0) < _SUPPRESS_REFRESH_S:

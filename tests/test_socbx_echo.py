@@ -9,7 +9,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "compose"))
 sys.path.insert(0, str(ROOT / "compose" / "control"))
 
-from protocols.vendors.random.echo_filter import EchoFilter  # noqa: E402
+from protocols.vendors.random.fusion import EchoFilter  # noqa: E402
 from protocols.vendors.socbx import socbx  # noqa: E402
 from schemas.vendors.socbx.proto.socbx_unified_pb2 import UnifiedSchema  # noqa: E402
 

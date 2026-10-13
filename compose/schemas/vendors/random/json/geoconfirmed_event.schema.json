@@ -19,7 +19,8 @@
     "target_type": {"const": "event"},
     "position_uncertainty_m": {"type": "number"},
     "stale_s": {"type": "number"},
-    "faction": {"type": "string", "description": "The placemark's faction, e.g. 'Russia (UKR)'; the topic's side follows it: Ukraine and NATO friendly, Russia, Belarus and North Korea hostile, civilian and neutral neutral, the rest unknown."},
+    "faction": {"type": "string", "description": "The placemark's faction, e.g. 'Russia (UKR)'. The topic's side is who struck, read from the kind of event: striker kinds (shelling, drones and missiles in use, killed civilians) take the faction's side, victim kinds (destroyed or damaged equipment, casualties) the opposite side, other kinds the faction's own side (neutral for civilians). Ukraine and NATO are friendly, Russia, Belarus and North Korea hostile."},
+    "role": {"enum": ["striker", "victim", "other"], "description": "striker: the faction struck; victim: the faction was struck, so the side is inferred as the other one; other: not a strike."},
     "event_date": {"type": "string", "description": "YYYY-MM-DD."},
     "remarks": {"type": "string", "description": "The full kind of event, the faction, the placemark id and the credit line."}
   }

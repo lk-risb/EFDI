@@ -9,7 +9,7 @@ sys.path.insert(0, str(ROOT / "compose"))
 sys.path.insert(0, str(ROOT / "compose" / "control"))
 
 import dup_report  # noqa: E402
-from protocols.vendors.random import echo_filter  # noqa: E402
+from protocols.vendors.random import fusion as echo_filter  # noqa: E402
 
 
 def _rec(uid, src, call=None, lat=50.0, lon=20.0):
