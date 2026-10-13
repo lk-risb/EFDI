@@ -265,3 +265,29 @@ date. The `nffi.py` decode logic above is a spec-conformance fix verified
 against the actual primary XSD and a synthetic message built from it, not
 a live-traffic test. `nffi_bridge.py` (above) is closer to closing that
 gap but isn't there yet — it has never connected to a real NFFI/FFI server.
+
+
+## Added 2026-10-13: layers/vendors/tak/systematic/nffi_layer.py (EFDI -> SitaWare, NFFI 1.4 server)
+
+`nffi_layer.py` is the reverse direction of `nffi.py`: it writes the TAK users as NFFI 1.4 XML to SitaWare's NFFI and FFI Manager
+(client mode), which connects to a TCP port the layer listens on.
+
+Sources used and how far each is trusted:
+
+- **The NC3A NFFI 1.4 XSD** (`community.rti.com/sites/default/files/STANAG5527_NFFI14_original.xsd`, the same file as above),
+  fetched again and read for the element order, the required elements and the field patterns the layer cuts its values to:
+  `trackSource/sourceSystem` (country `[A-Z]{3}`, system `[A-Z0-9-]` up to 30, optional subsystem), `transponderId`
+  (`[A-Za-z0-9.,:*-]` 1-60), `dateTime` (14 digits), latitude/longitude ranges, bearing `[0,360)`, speed `>= 0` (km/h as the schema
+  states it), `unitSymbol` (`[A-Z0-9-]{15}`, so no `*` wildcards), `unitShortName` (21 characters), `remarks` (60 characters).
+  Trust: high for the document structure. The XSD itself is not stored in the repo and no XSD validation is run; the tests check the patterns.
+- **The existing project notes above**, for the fact that a real SitaWare HQ has an "NFFI and FFI Manager" (Coalition Gateway) that
+  can run as client or server in the profiles IP1, IP1 Classic, IP2 and SIP3 (from a screenshot of a live instance, not documentation).
+- **milsymbol SIDC documentation** and the **symbol.army 2525C list** for the letter SIDC in `unitSymbol` (friendly ground unit, the
+  Team/Crew echelon `A`, the function ids), see `../symbology/SYMBOLOGY.md`.
+- **A vendor blog on CoT and NFFI** (`corvusintell.com`, "Bridging CoT and NATO standards"), only for the idea of keeping a stable
+  track id per CoT uid and using the stale time to drop tracks; no code or field was taken from it.
+- **Systematic's SitaWare Headquarters datasheet**, only for the statement that NFFI is a supported standard.
+
+Not confirmed, and the reason this is a first attempt: which transport variant the SitaWare manager uses, whether it dials a server or
+accepts a connection, and the framing on the socket. The documents are written back to back, the same untested assumption as in
+`nffi_bridge.py`. The CoT fields NFFI has no place for (team colour, platform) are carried in the remarks.

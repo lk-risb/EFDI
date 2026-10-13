@@ -119,7 +119,7 @@ SERVICES=(
     cap mqtt sparkplug sensor-health mission-route aartos
     generic_json geojson camera_sites socbx palantir tacvox tytan usareur skylord kyber fpv ita_efdi
     # Output layers
-    tak_layer sitaware_layer tak_alert_layer intcore_layer
+    tak_layer sitaware_layer nffi_layer tak_alert_layer intcore_layer
     # C2 inputs
     tak-bridge nffi-bridge intcore-bridge
     # Backbone
@@ -208,7 +208,7 @@ declare -A SVC_CAT=(
     [stanag4586-raw]="Sensor bridges" [stanag4609-raw]="Sensor bridges" [stanag5516-raw]="Sensor bridges"
     [cap]="Protocols"
     [sensor-health]="Protocols" [mission-route]="Protocols"
-    [tak_layer]="Output layers"   [sitaware_layer]="Output layers"
+    [tak_layer]="Output layers"   [sitaware_layer]="Output layers" [nffi_layer]="Output layers"
     [tak_alert_layer]="Output layers" [intcore_layer]="Output layers"
     [intcore-bridge]="C2 inputs"
     [track-fusion]="Sensor bridges"
@@ -272,6 +272,7 @@ declare -A SVC_DESC=(
     [tak-bridge]="TAK Server CoT ingress"
     [nffi-bridge]="NFFI (STANAG 5527) TCP ingress → Zenoh raw"
     [sitaware_layer]="EFDI tracks → SitaWare (NVG feed, SitaWare polls)"
+    [nffi_layer]="TAK users → SitaWare force tracking (NFFI 1.4 feed, SitaWare connects)"
     [intcore_layer]="EFDI tracks → INT-CORE (NVG 2.0.2 via TopicApi SaveItems)"
     [intcore-bridge]="INT-CORE Dissemination (HTTP Post ADT) → Zenoh"
     [track-fusion]="Radar/ADS-B track correlation"
@@ -344,6 +345,7 @@ svc_ready() {
         stanag5516) return 0 ;;  # UDP listener, default port 3010
         # sitaware_layer serves a feed, so it needs a port to listen on.
         sitaware_layer) [[ -n "${SITAWARE_HQ_NVG_PORT:-}" ]] ;;
+        nffi_layer) [[ -n "${NFFI_LAYER_PORT:-}" ]] ;;
         intcore_layer) [[ -n "${INTCORE_URL:-}" && -n "${INTCORE_API_KEY:-}" && -n "${INTCORE_TOPIC_ID:-}" ]] ;;
         intcore-bridge) return 0 ;;  # always ready; binds INTCORE_BRIDGE_PORT (default 8092)
         mediamtx) return 0 ;;  # binds default RTMP :1935 / RTSP :8554, no config required
@@ -427,6 +429,12 @@ svc_hint() {
                 echo "serving ${SITAWARE_HQ_NVG_BIND:-127.0.0.1}:${SITAWARE_HQ_NVG_PORT}${SITAWARE_HQ_NVG_PATH:-/nvg}"
             else
                 echo "SITAWARE_HQ_NVG_PORT not set"
+            fi ;;
+        nffi_layer)
+            if [[ -n "${NFFI_LAYER_PORT:-}" ]]; then
+                echo "serving NFFI on ${NFFI_LAYER_BIND:-127.0.0.1}:${NFFI_LAYER_PORT}"
+            else
+                echo "NFFI_LAYER_PORT not set"
             fi ;;
         intcore_layer)
             if [[ -n "${INTCORE_URL:-}" && -n "${INTCORE_API_KEY:-}" && -n "${INTCORE_TOPIC_ID:-}" ]]; then
@@ -1222,6 +1230,15 @@ launch() {
                 return
             fi
             _start sitaware_layer layers/vendors/tak/systematic/sitaware_layer.py
+            ;;
+
+        nffi_layer)
+            # An NFFI server for SitaWare's NFFI and FFI Manager (client mode): it takes a port to listen on and has nothing to prompt for.
+            if [[ -z "${NFFI_LAYER_PORT:-}" ]]; then
+                printf "  ${YELLOW}[skip]${R}  nffi_layer              set NFFI_LAYER_PORT\n"
+                return
+            fi
+            _start nffi_layer layers/vendors/tak/systematic/nffi_layer.py
             ;;
 
         intcore_layer)

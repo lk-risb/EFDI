@@ -158,6 +158,7 @@ SERVICE_SPECS = [
     # fabric OUT to a C2 system. Which side opens the socket is a transport
     # detail: SitaWare polls sitaware_layer's feed, and that still makes it egress.
     ("sitaware_layer", "C2 outputs", "NVG feed → SitaWare (SitaWare polls)"),
+    ("nffi_layer", "C2 outputs", "TAK users → SitaWare force tracking (NFFI 1.4 feed, SitaWare connects)"),
     ("intcore_layer", "C2 outputs", "EFDI tracks → INT-CORE (NVG 2.0.2 via TopicApi)"),
     ("intcore-bridge", "C2 inputs", "INT-CORE Topic dissemination (RabbitMQ) → Zenoh"),
     ("backbone-bridge", "Backbone", "EFDI Backbone trial fabric → EFDI tracks (feeds tak_layer + sitaware_layer)"),
@@ -224,6 +225,7 @@ SERVICE_SOURCES = {
     "tak-bridge": "bridges/vendors/tak/tak_bridge.py",
     "sitaware": "bridges/vendors/sitaware/sitaware_bridge.py",
     "sitaware_layer": "layers/vendors/tak/systematic/sitaware_layer.py",
+    "nffi_layer": "layers/vendors/tak/systematic/nffi_layer.py",
     "intcore_layer": "layers/vendors/tak/random/intcore_layer.py",
     "intcore-bridge": "bridges/vendors/intcore/intcore_bridge.py",
     "backbone-bridge": "bridges/vendors/random/backbone_bridge.py",
@@ -268,6 +270,7 @@ def _service_kind(name: str, source: str) -> str:
 _SERVICE_REQUIRED_KEYS = {
     "sitaware": ("SITAWARE_URL", "SITAWARE_API_PATH"),
     "intcore_layer": ("INTCORE_URL", "INTCORE_API_KEY", "INTCORE_TOPIC_ID"),
+    "nffi_layer": ("NFFI_LAYER_PORT",),
 }
 
 
@@ -290,6 +293,8 @@ EDITABLE_EXACT = {
     "ASTERIX_ZENOH_UPSTREAM_ENDPOINT", "ASTERIX_ZENOH_UPSTREAM_ROOT",
     "TAK_HOST", "TAK_HOST_FALLBACK", "TAK_HOST_TAILSCALE", "TAK_PORT", "TAK_TLS", "TAK_TLS_SERVER_NAME",
     "TAK_CERT", "TAK_KEY", "TAK_CA",
+    "TAK_INGEST_PORT", "TAK_INGEST_TLS", "TAK_INGEST_CERT", "TAK_INGEST_KEY", "TAK_INGEST_CA",
+    "SITAWARE_TAK_INDIVIDUAL_SCHEME",
     "SITAWARE_URL", "SITAWARE_URL_FALLBACK", "SITAWARE_URL_TAILSCALE", "SITAWARE_API_PATH", "SITAWARE_USER", "SITAWARE_PASS", "SITAWARE_POLL_S",
     "SITAWARE_TLS_VERIFY", "SITAWARE_DISCOVER",
     "SITAWARE_HQ_NVG_ENABLE", "SITAWARE_HQ_NVG_BIND", "SITAWARE_HQ_NVG_PORT", "SITAWARE_HQ_NVG_PATH",
