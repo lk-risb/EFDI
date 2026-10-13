@@ -503,3 +503,57 @@ def test_a_country_is_at_war_from_its_standing_tone_or_red_alerts_in_several_reg
     stale = {"UA-R:%d" % i: {"country": "PL", "level": "red", "stale": True} for i in range(5)}
     war.observe_alerts(stale, 100.0)
     assert "PL" not in war.countries(100.0)
+
+
+def test_a_drone_incursion_makes_its_region_yellow_in_a_country_at_peace_and_only_that_region():
+    from protocols.vendors.random.war_status import Incursions
+    from protocols.vendors.random import region_geometry
+    ring_a = [[24.0, 54.0], [25.0, 54.0], [25.0, 55.0], [24.0, 55.0], [24.0, 54.0]]
+    ring_b = [[25.0, 54.0], [26.0, 54.0], [26.0, 55.0], [25.0, 55.0], [25.0, 54.0]]
+    bounds = {"LT:LT-VL": _region("Vilnius County", [ring_a]), "LT:LT-KU": _region("Kaunas County", [ring_b])}
+    tracker = Incursions()
+    tracker.on_sample(mock.Mock(payload=json.dumps({"incidents": [{"country": "LT", "lat": 54.5, "lon": 24.5},
+                                                                  {"country": "PL", "lat": 54.5, "lon": 25.5}]}).encode()))
+    hit = tracker.regions(bounds, region_geometry.contains)
+    assert hit == {"LT:LT-VL"}                       # the Polish incident is not in a Lithuanian region
+    out = bridge.wash_tracks({}, bounds, {}, NOW, incursions=hit)
+    assert out["DA-WASH-LT:LT-VL"][1]["shape_color"] == "yellow" and out["DA-WASH-LT:LT-VL"][1]["callsign"] == "LT Vilnius County (drone incursion)"
+    assert out["DA-WASH-LT:LT-KU"][1]["shape_color"] == "white"
+    assert tracker.regions(bounds, region_geometry.contains, now=time.time() + 4 * 3600) == set()       # no announcement for hours: expired
+
+
+def test_incursions_also_mark_the_regions_of_a_country_drawn_from_geoboundaries():
+    from protocols.vendors.random.war_status import Incursions
+    from protocols.vendors.random import region_geometry
+    tracker = Incursions()
+    tracker.on_sample(mock.Mock(payload=json.dumps({"incidents": [{"country": "MD", "lat": 46.0, "lon": 29.0}]}).encode()))
+    regions = [_geo_region("MD-SN", "Transnistria", 28.5, 45.5), _geo_region("MD-CU", "Chisinau", 28.6, 47.0)]
+    assert tracker.region_ids("MD", regions, region_geometry.contains) == {"MD-SN"}
+    assert tracker.region_ids("RO", regions, region_geometry.contains) == set()
+
+
+def test_regions_outside_the_war_theatre_turn_yellow_for_russian_units_drones_and_incursions_not_only_at_war():
+    from protocols.vendors.random.war_status import Incursions, Presence
+    ring = lambda lon, lat: [[lon, lat], [lon + 1, lat], [lon + 1, lat + 1], [lon, lat + 1], [lon, lat]]
+    boundaries = {"LT:LT-VL": _region("Vilnius", [ring(24, 54)]), "LT:LT-KU": _region("Kaunas", [ring(25, 54)]),
+                  "PL:lub": _region("Lublin", [ring(23, 51)]), "PL:pod": _region("Podlasie", [ring(23, 52)]),
+                  "UA-O:a": _region("Alpha Oblast", [ring(30, 50)])}
+    country_regions = {"MD": [_geo_region("MD-SN", "Transnistria", 29.0, 46.0), _geo_region("MD-CU", "Chisinau", 28.0, 47.0)],
+                       "RU": [_geo_region("RU-BEL", "Belgorod", 35, 50)]}
+
+    def track(**fields):
+        return mock.Mock(payload=json.dumps(fields).encode())
+
+    presence, threats, incursions = Presence(), Presence(ttl_s=1800), Incursions()
+    presence.on_sample(track(uid="DS-UNIT-1", lat_deg=46.5, lon_deg=29.5))                      # Russian unit in Transnistria
+    threats.on_sample(track(uid="MAPA-1", lat_deg=51.5, lon_deg=23.5))                          # a drone over Lublin
+    threats.on_sample(track(uid="MAPA-1-TRAIL", lat_deg=54.5, lon_deg=24.5))                    # a trail line is not a thing in a region
+    threats.on_sample(track(uid="MAPA-2", lat_deg=50.5, lon_deg=35.5))                          # over Belgorod: Russia is in the war theatre
+    incursions.on_sample(mock.Mock(payload=json.dumps({"incidents": [{"country": "LT", "lat": 54.5, "lon": 25.5}]}).encode()))
+    activity, hit, russian_units = bridge.region_activity(country_regions, boundaries, presence, threats, incursions, time.time())
+    assert activity == {"MD": {"MD-SN"}} and russian_units == ["MD"]                           # Russia has no entry
+    assert hit == {"PL:lub", "LT:LT-KU"}                                                        # Vilnius, Podlasie and Ukraine untouched
+    out = bridge.wash_tracks({}, boundaries, {}, NOW, country_regions, war={"UA", "RU", "MD"}, activity=activity, incursions=hit)
+    colours = {uid: t["shape_color"] for uid, (_, t) in out.items()}
+    assert colours["DA-WASH-PL:lub"] == colours["DA-WASH-LT:LT-KU"] == "yellow" and colours["DA-WASH-PL:pod"] == "white"
+    assert colours["DA-REGION-MD-MD-SN"] == "yellow" and colours["DA-REGION-MD-MD-CU"] == "orange"

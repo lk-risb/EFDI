@@ -25,7 +25,10 @@ Published (JSON tracks):
       active air-raid alert, yellow with a place hit today or yesterday. Drawn on top of the orange regions that
       dangausakis_bridge.py publishes for all of Russia (a country at war: nowhere is safe), as the Ukrainian oblasts
       are coloured all over with the alert districts on top.
-It also announces, on <ORG>/land/dronestrikemap/status/war, the countries it records strikes on (the two above, and
+It also announces, on <ORG>/land/dronestrikemap/status/incursions, where drones were shot down, crashed or struck in the
+last three days in NATO-border countries (from /api/incidents, only those with a position better than the country's
+centre); dangausakis_bridge.py draws the region that holds one yellow, at peace as well as at war. And on
+<ORG>/land/dronestrikemap/status/war, the countries it records strikes on (the two above, and
 a NATO country with a recent incident of kind "strike"); dangausakis_bridge.py draws an announced country orange.
 Strikes of today and yesterday (Kyiv dates) are shown; one marker per place per day. Anything that leaves
 the record is retracted with a JSON tombstone.
@@ -35,6 +38,7 @@ Env:
   DSM_POLL_S         poll interval (default 600, at least 120)
   DSM_STALE_S        how long a marker lives between polls (default 1800)
   DSM_DAYS           days shown, today first (default 2)
+  DSM_INCURSION_DAYS an incident (a drone shot down, crashed, struck) keeps its region yellow this many days (default 3)
   DSM_COUNTRIES      places to draw, comma separated (default RU,UA)
   DSM_ALERT_ZONES    0 turns the yellow and red Russian regions off (default on)
   DSM_DROP_REGEX     skip a strike whose place, region, summary or article titles match this regex (default none):
@@ -57,7 +61,7 @@ from protocols.vendors.random import region_geometry
 from protocols.vendors.random.gateway import open_session
 from protocols.vendors.random.geo_simplify import ring_area, simplify_ring
 from protocols.vendors.random.track_views import add_version, semantic_topic
-from protocols.vendors.random.war_status import war_topic
+from protocols.vendors.random.war_status import incursion_topic, war_topic
 
 TOPIC_ROOT = topic_root()
 URL = os.environ.get("DSM_URL", "https://dronestrikemap.com").rstrip("/")
@@ -78,6 +82,7 @@ _HEADERS = {"User-Agent": "EFDI-dronestrikemap-bridge (+open data, CC BY 4.0, cr
             "Accept": "application/json"}
 INCIDENT_POLL_S = 3600           # /api/incidents is 120 KB and changes slowly
 INCIDENT_DAYS = 3
+INCURSION_DAYS = max(1, int(os.environ.get("DSM_INCURSION_DAYS", "3")))   # an incident this recent keeps its region yellow
 _UNSAFE = re.compile(r"[^A-Za-z0-9]+")
 _ZONE_RINGS: dict = {}      # region id -> simplified rings: simplifying a Russian region is slow and it never changes
 
@@ -235,6 +240,26 @@ def war_countries(strikes: dict, incidents: list, today: str) -> list:
     return sorted(c for c in countries if c)
 
 
+def incursion_points(incidents: list, today: str) -> list:
+    """[{"country", "lat", "lon", "kind", "place"}] for the incidents of the last INCURSION_DAYS days that have a position
+    better than the country's centre: where a drone was shot down, crashed or struck. dangausakis_bridge.py draws the
+    region that holds one yellow."""
+    try:
+        since = (datetime.strptime(today, "%Y-%m-%d") - timedelta(days=INCURSION_DAYS)).strftime("%Y-%m-%d")
+    except ValueError:
+        since = "0000-00-00"
+    out = []
+    for i in incidents:
+        if str(i.get("date") or "") < since or i.get("geo_precision") == "country":
+            continue
+        try:
+            out.append({"country": str(i["country"]).upper(), "lat": float(i["lat"]), "lon": float(i["lon"]),
+                        "kind": i.get("kind"), "place": i.get("place")})
+        except (KeyError, TypeError, ValueError):
+            continue
+    return out
+
+
 def _get_json(path: str):
     try:
         with urllib.request.urlopen(urllib.request.Request(URL + path, headers=_HEADERS), timeout=30) as resp:
@@ -314,6 +339,8 @@ def main():
                                       _kyiv_days(now, 1)[0])
             if countries:
                 session.put(war_topic(TOPIC_ROOT), json.dumps({"countries": countries, "ts": now}).encode())
+            session.put(incursion_topic(TOPIC_ROOT), json.dumps(
+                {"incidents": incursion_points(incidents, _kyiv_days(now, 1)[0]), "ts": now}).encode())
             for uid, (prefix, track) in current.items():
                 _put(session, prefix, track)
             for uid in set(published) - set(current):

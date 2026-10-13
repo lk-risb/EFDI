@@ -25,6 +25,10 @@ def war_topic(topic_root: str) -> str:
     return "{}/land/dronestrikemap/status/war".format(topic_root)
 
 
+def incursion_topic(topic_root: str) -> str:
+    return "{}/land/dronestrikemap/status/incursions".format(topic_root)
+
+
 class WarStatus:
     def __init__(self, hold_s: float = HOLD_S, path: str | None = None):
         self._hold = hold_s
@@ -93,8 +97,9 @@ class WarStatus:
 
 
 class Presence:
-    """Where the hostile units DeepState draws are now: on_sample() for each unit track, inside(regions) for the ids
-    of the regions that hold at least one."""
+    """Where hostile things are now: on_sample() for each track (DeepState's hostile units, MAPA and NEPTUN drones and
+    missiles, community drone reports), inside(regions, contains) for the ids of the regions that hold at least one.
+    The ttl is how long a thing counts after it was last seen."""
 
     def __init__(self, ttl_s: float = 1800.0):
         self._ttl = ttl_s
@@ -107,6 +112,8 @@ class Presence:
             uid, lat, lon = track.get("uid"), float(track["lat_deg"]), float(track["lon_deg"])
         except (ValueError, UnicodeDecodeError, AttributeError, KeyError, TypeError):
             return
+        if str(uid).endswith("-TRAIL") or track.get("geometry"):
+            return                      # a trail line or a zone polygon is not a thing at a place
         with self._lock:
             if track.get("_delete"):
                 self._seen.pop(uid, None)
@@ -118,4 +125,41 @@ class Presence:
         now = time.time() if now is None else now
         with self._lock:
             points = [(lon, lat) for seen, lon, lat in self._seen.values() if now - seen <= self._ttl]
+        return {region["id"] for region in regions if any(contains(region, lon, lat) for lon, lat in points)}
+
+
+class Incursions:
+    """Drone incursions announced by dronestrikemap_bridge.py on incursion_topic(): [{"country", "lat", "lon"}] for the
+    recent incidents (a drone shot down, crashed or striking) in NATO-border countries. A region that holds one is drawn
+    yellow whether or not its country is at war. They expire TTL_S after the last announcement."""
+
+    TTL_S = 3 * 3600
+
+    def __init__(self):
+        self._points: list = []         # (country, lon, lat)
+        self._seen = 0.0
+        self._lock = threading.Lock()
+
+    def on_sample(self, sample) -> None:
+        try:
+            incidents = json.loads(bytes(sample.payload).decode()).get("incidents") or []
+            points = [(str(i["country"]).upper(), float(i["lon"]), float(i["lat"])) for i in incidents]
+        except (ValueError, UnicodeDecodeError, AttributeError, KeyError, TypeError):
+            return
+        with self._lock:
+            self._points, self._seen = points, time.time()
+
+    def regions(self, boundaries: dict, contains, now: float | None = None) -> set:
+        """ids of the `boundaries` ({"LT:LT-VL": {"rings": ...}}, the id's prefix is the country) that hold an incursion."""
+        now = time.time() if now is None else now
+        with self._lock:
+            points = list(self._points) if now - self._seen <= self.TTL_S else []
+        return {rid for rid, region in boundaries.items()
+                if any(country == rid.split(":")[0] and contains(region, lon, lat) for country, lon, lat in points)}
+
+    def region_ids(self, country: str, regions: list, contains, now: float | None = None) -> set:
+        """ids of a country's `regions` (dicts with "id" and "rings") that hold an incursion."""
+        now = time.time() if now is None else now
+        with self._lock:
+            points = [(lon, lat) for c, lon, lat in self._points if c == country] if now - self._seen <= self.TTL_S else []
         return {region["id"] for region in regions if any(contains(region, lon, lat) for lon, lat in points)}

@@ -87,7 +87,7 @@ import zenoh
 from bridges.vendors.dangausakis import alert_sources, neptun
 from protocols.vendors.random.gateway import open_session, publish_dual, subscribe
 from protocols.vendors.random import region_geometry
-from protocols.vendors.random.war_status import Presence, WarStatus, war_topic
+from protocols.vendors.random.war_status import Incursions, Presence, WarStatus, incursion_topic, war_topic
 from protocols.vendors.random.geo_simplify import ring_area, simplify_ring as _simplify_ring
 from protocols.vendors.random.proto.normalized_track_pb2 import NormalizedTrack
 from protocols.vendors.random.track_views import add_version, semantic_topic
@@ -130,8 +130,10 @@ WASH_ENABLED = os.environ.get("DANGAUSAKIS_COUNTRY_ZONES", "1") != "0"
 # "RU:RUS,BY:BLR,MD:MDA" = <country code>:<ISO 3166 alpha-3>. Russia and Belarus replace the single outline the site
 # draws in a standing tone; Moldova is not on the site's map at all. Empty keeps the single outlines. A country
 # whose regions cannot be loaded keeps its outline (or nothing).
-# Where Russian units stand in one of these countries (not Russia itself) that region is drawn yellow, whatever the base.
-PRESENCE_COUNTRIES = {"BY", "MD"}
+# Level 2 is yellow wherever something hostile is in a region and the country is not Ukraine or Russia (whose regions
+# are coloured by their alerts and strikes): Russian units (DeepState), drones and missiles (MAPA, NEPTUN), community
+# drone reports and the incursions Drone Strike Map records. At peace as well as at war.
+WAR_THEATRE_COUNTRIES = {"UA", "RU"}
 REGION_SPLIT = dict(pair.split(":", 1) for pair in
                     os.environ.get("DANGAUSAKIS_REGION_SPLIT", "RU:RUS,BY:BLR,MD:MDA").replace(" ", "").split(",") if ":" in pair)
 # The base colour of a country's regions follows whether it is at war (see protocols/vendors/random/war_status.py):
@@ -309,6 +311,23 @@ def _region_wash_tracks(code: str, level: str, country_regions: list, now: float
     return out
 
 
+def region_activity(country_regions: dict, boundaries: dict, presence, threats, incursions, now: float):
+    """(activity, hit, russian_units): the regions to draw yellow because something hostile is in them, outside the war
+    theatre (Ukraine and Russia colour theirs by alerts and strikes). `activity` maps a country drawn from geoBoundaries to
+    the ids of its regions, `hit` is the set of ids of the site's own regions (LT/LV/PL/EE), `russian_units` the countries
+    with Russian units (DeepState) inside them. Hostile things: Russian units, drones and missiles in flight, community
+    drone reports and the incursions Drone Strike Map records."""
+    contains = region_geometry.contains
+    outside = {code: regions for code, regions in country_regions.items() if code not in WAR_THEATRE_COUNTRIES}
+    units = {code: presence.inside(regions, contains, now) for code, regions in outside.items()}
+    activity = {code: units[code] | threats.inside(regions, contains, now) | incursions.region_ids(code, regions, contains, now)
+                for code, regions in outside.items()}
+    site = [{"id": rid, "rings": region["rings"]} for rid, region in boundaries.items()
+            if rid.split(":")[0] not in WAR_THEATRE_COUNTRIES]
+    hit = incursions.regions(boundaries, contains, now) | presence.inside(site, contains, now) | threats.inside(site, contains, now)
+    return activity, hit, [code for code, ids in units.items() if ids]
+
+
 def load_country_regions(loaded: dict) -> dict:
     """{country code: regions} for the countries in REGION_SPLIT; one already loaded is kept, one that fails is left out
     (it keeps its single outline, or nothing)."""
@@ -328,7 +347,7 @@ def display_level(level: str) -> str:
 
 
 def wash_tracks(current: dict, boundaries: dict, standing: dict, now: float, country_regions: dict | None = None,
-                war=frozenset(), activity: dict | None = None) -> dict:
+                war=frozenset(), activity: dict | None = None, incursions=frozenset()) -> dict:
     """uid -> (topic prefix, track): faint area fills drawn behind the district zones, like the site's map. Every
     region of a country at war (`war`, see war_status.py) is orange and of any other country white; an oblast
     takes the colour of the worst active district alert in it (yellow, red), and one with an alert of its own already
@@ -361,14 +380,16 @@ def wash_tracks(current: dict, boundaries: dict, standing: dict, now: float, cou
         if rid.startswith("UA") or rid in current:
             continue
         code = rid.split(":")[0]
-        level = WAR_BASE if code in war else PEACE_BASE
+        level = "yellow" if rid in incursions else WAR_BASE if code in war else PEACE_BASE
         rings = sorted(region["rings"], key=_ring_area, reverse=True)[:1]
         if rings:
             uid = "DA-WASH-" + rid
             out[uid] = (ZONE_PREFIX, _wash_track(
-                uid, region, level, "{} {} ({})".format(code, region["name"], "at war" if level == WAR_BASE else "monitored"),
+                uid, region, level, "{} {} ({})".format(
+                    code, region["name"], "drone incursion" if level == "yellow" else "at war" if level == WAR_BASE else "monitored"),
                 "{} - source: dangausakis.lt - not an official warning".format(
-                    "Country at war, no active alert" if level == WAR_BASE else "Lowest status (monitored, no active alert)"),
+                    "A drone was shot down, crashed or struck in this region (Drone Strike Map)" if level == "yellow"
+                    else "Country at war, no active alert" if level == WAR_BASE else "Lowest status (monitored, no active alert)"),
                 rings, now, country=code, alert_id=rid))
     for code, region in standing.items():
         level = WAR_BASE
@@ -596,8 +617,14 @@ def main():
     suppress_sub = subscribe(session, neptun.SUPPRESS_TOPIC, suppression.on_sample) if NEPTUN_ENABLED else None
     war_status = WarStatus(path=os.path.join(os.environ.get("POD_STATE_DIR") or "/tmp", "war-status.json"))
     war_sub = subscribe(session, war_topic(TOPIC_ROOT), war_status.on_sample)
-    presence = Presence()
+    incursions = Incursions()
+    incursion_sub = subscribe(session, incursion_topic(TOPIC_ROOT), incursions.on_sample)
+    presence = Presence()                               # Russian units (DeepState)
     presence_sub = subscribe(session, "{}/land/deepstate/frontline/hostile/unit/**".format(TOPIC_ROOT), presence.on_sample)
+    threats = Presence(ttl_s=1800)                      # drones and missiles in flight, community drone reports
+    threat_subs = [subscribe(session, "{}/{}".format(TOPIC_ROOT, pattern), threats.on_sample)
+                   for pattern in ("air/mapa/hostile/**", "air/neptun/hostile/**", "air/neptun/unknown/**",
+                                   "air/dangausakis/community/**")]
     next_threats = 0.0
     site_cache, neptun_cache, lt_cache, rso_cache, lv_cache = (
         alert_sources.SourceCache(SOURCE_MAX_AGE_S) for _ in range(5))
@@ -690,13 +717,12 @@ def main():
             if ZONES_ENABLED:
                 zones = zone_tracks(current, boundaries or {}, now)
                 if WASH_ENABLED:
-                    activity = {code: presence.inside(country_regions[code], region_geometry.contains, now)
-                            for code in PRESENCE_COUNTRIES if code in country_regions}
-                for code, ids in activity.items():
-                    if ids:
+                    activity, hit, russian_units = region_activity(
+                        country_regions, boundaries or {}, presence, threats, incursions, now)
+                    for code in russian_units:
                         war_status.note(code, now)          # Russian units stand in it
-                zones.update(wash_tracks(current, boundaries or {}, standing, now, country_regions,
-                                         war_status.countries(now), activity))
+                    zones.update(wash_tracks(current, boundaries or {}, standing, now, country_regions,
+                                             war_status.countries(now), activity, hit))
                 for uid, (prefix, track) in zones.items():
                     # A zone is big (hundreds of points) and TAK stores every event, so an unchanged
                     # zone is re-sent only every ZONE_REFRESH_S, well inside its ZONE_STALE_S.
@@ -722,6 +748,9 @@ def main():
             suppress_sub.undeclare()
         war_sub.undeclare()
         presence_sub.undeclare()
+        incursion_sub.undeclare()
+        for threat_sub in threat_subs:
+            threat_sub.undeclare()
         pub.undeclare()
         session.close()
 

@@ -180,3 +180,14 @@ def test_the_countries_under_attack_are_those_with_a_place_hit_or_a_recent_strik
                  {"country": "LT", "kind": "strike", "date": "2026-09-01"}]         # too old
     assert dsm.war_countries(strikes, incidents, "2026-10-13") == ["PL", "RU", "UA"]
     assert dsm.war_countries({}, [], "2026-10-13") == []
+
+
+def test_recent_incidents_with_a_real_position_are_announced_as_incursions():
+    incidents = [
+        {"country": "PL", "kind": "shootdown", "date": "2026-10-12", "geo_precision": "town", "lat": 51.3, "lon": 23.3, "place": "Hrubieszow"},
+        {"country": "LT", "kind": "crash", "date": "2026-10-13", "geo_precision": "area", "lat": 54.6, "lon": 24.9, "place": "Vilnius"},
+        {"country": "EE", "kind": "shootdown", "date": "2026-10-13", "geo_precision": "country", "lat": 58.6, "lon": 25.0, "place": "?"},
+        {"country": "LV", "kind": "crash", "date": "2026-09-01", "geo_precision": "town", "lat": 57.0, "lon": 24.0, "place": "old"},
+    ]
+    got = dsm.incursion_points(incidents, "2026-10-13")
+    assert [(p["country"], p["place"]) for p in got] == [("PL", "Hrubieszow"), ("LT", "Vilnius")]     # centre-of-country and old ones left out
