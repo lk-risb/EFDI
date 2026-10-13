@@ -343,7 +343,7 @@ def border_tracks(now: float) -> dict:
     out = {}
     for code, (iso3, color) in BORDERS.items():
         if code not in _BORDER_TRACKS:
-            found = region_geometry.regions(iso3, level="ADM0")
+            found = region_geometry.regions(iso3, level="ADM0", full=True)
             rings = sorted([r for found_region in found for r in found_region["rings"]
                             if _ring_area(r) >= _MIN_PART_DEG2 and _in_theatre(r)], key=_ring_area, reverse=True)[:ZONE_MAX_PARTS]
             if not rings:

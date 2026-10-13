@@ -563,11 +563,11 @@ def test_country_borders_are_red_for_aggressor_states_and_blue_for_nato_and_have
     big = [[20.0, 50.0], [30.0, 50.0], [30.0, 56.0], [20.0, 56.0], [20.0, 50.0]]
     asked = []
     monkeypatch.setattr(bridge.region_geometry, "regions",
-                        lambda iso3, level="ADM1", **kw: asked.append((iso3, level)) or [{"id": iso3, "name": iso3, "rings": [big]}])
+                        lambda iso3, level="ADM1", full=False, **kw: asked.append((iso3, level, full)) or [{"id": iso3, "name": iso3, "rings": [big]}])
     monkeypatch.setattr(bridge, "BORDERS", {"RU": ("RUS", "red"), "LT": ("LTU", "blue")})
     bridge._BORDER_TRACKS.clear()
     out = bridge.border_tracks(NOW)
-    assert asked == [("RUS", "ADM0"), ("LTU", "ADM0")]
+    assert asked == [("RUS", "ADM0", True), ("LTU", "ADM0", True)]            # full resolution
     colours = {t["country"]: (t["shape_color"], t["shape_style"]) for _, t in out.values()}
     assert colours == {"RU": ("red", "border"), "LT": ("blue", "border")}
     assert bridge.border_tracks(NOW + 1) and len(asked) == 2                    # a country is fetched and simplified once

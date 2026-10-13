@@ -5,7 +5,7 @@ Federation's 83 regions and Belarus's 7 come with an ODbL 1.0 licence that asks 
 the simplified ADM1 GeoJSON through the API, keeps a copy under ${POD_STATE_DIR}/region-geometry (refreshed after
 30 days; an old copy is used when the download fails) and hands back, per region, its name and outer rings.
 
-ADM0 gives the country's own outline (borders).
+ADM0 gives the country's own outline (borders), `full=True` at full resolution (RUS is 7 MB).
 
 Bridges use it to draw a country as its regions, like the site's own LT/LV/PL/EE/UA zones, and to find the region
 an alert source names ("Kaliningrad Oblast", "Mordovia") by region_index() / match_region().
@@ -42,12 +42,12 @@ def _valid(data) -> bool:
 
 
 def fetch_geojson(iso3: str, cache_dir: str | None = None, now: float | None = None, read=_read_url,
-                  level: str = "ADM1") -> dict | None:
+                  level: str = "ADM1", full: bool = False) -> dict | None:
     """The simplified `level` (ADM1 regions, ADM0 the country) FeatureCollection for an ISO 3166-1 alpha-3 code, or None if there is neither a
-    fresh download nor an old copy."""
+    fresh download nor an old copy. `full` fetches the full-resolution file instead of the simplified one."""
     now = time.time() if now is None else now
     cache_dir = cache_dir or _cache_dir()
-    path = os.path.join(cache_dir, "{}-{}.geojson".format(iso3.upper(), level))
+    path = os.path.join(cache_dir, "{}-{}{}.geojson".format(iso3.upper(), level, "-full" if full else ""))
     cached = None
     try:
         with open(path, encoding="utf-8") as handle:
@@ -59,7 +59,7 @@ def fetch_geojson(iso3: str, cache_dir: str | None = None, now: float | None = N
     try:
         meta = json.loads(read(API.format(iso3.upper(), level)))
         meta = meta[0] if isinstance(meta, list) else meta
-        data = json.loads(read(meta["simplifiedGeometryGeoJSON"]))
+        data = json.loads(read(meta["gjDownloadURL" if full else "simplifiedGeometryGeoJSON"]))
         if not _valid(data):
             raise ValueError("no features")
     except (urllib.error.URLError, OSError, ValueError, KeyError, IndexError, TypeError) as exc:
@@ -83,10 +83,10 @@ def _rings(geometry: dict) -> list:
     return sorted(rings, key=lambda ring: -abs(sum(a[0] * b[1] - b[0] * a[1] for a, b in zip(ring, ring[1:]))))
 
 
-def regions(iso3: str, cache_dir: str | None = None, read=_read_url, level: str = "ADM1") -> list:
+def regions(iso3: str, cache_dir: str | None = None, read=_read_url, level: str = "ADM1", full: bool = False) -> list:
     """[{"id": "RU-BEL", "name": "Belgorod Oblast", "rings": [...]}] for a country (level ADM0: the country itself);
     [] when unavailable."""
-    data = fetch_geojson(iso3, cache_dir, read=read, level=level)
+    data = fetch_geojson(iso3, cache_dir, read=read, level=level, full=full)
     out = []
     for feature in (data or {}).get("features", []):
         props, geometry = feature.get("properties") or {}, feature.get("geometry") or {}
