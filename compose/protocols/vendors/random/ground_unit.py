@@ -12,6 +12,7 @@ FUNCTION = {
     "artillery": "UCF---", "recon": "UCR---", "engineer": "UCE---", "air_defence": "UCD---",
 }
 # size -> 2525B size letter (SIDC position 12)
+ECHELON_TEAM = "A"       # team / crew: the smallest unit, one TAK user
 ECHELON = {"battalion": "F", "regiment": "G", "brigade": "H", "division": "I", "corps": "J", "army": "K"}
 
 

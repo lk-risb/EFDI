@@ -242,8 +242,12 @@ def _normalize_event(event: ET.Element) -> tuple[str, dict[str, object]] | None:
         cot_detail=detail_map if detail_map else None,
     )
 
+    if detail_map.get("callsign"):
+        record["callsign"] = detail_map["callsign"]            # the name the user chose: the label of its marker
     if detail_map.get("tak_role"):
         record["tak_role"] = detail_map["tak_role"]
+    if detail_map.get("tak_team"):
+        record["tak_team"] = detail_map["tak_team"]
     if cot_time:
         record["cot_time_epoch_s"] = _parse_time(cot_time)
     if cot_start:
@@ -258,6 +262,10 @@ def _normalize_event(event: ET.Element) -> tuple[str, dict[str, object]] | None:
     if point is not None:
         lat = _to_float(point.get("lat"))
         lon = _to_float(point.get("lon"))
+        if lat == 0.0 and lon == 0.0:
+            return None                  # TAK's "no position": a client with no GPS fix reports 0,0, which is not a place
+        if lat == 0.0 and lon == 0.0:
+            return None                  # TAK's "no position": a client with no GPS fix reports 0,0, which is not a place
         if lat is not None and lon is not None:
             record["lat_deg"] = lat
             record["lon_deg"] = lon

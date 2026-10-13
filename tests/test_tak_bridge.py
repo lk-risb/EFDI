@@ -49,12 +49,28 @@ def test_a_clients_role_and_type_pick_the_sitaware_symbol_only_when_known():
         '<event version="2.0" uid="A1" type="a-f-G-U-C" how="m-g" time="2026-10-13T13:00:00Z" start="2026-10-13T13:00:00Z" '
         'stale="2026-10-13T13:05:00Z"><point lat="54.7" lon="25.3" hae="1" ce="1" le="1"/>'
         '<detail><contact callsign="Alpha"/><__group name="Cyan" role="HQ"/></detail></event>'))
-    assert record["tak_role"] == "HQ" and record["cot_detail"]["tak_team"] == "Cyan"
+    assert record["tak_role"] == "HQ" and record["cot_detail"]["tak_team"] == "Cyan" and record["callsign"] == "Alpha"
     sidc = sitaware_layer._friendly_unit_sidc
-    assert sidc(record) == "SFGPUH----*****"                                          # headquarters
-    assert sidc(dict(record, tak_role="Medic")) == "SFGPUSM---*****"
-    assert sidc(dict(record, tak_role="RTO")) == "SFGPUUS---*****"
-    assert sidc(dict(record, tak_role="Team Lead")) == "SFGPU-----*****"              # no checked entry: the plain unit
-    assert sidc(dict(record, tak_role=None, cot_type="a-f-G-U-C-I-Z")) == "SFGPUCIZ--*****"
-    assert sidc(dict(record, tak_role=None, cot_type="a-f-G-U-C")) == "SFGPU-----*****"
+    assert sidc(record) == "SFGPUH----*A***"                                          # headquarters, one person: team/crew
+    assert sidc(dict(record, tak_role="Medic")) == "SFGPUSM---*A***"
+    assert sidc(dict(record, tak_role="RTO")) == "SFGPUUS---*A***"
+    assert sidc(dict(record, tak_role="Team Lead")) == "SFGPU-----*A***"              # no checked entry: the plain unit
+    assert sidc(dict(record, tak_role=None, cot_type="a-f-G-U-C-I-Z")) == "SFGPUCIZ--*A***"
+    assert sidc(dict(record, tak_role=None, cot_type="a-f-G-U-C")) == "SFGPU-----*A***"
+    assert record["tak_team"] == "Cyan" and sitaware_layer._callsign(record, "U") == "Alpha (Cyan)"
+    assert sitaware_layer._callsign(dict(record, _ingress="x"), "U") == "Alpha"
     assert sidc({"uid": "nffi", "cot_type": "a-f-G-U-C-I"}) == "SFGPU-----*****"       # not from TAK: as before
+
+
+def test_a_client_with_no_gps_fix_reports_0_0_and_is_not_a_track():
+    event = _event("a-f-G-U-C")
+    event.find("point").set("lat", "0.0")
+    event.find("point").set("lon", "0.0")
+    assert bridge._normalize_event(event) is None
+
+
+def test_a_client_with_no_gps_fix_reports_0_0_and_is_not_a_track():
+    event = _event("a-f-G-U-C")
+    event.find("point").set("lat", "0.0")
+    event.find("point").set("lon", "0.0")
+    assert bridge._normalize_event(event) is None

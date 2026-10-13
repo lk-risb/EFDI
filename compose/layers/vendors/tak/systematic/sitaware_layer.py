@@ -130,12 +130,11 @@ def _resolve_sidc(resolver, track: dict) -> str:
 _NON_JSON_VIEWS = frozenset({"sapient", "proto", "raw"})
 
 def _friendly_unit_sidc(track: dict) -> str:
-    """NFFI units keep the unspecified frame; a TAK user's position takes the function of its role (HQ, medic, RTO) or of its specific
-    CoT type (infantry...), when ground_unit knows one, else the same unspecified frame."""
+    """NFFI units keep the unspecified frame. A TAK user is one person, so its frame carries the Team/Crew echelon (A), and the function
+    of its role (HQ, medic, RTO) or of its specific CoT type (infantry...) when ground_unit knows one."""
     if track.get("_ingress") == "tak_server":
-        function = ground_unit.tak_function(track.get("cot_type"), track.get("tak_role"))
-        if function:
-            return "SFGP{}*****".format(function)
+        return "SFGP{}*{}***".format(ground_unit.tak_function(track.get("cot_type"), track.get("tak_role")) or "U-----",
+                                     ground_unit.ECHELON_TEAM)
     return "SFGPU-----*****"
 
 
@@ -241,7 +240,11 @@ def _uid(track: dict) -> str:
 
 
 def _callsign(track: dict, uid: str) -> str:
-    return _cot_callsign(track, uid)
+    """The label of a marker; a TAK user's carries its team, "Alpha (Cyan)", since SitaWare has no team colours."""
+    name = _cot_callsign(track, uid)
+    if track.get("_ingress") == "tak_server" and track.get("tak_team"):
+        return "{} ({})".format(name, track["tak_team"])
+    return name
 
 
 def _cot_type_for_sidc(sidc: str) -> str:
