@@ -1,0 +1,144 @@
+{
+ "date": "2026-10-12",
+ "totals": {},
+ "strikes": [
+  {
+   "articles": [
+    {
+     "source": "The Guardian – Ukraine",
+     "title": "Ukraine war briefing: Russia attacks multiple power plants after Trump energy ceasefire claim",
+     "url": "https://www.theguardian.com/world/2026/oct/12/ukraine-war-briefing-russia-attacks-multiple-power-plants-after-trump-energy-ceasefire-claim"
+    },
+    {
+     "source": "TASS (EN)",
+     "title": "One civilian killed, 9 injured in Ukrainian attacks on Belgorod Region",
+     "url": "https://tass.com/emergencies/2201021"
+    }
+   ],
+   "confidence": "confirmed",
+   "country": "RU",
+   "image": null,
+   "image_caption": null,
+   "lat": 50.5977,
+   "lon": 36.5858,
+   "place": "Belgorod",
+   "region": "Belgorod Oblast",
+   "summary": "drone attack reported · civilian facility · impact reported",
+   "weapons": [
+    "drone"
+   ]
+  },
+  {
+   "articles": [
+    {
+     "source": "Meduza (EN)",
+     "title": "How would NATO defeat a Russian invasion? Its top commander envisions a wall of drones, a counteroffensive, and missile strikes deep behind Russian lines.",
+     "url": "https://meduza.io/en/feature/2026/10/12/how-would-nato-defeat-a-russian-invasion-its-top-commander-envisions-a-wall-of-drones-a-counteroffensive-and-missile-strikes-deep-behind-russian-lines"
+    },
+    {
+     "source": "Al Jazeera English",
+     "title": "NATO says will do ‘anything and everything’ if alliance is attacked",
+     "url": "https://www.aljazeera.com/news/2026/10/12/nato-says-will-do-anything-and-everything-if-alliance-is-attacked?traffic_source=rss"
+    }
+   ],
+   "confidence": "confirmed",
+   "country": "RU",
+   "image": null,
+   "image_caption": null,
+   "lat": 54.7104,
+   "lon": 20.4522,
+   "place": "Kaliningrad",
+   "region": "Kaliningrad Oblast",
+   "summary": "drone and missile attack reported",
+   "weapons": [
+    "drone",
+    "missile"
+   ]
+  },
+  {
+   "articles": [
+    {
+     "source": "Novaya Gazeta Europe (EN)",
+     "title": "Russian Defence Ministry to protect data centres as Yandex reels from Ukrainian airstrikes",
+     "url": "https://novayagazeta.eu/articles/2026/10/12/russian-defence-ministry-to-protect-data-centres-as-yandex-reels-from-ukrainian-airstrikes-en-news"
+    }
+   ],
+   "confidence": "reported",
+   "country": "RU",
+   "image": null,
+   "image_caption": null,
+   "lat": 55.5,
+   "lon": 37.0,
+   "place": "Moscow Oblast",
+   "region": "Moscow Oblast",
+   "summary": "drone attack reported · reported for the whole oblast, pinned on its centre",
+   "weapons": [
+    "drone"
+   ]
+  },
+  {
+   "articles": [
+    {
+     "source": "Meduza (EN)",
+     "title": "How many children have been killed in Russia’s full-scale invasion of Ukraine? A new Meduza investigation finds at least 940.",
+     "url": "https://meduza.io/en/feature/2026/10/12/how-many-children-have-been-killed-in-russia-s-full-scale-invasion-of-ukraine-a-new-meduza-investigation-finds-at-least-940"
+    }
+   ],
+   "confidence": "reported",
+   "country": "RU",
+   "image": null,
+   "image_caption": null,
+   "lat": 49.2788,
+   "lon": 38.9075,
+   "place": "Starobilsk",
+   "region": "Luhansk Oblast (occupied)",
+   "summary": "housing",
+   "weapons": []
+  },
+  {
+   "articles": [
+    {
+     "source": "The Kyiv Independent",
+     "title": "Russian attacks kill at least 10, injure 73 across Ukraine as Moscow targets energy infrastructure in several oblasts",
+     "url": "https://kyivindependent.com/russian-attacks-kill-at-least-10-injure-73-across-ukraine-as-moscow-targets-energy-infrastructure-in-several-oblasts/"
+    }
+   ],
+   "confidence": "reported",
+   "country": "UA",
+   "image": null,
+   "image_caption": null,
+   "lat": 51.4982,
+   "lon": 31.2893,
+   "place": "Chernihiv",
+   "region": "Chernihiv Oblast",
+   "summary": "attack reported · reported for the whole oblast, pinned on its centre",
+   "weapons": []
+  },
+  {
+   "articles": [
+    {
+     "source": "Ukrainska Pravda (EN)",
+     "title": "Russian attack on Dnipro kills one person, sparks fire at shopping centre",
+     "url": "https://www.pravda.com.ua/eng/news/2026/10/12/8057565/"
+    },
+    {
+     "source": "Ukrinform (EN)",
+     "title": "Russia targets residential buildings and energy infrastructure: Koretskyi reports 22 injured in Kharkiv",
+     "url": "https://www.ukrinform.net/rubric-ato/4173609-russia-targets-residential-buildings-and-energy-infrastructure-koretskyi-reports-22-injured-in-kharkiv.html"
+    }
+   ],
+   "confidence": "confirmed",
+   "country": "UA",
+   "image": null,
+   "image_caption": null,
+   "lat": 48.4647,
+   "lon": 35.0462,
+   "place": "Dnipro",
+   "region": "Dnipropetrovsk Oblast",
+   "summary": "drone attack reported · housing, industrial site · impact reported · fire",
+   "weapons": [
+    "drone"
+   ]
+  }
+ ]
+}

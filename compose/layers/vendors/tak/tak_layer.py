@@ -275,6 +275,11 @@ _TOPIC_COT = {
     "land/**/unknown/person/**": ("a-u-G-U-C-I", LAND_STALE_S),
     "land/**/unknown/sensor/**": ("a-u-G-E-S",   LAND_STALE_S),
     "land/**/neutral/zone/**":   ("a-n-G-I-R",    LAND_STALE_S),
+    # A place hit (dronestrikemap_bridge.py): the 2525B incident "Explosion" (SxGPIE----), which ATAK/WinTAK
+    # resolve from the type's function letters like the a-n-G-E-S-E sensor above. Hostile: Russia and
+    # Russian-held Ukraine; friendly: Ukraine. The track asks for its own stale time.
+    "land/**/hostile/incident/**":  ("a-h-G-I-E",  LAND_STALE_S),
+    "land/**/friendly/incident/**": ("a-f-G-I-E",  LAND_STALE_S),
     "land/**/neutral/alert/**":  ("a-n-G-I-R",    LAND_STALE_S),
     # AIR — full affiliation matrix
     "air/**/friendly/aircraft/**": ("a-f-A-M-F",   AIR_STALE_S),

@@ -396,3 +396,43 @@ def test_simplify_ring_does_not_leave_the_ring_crossing_itself():
     simple = geo_simplify.simplify_ring(ring, max_vertices=12)
     assert simple[0] == simple[-1]
     assert geo_simplify._crossings(simple[:-1]) == []
+
+
+def _geo_region(region_id, name, lon, lat, size=2.0):
+    return {"id": region_id, "name": name, "rings": [[[lon, lat], [lon + size, lat], [lon + size, lat + size], [lon, lat + size], [lon, lat]]]}
+
+
+def test_a_standing_country_with_regions_is_drawn_as_its_regions_not_as_one_outline():
+    standing = {"RU": {"name": "Russia", "tone": "danger", "rings": [SQUARE]},
+                "BY": {"name": "Belarus", "tone": "warning", "rings": [SQUARE]}}
+    regions = {"RU": [_geo_region("RU-BEL", "Belgorod Oblast", 35, 50), _geo_region("RU-CHU", "Chukotka", 170, 65)],
+               "BY": [_geo_region("BY-BR", "Brest", 23, 52)]}
+    out = bridge.wash_tracks({}, {}, standing, NOW, regions)
+    assert sorted(out) == ["DA-REGION-BY-BY-BR", "DA-REGION-RU-RU-BEL"]      # Chukotka is beyond the theatre
+    prefix, track = out["DA-REGION-RU-RU-BEL"]
+    assert (track["shape_color"], track["shape_style"], track["callsign"]) == ("red", "wash", "RU Belgorod Oblast (danger)")
+    assert out["DA-REGION-BY-BY-BR"][1]["shape_color"] == "orange"
+    assert "geoBoundaries" in track["remarks"] and "not an official warning" in track["remarks"]
+    assert not [uid for uid in out if uid.startswith("DA-COUNTRY")]
+
+
+def test_a_country_whose_regions_could_not_be_loaded_keeps_its_single_outline():
+    standing = {"RU": {"name": "Russia", "tone": "danger", "rings": [[[30, 50], [40, 50], [40, 60], [30, 60], [30, 50]]]}}
+    assert list(bridge.wash_tracks({}, {}, standing, NOW, {})) == ["DA-COUNTRY-RU"]
+    assert list(bridge.wash_tracks({}, {}, standing, NOW)) == ["DA-COUNTRY-RU"]
+
+
+def test_region_tracks_are_built_once_and_stamped_each_time():
+    standing = {"BY": {"name": "Belarus", "tone": "warning", "rings": [SQUARE]}}
+    regions = {"BY": [_geo_region("BY-BR", "Brest", 23, 52)]}
+    first = bridge.wash_tracks({}, {}, standing, 100.0, regions)["DA-REGION-BY-BY-BR"][1]
+    second = bridge.wash_tracks({}, {}, standing, 200.0, regions)["DA-REGION-BY-BY-BR"][1]
+    assert (first["_ts"], second["_ts"]) == (100.0, 200.0) and first["geometry"] == second["geometry"]
+
+
+def test_only_standing_countries_listed_in_the_split_are_loaded(monkeypatch):
+    seen = []
+    monkeypatch.setattr(bridge.region_geometry, "regions", lambda iso3: seen.append(iso3) or [_geo_region("X", "X", 1, 1)])
+    got = bridge.load_country_regions({"RU": {}, "BY": {}, "XX": {}}, {})
+    assert sorted(got) == ["BY", "RU"] and sorted(seen) == ["BLR", "RUS"]
+    assert bridge.load_country_regions({"RU": {}}, got) == got and len(seen) == 2     # already loaded: not asked again

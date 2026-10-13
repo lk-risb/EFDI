@@ -1,0 +1,69 @@
+{
+ "active": [
+  {
+   "country": "RU",
+   "day": "2026-10-13",
+   "ended_at": null,
+   "kind": "air_raid",
+   "occupied": true,
+   "official": false,
+   "region": "Crimea (occupied)",
+   "region_key": "occ-crimea",
+   "source": "alertmonitor",
+   "stale": false,
+   "started_at": "2026-10-13T06:05:15+00:00"
+  },
+  {
+   "country": "RU",
+   "day": "2026-10-13",
+   "ended_at": null,
+   "kind": "air_raid",
+   "occupied": true,
+   "official": false,
+   "region": "Donetsk Oblast (occupied)",
+   "region_key": "occ-donetsk",
+   "source": "alertmonitor",
+   "stale": false,
+   "started_at": "2026-10-13T06:04:22+00:00"
+  },
+  {
+   "country": "RU",
+   "day": "2026-10-13",
+   "ended_at": null,
+   "kind": "air_raid",
+   "occupied": false,
+   "official": false,
+   "region": "Moscow Oblast",
+   "region_key": "ru-moscow-oblast",
+   "source": "alertmonitor",
+   "stale": false,
+   "started_at": "2026-10-13T05:58:02+00:00"
+  },
+  {
+   "country": "UA",
+   "day": "2026-10-13",
+   "ended_at": null,
+   "kind": "air_raid",
+   "occupied": false,
+   "official": true,
+   "region": "Kyiv Oblast",
+   "region_key": "kyiv",
+   "source": "ubilling",
+   "stale": false,
+   "started_at": "2026-10-13T06:28:19+00:00"
+  },
+  {
+   "country": "RU",
+   "day": "2026-10-13",
+   "ended_at": "2026-10-13T04:38:54+00:00",
+   "kind": "air_raid",
+   "occupied": false,
+   "official": false,
+   "region": "Kaluga Oblast",
+   "region_key": "ru-kaluga",
+   "source": "alertmonitor",
+   "stale": true,
+   "started_at": "2026-10-13T03:36:02+00:00"
+  }
+ ]
+}

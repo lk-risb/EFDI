@@ -106,7 +106,7 @@ SERVICES=(
     # Infrastructure
     zenoh admin-control cert-renewer supervisor presence router-watchdog
     # Open-data bridges
-    meteolt dangausakis deepstate mapa
+    meteolt dangausakis deepstate mapa dronestrikemap
     # Sensor bridges (includes raw-ingress variants — SVC_CAT has no
     # separate "Raw ingress" bucket the way admin_control.py's Python-side
     # SERVICE_SPECS does; not unifying that here, out of scope for this pass)
@@ -194,7 +194,7 @@ declare -A SVC_CAT=(
     [cert-renewer]="Infrastructure"
     [supervisor]="Infrastructure"
     [presence]="Infrastructure" [router-watchdog]="Infrastructure"
-    [meteolt]="Open-data bridges" [dangausakis]="Open-data bridges" [deepstate]="Open-data bridges" [mapa]="Open-data bridges"
+    [meteolt]="Open-data bridges" [dangausakis]="Open-data bridges" [deepstate]="Open-data bridges" [mapa]="Open-data bridges" [dronestrikemap]="Open-data bridges"
     [asterix]="Sensor bridges"
     [mqtt]="Protocols" [sparkplug]="Protocols"
     [nffi]="Protocols"
@@ -246,6 +246,7 @@ declare -A SVC_DESC=(
     [dronuradaras]="dronuradaras.lt drone detection network"
     [deepstate]="DeepStateMap frontline (occupied/liberated fills, attack arrows, units) - context layer, updated daily"
     [mapa]="MAPA.UA live drone/missile/KAB tracks with trail lines (OSINT; compare with NEPTUN)"
+    [dronestrikemap]="Drone Strike Map: places hit in Russia and Ukraine (explosion markers) + Russian air-raid alert regions (CC BY 4.0, reporting by the outlets it cites)"
     [dangausakis]="dangausakis.lt alerts (→ tak_alert_layer), alert zones, ADS-B aircraft + NEPTUN drone/missile threats"
     [mainline_terminal]="mainline.inc TERMINAL drone-fleet C2 (WebSocket)"
     [mavlink-command]="Generic MAVLink drone command bridge (arm/takeoff/rtl/land/hold/goto)"
@@ -307,7 +308,7 @@ svc_ready() {
     svc_disabled "$1" && return 1
     case "$1" in
         zenoh|meteolt|\
-        dronuradaras|dangausakis|deepstate|mapa|nffi|tak_layer|tak_alert_layer|track-fusion|\
+        dronuradaras|dangausakis|deepstate|mapa|dronestrikemap|nffi|tak_layer|tak_alert_layer|track-fusion|\
         cap|sensor-health|mission-route)
             return 0 ;;
         admin-control) [[ -n "${ZENOH_ADMIN_SECRET_KEY:-}" || -n "${EFDI_CONTROL_TOKEN:-}" ]] ;;
@@ -1079,6 +1080,9 @@ launch() {
             ;;
         mapa)
             _start mapa bridges/vendors/mapa/mapa_bridge.py
+            ;;
+        dronestrikemap)
+            _start dronestrikemap bridges/vendors/dronestrikemap/dronestrikemap_bridge.py
             ;;
         dangausakis)
             _start dangausakis bridges/vendors/dangausakis/dangausakis_bridge.py

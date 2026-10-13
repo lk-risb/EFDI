@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://efdi.ltu/schemas/json/dronestrikemap_feature.schema.json",
+  "title": "Drone Strike Map place hit / Russian alert region",
+  "description": "Published BY bridges/vendors/dronestrikemap/dronestrikemap_bridge.py every DSM_POLL_S: one marker per place hit per day (type strike), and one red polygon per Russian region with an active air-raid alert (type air_alert_zone). Data: Drone Strike Map (dronestrikemap.com, CC BY 4.0), reporting by the outlets named in remarks. The position of a strike is the place, not the impact point. A record that leaves the site is retracted with a one-shot {uid, type, _delete: true} tombstone.",
+  "x-efdi-topic": "{TOPIC_ROOT}/land/dronestrikemap/strike/{hostile|friendly}/incident/strike/{uid}/tracks/v1 and {TOPIC_ROOT}/land/dronestrikemap/airzone/neutral/zone/air_alert_zone/{uid}/tracks/v1",
+  "x-efdi-producer": "bridges/vendors/dronestrikemap/dronestrikemap_bridge.py",
+  "x-efdi-consumer": "layers/vendors/tak/tak_layer.py, layers/vendors/tak/systematic/sitaware_layer.py",
+  "type": "object",
+  "required": ["_src", "_ts", "uid", "type", "callsign", "lat_deg", "lon_deg", "remarks"],
+  "properties": {
+    "_src": {"const": "dronestrikemap.com"},
+    "_ts": {"type": "number"},
+    "uid": {"type": "string", "description": "DSM-<date>-<country>-<place> for a strike; DSM-ALERT-<region key>[-p<n>] for a zone."},
+    "type": {"enum": ["strike", "air_alert_zone"]},
+    "callsign": {"type": "string", "description": "A strike: '<place> hit <dd Mon> (<confidence>)', plus ' - occupied' in Russian-held Ukraine."},
+    "lat_deg": {"type": "number"},
+    "lon_deg": {"type": "number"},
+    "target_type": {"const": "strike"},
+    "position_uncertainty_m": {"type": "number"},
+    "stale_s": {"type": "number"},
+    "country": {"enum": ["RU", "UA"]},
+    "region": {"type": "string"},
+    "confidence": {"enum": ["confirmed", "reported", "claimed"]},
+    "weapons": {"type": "array", "items": {"type": "string"}},
+    "geometry": {"type": "object", "description": "Zones only: a GeoJSON Polygon."},
+    "shape_color": {"const": "red", "description": "Zones only."},
+    "alert_id": {"type": "string", "description": "Zones only: DSM:<geoBoundaries region id>."},
+    "remarks": {"type": "string", "description": "Summary, weapons, outlets and the credit line."}
+  }
+}

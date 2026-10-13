@@ -56,6 +56,8 @@ Env:
   DANGAUSAKIS_ZONE_REFRESH_S    re-send an unchanged zone this often (default 600; a zone lives 1800 s)
   DANGAUSAKIS_COUNTRY_ZONES     set 0 to skip the faint oblast fills and the standing Belarus/Russia
                                 colours the site draws (default on; needs DANGAUSAKIS_ZONES)
+  DANGAUSAKIS_REGION_SPLIT      "RU:RUS,BY:BLR" (default): draw those standing countries as their regions
+                                (geoBoundaries) instead of one outline; empty keeps the single outline
   DANGAUSAKIS_COMMUNITY         set 0 to disable the community drone reports and incident
                                 markers (tracks under air/dangausakis/community and
                                 land/dangausakis/incident); default on
@@ -84,6 +86,7 @@ from namespace_prefix import topic_root
 import zenoh
 from bridges.vendors.dangausakis import alert_sources, neptun
 from protocols.vendors.random.gateway import open_session, publish_dual, subscribe
+from protocols.vendors.random import region_geometry
 from protocols.vendors.random.geo_simplify import ring_area, simplify_ring as _simplify_ring
 from protocols.vendors.random.proto.normalized_track_pb2 import NormalizedTrack
 from protocols.vendors.random.track_views import add_version, semantic_topic
@@ -122,6 +125,13 @@ ZONE_PREFIX = "{}/land/dangausakis/airzone/neutral/zone".format(TOPIC_ROOT)
 AIRCRAFT_POLL_S = int(os.environ.get("DANGAUSAKIS_AIRCRAFT_POLL_S", "15"))
 AIRCRAFT_MAX_POSITION_AGE_S = 60
 WASH_ENABLED = os.environ.get("DANGAUSAKIS_COUNTRY_ZONES", "1") != "0"
+# A country the site draws as one standing colour is drawn as its regions instead, from geoBoundaries
+# (protocols/vendors/random/region_geometry.py): "RU:RUS,BY:BLR" = <site country code>:<ISO 3166 alpha-3>. Empty
+# keeps the single country outline. A country whose regions cannot be loaded keeps its outline too.
+REGION_SPLIT = dict(pair.split(":", 1) for pair in
+                    os.environ.get("DANGAUSAKIS_REGION_SPLIT", "RU:RUS,BY:BLR").replace(" ", "").split(",") if ":" in pair)
+REGION_THEATRE = (10.0, 40.0, 70.0, 72.0)    # lon min, lat min, lon max, lat max: regions beyond the Urals are not drawn
+REGION_MAX_VERTICES = 400                    # per region part: 60 regions stay far below TAK Server's event size limit
 COMMUNITY_ENABLED = os.environ.get("DANGAUSAKIS_COMMUNITY", "1") != "0"
 COMMUNITY_POLL_S = int(os.environ.get("DANGAUSAKIS_COMMUNITY_POLL_S", "30"))
 EVENTS_ENABLED = os.environ.get("DANGAUSAKIS_EVENTS", "1") != "0"
@@ -260,7 +270,45 @@ def _wash_track(uid: str, region: dict, level: str, callsign: str, remarks: str,
     }
 
 
-def wash_tracks(current: dict, boundaries: dict, standing: dict, now: float) -> dict:
+_REGION_TRACKS: dict = {}   # (code, region id, tone) -> [(uid, track)]: simplifying a region is slow and it never changes
+
+
+def _region_wash_tracks(code: str, standing_region: dict, level: str, country_regions: list, now: float) -> dict:
+    """uid -> (topic prefix, track): one faint fill per region of a country the site draws as one standing colour."""
+    out = {}
+    for region in country_regions:
+        key = (code, region["id"], standing_region["tone"])
+        if key not in _REGION_TRACKS:
+            rings = [r for r in region["rings"] if region_geometry.overlaps(r, REGION_THEATRE)][:ZONE_MAX_PARTS]
+            rings = [r for r in rings if _ring_area(r) >= 0.02 * _ring_area(rings[0])]
+            built = []
+            for index, ring in enumerate(rings):
+                uid = "DA-REGION-{}-{}{}".format(code, region["id"], "-p{}".format(index) if index else "")
+                built.append((uid, _wash_track(
+                    uid, region, level, "{} {} ({})".format(code, region["name"], standing_region["tone"]),
+                    "Standing status shown by dangausakis.lt: {} - not an official warning - {}".format(
+                        standing_region["tone"], region_geometry.CREDIT),
+                    [ring], now, max_vertices=REGION_MAX_VERTICES, country=code,
+                    alert_id="REGION:" + str(region["id"]))))
+            _REGION_TRACKS[key] = built
+        for uid, track in _REGION_TRACKS[key]:
+            out[uid] = (ZONE_PREFIX, dict(track, _ts=now))
+    return out
+
+
+def load_country_regions(standing: dict, loaded: dict) -> dict:
+    """{site country code: regions} for the standing countries listed in REGION_SPLIT; a country already
+    loaded is kept, one that fails is left out (it keeps its single outline)."""
+    out = dict(loaded)
+    for code in standing:
+        if code in REGION_SPLIT and code not in out:
+            found = region_geometry.regions(REGION_SPLIT[code])
+            if found:
+                out[code] = found
+    return out
+
+
+def wash_tracks(current: dict, boundaries: dict, standing: dict, now: float, country_regions: dict | None = None) -> dict:
     """uid -> (topic prefix, track): faint area fills drawn behind the district zones, like the
     site's map. One per Ukrainian oblast: yellow by default (the site draws all of Ukraine as
     "monitored"), coloured by the worst active district alert in it; an oblast with an alert of its
@@ -300,6 +348,9 @@ def wash_tracks(current: dict, boundaries: dict, standing: dict, now: float) -> 
                 rings, now, country=rid.split(":")[0], alert_id=rid))
     for code, region in standing.items():
         level = _TONE_LEVEL[region["tone"]]
+        if (country_regions or {}).get(code):
+            out.update(_region_wash_tracks(code, region, level, country_regions[code], now))
+            continue
         rings = [r for r in sorted(region["rings"], key=_ring_area, reverse=True)
                  if _ring_area(r) >= _MIN_PART_DEG2 and _in_theatre(r)][:ZONE_MAX_PARTS]
         for index, ring in enumerate(rings):
@@ -521,6 +572,7 @@ def main():
     known: dict = {}
     boundaries, next_boundaries = None, 0.0
     standing: dict = {}
+    country_regions: dict = {}
     known_zones: dict = {}
     zone_sent: dict = {}                      # uid -> (digest of what was sent, time sent)
     next_alerts = next_aircraft = next_community = 0.0
@@ -562,6 +614,7 @@ def main():
                 boundaries = loaded or boundaries
                 if WASH_ENABLED:
                     standing = load_standing_zones() or standing
+                    country_regions = load_country_regions(standing, country_regions)
                 next_boundaries = time.time() + (BOUNDARY_REFRESH_S if loaded else BOUNDARY_RETRY_S)
 
             raw = {"dangausakis.lt": _fetch("region-alerts"),
@@ -603,7 +656,7 @@ def main():
             if ZONES_ENABLED:
                 zones = zone_tracks(current, boundaries or {}, now)
                 if WASH_ENABLED:
-                    zones.update(wash_tracks(current, boundaries or {}, standing, now))
+                    zones.update(wash_tracks(current, boundaries or {}, standing, now, country_regions))
                 for uid, (prefix, track) in zones.items():
                     # A zone is big (hundreds of points) and TAK stores every event, so an unchanged
                     # zone is re-sent only every ZONE_REFRESH_S, well inside its ZONE_STALE_S.
