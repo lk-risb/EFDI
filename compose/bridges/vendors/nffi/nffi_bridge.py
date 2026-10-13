@@ -1,61 +1,42 @@
 #!/usr/bin/env python3
-"""NFFI (STANAG 5527) ingress -> Zenoh.
+"""NFFI (STANAG 5527) and FFI (APP-11 Edition D) ingress -> Zenoh.
 
-This bridge is the missing ingest side for protocols/vendors/nffi/nffi.py, which
-owns no source socket of its own by design (see that file's docstring) and
-expects complete NFFI XML documents to already be sitting on the local
-Zenoh router under `.../raw/nffi/{source-id}`. This file's only job is to
-get those bytes there — it does not parse NFFI, does not decode a track,
-does not know what a SIDC is. nffi.py does all of that, unchanged, on
-whatever this bridge publishes.
+This bridge is the ingest side for protocols/vendors/nffi/nffi.py and ffi.py, which own no source socket by design and expect complete
+XML documents to already be on the local Zenoh router under `.../raw/nffi/{source-id}` (NFFI) or `.../raw/ffi/{source-id}` (FFI). This
+file's only job is to get those bytes there: it does not parse NFFI or FFI, does not decode a track, does not know what a SIDC is. The
+two formats come in through the same connection code and the same framing; ffi_bridge.py is this bridge with the FFI_* settings, so the
+two can run side by side against two servers. Which format a document is, is read from the frame, not from the bridge's name.
 
 ============================================================================
-STATUS: untested shell, not a confirmed-working bridge yet
+WHAT IT CONNECTS TO (checked against a live SitaWare Headquarters 6.21)
 ============================================================================
-The TCP-dial-and-frame-extraction structure below is copied from
-tak_bridge.py's own ingress path (a proven, working pattern in this
-codebase for "connect out to a partner's server, pull a stream of XML
-documents, republish the raw bytes"), NOT from any confirmed NFFI wire
-documentation. Specifically UNVERIFIED against a real endpoint:
+A SitaWare "NFFI and FFI Manager" IP1 Classic Server (Coalition Gateway, Servers) listens on the port its form asks for and writes its
+source layer as NFFI or FFI (its Payload Message setting), but only to a host that has a CONTRACT on the server (the server's "No
+contracts" link, Create New: the host name of this machine, a snapshot and a delta interval). A host without a contract is accepted and
+closed again without data. So: create the server, create the contract for the host this bridge runs on, and set NFFI_HOST and NFFI_PORT
+(or FFI_HOST and FFI_PORT) to the SitaWare machine and the server's port. The feed has no login or encryption.
 
-- That the far side is a plain (or TLS) TCP socket you dial OUT to at all.
-  A NATO NFFI/FFI "IP1"/"IP1 Classic"/"IP2"/"SIP3" server (see a real
-  SitaWare Headquarters "NFFI and FFI Manager" screen, Coalition Gateway
-  section) may behave differently per profile — could be the other side
-  dialing IN to you instead, could be UDP, could need a handshake this
-  file sends nothing for.
-- That documents arrive back-to-back on one stream, frame-delimited only
-  by their own opening/closing tags (`_extract_frames` below assumes this,
-  matching how tak_bridge.py's `_extract_events` handles CoT's `<event>`
-  stream) — real NFFI could be one document per TCP connection, length-
-  prefixed, or something else entirely.
-- The default port: there isn't one. TAK_INGEST_PORT's former default of 8087 in
-  tak_bridge.py came from TAK Server's own documented CoreConfig default;
-  no equivalent default exists here, so NFFI_HOST/NFFI_PORT are required,
-  not defaulted, and the bridge refuses to start without them.
+Each document is written behind a 16-byte header (see docs/references/nffi/NFFI.md): the first byte is the message type (0x04 NFFI, 0x14
+FFI), then 3 zero bytes, the time in epoch seconds (4 bytes, big-endian), 4 zero bytes, `01 00`, and the document length (2 bytes,
+big-endian). A stream with no header (bare XML documents back to back) is still understood, by the closing tag of the root element, for
+a partner server that writes none. Unconfirmed: TLS on any such server (the options below are kept), and other server profiles (IP1,
+IP2, SIP3), which were not looked at.
 
-Fill in / correct once a real SitaWare (or other partner) NFFI/FFI server
-is reachable and its connection docs (which profile, host, port, TLS
-y/n, actual framing) are known. Until then this is scaffolding: it will
-either work as written or fail loudly with a connect/timeout error, never
-silently pretend to work.
+A SitaWare server whose source layer holds the force tracks this pod sent to SitaWare (the EFDI-TAK layer of nffi_layer.py and
+ffi_layer.py) sends them back: the decoders drop those (this pod's own source system EFDI-<namespace> with subsystem TAK, or a TAK id this pod published, see
+fusion.is_own_force_track; a partner pod's tracks are kept), but a layer of
+real force tracks is the better source layer.
 
 ============================================================================
-CONFIGURATION
+CONFIGURATION (the FFI bridge reads the same names with FFI_ for NFFI_)
 ============================================================================
   NFFI_HOST              Required. Host/IP of the NFFI/FFI server to dial.
   NFFI_PORT              Required. Its port.
   NFFI_TLS               "1" to wrap the socket in TLS. Default: off.
   NFFI_CERT, NFFI_KEY    Client cert/key for mTLS (optional even with TLS on).
-  NFFI_CA                CA bundle to verify the server cert against
-                          (required if NFFI_TLS=1 and the server cert isn't
-                          from a public CA).
-  NFFI_TLS_SERVER_NAME   DNS SAN expected in the server certificate;
-                          defaults to NFFI_HOST.
-  NFFI_SOURCE_ID         Segment identifying this feed under
-                          `.../raw/nffi/{source-id}` — lets nffi.py (and
-                          anyone else) tell multiple NFFI sources apart.
-                          Default: "sitaware".
+  NFFI_CA                CA bundle to verify the server cert against (required if NFFI_TLS=1 and the server cert isn't from a public CA).
+  NFFI_TLS_SERVER_NAME   DNS SAN expected in the server certificate; defaults to NFFI_HOST.
+  NFFI_SOURCE_ID         Segment identifying this feed under `.../raw/nffi/{source-id}` (or raw/ffi). Default: "sitaware".
   NFFI_RECONNECT_S       Seconds between reconnect attempts. Default: 10.
   NFFI_READ_CHUNK        Bytes per socket.recv() call. Default: 65536.
 """
@@ -74,16 +55,53 @@ from protocols.vendors.random.gateway import open_session
 
 TOPIC_ROOT = topic_root()
 
-_SOURCE_ID = os.environ.get("NFFI_SOURCE_ID", "sitaware").strip() or "sitaware"
-_RECONNECT_S = float(os.environ.get("NFFI_RECONNECT_S", "10"))
 _READ_CHUNK = int(os.environ.get("NFFI_READ_CHUNK", "65536"))
-_RAW_TOPIC = "{}/raw/nffi/{}".format(TOPIC_ROOT, _SOURCE_ID)
 
-# NFFI 1.4's own root is NFFIMessage (see nffi.py's parse_nffi()), which
-# also tolerates a bare <track> with no wrapper. Watch for either as a
-# frame boundary, since which one a real server actually sends is one of
-# the unconfirmed points above.
-_FRAME_TAGS = ("NFFIMessage", "track")
+# Roots to watch for as a frame boundary in a stream with no header: NFFI's NFFIMessage (or a bare track, which nffi.py also takes) and
+# FFI's mtf:FriendlyForceInformation.
+_FRAME_TAGS = ("NFFIMessage", "track", "mtf:FriendlyForceInformation")
+
+HEADER_LEN = 16
+_KIND_BY_TYPE = {0x04: "nffi", 0x14: "ffi"}
+
+
+def _kind_of(xml: bytes) -> str:
+    """"ffi" or "nffi", read from a document's own root element."""
+    return "ffi" if b"FriendlyForceInformation" in xml[:400] else "nffi"
+
+
+class Ip1Reader:
+    """Cuts a TCP stream into (kind, xml) documents: behind SitaWare's 16-byte header (type, time, length), or bare XML back to back."""
+
+    def __init__(self):
+        self._buf = b""
+
+    def feed(self, data: bytes) -> list:
+        self._buf += data
+        out = []
+        while self._buf:
+            if self._buf[:1] == b"<":                           # no header: bare documents, cut by the closing tag of the root
+                text = [self._buf.decode("utf-8", errors="replace")]
+                frames = _extract_frames(text)
+                if not frames:
+                    self._buf = text[0].encode("utf-8", errors="replace")
+                    break
+                out.extend((_kind_of(f.encode()), f.encode("utf-8", errors="replace")) for f in frames)
+                self._buf = text[0].encode("utf-8", errors="replace")
+                continue
+            if len(self._buf) < HEADER_LEN:
+                break
+            if self._buf[1:4] != b"\x00\x00\x00" or self._buf[8:12] != b"\x00\x00\x00\x00":      # bytes 12-13 are the contract's header priority
+                self._buf = self._buf[1:]                       # not a header: look for the next one
+                continue
+            length = int.from_bytes(self._buf[14:16], "big")
+            if len(self._buf) < HEADER_LEN + length:
+                break
+            xml = self._buf[HEADER_LEN:HEADER_LEN + length]
+            kind = _KIND_BY_TYPE.get(self._buf[0]) or _kind_of(xml)
+            out.append((kind, xml))
+            self._buf = self._buf[HEADER_LEN + length:]
+        return out
 
 
 def _connect(
@@ -138,52 +156,51 @@ def _extract_frames(buffer: list[str]) -> list[str]:
         buffer[0] = text
 
 
-def run(args) -> None:
-    host = args.host or os.environ.get("NFFI_HOST", "").strip()
+def run(args, prefix: str = "NFFI") -> None:
+    host = args.host or os.environ.get("{}_HOST".format(prefix), "").strip()
     if not host:
-        raise SystemExit("Set NFFI_HOST or pass --host")
+        raise SystemExit("Set {}_HOST or pass --host".format(prefix))
     port = args.port
     if not port:
-        raise SystemExit("Set NFFI_PORT or pass --port")
+        raise SystemExit("Set {}_PORT or pass --port".format(prefix))
     if args.tls and not args.ca:
-        raise SystemExit("--ca / NFFI_CA is required when --tls is specified (unless the server cert is publicly trusted)")
+        raise SystemExit("--ca / {}_CA is required when --tls is specified (unless the server cert is publicly trusted)".format(prefix))
+    source_id = os.environ.get("{}_SOURCE_ID".format(prefix), "sitaware").strip() or "sitaware"
+    reconnect_s = float(os.environ.get("{}_RECONNECT_S".format(prefix), "10"))
 
     while True:
         try:
             session = open_session()
             break
         except Exception as exc:
-            print("NFFI bridge Zenoh connect failed: {} — retry in {}s".format(exc, _RECONNECT_S), flush=True)
-            time.sleep(_RECONNECT_S)
-    raw_pub = session.declare_publisher(_RAW_TOPIC)
+            print("{} bridge Zenoh connect failed: {} - retry in {}s".format(prefix, exc, reconnect_s), flush=True)
+            time.sleep(reconnect_s)
+    publishers = {kind: session.declare_publisher("{}/raw/{}/{}".format(TOPIC_ROOT, kind, source_id)) for kind in ("nffi", "ffi")}
 
-    print("NFFI ingress bridge started", flush=True)
+    print("{} ingress bridge started".format(prefix), flush=True)
     print("  Host   : {}:{}".format(host, port), flush=True)
     print("  TLS    : {}".format("on" if args.tls else "off"), flush=True)
-    print("  Raw out: {}".format(_RAW_TOPIC), flush=True)
+    print("  Raw out: {}/raw/nffi|ffi/{}".format(TOPIC_ROOT, source_id), flush=True)
 
     while True:
         sock = None
         try:
             sock = _connect(host, port, args.tls, args.cert, args.key, args.ca, args.tls_server_name)
-            mode = "mTLS" if args.tls else "TCP"
-            print("NFFI {} connected -> {}:{}".format(mode, host, port), flush=True)
-            text_buffer = [""]
+            print("{} {} connected -> {}:{}".format(prefix, "mTLS" if args.tls else "TCP", host, port), flush=True)
+            reader = Ip1Reader()
             while True:
                 chunk = sock.recv(_READ_CHUNK)
                 if not chunk:
                     break
-                text_buffer[0] += chunk.decode("utf-8", errors="replace")
-                for xml in _extract_frames(text_buffer):
-                    raw_pub.put(xml.encode("utf-8", errors="replace"), encoding=zenoh.Encoding.APPLICATION_XML)
+                for kind, xml in reader.feed(chunk):
+                    publishers[kind].put(xml, encoding=zenoh.Encoding.APPLICATION_XML)
                     if args.verbose:
-                        print("NFFI PUB {} ({} bytes)".format(_RAW_TOPIC, len(xml)), flush=True)
+                        print("{} PUB {} ({} bytes)".format(prefix, kind, len(xml)), flush=True)
         except KeyboardInterrupt:
             break
         except Exception as exc:
-            print("NFFI ingest error on {}:{} — {} — retry in {}s".format(
-                host, port, exc, _RECONNECT_S), flush=True)
-            time.sleep(_RECONNECT_S)
+            print("{} ingest error on {}:{} - {} - retry in {}s".format(prefix, host, port, exc, reconnect_s), flush=True)
+            time.sleep(reconnect_s)
         finally:
             if sock is not None:
                 try:
@@ -191,25 +208,23 @@ def run(args) -> None:
                 except Exception:
                     pass
 
-    raw_pub.undeclare()
+    for publisher in publishers.values():
+        publisher.undeclare()
 
 
-def main(argv=None) -> None:
-    parser = argparse.ArgumentParser(description="NFFI (STANAG 5527) -> Zenoh ingress bridge")
-    parser.add_argument("--host", default=os.environ.get("NFFI_HOST", "").strip())
-    parser.add_argument("--port", type=int, default=int(os.environ.get("NFFI_PORT", "0") or 0))
-    parser.add_argument("--tls", action="store_true", default=os.environ.get("NFFI_TLS", "0") == "1")
-    parser.add_argument("--cert", default=os.environ.get("NFFI_CERT"))
-    parser.add_argument("--key", default=os.environ.get("NFFI_KEY"))
-    parser.add_argument("--ca", default=os.environ.get("NFFI_CA"))
-    parser.add_argument(
-        "--tls-server-name",
-        default=os.environ.get("NFFI_TLS_SERVER_NAME"),
-        help="DNS SAN expected in the NFFI server certificate; defaults to the dial host",
-    )
+def main(argv=None, prefix: str = "NFFI", description: str = "NFFI (STANAG 5527) / FFI (APP-11 Ed D) -> Zenoh ingress bridge") -> None:
+    env = lambda name, default="": os.environ.get("{}_{}".format(prefix, name), default)
+    parser = argparse.ArgumentParser(description=description)
+    parser.add_argument("--host", default=env("HOST").strip())
+    parser.add_argument("--port", type=int, default=int(env("PORT", "0") or 0))
+    parser.add_argument("--tls", action="store_true", default=env("TLS", "0") == "1")
+    parser.add_argument("--cert", default=env("CERT") or None)
+    parser.add_argument("--key", default=env("KEY") or None)
+    parser.add_argument("--ca", default=env("CA") or None)
+    parser.add_argument("--tls-server-name", default=env("TLS_SERVER_NAME") or None,
+                        help="DNS SAN expected in the server certificate; defaults to the dial host")
     parser.add_argument("--verbose", "-v", action="store_true")
-    args = parser.parse_args(argv)
-    run(args)
+    run(parser.parse_args(argv), prefix)
 
 
 if __name__ == "__main__":

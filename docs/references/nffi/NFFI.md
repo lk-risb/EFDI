@@ -331,5 +331,45 @@ through its port with a contract for the reading host (28,066 bytes, 2 messages 
   so which `SymbolStandard` values SitaWare accepts (APP-6(D) among them) and what the 20-digit symbol looks like in `UnitSymbol` is unverified.
 
 `ffi_layer.py` writes this structure for the TAK users (a separate layer from `nffi_layer.py`; `FFI_LAYER_SYMBOL_STANDARD=APP-6(D)` puts the
-20-digit APP-6D dismounted individual in `UnitSymbol`). Whether the IP1 *Client* (which has no payload setting) accepts FFI, and whether it draws
-the numeric symbol, was not tested when this was written.
+20-digit APP-6D dismounted individual in `UnitSymbol`). 
+Tested live the same day (the gateway's `ffi_layer` connected out to the IP1 Client `EFDI-TAK`, `nffi_layer` stopped):
+
+- The IP1 Client, which has no payload setting, took the FFI messages (object count 1, the same user as from NFFI, details: Friendly, Team, system
+  EFDI, subsystem TAK; since changed to the pod-scoped `EFDI-<namespace>`, see below).
+- With `FFI_LAYER_SYMBOL_STANDARD=APP-6(B)` (`SFGPUCI----A---`) it draws the same infantry symbol as from NFFI.
+- With `APP-6(D)` (the 20-digit dismounted individual in `UnitSymbol`, `SymbolStandard` `APP-6(D)`) the message was still accepted, but the user was
+  drawn as a plain blue unit frame, Friendly, size Unknown, with no icon and no person: SitaWare 6.21 does not draw the numeric APP-6(D) symbol
+  in FFI either, as it did not in NVG. Which `SymbolStandard` values it parses beyond APP-6(B) was not checked (the server form's dropdown was not read).
+- So on 6.21 the person icon is not reachable through NFFI, FFI or NVG; the letter code (infantry, Team) is the best it draws. A newer SitaWare
+  may draw it; the two layers and `SITAWARE_TAK_USERS_NVG` are there to try that without new code.
+
+## The way back, 2026-10-13: nffi_bridge.py / ffi_bridge.py, ffi.py and the decoders against the real captures
+
+The same Classic Server captures (NFFI and FFI) were fed to the new code, offline, as a check: `nffi_bridge.Ip1Reader` cut the NFFI capture into
+4 documents and the FFI capture into 2, told by the first header byte; `nffi.parse_nffi` (now matching elements by local name, so it takes
+NFFI 1.3 and 1.4) decoded 32 tracks from the NFFI documents and `ffi.parse_ffi` 16 from the FFI ones. The two formats gave the same
+tracks at the same positions (to the sixth decimal; FFI carries minutes with three decimals), with `source_system` EFDI and `source_subsystem`
+TAK, the system and subsystem of the tracks of `nffi_layer`, which that server layer held.
+
+- The header has to be parsed, not the XML alone: type byte, 3 zeros, time, 4 zeros, 2 bytes (the contract's header priority, 1 here), length.
+  A server can put several documents in one stream; the bridge also cuts a stream with no header by the closing tag of the root element.
+- A numeric APP-6(D) `UnitSymbol` is routed by its symbol set (digits 5-6; the sets 01, 02, 05, 10, 11, 15, 20, 25, 27, 30, 35, 36, 40 exist in the
+  milstd package's APP-6D tables), a letter symbol by its dimension letter as in `nffi.py`.
+- Our own tracks come back when the server's source layer holds them (here, the layer our `nffi_layer` fills): `fusion.is_own_force_track`
+  drops them in the decoders, so a TAK user does not return into TAK as a second marker.
+- Not decoded because no capture showed them: FFI speed, course and altitude elements, and an NFFI-1.4 document from a real SitaWare (6.21 writes 1.3).
+- Not tried live yet when this was written: the bridge dialing a Classic Server end to end through Zenoh into TAK.
+
+### Telling our own tracks from a partner's when they come back (2026-10-13)
+
+The first filter dropped anything with source system `EFDI` and subsystem `TAK`. Every EFDI pod writes those same words, so a partner pod's TAK
+users arriving through SitaWare would have been dropped as well. Two marks tell this pod's own tracks instead (`fusion.is_own_force_track`):
+
+- the source system is `EFDI-` plus this pod's namespace (`PARTNER_NAMESPACE`, for example `EFDI-LTU-CISB-ZENOH-GATEWAY`, cut to the 30 characters
+  NFFI's system field takes), with subsystem `TAK`; a partner pod has another namespace and is kept;
+- the transponderId equals an id this pod's own bridge published (the TAK uid, remembered by `fusion.EchoFilter`, `has_id`, exact match, 10
+  characters or more). This needs no tag, so it also catches tracks sent before the tag changed, which are still in SitaWare's layer until they
+  go stale, and tracks through a layer that does not keep the tag.
+
+A field that this pod writes into its own JSON (an "origin" mark) would not do: a system that re-publishes our data under its own ids loses it, as
+the echo filter's notes describe. The system, subsystem and transponder id are the fields SitaWare keeps on the way through.

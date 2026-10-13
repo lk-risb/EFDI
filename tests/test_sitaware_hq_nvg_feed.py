@@ -209,7 +209,7 @@ class NVGFeedCacheTests(unittest.TestCase):
         # Same domain-routing gap, TAK side: tak_layer._TOPIC_COT needs a
         # matching entry per domain or the track is dropped silently (no
         # subscription matches, not even a wrong-icon fallback).
-        self.assertEqual(_TOPIC_COT["land/**/friendly/unit/**"][0], "a-f-G-U-C")
+        self.assertEqual(_TOPIC_COT["land/**/friendly/unit/**"][0]({}), "a-f-G-U-C")      # by the track's symbol, the plain unit when it has none
         self.assertEqual(_TOPIC_COT["air/**/friendly/unit/**"][0]({}), "a-f-A")
         self.assertEqual(_TOPIC_COT["sea/**/friendly/unit/**"][0], "a-f-S")
         self.assertEqual(_TOPIC_COT["space/**/friendly/unit/**"][0], "a-f-P")

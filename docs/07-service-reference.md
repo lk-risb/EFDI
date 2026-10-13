@@ -29,6 +29,8 @@
 | `tak_layer` | `layers/vendors/tak/tak_layer.py` | Subscriber — all topics | Event-driven |
 | `tak-bridge` | `bridges/vendors/tak/tak_bridge.py` | Subscriber — all topics | TAK-visible CoT ingress |
 | `sitaware-hq-nvg` | `layers/vendors/tak/systematic/sitaware_layer.py` | Subscriber — all track topics | Pull-based NVG snapshot |
+| `ffi` | `protocols/vendors/nffi/ffi.py` | `…/raw/ffi/**` | Decodes APP-11(D) FFI XML into the same friendly-force tracks as `nffi`; drops our own TAK tracks coming back |
+| `nffi-bridge` / `ffi-bridge` | `bridges/vendors/nffi/{nffi,ffi}_bridge.py` | Publishes `…/raw/nffi/{id}`, `…/raw/ffi/{id}` | Dials a SitaWare IP1 Classic Server (needs a contract for this host), cuts the 16-byte-header stream; SitaWare tracks into TAK |
 | `nffi_layer` | `layers/vendors/tak/systematic/nffi_layer.py` | Subscriber — `…/land/tak/**` | Event-driven; connects out to SitaWare's NFFI IP1 Client and sends the TAK users as force tracks (see [06](06-atak-and-sitaware-setup.md)) |
 | `ffi_layer` | `layers/vendors/tak/systematic/ffi_layer.py` | Subscriber — `…/land/tak/**` | Event-driven; the same feed as `nffi_layer` as APP-11(D) FFI messages (being tried; run one of the two against a client) |
 | `intcore_layer` | `layers/vendors/tak/random/intcore_layer.py` | Subscriber — all track topics | Event-driven; POSTs NVG 2.0.2 to INT-CORE's `Topic/SaveItems` |

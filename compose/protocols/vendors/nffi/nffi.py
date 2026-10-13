@@ -10,9 +10,10 @@ STANAG 4677 is a separate dismounted-soldier interoperability family; one of
 its profiles can use an NFFI transport, but this generic NFFI translator does
 not claim to decode the STANAG 4677 JDSSDM profile.
 
-Targets the real STANAG 5527 / NFFI 1.4 schema (namespace
-urn:nato:fft:protocols:nffi14, root NFFIMessage/track*) — see
-docs/references/nffi/NFFI.md for the source and how it was confirmed.
+Targets the real STANAG 5527 NFFI schema (namespace urn:nato:fft:protocols:nffi14 or nffi13, root NFFIMessage/track*): SitaWare 6.21
+writes 1.3, the element names are the same in both, so elements are matched by local name — see docs/references/nffi/NFFI.md for the
+source and how it was confirmed. A track that this pod itself sent to SitaWare (this pod's system and subsystem TAK, or a transponderId this pod
+published) and SitaWare sends back is dropped (fusion.is_own_force_track); a partner pod's tracks are kept.
 
 Raw input:  <PREFIX>/<ORG>/raw/nffi/<source-id>
 Output:     <PREFIX>/<ORG>/{domain}/nato/c2/friendly/unit/json/tracks
@@ -26,6 +27,7 @@ import time
 
 import defusedxml.ElementTree as ET
 from namespace_prefix import topic_root
+from protocols.vendors.random.fusion import EchoFilter, is_own_force_track, subscribe_own
 from protocols.vendors.random.gateway import ZError, open_session, publish_dual, subscribe
 from protocols.vendors.random.proto.nffi_pb2 import NffiTrack
 
@@ -115,12 +117,16 @@ _NFFI_NS = "urn:nato:fft:protocols:nffi14"
 # NFFI XML parser
 # ---------------------------------------------------------------------------
 
+def _local(tag) -> str:
+    return tag.rsplit("}", 1)[-1] if isinstance(tag, str) else ""
+
+
 def _child(elem, tag):
-    """Find a direct child by local tag name, NFFI-namespaced or not."""
-    e = elem.find("{%s}%s" % (_NFFI_NS, tag))
-    if e is None:
-        e = elem.find(tag)
-    return e
+    """Find a direct child by local tag name, whatever the NFFI namespace (1.3 or 1.4) or none."""
+    for e in elem:
+        if _local(e.tag) == tag:
+            return e
+    return None
 
 
 def _child_text(elem, tag) -> str | None:
@@ -209,6 +215,9 @@ def _parse_track(track_elem) -> dict | None:
         # reasoning stanag.py applies to PPLI (see stanag.py's own comment).
         "affiliation": "friendly",
         "nffi_affiliation": "FRIEND",
+        "source_system": system,
+        "source_subsystem": subsystem,
+        "transponder_id": transponder_id,
     }
 
     altitude = _child_text(coordinates, "altitude")
@@ -286,11 +295,9 @@ def parse_nffi(xml_bytes: bytes) -> list[dict]:
         print("NFFI XML parse error:", exc, flush=True)
         return []
 
-    track_elems = root.findall("{%s}track" % _NFFI_NS) or root.findall("track")
-    if not track_elems:
-        root_local = root.tag.split("}")[-1] if "}" in root.tag else root.tag
-        if root_local == "track":
-            track_elems = [root]
+    track_elems = [e for e in root if _local(e.tag) == "track"]
+    if not track_elems and _local(root.tag) == "track":
+        track_elems = [root]
 
     tracks = []
     for track_elem in track_elems:
@@ -300,19 +307,26 @@ def parse_nffi(xml_bytes: bytes) -> list[dict]:
     return tracks
 
 
-def make_handler(session, verbose: bool = False):
+def make_handler(session, verbose: bool = False, parse=None, label: str = "NFFI", domain_of=None, echoes=None):
+    """Zenoh callback for raw documents. ffi.py reuses this with its own `parse`, `label` and `domain_of`."""
+    parse = parse or parse_nffi
+    domain_of = domain_of or _output_topic
+
     def on_sample(sample) -> None:
         xml_bytes = bytes(sample.payload)
         if not xml_bytes or len(xml_bytes) > MAX_NFFI_XML:
             if verbose:
                 print("NFFI ignored invalid payload size from", sample.key_expr, flush=True)
             return
-        for track in parse_nffi(xml_bytes):
-            topic = _output_topic(track.get("unit_type"))
+        for track in parse(xml_bytes):
+            if is_own_force_track(track, echoes):       # a TAK user of this pod that SitaWare sends back
+                continue
+            topic = domain_of(track.get("unit_type"))
             publish_dual(session, topic, track, NffiTrack)
             if verbose:
                 print(
-                    "NFFI {} lat={} lon={}".format(
+                    "{} {} lat={} lon={}".format(
+                        label,
                         track["callsign"],
                         track["lat_deg"],
                         track["lon_deg"],
@@ -334,10 +348,12 @@ def _open_session():
 
 def run(args):
     session = _open_session()
+    echoes = EchoFilter()
+    echo_subs = subscribe_own(session, TOPIC_ROOT, echoes, subscribe)       # the ids this pod publishes: its own TAK users
     subscriber = subscribe(
         session,
         args.input_topic,
-        make_handler(session, args.verbose),
+        make_handler(session, args.verbose, echoes=echoes),
     )
     print("NFFI raw Zenoh input:", args.input_topic, flush=True)
     print(

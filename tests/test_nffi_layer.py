@@ -31,7 +31,7 @@ def test_a_tak_client_is_one_nffi_track_that_fits_the_schema_patterns():
     assert root.tag == "{%s}NFFIMessage" % nffi.NFFI_NS
     text = lambda path: root.find(path, NS).text
     assert re.fullmatch(r"[A-Z]{3}", text("n:track/n:positionalData/n:trackSource/n:sourceSystem/n:country"))
-    assert text("n:track/n:positionalData/n:trackSource/n:sourceSystem/n:system") == "EFDI"
+    assert text("n:track/n:positionalData/n:trackSource/n:sourceSystem/n:system") == nffi.SYSTEM
     assert re.fullmatch(r"[A-Za-z0-9.,:*\-]{1,60}", text("n:track/n:positionalData/n:trackSource/n:transponderId"))
     assert re.fullmatch(r"\d{14}", text("n:track/n:positionalData/n:dateTime"))
     assert float(text("n:track/n:positionalData/n:coordinates/n:latitude")) == 54.76
@@ -48,7 +48,8 @@ def test_a_tak_client_without_a_role_is_infantry_the_letter_code_counterpart_of_
 
 
 def test_what_is_no_tak_client_or_has_no_position_is_not_a_track():
-    assert nffi.track_message({k: v for k, v in CLIENT.items() if k != "tak_platform"}) is None      # a marker a user placed
+    assert nffi.track_message({k: v for k, v in CLIENT.items() if not k.startswith("tak_")}) is None      # a marker a user placed
+    assert nffi.track_message({k: v for k, v in CLIENT.items() if k in ("uid", "lat_deg", "lon_deg", "tak_team")}) is not None   # no device, but a team: a user (iTAK, WinTAK)
     assert nffi.track_message(dict(CLIENT, lat_deg=0.0, lon_deg=0.0)) is None
     assert nffi.track_message(dict(CLIENT, lat_deg=95.0)) is None
     assert nffi.track_message({"uid": "x"}) is None

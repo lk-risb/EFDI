@@ -9,8 +9,9 @@ the current tracks at once and then every update, as NFFI XML documents (NFFI_LA
 urn:nato:fft:protocols:nffi13 or nffi14, one NFFIMessage with one track each, each behind SitaWare's 16-byte IP1 header); the whole table is re-sent every NFFI_LAYER_REFRESH_S.
 
 What is sent: the friendly unit tracks of TAK clients, which tak_bridge.py publishes under <ORG>/land/tak/**/friendly/unit/** (only a
-track that reports its TAK device, so a marker a user placed is not a force track). The NFFI fields follow the NC3A schema:
-  trackSource   system EFDI, subsystem TAK, country NFFI_COUNTRY, transponderId the TAK uid
+track that reports its TAK device, platform, team or role, so a marker a user placed is not a force track; how the position was
+made, GPS or typed in by hand, does not matter, only a position of exactly 0,0 is dropped). The NFFI fields follow the NC3A schema:
+  trackSource   system EFDI-<this pod's namespace>, subsystem TAK, country NFFI_COUNTRY, transponderId the TAK uid
   dateTime      the time of the position report, UTC, 14 digits
   coordinates   latitude, longitude, altitude (m)
   bearing/speed heading, speed in km/h
@@ -30,7 +31,7 @@ Env (at least one of NFFI_LAYER_CONNECT and NFFI_LAYER_PORT is required; the lay
   NFFI_LAYER_BIND        address to listen on (default 127.0.0.1: set the one address SitaWare reaches, e.g. the VPN address)
   NFFI_LAYER_ALLOW       comma-separated source addresses that may connect (default: any that can reach the port)
   NFFI_COUNTRY           3-letter country code in trackSource (default LTU)
-  NFFI_LAYER_VERSION     NFFI version of the documents: 1.3 (default, SitaWare 6.21) or 1.4
+  NFFI_LAYER_VERSION     NFFI version of the documents: 1.3 or 1.4 (default by SITAWARE_VERSION: 1.3 on 6.21, 1.4 on 6.22)
   NFFI_LAYER_FRAMING     how each document is written on the socket: ip1 (default: SitaWare's 16-byte header in front), xml (XML
                          declaration, newline after), nodecl (no declaration), length (4-byte big-endian length in front) or nul
                          (a 0 byte after)
@@ -50,17 +51,18 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 
 from namespace_prefix import topic_root
-from protocols.vendors.random import ground_unit
+from layers.vendors.tak.systematic import sitaware_profile
+from protocols.vendors.random import fusion, ground_unit
 from protocols.vendors.random.gateway import open_session, subscribe
 
 TOPIC_ROOT = topic_root()
-NFFI_VERSION = os.environ.get("NFFI_LAYER_VERSION", "1.3").strip()
+NFFI_VERSION = sitaware_profile.setting("NFFI_LAYER_VERSION")
 NFFI_NS = "urn:nato:fft:protocols:nffi" + ("14" if NFFI_VERSION == "1.4" else "13")
 COUNTRY = (os.environ.get("NFFI_COUNTRY") or "LTU").strip().upper()[:3]
 FRAMING = os.environ.get("NFFI_LAYER_FRAMING", "ip1").strip().lower()
 STALE_S = float(os.environ.get("NFFI_LAYER_STALE_S", "600"))
 REFRESH_S = float(os.environ.get("NFFI_LAYER_REFRESH_S", "30"))
-SYSTEM = "EFDI"
+SYSTEM = fusion.own_force_track_system()       # "EFDI-" and this pod's namespace: fusion drops our own tracks that come back by it
 SUBSYSTEM = "TAK"
 TOPIC = "{}/land/tak/**".format(TOPIC_ROOT)
 _SECURITY = {"secPolicyName": "0", "secClassification": "UNCLASSIFIED", "secCategory": "0"}     # as SitaWare writes them
@@ -94,7 +96,7 @@ def track_message(track: dict, now: float | None = None) -> bytes | None:
         return None
     if not (-90 <= lat <= 90 and -180 < lon <= 180) or (lat == 0.0 and lon == 0.0):
         return None
-    if not (track.get("tak_platform") or track.get("tak_device")):
+    if not ground_unit.is_tak_client(track):
         return None
     uid = _clean(track.get("uid"), r"A-Za-z0-9.,:*\-", 60)
     if not uid:

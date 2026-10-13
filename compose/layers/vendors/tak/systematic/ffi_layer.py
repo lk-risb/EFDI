@@ -5,13 +5,14 @@ The same feed as nffi_layer.py (TAK users from tak_bridge.py, sent to a SitaWare
 out to, or served on a port), but written as the APP-11(D) FriendlyForceInformation message instead of NFFI. SitaWare's manager has both
 payloads (its servers take "Payload Message": NFFI or FFI), and FFI is the newer one: its UnitSymbol comes with a SymbolStandard, so it can
 carry the numeric APP-6(D) dismounted individual where the NFFI unitSymbol takes only 15 letters or digits. It is a separate layer so the NFFI
-route that works on SitaWare 6.21 is untouched while this one is tried; run one of the two against a client, not both.
+route stays as it is; run one of the two against a client, not both. Tried on a live SitaWare 6.21: its IP1 Client takes the FFI messages
+and draws the letter symbol (APP-6(B)) as it does from NFFI; with APP-6(D) it accepted them but drew a plain frame, no person icon.
 
 The message structure is copied from what a live SitaWare 6.21 IP1 Classic Server writes as FFI (docs/references/nffi/NFFI.md): the
 namespace urn:nato:mtf:app-11(d):1:ffi, MessageIdentifier, GeodeticDatum WGE, one TrackInformation per message with TrackSource, the
 security label, TrackPositionalData (time, position in degrees and minutes) and TrackIdentificationData (UnitSymbol, SymbolStandard,
-UnitShortName), each behind the 16-byte header with the first byte 0x14 (0x04 on NFFI). Whether the IP1 Client accepts it is what this
-layer is for finding out; the client form has no payload setting.
+UnitShortName), each behind the 16-byte header with the first byte 0x14 (0x04 on NFFI). The IP1 Client form has no payload setting: the
+client takes whichever of the two arrives.
 
 Env (at least one of FFI_LAYER_CONNECT and FFI_LAYER_PORT is required; the layer does not start without one):
   FFI_LAYER_CONNECT          host:port of SitaWare's IP1 client to connect out to (comma-separated for several)
@@ -19,7 +20,9 @@ Env (at least one of FFI_LAYER_CONNECT and FFI_LAYER_PORT is required; the layer
   FFI_LAYER_PORT             TCP port to listen on, if SitaWare dials in instead
   FFI_LAYER_BIND             address to listen on (default 127.0.0.1: set the one address SitaWare reaches, e.g. the VPN address)
   FFI_LAYER_ALLOW            comma-separated source addresses that may connect (default: any that can reach the port)
-  FFI_LAYER_SYMBOL_STANDARD  APP-6(B) (default: the 15-character letter code) or APP-6(D) (the 20-digit dismounted individual)
+  FFI_LAYER_SYMBOL_STANDARD  APP-6(B) (the 15-character letter code) or APP-6(D) (the 20-digit dismounted individual; default by
+                             SITAWARE_VERSION: APP-6(B) on 6.21, APP-6(D) on 6.22; SitaWare 6.21
+                             draws it as a plain frame, a newer SitaWare may draw the person)
   FFI_LAYER_STALE_S          drop a track this long after its last report (default 600)
   FFI_LAYER_REFRESH_S        re-send every track this often (default 30)
 The country, system and subsystem are those of nffi_layer.py (NFFI_COUNTRY, EFDI, TAK).
@@ -31,9 +34,10 @@ from datetime import datetime, timezone
 from xml.sax.saxutils import escape as xml_escape
 
 from layers.vendors.tak.systematic import nffi_layer as nffi
+from layers.vendors.tak.systematic import sitaware_profile
 from protocols.vendors.random import ground_unit
 
-SYMBOL_STANDARD = os.environ.get("FFI_LAYER_SYMBOL_STANDARD", "APP-6(B)").strip()
+SYMBOL_STANDARD = sitaware_profile.setting("FFI_LAYER_SYMBOL_STANDARD")
 
 
 def _ffi_time(when: float) -> str:
@@ -65,7 +69,7 @@ def track_message(track: dict, now: float | None = None) -> bytes | None:
         return None
     if not (-90 <= lat <= 90 and -180 < lon <= 180) or (lat == 0.0 and lon == 0.0):
         return None
-    if not (track.get("tak_platform") or track.get("tak_device")):
+    if not ground_unit.is_tak_client(track):
         return None
     uid = nffi._clean(track.get("uid"), r"A-Za-z0-9.,:*\-", 60)
     if not uid:

@@ -441,6 +441,33 @@ def subscribe_own(session, topic_root: str, echoes: "EchoFilter", subscribe) -> 
     return [subscribe(session, "{}/{}".format(topic_root, pattern), echoes.on_sample) for pattern in OWN_TOPICS]
 
 
+# Force tracks of the TAK users that nffi_layer.py and ffi_layer.py put into SitaWare. SitaWare sends them back through an NFFI or FFI
+# server whose source layer holds them (the EFDI-TAK layer), and the NFFI and FFI decoders drop them here, so a TAK user does not come
+# back into TAK as a second marker, while a partner pod's users (another EFDI pod, or any other system) are kept. Two marks tell ours:
+#   - the source system is "EFDI-" plus THIS pod's namespace (own_force_track_system), not just "EFDI": every EFDI pod writes the same
+#     product name, and a partner pod's tracks must not be taken for ours; the subsystem is TAK;
+#   - the transponderId is a TAK uid that this pod's own bridge published (EchoFilter.has_id): it needs no tag at all, so it also
+#     catches tracks sent before the tag existed or through a layer that does not keep it.
+OWN_FORCE_TRACK_SUBSYSTEM = "TAK"
+
+
+def own_force_track_system() -> str:
+    """The source system of this pod's force tracks: "EFDI-" and the pod's namespace (LTU/CISB/zenoh_gateway -> EFDI-LTU-CISB-ZENOH-GATEWAY),
+    cut to the 30 characters the NFFI field takes and to its [A-Z0-9-] pattern."""
+    identity = os.environ.get("PARTNER_NAMESPACE", "").strip("/") or topic_root()          # the pod's own namespace, not the shared prefix
+    tag = re.sub(r"[^A-Z0-9]+", "-", identity.upper()).strip("-")
+    return ("EFDI-" + tag).rstrip("-")[:30] if tag else "EFDI"
+
+
+def is_own_force_track(track: dict, echoes: "EchoFilter | None" = None) -> bool:
+    """True for a decoded NFFI/FFI track that this pod itself put into SitaWare: its source system is this pod's and its subsystem TAK,
+    or its transponderId is an id this pod published (`echoes`, an EchoFilter fed with subscribe_own)."""
+    if (str(track.get("source_system") or "").upper(), str(track.get("source_subsystem") or "").upper()) == (
+            own_force_track_system(), OWN_FORCE_TRACK_SUBSYSTEM):
+        return True
+    return bool(echoes is not None and track.get("transponder_id") and echoes.has_id(track["transponder_id"]))
+
+
 class EchoFilter:
     def __init__(self, ttl_s: float = 12 * 3600.0):
         self._ttl = ttl_s
@@ -490,6 +517,13 @@ class EchoFilter:
         with self._lock:
             return any(now - self._cells.get((row + dr, col + dc), float("-inf")) <= self._ttl
                        for dr in (-1, 0, 1) for dc in (-1, 0, 1))
+
+    def has_id(self, identifier, now: float | None = None) -> bool:
+        """True when `identifier` is, exactly, an id (uid or sensor id) this pod published lately."""
+        key = str(identifier or "").upper()
+        now = time.time() if now is None else now
+        with self._lock:
+            return len(key) >= MIN_ID_LEN and now - self._ids.get(key, float("-inf")) <= self._ttl
 
     def is_echo(self, record: dict, now: float | None = None) -> bool:
         """True when the record's uid, callsign or label embeds one of our ids (a partner copy often

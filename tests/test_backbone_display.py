@@ -172,3 +172,21 @@ def test_sitaware_draws_a_tak_client_in_nvg_only_when_the_toggle_says_so(monkeyp
     assert len(cache._items) == 0                                    # toggled off (the NFFI feed has it): removed from NVG
     handler(_sample(key, marker))
     assert len(cache._items) == 1                                    # a marker without a device stays in NVG
+
+
+def test_a_tak_user_is_infantry_in_the_nvg_feed_as_in_nffi_and_a_placed_marker_stays_a_plain_unit(monkeypatch):
+    monkeypatch.setattr(sitaware_layer, "_INDIVIDUAL_SCHEME", "")
+    user = {"_ingress": "tak_server", "tak_platform": "ATAK-CIV", "cot_type": "a-f-G-U-C"}
+    assert sitaware_layer._friendly_unit_sidc(user) == "SFGPUCI---*A***"
+    assert sitaware_layer._friendly_unit_sidc({"_ingress": "tak_server", "cot_type": "a-f-G-U-C"}) == "SFGPU-----*A***"
+
+
+def test_sitaware_does_not_export_its_own_force_tracks_back_to_itself():
+    cache = sitaware_layer.NVGFeedCache(stale_s=60, max_tracks=100)
+    handler = sitaware_layer.make_handler("SFGP-----------", cache, False)
+    key = tak_layer.TOPIC_ROOT + "/land/nato/c2/friendly/unit/json/tracks"
+    for src in ("nffi", "ffi"):
+        handler(_sample(key, {"uid": "FFI-1", "_src": src, "lat_deg": 54.7, "lon_deg": 25.2}))
+    assert len(cache._items) == 0
+    handler(_sample(key, {"uid": "X-1", "_src": "other", "lat_deg": 54.7, "lon_deg": 25.2}))
+    assert len(cache._items) == 1

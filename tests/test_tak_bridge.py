@@ -65,7 +65,7 @@ def test_a_tak_client_is_the_app6d_dismounted_individual_by_role_and_type():
     # the numeric SIDC goes out under the APP-6D scheme, and a TAK marker that is no client keeps the unit frame
     item = sitaware_layer.track_to_nvg_item(record, sidc(record), "2525b")
     assert 'symbol="app6d:1003270000110000' in item[1]
-    marker = dict(record, tak_platform=None, tak_device=None, tak_role=None)
+    marker = dict(record, tak_platform=None, tak_device=None, tak_role=None, tak_team=None)
     assert sidc(marker) == "SFGPU-----*A***" and sidc(dict(marker, cot_type="a-f-G-U-C-I-Z")) == "SFGPUCIZ--*A***"
     assert sidc({"uid": "nffi", "cot_type": "a-f-G-U-C-I"}) == "SFGPU-----*****"       # not from TAK: as before
     assert sitaware_layer._cot_type_for_sidc(sidc(record)) == "a-f-G"

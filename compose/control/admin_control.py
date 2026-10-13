@@ -132,6 +132,7 @@ SERVICE_SPECS = [
     ("asterix", "Sensor bridges", "ASTERIX family bundle"),
     ("track-fusion", "Sensor bridges", "Track correlation"),
     ("nffi", "Protocols", "NFFI / STANAG 4677"),
+    ("ffi", "Protocols", "FFI (APP-11 Edition D) raw XML → friendly-force tracks"),
     ("sapient", "Protocols", "SAPIENT / FLEX 335"),
     ("stanag4586", "Protocols", "STANAG 4586 UAV control (VSM)"),
     ("stanag4609", "Protocols", "STANAG 4609 KLV decoder"),
@@ -154,6 +155,8 @@ SERVICE_SPECS = [
     ("tak_alert_layer", "C2 outputs", "Acoustic detections + air-raid alerts, status changes, data issues, drone reports → TAK GeoChat (opt-in)"),
     ("tak-bridge", "C2 inputs", "TAK Server CoT ingress"),
     ("sitaware", "C2 inputs", "SitaWare HQ REST input"),
+    ("nffi-bridge", "C2 inputs", "SitaWare NFFI server → Zenoh (the way back: SitaWare tracks into TAK)"),
+    ("ffi-bridge", "C2 inputs", "SitaWare FFI (APP-11 Ed D) server → Zenoh (the way back: SitaWare tracks into TAK)"),
     # A _bridge brings a C2 system's data INTO the fabric, a _layer writes the
     # fabric OUT to a C2 system. Which side opens the socket is a transport
     # detail: SitaWare polls sitaware_layer's feed, and that still makes it egress.
@@ -203,6 +206,9 @@ SERVICE_SOURCES = {
     "asterix": "protocols/vendors/asterix/cat.py",
     "track-fusion": "protocols/vendors/random/fusion.py",
     "nffi": "protocols/vendors/nffi/nffi.py",
+    "ffi": "protocols/vendors/nffi/ffi.py",
+    "nffi-bridge": "bridges/vendors/nffi/nffi_bridge.py",
+    "ffi-bridge": "bridges/vendors/nffi/ffi_bridge.py",
     "sapient": "protocols/vendors/sapient/flex335.py",
     "stanag4586": "protocols/vendors/stanag/stanag.py",
     "stanag4609": "protocols/vendors/stanag/stanag.py",
@@ -274,6 +280,8 @@ _SERVICE_REQUIRED_KEYS = {
     "intcore_layer": ("INTCORE_URL", "INTCORE_API_KEY", "INTCORE_TOPIC_ID"),
     "nffi_layer": ("NFFI_LAYER_CONNECT",),
     "ffi_layer": ("FFI_LAYER_CONNECT",),
+    "nffi-bridge": ("NFFI_HOST", "NFFI_PORT"),
+    "ffi-bridge": ("FFI_HOST", "FFI_PORT"),
 }
 
 
@@ -325,7 +333,7 @@ EDITABLE_EXACT = {
     "INTCORE_BRIDGE_BIND", "INTCORE_BRIDGE_PORT", "INTCORE_BRIDGE_PATH", "INTCORE_BRIDGE_TOKEN",
     "INTCORE_SOURCE",
 }
-EDITABLE_PREFIXES = ("CAT10_", "CAT20_", "CAT21_", "CAT34_", "CAT48_", "CAT62_", "NFFI_", "FFI_LAYER_")
+EDITABLE_PREFIXES = ("CAT10_", "CAT20_", "CAT21_", "CAT34_", "CAT48_", "CAT62_", "NFFI_", "FFI_")
 SECRET_MARKERS = ("PASS", "PASSWORD", "TOKEN", "SECRET", "_KEY", "PRIVATE_KEY")
 KEY_RE = re.compile(r"^[A-Z][A-Z0-9_]{0,63}$")
 

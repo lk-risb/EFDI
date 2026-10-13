@@ -138,6 +138,50 @@ Srauto prieigos žurnaluose lieka tik rezultatas, takelių skaičius ir kliento
 adresas — po vieną eilutę per minutę tiek sėkmingiems, tiek neautorizuotiems
 paėmimams.
 
+### TAK naudotojai nerodomi SitaWare pajėgų sekime (IP1 Client rodo Connected, objektų 0)
+
+`Connected` reiškia tik tai, kad TCP ryšys užmegztas. Tikrinkite šia tvarka:
+
+```bash
+tail -5 $POD_STATE_DIR/logs/ffi_layer.log        # arba nffi_layer.log: eilutė „connected to <host>:<port>“ turi būti nesena
+```
+
+- **Kuris srautas veikia.** `ffi_layer` (FFI, numatytasis) arba `nffi_layer`, su vienu klientu tik vienas. Abu praleidžiami, jei nenustatytas nei
+  `FFI_LAYER_CONNECT`, nei `NFFI_LAYER_CONNECT`.
+- **Formatas ir versija.** SitaWare 6.21 skaito 16 baitų antraštę ir NFFI 1.3; ankstesnis bandymas be antraštės arba su NFFI 1.4 6.21 versijoje paliko
+  klientą ties 0 objektų. `SITAWARE_VERSION` (ir `NFFI_LAYER_VERSION`, `NFFI_LAYER_FRAMING`) turi atitikti naudojamą SitaWare.
+- **Kas siunčiama.** Tik TAK klientai, nurodantys įrenginį, platformą, komandą ar vaidmenį (naudotojo padėtas taškas jų nenurodo), kurių pozicija nėra
+  lygiai 0,0 ir kuriuos TAK Server perduoda EFDI paslaugos paskyrai (tai lemia jo grupės). TAK klientai poziciją siunčia tik kas kelias minutes;
+  `tak_bridge` pakartoja paskutinę kas `TAK_INGEST_REPUBLISH_S` sekundžių (30) iki jos galiojimo pabaigos, todėl po paleidimo iš naujo palaukite minutę.
+- **Skaičius.** Kliento **Object Count** padidėja su pirmu naudotoju. Stulpelyje **Data** rodoma N/A, kol atkeliauja pirmas pranešimas.
+
+### SitaWare serveris priima ryšį ir jį užveria be duomenų
+
+IP1 Classic Server savo šaltinio sluoksnį rašo tik kompiuteriui, turinčiam **sutartį** (contract). SitaWare NFFI and FFI Manager atidarykite serverio nuorodą
+**No contracts**, **Create New** ir nurodykite kompiuterio, kuriame veikia tiltas ar bandymas, host name (adresą, kurį jam mato SitaWare; NetBird tinkle tai
+VPN adresas). IP1 Client forma sutarties neturi. Ką serveris siunčia, galima pamatyti taip:
+
+```bash
+timeout 20 bash -c 'exec 3<>/dev/tcp/<sitaware-host>/<server-port>; head -c 64 <&3 | xxd'
+```
+
+Veikiantis serveris pradeda `04 00 00 00` (NFFI) arba `14 00 00 00` (FFI), toliau laikas ir `<?xml`. Jei baitų nėra, o jungtis užverta, šiam kompiuteriui sutarties
+nėra. TAK nieko neatkeliauja, kol neveikia `ffi-bridge` (ar `nffi-bridge`) ir `ffi` (ar `nffi`), o serverio šaltinio sluoksnyje nėra takelių.
+
+### SitaWare takelis piešiamas kaip `?` arba kaip paprastas rėmelis
+
+SitaWare 6.21 nepiešia skaitmeninio APP-6(D) simbolio (pėsčiojo): NVG srautas rodo `?`, o FFI paprastą vieneto rėmelį. Naudokite raidinį simbolį,
+`FFI_LAYER_SYMBOL_STANDARD=APP-6(B)` (6.21 numatytasis), o `SITAWARE_TAK_INDIVIDUAL_SCHEME` palikite tuščią. `?`, likęs po pataisymo, yra senas NVG objektas,
+kurį SitaWare dar laiko: sluoksnį išjunkite ir vėl įjunkite. 6.22 profilis (`SITAWARE_VERSION=6.22`) yra prielaida, kol neišmatuotas su tikra 6.22.
+
+### Takelis atsiranda du kartus (TAK arba SitaWare)
+
+- TAK naudotojas ir NFFI/FFI sraute, ir NVG sraute: nustatykite `SITAWARE_TAK_USERS_NVG` (tuščia reikšmė slepia juos nuo NVG, kai sukonfigūruotas NFFI ar FFI
+  srautas).
+- SitaWare takelis, grįžtantis į SitaWare: `nffi-bridge` ar `ffi-bridge` perskaityti takeliai į NVG srautą neeksportuojami.
+- TAK naudotojas, grįžtantis į TAK iš SitaWare serverio, kurio šaltinio sluoksnyje yra `EFDI-TAK` sluoksnis: dekoderiai atmeta takelius, pažymėtus šio mazgo
+  sistema (`EFDI-<vardų erdvė>`) arba turinčius šio mazgo paskelbtą id; kito mazgo naudotojai paliekami. Geriau rinkitės šaltinio sluoksnį, kuriame tik tikri pajėgų takeliai.
+
 ### Dubliuoti proceso egzemplioriai
 
 Sukelia dukart paleistas `start.sh` be sustabdymo:

@@ -264,7 +264,7 @@ _TOPIC_COT = {
     # LAND — full affiliation matrix for SitaWare / NFFI
     "land/**/civ/vehicle/**":    ("a-f-G-E-V-C", LAND_STALE_S),
     "land/**/neutral/station/**":("a-n-G-E-S",   LAND_STALE_S),   # ground sensor equipment, as sitaware_layer's SNGPES
-    "land/**/friendly/unit/**":  ("a-f-G-U-C",   LAND_STALE_S),
+    "land/**/friendly/unit/**":  (lambda track: ground_unit.friendly_unit_cot_type(track.get("unit_type")), LAND_STALE_S),   # NFFI/FFI: by the symbol
     "land/**/hostile/unit/**":   (lambda track: "a-h-G-U-C" + ground_unit.cot_suffix(track.get("arm")), LAND_STALE_S),   # DeepState units: the arm of service when known, else the generic Combat unit
     "land/**/neutral/unit/**":   ("a-n-G-U-C",   LAND_STALE_S),
     "land/**/unknown/unit/**":   ("a-u-G-U-C",   LAND_STALE_S),
@@ -1393,6 +1393,10 @@ def _build_remarks(track: dict, cot_type: str) -> str:
                 _r("DEVICE", track.get("tak_device"), ident_l)
                 _r("APP VERSION", track.get("tak_version"), ident_l)
                 _r("OS", track.get("tak_os"), ident_l)
+            if track.get("_src") in ("nffi", "ffi"):       # a friendly-force track from a partner C2 (SitaWare) by NFFI or FFI
+                _r("FEED", {"nffi": "NFFI", "ffi": "FFI (APP-11 Ed D)"}[track["_src"]], ident_l)
+                origin = " / ".join(str(p) for p in (track.get("source_system"), track.get("source_subsystem")) if p)
+                _r("SOURCE", origin or None, ident_l)
             if lat is not None: ident_l.append("LAT: {:.5f}°".format(round(lat, 5)))
             if lon is not None: ident_l.append("LON: {:.5f}°".format(round(lon, 5)))
             if lat is not None and lon is not None:

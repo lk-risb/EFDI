@@ -24,7 +24,7 @@ def test_a_tak_client_is_one_ffi_message_behind_the_type_0x14_header():
     assert root.tag == "{urn:nato:mtf:app-11(d):1:ffi}FriendlyForceInformation"
     assert root.find("MessageIdentifier/Standard").text == "APP-11(D)" and root.find("MessageIdentifier/Originator").text == "LTU"
     track = root.find("TrackInformation")
-    assert track.find("TrackSource/System").text == "EFDI" and track.find("TrackSource/TransponderId").text == "ANDROID-7e82"
+    assert track.find("TrackSource/System").text == nffi.SYSTEM and track.find("TrackSource/TransponderId").text == "ANDROID-7e82"
     assert track.find("TrackPositionalData/Location/LatitudeDegrees").text == "54"
     assert track.find("TrackPositionalData/Location/LatitudeMinutes04DecimalPlaces").text == "45.600"          # 54.76 degrees
     assert track.find("TrackPositionalData/Location/LongitudeDegrees").text == "025"
@@ -44,7 +44,7 @@ def test_the_ffi_header_does_not_follow_the_nffi_framing_setting(monkeypatch):
 
 
 def test_what_is_no_tak_client_or_has_no_position_is_not_a_track():
-    assert ffi.track_message({k: v for k, v in CLIENT.items() if k != "tak_platform"}) is None
+    assert ffi.track_message({k: v for k, v in CLIENT.items() if not k.startswith("tak_")}) is None
     assert ffi.track_message(dict(CLIENT, lat_deg=0.0, lon_deg=0.0)) is None
     assert ffi.track_message({"uid": "x"}) is None
 

@@ -56,6 +56,7 @@ from layers.vendors.tak.tak_layer import (
 )
 from namespace_prefix import topic_root
 from protocols.vendors.random.gateway import open_session, subscribe
+from layers.vendors.tak.systematic import sitaware_profile
 from protocols.vendors.random import ground_unit
 from protocols.vendors.random.airframe import is_rotorcraft, military_role
 from protocols.vendors.random.fusion import MarkerMemory, TwinSuppressions
@@ -132,18 +133,19 @@ _NON_JSON_VIEWS = frozenset({"sapient", "proto", "raw"})
 # The NVG scheme tag of the APP-6D dismounted-individual symbols of TAK clients. SitaWare drew "app6d:" as a "?", so it is off until a
 # scheme it draws is found: set SITAWARE_TAK_INDIVIDUAL_SCHEME (e.g. app6d, 2525d) to send the 20-digit SIDC under that tag; empty
 # draws a TAK client as a unit frame with the Team/Crew echelon.
-_INDIVIDUAL_SCHEME = os.environ.get("SITAWARE_TAK_INDIVIDUAL_SCHEME", "").strip().lower()
+_INDIVIDUAL_SCHEME = sitaware_profile.setting("SITAWARE_TAK_INDIVIDUAL_SCHEME").lower()
 
 
 def _friendly_unit_sidc(track: dict) -> str:
     """NFFI units keep the unspecified frame. A TAK client is drawn as the APP-6D dismounted individual (a person icon) with the entity of
     its role (medic, RTO, sniper, forward observer) or type. Any other TAK marker is a unit frame with the Team/Crew echelon (A) and the
     function of its type when ground_unit knows one."""
-    if _INDIVIDUAL_SCHEME and track.get("_ingress") == "tak_server" and (track.get("tak_platform") or track.get("tak_device")):
+    if _INDIVIDUAL_SCHEME and track.get("_ingress") == "tak_server" and ground_unit.is_tak_client(track):
         # a TAK client (it reports its device) is one person: the APP-6D dismounted individual, numeric SIDC
         return ground_unit.tak_individual_sidc(track.get("cot_type"), track.get("tak_role"))
     if track.get("_ingress") == "tak_server":
-        return "SFGP{}*{}***".format(ground_unit.tak_function(track.get("cot_type"), track.get("tak_role")) or "U-----",
+        fallback = "UCI---" if ground_unit.is_tak_client(track) else "U-----"       # a user is infantry (as in the NFFI feed), a marker is a plain unit
+        return "SFGP{}*{}***".format(ground_unit.tak_function(track.get("cot_type"), track.get("tak_role")) or fallback,
                                      ground_unit.ECHELON_TEAM)
     return "SFGPU-----*****"
 
@@ -1211,15 +1213,15 @@ _twins = TwinSuppressions()   # loose copies of ICAO-keyed aircraft that track f
 # SitaWare that draws it, 6.22 or later perhaps. SITAWARE_TAK_USERS_NVG=true|false chooses whether this feed draws the TAK users; unset,
 # it draws them unless the NFFI or FFI feed is configured (NFFI_LAYER_* or FFI_LAYER_CONNECT / FFI_LAYER_PORT), so a user is not drawn twice.
 _NFFI_ON = any(os.environ.get(key, "").strip() for key in ("NFFI_LAYER_CONNECT", "NFFI_LAYER_PORT", "FFI_LAYER_CONNECT", "FFI_LAYER_PORT"))
-_TAK_USERS_NVG = os.environ.get("SITAWARE_TAK_USERS_NVG", "").strip().lower() in ("1", "true", "yes", "on") \
-    if os.environ.get("SITAWARE_TAK_USERS_NVG", "").strip() else not _NFFI_ON
+_TAK_USERS_NVG = (sitaware_profile.setting("SITAWARE_TAK_USERS_NVG").lower() in ("1", "true", "yes", "on")
+                  if sitaware_profile.setting("SITAWARE_TAK_USERS_NVG") else not _NFFI_ON)
 
 
 def _left_out_of_nvg(track: dict) -> bool:
-    """A TAK client (a track that carries its TAK device or platform, the same test as nffi_layer.track_message) when the NVG
+    """A TAK client (ground_unit.is_tak_client, the same test as the NFFI and FFI layers) when the NVG
     feed is not to draw the TAK users."""
     return (not _TAK_USERS_NVG and track.get("_ingress") == "tak_server"
-            and bool(track.get("tak_platform") or track.get("tak_device")))
+            and ground_unit.is_tak_client(track))
 
 
 def make_handler(
@@ -1245,6 +1247,8 @@ def make_handler(
         # subscription. The matching ingress bridge preserves the raw export.
         if track.get("_ingress") == "sitaware_nvg":
             return
+        if track.get("_src") in ("nffi", "ffi"):
+            return                                  # SitaWare's own force tracks, read back by nffi/ffi-bridge: not exported to it again
         if _is_unfused_sensor_track(track, str(sample.key_expr)):
             return
         if track.get("_delete"):

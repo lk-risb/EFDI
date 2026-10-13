@@ -124,6 +124,50 @@ curl -ksS -u "$SITAWARE_HQ_NVG_USER:$SITAWARE_HQ_NVG_PASS" \
 Feed access logs contain only the outcome, track count, and client address and
 are rate-limited to one line per minute for successful and unauthorized pulls.
 
+### TAK users do not appear in SitaWare force tracking (the IP1 Client shows Connected with 0 objects)
+
+`Connected` only means the TCP connection is up. Check in this order:
+
+```bash
+tail -5 $POD_STATE_DIR/logs/ffi_layer.log        # or nffi_layer.log: "connected to <host>:<port>" must be recent
+```
+
+- **Which feed runs.** `ffi_layer` (FFI, the default) or `nffi_layer`, one against a client, not both. Both are skipped when neither
+  `FFI_LAYER_CONNECT` nor `NFFI_LAYER_CONNECT` is set.
+- **Format and version.** SitaWare 6.21 reads the 16-byte header and NFFI 1.3; an older attempt with no header, or with NFFI 1.4 on 6.21,
+  left the client at 0 objects. `SITAWARE_VERSION` (and `NFFI_LAYER_VERSION`, `NFFI_LAYER_FRAMING`) must match the SitaWare in use.
+- **Who is sent.** Only TAK clients that report a device, platform, team or role (a point a user placed does not), with a position that is not
+  exactly 0,0, and that TAK Server forwards to the EFDI service account (its groups decide). TAK clients send a position only every few minutes;
+  `tak_bridge` repeats the last one every `TAK_INGEST_REPUBLISH_S` seconds (30) until its stale time, so wait a minute after a restart.
+- **The count.** The client's **Object Count** rises with the first user. The **Data** column shows N/A until the first message arrives.
+
+### The SitaWare server accepts the connection and closes it with no data
+
+The IP1 Classic Server writes its source layer only to a host that has a **contract**. In SitaWare's NFFI and FFI Manager open the server's
+**No contracts** link, **Create New**, and give the host name of the machine the bridge or your test runs on (the address SitaWare sees for it, the VPN
+address on a NetBird mesh). The IP1 Client form takes no contract. To see what a server sends:
+
+```bash
+timeout 20 bash -c 'exec 3<>/dev/tcp/<sitaware-host>/<server-port>; head -c 64 <&3 | xxd'
+```
+
+A working server starts with `04 00 00 00` (NFFI) or `14 00 00 00` (FFI), then the time, then `<?xml`. No bytes and a closed socket mean no contract
+for this host. Nothing arrives in TAK until `ffi-bridge` (or `nffi-bridge`) and `ffi` (or `nffi`) run and the server's source layer holds tracks.
+
+### A SitaWare track is drawn as `?` or as a plain frame
+
+SitaWare 6.21 does not draw the numeric APP-6(D) symbol (the dismounted individual): the NVG feed shows a `?` and FFI a plain unit frame. Use the letter
+symbol, `FFI_LAYER_SYMBOL_STANDARD=APP-6(B)` (the 6.21 default), and `SITAWARE_TAK_INDIVIDUAL_SCHEME` blank. A `?` that stays after a fix is an old NVG
+object that SitaWare still holds: switch the layer off and on. The 6.22 profile (`SITAWARE_VERSION=6.22`) is an assumption until measured on a real 6.22.
+
+### A track appears twice (in TAK or in SitaWare)
+
+- A TAK user that is both in the NFFI/FFI feed and in the NVG feed: set `SITAWARE_TAK_USERS_NVG` (blank hides them from NVG when an NFFI or FFI feed is
+  configured).
+- A SitaWare track coming back into SitaWare: tracks read by `nffi-bridge` or `ffi-bridge` are not exported to the NVG feed.
+- A TAK user returning into TAK from a SitaWare server whose source layer holds the `EFDI-TAK` layer: the decoders drop tracks marked with this pod's
+  system (`EFDI-<namespace>`) or carrying an id this pod published; another pod's users are kept. Prefer a source layer that holds only real force tracks.
+
 ### Duplicate process instances
 
 Caused by running `start.sh` twice without stopping:

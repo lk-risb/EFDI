@@ -115,13 +115,13 @@ SERVICES=(
     mqtt-raw aartos-raw aartos-wifi-raw
     mediamtx
     # Protocols
-    nffi sapient stanag4586 stanag4609 stanag5516
+    nffi ffi sapient stanag4586 stanag4609 stanag5516
     cap mqtt sparkplug sensor-health mission-route aartos
     generic_json geojson camera_sites socbx palantir tacvox tytan usareur skylord kyber fpv ita_efdi
     # Output layers
     tak_layer sitaware_layer nffi_layer ffi_layer tak_alert_layer intcore_layer
     # C2 inputs
-    tak-bridge nffi-bridge intcore-bridge
+    tak-bridge nffi-bridge ffi-bridge intcore-bridge
     # Backbone
     backbone-bridge backbone_layer
     # Video prototype
@@ -197,11 +197,11 @@ declare -A SVC_CAT=(
     [meteolt]="Open-data bridges" [dangausakis]="Open-data bridges" [deepstate]="Open-data bridges" [mapa]="Open-data bridges" [dronestrikemap]="Open-data bridges" [geoconfirmed]="Open-data bridges"
     [asterix]="Sensor bridges"
     [mqtt]="Protocols" [sparkplug]="Protocols"
-    [nffi]="Protocols"
+    [nffi]="Protocols" [ffi]="Protocols"
     [sitaware]="Sensor bridges" [dronuradaras]="Sensor bridges" [mainline_terminal]="Sensor bridges"
     [mavlink-command]="Sensor bridges" [mavlink-video]="Sensor bridges"
     [sapient]="Protocols" [stanag4586]="Protocols" [stanag4609]="Protocols" [stanag5516]="Protocols"
-    [tak-bridge]="C2 inputs" [nffi-bridge]="C2 inputs"
+    [tak-bridge]="C2 inputs" [nffi-bridge]="C2 inputs" [ffi-bridge]="C2 inputs"
     [mqtt-raw]="Sensor bridges"
     [aartos-raw]="Sensor bridges" [aartos-wifi-raw]="Sensor bridges" [aartos]="Protocols"
     [sapient-raw]="Sensor bridges"
@@ -243,6 +243,7 @@ declare -A SVC_DESC=(
     [sparkplug]="Eclipse Sparkplug B (MQTT protobuf) → sensor records"
     [sitaware]="SitaWare HQ friendly force tracking (inbound REST)"
     [nffi]="Raw NFFI XML on Zenoh → normalized friendly-force tracks"
+    [ffi]="Raw APP-11(D) FFI XML on Zenoh → normalized friendly-force tracks"
     [dronuradaras]="dronuradaras.lt drone detection network"
     [deepstate]="DeepStateMap frontline (occupied/liberated fills, attack arrows, units) - context layer, updated daily"
     [mapa]="MAPA.UA live drone/missile/KAB tracks with trail lines (OSINT; compare with NEPTUN)"
@@ -270,7 +271,8 @@ declare -A SVC_DESC=(
     [tak_layer]="CoT → TAK Server (mTLS)"
     [tak_alert_layer]="Acoustic detections (dronuradaras) + air-raid alerts, status changes, data issues and drone reports (dangausakis) → TAK GeoChat (opt-in, off unless selected)"
     [tak-bridge]="TAK Server CoT ingress"
-    [nffi-bridge]="NFFI (STANAG 5527) TCP ingress → Zenoh raw"
+    [nffi-bridge]="NFFI (STANAG 5527) TCP ingress → Zenoh raw (SitaWare tracks into TAK)"
+    [ffi-bridge]="FFI (APP-11 Ed D) TCP ingress → Zenoh raw (SitaWare tracks into TAK)"
     [sitaware_layer]="EFDI tracks → SitaWare (NVG feed, SitaWare polls)"
     [nffi_layer]="TAK users → SitaWare force tracking (NFFI feed, connects out to SitaWare's IP1 Client)"
     [ffi_layer]="TAK users → SitaWare force tracking (FFI APP-11(D) feed, connects out to SitaWare's IP1 Client)"
@@ -311,7 +313,7 @@ svc_ready() {
     svc_disabled "$1" && return 1
     case "$1" in
         zenoh|meteolt|\
-        dronuradaras|dangausakis|deepstate|mapa|dronestrikemap|geoconfirmed|nffi|tak_layer|tak_alert_layer|track-fusion|\
+        dronuradaras|dangausakis|deepstate|mapa|dronestrikemap|geoconfirmed|nffi|ffi|tak_layer|tak_alert_layer|track-fusion|\
         cap|sensor-health|mission-route)
             return 0 ;;
         admin-control) [[ -n "${ZENOH_ADMIN_SECRET_KEY:-}" || -n "${EFDI_CONTROL_TOKEN:-}" ]] ;;
@@ -1033,6 +1035,10 @@ launch() {
             _start nffi protocols/vendors/nffi/nffi.py
             ;;
 
+        ffi)
+            _start ffi protocols/vendors/nffi/ffi.py
+            ;;
+
         sapient)
             if [[ "${SAPIENT_LISTEN_PORT:-}" ]]; then
                 local sapient_args=(--listen "$SAPIENT_LISTEN_PORT" --bind "${SAPIENT_BIND:-127.0.0.1}")
@@ -1232,6 +1238,18 @@ launch() {
             local nffi_args=(--host "$nffi_host" --port "$nffi_port")
             [[ "${NFFI_TLS:-}" == "1" ]] && nffi_args+=(--tls --cert "${NFFI_CERT:-}" --key "${NFFI_KEY:-}" --ca "${NFFI_CA:-}")
             _start nffi-bridge bridges/vendors/nffi/nffi_bridge.py "${nffi_args[@]}"
+            ;;
+
+        ffi-bridge)
+            # The FFI counterpart of nffi-bridge: a SitaWare IP1 Classic Server set to the FFI payload, with a contract for this host.
+            # Settings only (FFI_HOST, FFI_PORT), nothing to prompt for.
+            if [[ -z "${FFI_HOST:-}" || -z "${FFI_PORT:-}" ]]; then
+                printf "  ${YELLOW}[skip]${R}  ffi-bridge       set FFI_HOST and FFI_PORT\n"
+                return
+            fi
+            local ffi_args=(--host "$FFI_HOST" --port "$FFI_PORT")
+            [[ "${FFI_TLS:-}" == "1" ]] && ffi_args+=(--tls --cert "${FFI_CERT:-}" --key "${FFI_KEY:-}" --ca "${FFI_CA:-}")
+            _start ffi-bridge bridges/vendors/nffi/ffi_bridge.py "${ffi_args[@]}"
             ;;
 
         sitaware_layer)

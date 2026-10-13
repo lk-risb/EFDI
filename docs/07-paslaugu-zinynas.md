@@ -29,6 +29,8 @@
 | `tak_layer` | `layers/vendors/tak/tak_layer.py` | Prenumeratorius — visos temos | Įvykio valdomas |
 | `tak-bridge` | `bridges/vendors/tak/tak_bridge.py` | Prenumeratorius — visos temos | TAK matomo CoT srauto priėmimas |
 | `sitaware-hq-nvg` | `layers/vendors/tak/systematic/sitaware_layer.py` | Prenumeratorius — visos takelių temos | HQ periodiškai ima NVG būseną |
+| `ffi` | `protocols/vendors/nffi/ffi.py` | `…/raw/ffi/**` | Dekoduoja APP-11(D) FFI XML į tuos pačius draugiškų pajėgų takelius kaip `nffi`; atmeta atgal grįžtančius mūsų TAK takelius |
+| `nffi-bridge` / `ffi-bridge` | `bridges/vendors/nffi/{nffi,ffi}_bridge.py` | Skelbia `…/raw/nffi/{id}`, `…/raw/ffi/{id}` | Jungiasi prie SitaWare IP1 Classic Server (šiam kompiuteriui reikia sutarties), pjausto srautą su 16 baitų antrašte; SitaWare takeliai į TAK |
 | `nffi_layer` | `layers/vendors/tak/systematic/nffi_layer.py` | Prenumeratorius — `…/land/tak/**` | Įvykio valdomas; jungiasi prie SitaWare NFFI IP1 Client ir siunčia TAK naudotojus kaip pajėgų takelius (žr. [06](06-atak-ir-sitaware-saranka.md)) |
 | `ffi_layer` | `layers/vendors/tak/systematic/ffi_layer.py` | Prenumeratorius — `…/land/tak/**` | Įvykio valdomas; tas pats srautas kaip `nffi_layer`, bet APP-11(D) FFI pranešimais (bandoma; su vienu klientu naudokite vieną iš dviejų) |
 | `track-fusion` | `protocols/fusion.py` | CAT-48 + CAT-21 prenumeratorius; sujungia Drone Strike Map ir GeoConfirmed smūgių žymeklius, apie tą patį išpuolį (ta pati pusė, ta pati diena, per `FUSION_STRIKE_M` = 100 m; paliekama tikslesnė pozicija, kitos atšaukiamos žyme „ištrinta“) | Įvykio valdomas |

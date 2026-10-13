@@ -41,5 +41,32 @@ field is `[A-Z0-9-]{15}`, so it can hold only the letter code: the numeric APP-6
 fit. A user with no role is therefore sent as infantry (`SFGPUCI----A---`), the letter-code counterpart of the APP-6D infantry individual
 (`110101`); HQ, medic and signal roles keep their function ids. This pairing is a choice, not a table in either standard.
 
+The FFI route (`ffi_layer.py`, APP-11(D)) was tried on 6.21 with `SymbolStandard` APP-6(D) and the 20-digit individual: the message was accepted and the
+user drawn as a plain unit frame without an icon, so FFI does not reach the person icon on 6.21 either.
+
 The numeric individual stays available on the NVG route (`sitaware_layer.py`, `SITAWARE_TAK_INDIVIDUAL_SCHEME`), for a SitaWare that draws
 it; whether 6.22 does is not checked. `SITAWARE_TAK_USERS_NVG` switches that route on or off, see `06-atak-and-sitaware-setup.md`.
+
+## SitaWare tracks in TAK: the CoT type of a friendly ground unit read from its symbol (added 2026-10-13)
+
+A friendly-force track that comes in by NFFI or FFI (`nffi_bridge.py`, `ffi_bridge.py`, decoded by `nffi.py` / `ffi.py`) carries its symbol as
+`unit_type`. `ground_unit.friendly_unit_cot_type` turns it into the CoT type `tak_layer` draws, so a SitaWare infantry unit is `a-f-G-U-C-I` (the
+infantry icon in ATAK and WinTAK) and not the generic combat unit that those label "CBT".
+
+- **Letter code (APP-6(B) / 2525B), what SitaWare 6.21 writes:** the function id at index 5-10 of the 15 characters (`SFGP`**`UCI---`**) becomes the
+  CoT function letters (`U-C-I`), as `tak_layer` already does for DeepState units (CoT writes the function letters of the 2525B symbol).
+  Accepted functions: the ground combat arms in `ground_unit.FUNCTION` (infantry `UCI`, mechanised infantry `UCIZ`, airborne `UCIA`, armour
+  `UCA`, artillery `UCF`, reconnaissance `UCR`, engineer `UCE`, air defence `UCD`) and the three role functions TAK users use (`UH`, `USM` medical,
+  `UUS` signal). Any other function, or none, stays the plain unit `a-f-G-U-C`: a function that was not checked is not guessed, and ATAK and WinTAK
+  show an unknown deeper function as a bare letter in the frame (seen for the C-17 and the BE20).
+- **Numeric code (APP-6(D)):** the six-digit entity at index 11-16, by symbol set. Checked in the APP-6D tables of the milstd package
+  (`https://cdn.jsdelivr.net/npm/milstd@0.1.6/JSON/APP6-D 10 land-unit.json` and `... 27 dismounted-individual.json`, fetched 2026-10-13):
+  set 10 (land unit) `121100` Infantry, `121102` Infantry armoured/mechanized/tracked, `120500` Armour, `130300` Field Artillery, `121300`
+  Reconnaissance/Cavalry/Scout, `140700` Engineer, `130100` Air Defence, `161300` Medical, `111000` Signal; set 27 (dismounted individual)
+  `110101` Infantry, `110102` Medical, `110103` Reconnaissance, `110104` Signal. Every other entity or symbol set is the plain unit.
+  The pairing of an APP-6D entity with a 2525B function letter code is this repository's choice of the same arm, not a table in either standard.
+- **Only the ground unit is mapped.** Air, sea and space tracks keep their dimension-only CoT types (`a-f-A`, `a-f-S`, `a-f-P`): the CoT type
+  catalog has no finer unit entry for them, as the comment in `tak_layer._TOPIC_COT` says. Affiliation is friendly whatever the symbol's own
+  identity letter says, because an NFFI/FFI exchange is friendly-force-only.
+- **Not verified live:** that ATAK and WinTAK draw each of these CoT types with the icon of its arm (the infantry, armour and medical ones were seen for
+  DeepState units earlier; the others follow the same rule). Check on a real SitaWare track before relying on the rest.

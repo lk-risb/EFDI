@@ -190,40 +190,47 @@ To remove those legacy objects without mixing them with live tracks:
 
 Do not clear a shared operational layer to work around this limitation.
 
-### TAK users in SitaWare force tracking (two routes)
+### TAK users in SitaWare force tracking, and SitaWare tracks in TAK
 
-A TAK client's position can reach SitaWare Headquarters in two ways. Both are built, and a switch chooses between them, so a SitaWare
-upgrade does not need new code.
+**Which SitaWare.** `SITAWARE_VERSION` (6.21 or 6.22, in the WebUI under "SitaWare version") sets the *default* of the settings that differ
+between versions; a setting that is set on its own wins, so versions can be mixed and matched.
 
-| | NFFI feed (`nffi_layer`) | NVG feed (`sitaware_layer`) |
+| Setting | 6.21 (measured on a live system) | 6.22 (an assumption, not measured yet) |
 |---|---|---|
-| What SitaWare does | Draws the user in its force tracking, as a track from an NFFI IP1 Client | Draws the user as an NVG object in the layer that imports the feed |
-| Symbol | 15-character letter SIDC only: friendly ground unit, Team echelon, infantry (HQ, medical and signal roles have their own function) | The same letter code, or the 20-digit APP-6D dismounted individual when `SITAWARE_TAK_INDIVIDUAL_SCHEME` is set |
-| Works with | SitaWare 6.21 (confirmed on a live instance) | 6.21 draws the letter code; it drew the numeric APP-6D code as a `?`. Whether 6.22 or later draws it is not checked |
-| Switch | Set `NFFI_LAYER_CONNECT` (or `NFFI_LAYER_PORT`) | `SITAWARE_TAK_USERS_NVG=true` |
+| `NFFI_LAYER_VERSION` | 1.3 | 1.4 |
+| `FFI_LAYER_SYMBOL_STANDARD` | `APP-6(B)`, the 15-character letter symbol | `APP-6(D)`, the 20-digit symbol with the person icon |
+| `SITAWARE_TAK_INDIVIDUAL_SCHEME` (NVG) | blank: the letter symbol | `app6d` |
+| `SITAWARE_TAK_USERS_NVG` | blank: the NVG feed draws the TAK users unless an NFFI or FFI feed is configured | `true` |
 
-Both are settings in the WebUI (Integrations). Unset, `SITAWARE_TAK_USERS_NVG` follows the NFFI feed: the NVG feed draws the TAK users
-unless the NFFI feed is configured, so a user is never drawn twice. A TAK marker without a device (a point a user placed) is not a force
-track and stays in the NVG feed either way.
+**TAK to SitaWare.** A TAK user's position can reach SitaWare Headquarters by FFI, NFFI or the NVG feed. FFI (APP-11 Edition D, `ffi_layer`)
+is the newer format and the one to use: its `UnitSymbol` comes with a `SymbolStandard`, so on a SitaWare that draws it the numeric APP-6(D)
+person symbol goes through, and on 6.21 it still draws the same letter symbol as NFFI. NFFI (`nffi_layer`) is the older format, kept for a
+SitaWare that wants it. Both are separate layers that connect out to an **IP1 Client** created in SitaWare's NFFI and FFI Manager (Coalition
+Gateway): a name, a destination layer and one port (SitaWare listens on it; the form has no host and no payload setting, the client takes
+whichever format arrives). Set `FFI_LAYER_CONNECT=host:port` (or `NFFI_LAYER_CONNECT`) and start `ffi_layer` (or `nffi_layer`); run one of
+the two against a client, not both. The NVG feed (`sitaware_layer`) is the third route. `SITAWARE_TAK_USERS_NVG` says whether it draws the
+TAK users, and left blank it does not when an NFFI or FFI feed is configured, so a user is never drawn twice.
 
-**Setting up the NFFI feed on SitaWare 6.21.** In the NFFI and FFI Manager (Coalition Gateway) create an **IP1 Client**: a name, a
-destination layer and one port (SitaWare listens on it; the form has no host). Put that machine and port in `NFFI_LAYER_CONNECT`
-(`host:port`); the layer connects out and keeps reconnecting. The object count of the client rises once the first user is sent.
-The documents are NFFI 1.3 (`NFFI_LAYER_VERSION`), each behind the 16-byte header SitaWare 6.21 writes itself
-(`NFFI_LAYER_FRAMING=ip1`). How that was found out, and what is still unconfirmed, is in
+Every TAK client that reports a device, platform, team or role is sent, whatever its team; a point a user placed by hand reports none of them
+and is not a force track. How the position was made (GPS or typed in, as on a WinTAK VM) does not matter; a position of exactly 0,0 is dropped.
+On 6.21, a user is drawn as infantry, Team size (`SFGPUCI----A---`), in all three routes. The numeric person symbol was tried on 6.21:
+the NVG feed drew it as a `?`, and FFI accepted it but drew a plain frame, so on 6.21 keep `APP-6(B)`. How the formats were found out is in
 [`references/nffi/NFFI.md`](references/nffi/NFFI.md).
 
-**FFI instead of NFFI (`ffi_layer`, being tried).** SitaWare's manager also has the FFI payload (APP-11 Edition D), the newer format; its
-`UnitSymbol` comes with a `SymbolStandard`, so it may carry the numeric APP-6(D) dismounted individual that NFFI cannot. `ffi_layer` is a
-separate layer from `nffi_layer`, so the NFFI route that works on 6.21 stays as it is: set `FFI_LAYER_CONNECT` (the same IP1 Client
-address) and `FFI_LAYER_SYMBOL_STANDARD` (`APP-6(B)`, the letter symbol, or `APP-6(D)`, the 20-digit individual), start `ffi_layer` and stop
-`nffi_layer`. Run one of the two against a client, not both. The IP1 Client form has no payload setting, so whether it accepts FFI is what the
-trial shows; the message structure is copied from what a SitaWare 6.21 server writes as FFI ([`references/nffi/NFFI.md`](references/nffi/NFFI.md)).
-
-**When SitaWare is upgraded (6.22 or later).** Try the NVG route first: set `SITAWARE_TAK_USERS_NVG=true` and
-`SITAWARE_TAK_INDIVIDUAL_SCHEME` to the scheme tag the new version draws (for example `app6d`), remove `NFFI_LAYER_CONNECT`, and check that
-a TAK user appears as the person symbol. If the new version wants NFFI 1.4, set `NFFI_LAYER_VERSION=1.4` and keep the NFFI route.
-Nothing else in the layers changes.
+**SitaWare to TAK (the way back).** `ffi-bridge` (and `nffi-bridge` for the older format) reads SitaWare's own tracks and puts them into the
+fabric, from where `tak_layer` shows them in TAK like any other source. In SitaWare create an **IP1 Classic Server** (NFFI and FFI
+Manager, Servers): the **source layer** to send, a port (say 8095) and the **Payload Message**, FFI preferably. Open its **No contracts** link and
+create a **contract** whose host name is the address of the machine the bridge runs on: the server answers only a host with a contract.
+Set `FFI_HOST` and `FFI_PORT` (or `NFFI_HOST` and `NFFI_PORT`) to the SitaWare machine and that port, and start `ffi-bridge`. Choose a
+source layer of real force tracks: the TAK users that this pod sent to SitaWare are dropped when they come back, so they are not shown twice
+in TAK, but another layer is the cleaner source. They are told by this pod's own mark, not by the product name: the source system is
+`EFDI-` and the pod's namespace (for example `EFDI-LTU-CISB-ZENOH-GATEWAY`) with subsystem `TAK`, or the track's transponder id is a TAK id this
+pod published. A partner pod's users, whether another EFDI pod or any other system, carry other marks and are kept. In SitaWare's server form, set the **System** and
+**Sub System** to something that is not our mark, for example `SITAWARE` and `SW`: SitaWare stamps them on the tracks it converts, and the ATAK info
+panel of such a track then shows `FEED` (NFFI or FFI) and `SOURCE` (`SITAWARE / SW`), so a TAK user can see it came from SitaWare. What TAK can show is what the 6.21 server writes, the
+15-character letter symbol. `tak_layer` reads it: a SitaWare infantry, armour, artillery, reconnaissance, engineer, air-defence, medical or signal unit
+is drawn with the icon of that arm; any other unit is the plain friendly ground unit. The numeric APP-6(D) code is read the same way when a newer
+SitaWare writes it ([`references/symbology/SYMBOLOGY.md`](references/symbology/SYMBOLOGY.md)).
 
 ### Icon reference
 
