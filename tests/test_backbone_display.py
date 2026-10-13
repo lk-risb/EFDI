@@ -138,3 +138,21 @@ def test_consilium_drone_record_ends_up_as_a_friendly_unmanned_aircraft_in_both_
     topic = _topic(dimension, slot)
     assert _tak(topic, record) == ["a-f-A-M-F-Q"]
     assert _sidc(topic, record) == ["SFAPMFQ---*****"]
+
+
+def test_aircraft_type_picks_rotary_wing_and_for_military_the_role_in_both_c2s():
+    # (aircraft_type, wing, role): wing H for a helicopter, role letter only where the type is a known military role
+    cases = (("H60", "H", "U"), ("H-60", "H", "U"), ("Mi-8", "H", "U"), ("MI24", "H", "A"), ("H47", "H", "C"), ("EC35", "H", ""),
+             ("C295", "F", "C"), ("C-130", "F", "C"), ("F16", "F", "F"), ("K35R", "F", "K"), ("B52", "F", "B"), ("P8", "F", "P"),
+             ("E3CF", "F", "R"), ("PC12", "F", "U"), ("A21N", "F", ""), ("", "F", ""))
+    for affiliation, cot, sidc in (("friendly", "a-f-A-M-%s%s", "SFAPM%s%s---*****"), ("hostile", "a-h-A-M-%s%s", "SHAPM%s%s---*****"),
+                                   ("neutral", "a-n-A-M-%s%s", "SNAPM%s%s---*****")):
+        topic = _topic("air", affiliation, "aircraft")
+        for kind, wing, role in cases:
+            track = {"uid": "X", "aircraft_type": kind}
+            assert _tak(topic, track) == [(cot % (wing, "-" + role if role else ""))], (affiliation, kind)
+            assert _sidc(topic, track) == [(sidc % (wing, role or "-"))], (affiliation, kind)
+    civil = _topic("air", "civ", "aircraft")
+    assert _tak(civil, {"aircraft_type": "H60"}) == ["a-n-A-C-H"] and _sidc(civil, {"aircraft_type": "H60"}) == ["SNAPCH----*****"]
+    assert _tak(civil, {"aircraft_type": "C295"}) == [tak_layer._CIV_AIR_TYPE]            # civil traffic has no role
+    assert _sidc(civil, {"aircraft_type": "C295"}) == ["SNAPCF----*****"]

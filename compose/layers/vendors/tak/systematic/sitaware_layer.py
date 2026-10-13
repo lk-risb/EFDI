@@ -56,6 +56,7 @@ from layers.vendors.tak.tak_layer import (
 )
 from namespace_prefix import topic_root
 from protocols.vendors.random.gateway import open_session, subscribe
+from protocols.vendors.random.airframe import is_rotorcraft, military_role
 from protocols.vendors.random.fusion import MarkerMemory, TwinSuppressions
 
 TOPIC_ROOT = topic_root()
@@ -78,16 +79,26 @@ ZENOH_RETRY_S = 5
 # the actual data (SAPIENT classification, IFF, an explicit source
 # affiliation field) via the dedicated topic entries, not from nationality.
 # ** matches zero-or-more Zenoh path segments.
+def _wing(sidc: str, military: bool = False):
+    """The SIDC of an aircraft, rotary wing (H) instead of fixed wing (F) when its aircraft_type is a helicopter and, for a
+    military aircraft, its role (C cargo, F fighter, K tanker ...) when the type has one."""
+    def resolve(track: dict) -> str:
+        kind = track.get("aircraft_type")
+        wing = "H" if is_rotorcraft(kind) else "F"
+        return sidc[:5] + wing + (military_role(kind) if military and military_role(kind) else sidc[6]) + sidc[7:]
+    return resolve
+
+
 def _civil_air_sidc(track: dict) -> str:
     if _is_adsb_surface_vehicle(track):
         return "SNGPEV----*****"
-    return "SNAPCF----*****"
+    return _wing("SNAPCF----*****")(track)
 
 
 def _military_air_sidc(track: dict) -> str:
     if _is_adsb_surface_vehicle(track):
         return "SNGPEV----*****"
-    return "SNAPMF----*****"
+    return _wing("SNAPMF----*****", True)(track)
 
 
 def _civil_sea_sidc(track: dict) -> str:
@@ -144,9 +155,9 @@ def _ground_unit_sidc(affiliation: str):
 _TOPIC_SIDC = {
     "air/**/civ/aircraft/**":        _civil_air_sidc,
     "air/**/mil/aircraft/**":        _military_air_sidc,
-    "air/**/friendly/aircraft/**":   "SFAPMF----*****",
+    "air/**/friendly/aircraft/**":   _wing("SFAPMF----*****", True),
     "air/**/friendly/uav/**":        "SFAPMFQ---*****",
-    "air/**/hostile/aircraft/**":    "SHAPMF----*****",
+    "air/**/hostile/aircraft/**":    _wing("SHAPMF----*****", True),
     # Mirrors friendly/uav. Without it a hostile UAV reached TAK but was dropped
     # from the NVG feed entirely, so the two C2 systems disagreed on whether the
     # track existed at all.
@@ -154,7 +165,7 @@ _TOPIC_SIDC = {
     "air/**/hostile/missile/**":     "SHAPWM----*****",   # NEPTUN missiles
     "air/**/hostile/bomb/**":        "SHAPWB----*****",   # NEPTUN guided (glide) bombs
     "air/**/trail/**":               "SHAP------*****",   # threat paths: only the line is drawn, see track_to_nvg_item
-    "air/**/neutral/aircraft/**":    "SNAPMF----*****",
+    "air/**/neutral/aircraft/**":    _wing("SNAPMF----*****", True),
     "air/**/unknown/**":             _unknown_air_sidc,
     # Equipment/Vehicle/Civilian — NOT "UCV", which is Unit/Combat/Aviation and
     # renders every civilian car as a rotary-wing aviation unit. Matches the

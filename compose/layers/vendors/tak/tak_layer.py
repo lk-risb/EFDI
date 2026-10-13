@@ -51,6 +51,7 @@ import zenoh.ext
 from namespace_prefix import topic_root
 from protocols.vendors.random.gateway import open_session, subscribe
 from protocols.vendors.random.tak_transport import TcpSender, RECONNECT_S
+from protocols.vendors.random.airframe import is_rotorcraft, military_role
 from protocols.vendors.random.fusion import MarkerMemory, TwinSuppressions
 
 # (Re)connect catch-up + mid-session gap-healing for this layer's subscriptions.
@@ -161,6 +162,16 @@ _radar_status: dict[str, dict] = {}   # "sac-sic" → latest CAT-34 status dict
 _CIV_AIR_TYPE = "a-n-A-C-F"
 _MIL_AIR_TYPE = "a-n-A-M-F"
 
+def _wing(cot: str, military: bool = False):
+    """The CoT type of an aircraft, rotary wing (-H) instead of fixed wing (-F) when its aircraft_type is a helicopter and,
+    for a military aircraft, its role (-C cargo, -F fighter, -K tanker ...) when the type has one."""
+    def resolve(track: dict) -> str:
+        kind = track.get("aircraft_type")
+        out = cot[:-1] + "H" if is_rotorcraft(kind) else cot
+        return out + "-" + military_role(kind) if military and military_role(kind) else out
+    return resolve
+
+
 def _friendly_air_type(track: dict) -> str:
     return "a-f-A-M-F-Q" if _unknown_air_type(track) == "a-u-A-M-F-Q" else "a-f-A"
 
@@ -250,8 +261,8 @@ _TOPIC_COT = {
     # AIR — affiliation slot drives CoT type. Covers fused tracks
     # (air/trackfusion/fused/**) + SAPIENT.
     # Raw CAT-48 / CAT-20 are dropped by _RAW_SENSOR_SOURCES check in make_handler.
-    "air/**/civ/aircraft/**":    (_CIV_AIR_TYPE,  AIR_STALE_S),
-    "air/**/mil/aircraft/**":    (_MIL_AIR_TYPE,  AIR_STALE_S),
+    "air/**/civ/aircraft/**":    (_wing(_CIV_AIR_TYPE),  AIR_STALE_S),
+    "air/**/mil/aircraft/**":    (_wing(_MIL_AIR_TYPE, True),  AIR_STALE_S),
     "air/**/unknown/**":         (_unknown_air_type, AIR_STALE_S),
     # LAND — full affiliation matrix for SitaWare / NFFI
     "land/**/civ/vehicle/**":    ("a-f-G-E-V-C", LAND_STALE_S),
@@ -284,10 +295,10 @@ _TOPIC_COT = {
     "land/**/unknown/incident/**":  ("a-u-G-I-E",  LAND_STALE_S),
     "land/**/neutral/alert/**":  ("a-n-G-I-R",    LAND_STALE_S),
     # AIR — full affiliation matrix
-    "air/**/friendly/aircraft/**": ("a-f-A-M-F",   AIR_STALE_S),
+    "air/**/friendly/aircraft/**": (_wing("a-f-A-M-F", True),   AIR_STALE_S),
     "air/**/friendly/uav/**":      ("a-f-A-M-F-Q", AIR_STALE_S),
-    "air/**/hostile/aircraft/**":  ("a-h-A-M-F",   AIR_STALE_S),
-    "air/**/neutral/aircraft/**":  ("a-n-A-M-F",   AIR_STALE_S),
+    "air/**/hostile/aircraft/**":  (_wing("a-h-A-M-F", True),   AIR_STALE_S),
+    "air/**/neutral/aircraft/**":  (_wing("a-n-A-M-F", True),   AIR_STALE_S),
     "air/**/hostile/uav/**":       ("a-h-A-M-F-Q", AIR_STALE_S),
     "air/**/hostile/missile/**":   ("a-h-A-W-M",   AIR_STALE_S),   # NEPTUN missiles
     "air/**/hostile/bomb/**":      ("a-h-A-W-B",   AIR_STALE_S),   # NEPTUN guided (glide) bombs
