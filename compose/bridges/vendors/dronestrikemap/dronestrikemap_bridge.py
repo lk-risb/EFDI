@@ -18,7 +18,7 @@ Published (JSON tracks):
                                                           Ukrainian strike
   <ORG>/land/dronestrikemap/strike/hostile/incident/...   a place hit in Ukraine: a Russian strike
       drawn by tak_layer / sitaware_layer as the 2525B incident "Explosion" (a-f-G-I-E / SFGPIE---- blue,
-      a-h-G-I-E / SHGPIE---- red). The colour says who struck, as Ukraine is the friendly side here; the site
+      a-h-G-I-E / OHVPE----- red). The colour says who struck, as Ukraine is the friendly side here; the site
       records where something landed, so the striker is inferred from the place. Confidence is in the name;
       the remarks carry the summary, weapons, outlets and the credit.
   <ORG>/land/dronestrikemap/airzone/neutral/zone/...      a Russian region that is more than "at war": red with an

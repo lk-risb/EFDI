@@ -29,7 +29,7 @@ documentation. Specifically UNVERIFIED against a real endpoint:
   matching how tak_bridge.py's `_extract_events` handles CoT's `<event>`
   stream) — real NFFI could be one document per TCP connection, length-
   prefixed, or something else entirely.
-- The default port: there isn't one. TAK_INGEST_PORT's default of 8087 in
+- The default port: there isn't one. TAK_INGEST_PORT's former default of 8087 in
   tak_bridge.py came from TAK Server's own documented CoreConfig default;
   no equivalent default exists here, so NFFI_HOST/NFFI_PORT are required,
   not defaulted, and the bridge refuses to start without them.

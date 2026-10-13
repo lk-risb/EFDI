@@ -116,8 +116,8 @@ def test_an_event_kind_is_cut_to_its_first_clause():
 
 def test_both_c2s_draw_every_side_as_the_2525b_explosion():
     out = gc.event_tracks(WORLD, gc.kind_names(ICONS), NOW, days=4)
-    expected = {"hostile": ("a-h-G-I-E", "SHGPIE----*****"), "friendly": ("a-f-G-I-E", "SFGPIE----*****"),
-                "neutral": ("a-n-G-I-E", "SNGPIE----*****"), "unknown": ("a-u-G-I-E", "SUGPIE----*****")}
+    expected = {"hostile": ("a-h-G-I-E", "OHVPE-----*****"), "friendly": ("a-f-G-I-E", "OFVPE-----*****"),
+                "neutral": ("a-n-G-I-E", "ONVPE-----*****"), "unknown": ("a-u-G-I-E", "OUVPE-----*****")}
     for prefix, track in out.values():
         topic = semantic_topic(prefix, track)
         side = prefix.rsplit("/", 2)[-2]

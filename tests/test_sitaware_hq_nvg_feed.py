@@ -201,7 +201,7 @@ class NVGFeedCacheTests(unittest.TestCase):
         # friendly marker. No Unit/Equipment/Installation split exists for
         # Air/Sea/Space in the standard (unlike Ground's "U"), so these use
         # an unspecified (dash) function ID rather than a fabricated one.
-        self.assertEqual(_TOPIC_SIDC["land/**/friendly/unit/**"], "SFGPU-----*****")
+        self.assertEqual(_TOPIC_SIDC["land/**/friendly/unit/**"]({"uid": "n"}), "SFGPU-----*****")
         self.assertEqual(_TOPIC_SIDC["air/**/friendly/unit/**"]({}), "SFAP------*****")
         self.assertEqual(_TOPIC_SIDC["sea/**/friendly/unit/**"], "SFSP------*****")
         self.assertEqual(_TOPIC_SIDC["space/**/friendly/unit/**"], "SFPP------*****")
@@ -663,7 +663,7 @@ def test_hostile_ground_units_get_a_function_so_the_frame_is_not_empty():
     for name, expected in cases.items():
         assert _resolve_sidc(hostile, {"callsign": name}) == expected, name
     assert _resolve_sidc(_TOPIC_SIDC["land/**/unknown/unit/**"], {"callsign": "x"}) == "SUGPUC----*****"
-    assert _TOPIC_SIDC["land/**/friendly/unit/**"] == "SFGPU-----*****"         # NFFI units are left as they were
+    assert _TOPIC_SIDC["land/**/friendly/unit/**"]({"uid": "n"}) == "SFGPU-----*****"         # NFFI units are left as they were
 
 
 def test_a_zone_without_any_shape_style_still_has_no_anchor_marker():

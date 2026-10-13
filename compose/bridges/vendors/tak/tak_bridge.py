@@ -109,6 +109,11 @@ def _describe_detail(detail: ET.Element | None) -> dict[str, object]:
                 out["tak_device"] = attrs["device"]
             if attrs.get("platform"):
                 out["tak_platform"] = attrs["platform"]
+        elif name == "__group":
+            if attrs.get("role"):
+                out["tak_role"] = attrs["role"]
+            if attrs.get("name"):
+                out["tak_team"] = attrs["name"]
         elif name == "takv":
             for key in ("platform", "device", "version", "os"):
                 if attrs.get(key):
@@ -210,6 +215,10 @@ def _normalize_event(event: ET.Element) -> tuple[str, dict[str, object]] | None:
     # normalized object. Unmarked TAK objects remain valid regardless of UID.
     if _is_fabric_reflection(event):
         return None
+    # Only atoms (a-<affiliation>-...: a position or a marker) are tracks. Tasking and deletion frames (t-x-...), drawings and chat
+    # are not, and would show up as ghost aircraft; the raw topic keeps every frame.
+    if not cot_type.startswith("a-"):
+        return None
 
     point = _child(event, "point")
     if point is None and uid is None and not cot_type:
@@ -233,6 +242,8 @@ def _normalize_event(event: ET.Element) -> tuple[str, dict[str, object]] | None:
         cot_detail=detail_map if detail_map else None,
     )
 
+    if detail_map.get("tak_role"):
+        record["tak_role"] = detail_map["tak_role"]
     if cot_time:
         record["cot_time_epoch_s"] = _parse_time(cot_time)
     if cot_start:
@@ -437,17 +448,14 @@ def run(args) -> None:
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description="TAK CoT → Zenoh bridge")
     parser.add_argument("--host", action="append", default=[], help="TAK host / IP (repeatable; fallback path supported)")
-    # Deliberately its own env vars, not TAK_PORT/TAK_TLS (tak_layer's egress
-    # connection, mTLS on 8089/stdssl). TAK Server's CoreConfig provisions a
-    # separate plaintext input on 8087 (stdtcp), pre-assigned to the same
-    # routing group as authenticated TAK clients — reusing TAK_TLS here
-    # would silently re-enable TLS against that plaintext port the moment
-    # someone sets TAK_TLS=1 for the (unrelated) egress connection.
-    parser.add_argument("--port", type=int, default=int(os.environ.get("TAK_INGEST_PORT", "8087")))
-    parser.add_argument("--tls", action="store_true", default=os.environ.get("TAK_INGEST_TLS", "0") == "1")
-    parser.add_argument("--cert", default=os.environ.get("TAK_CERT"))
-    parser.add_argument("--key", default=os.environ.get("TAK_KEY"))
-    parser.add_argument("--ca", default=os.environ.get("TAK_CA"))
+    # The same connection as tak_layer unless TAK_INGEST_* says otherwise: mTLS on 8089 with the EFDI service account certificate,
+    # which TAK Server puts in the clients' group, so every client's CoT reaches this bridge. TAK's plaintext port 8087 is published
+    # on the TAK VM's loopback only and is not reachable from the gateway.
+    parser.add_argument("--port", type=int, default=int(os.environ.get("TAK_INGEST_PORT") or os.environ.get("TAK_PORT") or "8089"))
+    parser.add_argument("--tls", action="store_true", default=(os.environ.get("TAK_INGEST_TLS") or os.environ.get("TAK_TLS", "1")) == "1")
+    parser.add_argument("--cert", default=os.environ.get("TAK_INGEST_CERT") or os.environ.get("TAK_CERT"))
+    parser.add_argument("--key", default=os.environ.get("TAK_INGEST_KEY") or os.environ.get("TAK_KEY"))
+    parser.add_argument("--ca", default=os.environ.get("TAK_INGEST_CA") or os.environ.get("TAK_CA"))
     parser.add_argument(
         "--tls-server-name",
         default=os.environ.get("TAK_TLS_SERVER_NAME"),

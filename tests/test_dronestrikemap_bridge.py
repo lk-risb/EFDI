@@ -95,7 +95,7 @@ def test_both_c2s_draw_a_marker_as_the_2525b_explosion_with_the_side_of_its_coun
         hostile = "/hostile/" in topic
         assert hostile == (track["country"] == "UA"), topic       # a Russian strike lands in Ukraine
         assert _cot(topic) == (["a-h-G-I-E"] if hostile else ["a-f-G-I-E"]), topic
-        assert _sidc(topic) == (["SHGPIE----*****"] if hostile else ["SFGPIE----*****"]), topic
+        assert _sidc(topic) == (["OHVPE-----*****"] if hostile else ["OFVPE-----*****"]), topic
         xml = tak_layer.track_to_cot(track, _cot(topic)[0], stale_s=tak_layer._track_stale_s(track, 120))
         assert xml and 'type="a-{}-G-I-E"'.format("h" if hostile else "f") in xml and track["callsign"] in xml
 

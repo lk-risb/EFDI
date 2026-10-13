@@ -129,6 +129,16 @@ def _resolve_sidc(resolver, track: dict) -> str:
 # including a bare topic with no view suffix, is the flat JSON payload.
 _NON_JSON_VIEWS = frozenset({"sapient", "proto", "raw"})
 
+def _friendly_unit_sidc(track: dict) -> str:
+    """NFFI units keep the unspecified frame; a TAK user's position takes the function of its role (HQ, medic, RTO) or of its specific
+    CoT type (infantry...), when ground_unit knows one, else the same unspecified frame."""
+    if track.get("_ingress") == "tak_server":
+        function = ground_unit.tak_function(track.get("cot_type"), track.get("tak_role"))
+        if function:
+            return "SFGP{}*****".format(function)
+    return "SFGPU-----*****"
+
+
 def _ground_unit_sidc(affiliation: str):
     """SIDC resolver for a ground unit. Bare "unit" (SxGPU-----) is an empty frame in SitaWare, while
     TAK's a-x-G-U-C shows a combat symbol; this sends combat (UC) for hostile and unknown units
@@ -179,7 +189,7 @@ _TOPIC_SIDC = {
     "land/**/neutral/sensor/**":     "SNGPES----*****",  # Neutral Ground Sensor
     "land/**/neutral/radar/**":      "SNGPESR---*****",  # Neutral Ground Radar: a civil radar site
     "land/**/friendly/radar/**":     "SFGPESR---*****",  # Friendly Ground Radar: our own military radar sites (VERA-NG, Giraffe, AARTOS)
-    "land/**/friendly/unit/**":      "SFGPU-----*****",  # Friendly Ground Unit (NFFI)
+    "land/**/friendly/unit/**":      _friendly_unit_sidc,  # Friendly Ground Unit (NFFI); a TAK user by its role and type
     "land/**/hostile/unit/**":       _ground_unit_sidc("H"),   # DeepState units etc.: combat unit, function from its name
     "land/**/neutral/unit/**":       "SNGPU-----*****",
     "land/**/unknown/unit/**":       _ground_unit_sidc("U"),
@@ -197,10 +207,12 @@ _TOPIC_SIDC = {
     "land/**/unknown/person/**":     "SUGPUCI---*****",
     "land/**/unknown/sensor/**":     "SUGPES----*****",
     "land/**/neutral/zone/**":       "SNGPES----*****",
-    "land/**/hostile/incident/**":   "SHGPIE----*****",  # a strike (dronestrikemap_bridge.py): 2525B incident Explosion, side = the striker
-    "land/**/friendly/incident/**":  "SFGPIE----*****",
-    "land/**/neutral/incident/**":   "SNGPIE----*****",  # geoconfirmed_bridge.py: civilian and neutral events
-    "land/**/unknown/incident/**":   "SUGPIE----*****",
+    # a strike (dronestrikemap_bridge.py, geoconfirmed_bridge.py), side = the striker: Stability Operations (coding scheme O),
+    # Violent Activities, Explosion (2525C list; SitaWare drew the former S?GPIE---- as an unknown "?")
+    "land/**/hostile/incident/**":   "OHVPE-----*****",
+    "land/**/friendly/incident/**":  "OFVPE-----*****",
+    "land/**/neutral/incident/**":   "ONVPE-----*****",  # geoconfirmed_bridge.py: civilian and neutral events
+    "land/**/unknown/incident/**":   "OUVPE-----*****",
     "land/**/neutral/alert/**":      "SNGPES----*****",
     "sea/**/civ/vessel/**":          _civil_sea_sidc,
     "sea/**/mil/vessel/**":          "SNSPXF----*****",  # Neutral Sea Surface (military)

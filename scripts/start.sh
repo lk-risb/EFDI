@@ -447,14 +447,14 @@ svc_hint() {
         tak-bridge)
             if [[ "${TAK_HOST:-}" ]]; then
                 _n=0; [[ "${TAK_HOST_FALLBACK:-}" ]] && ((_n++)); [[ "${TAK_HOST_TAILSCALE:-}" ]] && ((_n++))
-                ((_n)) && echo "${TAK_HOST}:${TAK_PORT:-8087} (+${_n} fallback)" || echo "${TAK_HOST}:${TAK_PORT:-8087}"
+                ((_n)) && echo "${TAK_HOST}:${TAK_INGEST_PORT:-${TAK_PORT:-8089}} (+${_n} fallback)" || echo "${TAK_HOST}:${TAK_INGEST_PORT:-${TAK_PORT:-8089}}"
             else
                 echo "will prompt for address"
             fi ;;
         tak_layer|tak_alert_layer)
             if [[ "${TAK_HOST:-}" ]]; then
                 _n=0; [[ "${TAK_HOST_FALLBACK:-}" ]] && ((_n++)); [[ "${TAK_HOST_TAILSCALE:-}" ]] && ((_n++))
-                ((_n)) && echo "${TAK_HOST}:${TAK_PORT:-8087} (+${_n} fallback)" || echo "${TAK_HOST}:${TAK_PORT:-8087}"
+                ((_n)) && echo "${TAK_HOST}:${TAK_INGEST_PORT:-${TAK_PORT:-8089}} (+${_n} fallback)" || echo "${TAK_HOST}:${TAK_INGEST_PORT:-${TAK_PORT:-8089}}"
             else
                 echo "will prompt for address"
             fi ;;
@@ -1179,17 +1179,9 @@ launch() {
             [[ -n "$tak_ingest_host"  ]] && tak_ingest_args+=(--host "$tak_ingest_host")
             [[ -n "$tak_ingest_host2" ]] && tak_ingest_args+=(--host "$tak_ingest_host2")
             [[ -n "$tak_ingest_host3" ]] && tak_ingest_args+=(--host "$tak_ingest_host3")
-            # Deliberately its OWN port, separate from TAK_PORT/TAK_TLS (which
-            # tak_layer's egress connection uses for 8089/stdssl/mTLS). TAK
-            # Server's CoreConfig provisions a SEPARATE plaintext input on
-            # 8087 (stdtcp) specifically for this bridge, pre-assigned to the
-            # same routing group as authenticated TAK clients — the mTLS 8089
-            # connection this used before only ever saw its own CoT echoed
-            # back, never another client's, because it had no group
-            # membership on that input. 8087 is plaintext by design; that is
-            # safe here because it is only reachable over the already-
-            # encrypted NetBird overlay, never the open internet.
-            tak_ingest_args+=(--port "${TAK_INGEST_PORT:-8087}")
+            # The same mTLS connection as tak_layer (TAK_PORT, TAK_TLS and the service account certificate) unless
+            # TAK_INGEST_PORT / TAK_INGEST_TLS / TAK_INGEST_CERT say otherwise: TAK's plaintext 8087 is loopback only.
+            tak_ingest_args+=(--port "${TAK_INGEST_PORT:-${TAK_PORT:-8089}}")
             _start tak-bridge bridges/vendors/tak/tak_bridge.py "${tak_ingest_args[@]}"
             ;;
 
