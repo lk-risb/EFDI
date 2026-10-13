@@ -281,6 +281,8 @@ _TOPIC_COT = {
     # The track asks for its own stale time.
     "land/**/hostile/incident/**":  ("a-h-G-I-E",  LAND_STALE_S),
     "land/**/friendly/incident/**": ("a-f-G-I-E",  LAND_STALE_S),
+    "land/**/neutral/incident/**":  ("a-n-G-I-E",  LAND_STALE_S),     # geoconfirmed_bridge.py: civilian and neutral events
+    "land/**/unknown/incident/**":  ("a-u-G-I-E",  LAND_STALE_S),
     "land/**/neutral/alert/**":  ("a-n-G-I-R",    LAND_STALE_S),
     # AIR — full affiliation matrix
     "air/**/friendly/aircraft/**": ("a-f-A-M-F",   AIR_STALE_S),

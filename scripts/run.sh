@@ -263,6 +263,7 @@ start_bridges() {
     start deepstate bridges/vendors/deepstate/deepstate_bridge.py
     start mapa bridges/vendors/mapa/mapa_bridge.py
     start dronestrikemap bridges/vendors/dronestrikemap/dronestrikemap_bridge.py
+    start geoconfirmed bridges/vendors/geoconfirmed/geoconfirmed_bridge.py
 
     start meteolt bridges/vendors/meteolt/meteolt_forecast_bridge.py
 

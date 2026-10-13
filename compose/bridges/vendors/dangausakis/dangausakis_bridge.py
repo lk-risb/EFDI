@@ -624,7 +624,7 @@ def main():
     threats = Presence(ttl_s=1800)                      # drones and missiles in flight, community drone reports
     threat_subs = [subscribe(session, "{}/{}".format(TOPIC_ROOT, pattern), threats.on_sample)
                    for pattern in ("air/mapa/hostile/**", "air/neptun/hostile/**", "air/neptun/unknown/**",
-                                   "air/dangausakis/community/**")]
+                                   "air/dangausakis/community/**", "land/geoconfirmed/event/hostile/**")]
     next_threats = 0.0
     site_cache, neptun_cache, lt_cache, rso_cache, lv_cache = (
         alert_sources.SourceCache(SOURCE_MAX_AGE_S) for _ in range(5))

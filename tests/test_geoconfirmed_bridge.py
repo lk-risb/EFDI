@@ -1,0 +1,96 @@
+"""GeoConfirmed bridge: world GeoJSON + icon names -> recent placemarks as incident markers, and how the layers draw them.
+The fixtures are trimmed copies of the site's real /api/placemark/geojson and /api/placemark/icons documents."""
+
+import calendar
+import importlib.util
+import json
+import pathlib
+import re
+import sys
+
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+for sub in ("compose", "compose/control", "compose/generated", "compose/generated/protocols"):
+    sys.path.insert(0, str(ROOT / sub))
+
+from layers.vendors.tak import tak_layer  # noqa: E402
+from layers.vendors.tak.systematic import sitaware_layer  # noqa: E402
+from protocols.vendors.random.track_views import semantic_topic  # noqa: E402
+
+_spec = importlib.util.spec_from_file_location("gc_bridge", ROOT / "compose/bridges/vendors/geoconfirmed/geoconfirmed_bridge.py")
+gc = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(gc)
+
+FIXTURES = ROOT / "tests" / "fixtures" / "geoconfirmed"
+WORLD = json.loads((FIXTURES / "world.json").read_text())
+ICONS = json.loads((FIXTURES / "icons.json").read_text())
+NOW = calendar.timegm((2026, 10, 12, 12, 0, 0))          # 15:00 on 12 October in Kyiv
+
+
+def _match(pattern: str, topic: str) -> bool:
+    regex = pattern.replace("**", "\0").replace("*", "[^/]+").replace("\0", ".*")
+    return re.match("^" + regex + "$", topic + "/x") is not None
+
+
+def _cot(topic: str):
+    rel = topic[len(tak_layer.TOPIC_ROOT) + 1:]
+    return [v for p, (v, _s) in tak_layer._TOPIC_COT.items() if _match(p, rel)]
+
+
+def _sidc(topic: str):
+    rel = topic[len(tak_layer.TOPIC_ROOT) + 1:]
+    return [v for p, v in sitaware_layer._TOPIC_SIDC.items() if _match(p, rel)]
+
+
+def test_only_placemarks_inside_the_window_become_markers_newest_first():
+    kinds = gc.kind_names(ICONS)
+    three = gc.event_tracks(WORLD, kinds, NOW, days=3)
+    four = gc.event_tracks(WORLD, kinds, NOW, days=4)
+    assert len(three) == 4 and len(four) == 6                      # the 2023 placemark is in neither
+    assert {t["event_date"] for _, t in three.values()} == {"2026-10-11"}
+    assert list(gc.event_tracks(WORLD, kinds, NOW, days=4, limit=2).values())[0][1]["event_date"] == "2026-10-11"
+
+
+def test_a_placemark_takes_the_side_of_its_faction_and_names_its_kind_and_date():
+    kinds = gc.kind_names(ICONS)
+    out = gc.event_tracks(WORLD, kinds, NOW, days=4)
+    sides = {track["faction"]: prefix.rsplit("/", 2)[-2] for prefix, track in out.values()}
+    assert sides == {"Russia (UKR)": "hostile", "Ukraine (UKR)": "friendly", "Neutral (UKR)": "neutral"}
+    prefix, track = next(v for v in out.values() if v[1]["faction"] == "Russia (UKR)")
+    assert re.fullmatch(r"GC-[0-9A-F]{12}", track["uid"]) and track["callsign"].endswith(("11 Oct", "09 Oct"))
+    assert "GeoConfirmed" in track["remarks"] and track["position_uncertainty_m"] == 100
+
+
+def test_civilians_are_neutral_and_unknown_factions_unknown():
+    assert gc._side("Russia Civilian (UKR)") == "neutral" and gc._side("Ukraine Civilian (UKR)") == "neutral"
+    assert gc._side("NATO (UKR)") == "friendly" and gc._side("Belarus (UKR)") == "hostile"
+    assert gc._side("Special (UKR)") == "unknown" and gc._side("Something new") == "unknown"
+
+
+def test_an_event_kind_is_cut_to_its_first_clause():
+    assert gc._short("Shelling by artillery or aerial bombings - Location of the shelling, c") == "Shelling by artillery or aerial bombings"
+    assert gc._short("WIA/KIA Soldier/Militant") == "WIA/KIA Soldier/Militant"
+    assert gc._short("Recently Destroyed/Damaged[Visible in footage] Logistical Trucks (Soft Skin)") == "Recently Destroyed/Damaged Logistical Trucks"
+    assert gc._short("Killed or wounded civilian. Potential Warcrime. In the colour of who is the victim") == "Killed or wounded civilian"
+    assert len(gc._short("x" * 100)) <= 44
+
+
+def test_both_c2s_draw_every_side_as_the_2525b_explosion():
+    out = gc.event_tracks(WORLD, gc.kind_names(ICONS), NOW, days=4)
+    expected = {"hostile": ("a-h-G-I-E", "SHGPIE----*****"), "friendly": ("a-f-G-I-E", "SFGPIE----*****"),
+                "neutral": ("a-n-G-I-E", "SNGPIE----*****"), "unknown": ("a-u-G-I-E", "SUGPIE----*****")}
+    for prefix, track in out.values():
+        topic = semantic_topic(prefix, track)
+        side = prefix.rsplit("/", 2)[-2]
+        assert _cot(topic) == [expected[side][0]], topic
+        assert _sidc(topic) == [expected[side][1]], topic
+        xml = tak_layer.track_to_cot(track, _cot(topic)[0], stale_s=tak_layer._track_stale_s(track, 120))
+        assert xml and track["callsign"] in xml
+
+
+def test_a_placemark_without_a_position_or_in_another_conflict_is_skipped():
+    world = {"factionMeta": WORLD["factionMeta"] + [{"id": 99, "name": "Iran (Iran)", "conflictCode": "Iran"}],
+             "geojson": {"features": [
+                 {"geometry": {"type": "Point", "coordinates": []}, "properties": {"id": "a", "factionId": 7, "date": "2026-10-12T00:00:00", "icon": "x/1.png"}},
+                 {"geometry": {"type": "Point", "coordinates": [30.0, 50.0]}, "properties": {"id": "b", "factionId": 99, "date": "2026-10-12T00:00:00", "icon": "x/1.png"}},
+                 {"geometry": {"type": "Point", "coordinates": [30.0, 50.0]}, "properties": {"id": "c", "factionId": 7, "icon": "x/1.png"}}]}}
+    assert gc.event_tracks(world, {}, NOW) == {}

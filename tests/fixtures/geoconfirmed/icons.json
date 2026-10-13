@@ -1,0 +1,371 @@
+[
+{
+"conflictCode": "UKR",
+"factions": [
+{
+"factionId": 9,
+"name": "Ukraine",
+"icons": [
+{
+"icon": "/api/icons/0051CA/False/template/100.png",
+"name": "Civilian or Soldier or Militant (Depending on the colour)"
+},
+{
+"icon": "/api/icons/0051CA/False/template/12.png",
+"name": "Recently destroyed/Damaged brigde[Visible in footage] - if colour is used of a fighting faction = pontoon or similar bridge"
+},
+{
+"icon": "/api/icons/0051CA/False/template/111.png",
+"name": "Short Range (<50km) OWAD (One Way Attack Drone), mostly rotary wing, Flying OR Attacking a target without knowing the outcome: if something is damaged --> icon of the damaged equipment."
+},
+{
+"icon": "/api/icons/0051CA/False/template/70.png",
+"name": "Controlled Demolition OR explosion of unknown origin OR fire of unknown origin where no other icon fits"
+},
+{
+"icon": "/api/icons/0051CA/False/template/10.png",
+"name": "Shelling by artillery or aerial bombings - Location of the shelling, colour of who is shelling; Brown = UXO"
+},
+{
+"icon": "/api/icons/0051CA/False/template/02.png",
+"name": "Recently Destroyed/Damaged[Visible in footage] Artillery"
+}
+]
+},
+{
+"factionId": 10,
+"name": "Ukraine Civilian",
+"icons": [
+{
+"icon": "/api/icons/3184FF/False/template/100.png",
+"name": "Civilian or Soldier or Militant (Depending on the colour)"
+},
+{
+"icon": "/api/icons/3184FF/False/template/12.png",
+"name": "Recently destroyed/Damaged brigde[Visible in footage] - if colour is used of a fighting faction = pontoon or similar bridge"
+},
+{
+"icon": "/api/icons/3184FF/False/template/111.png",
+"name": "Short Range (<50km) OWAD (One Way Attack Drone), mostly rotary wing, Flying OR Attacking a target without knowing the outcome: if something is damaged --> icon of the damaged equipment."
+},
+{
+"icon": "/api/icons/3184FF/False/template/70.png",
+"name": "Controlled Demolition OR explosion of unknown origin OR fire of unknown origin where no other icon fits"
+},
+{
+"icon": "/api/icons/3184FF/False/template/10.png",
+"name": "Shelling by artillery or aerial bombings - Location of the shelling, colour of who is shelling; Brown = UXO"
+},
+{
+"icon": "/api/icons/3184FF/False/template/02.png",
+"name": "Recently Destroyed/Damaged[Visible in footage] Artillery"
+}
+]
+},
+{
+"factionId": 7,
+"name": "Russia",
+"icons": [
+{
+"icon": "/api/icons/E00000/False/template/100.png",
+"name": "Civilian or Soldier or Militant (Depending on the colour)"
+},
+{
+"icon": "/api/icons/E00000/False/template/12.png",
+"name": "Recently destroyed/Damaged brigde[Visible in footage] - if colour is used of a fighting faction = pontoon or similar bridge"
+},
+{
+"icon": "/api/icons/E00000/False/template/111.png",
+"name": "Short Range (<50km) OWAD (One Way Attack Drone), mostly rotary wing, Flying OR Attacking a target without knowing the outcome: if something is damaged --> icon of the damaged equipment."
+},
+{
+"icon": "/api/icons/E00000/False/template/70.png",
+"name": "Controlled Demolition OR explosion of unknown origin OR fire of unknown origin where no other icon fits"
+},
+{
+"icon": "/api/icons/E00000/False/template/10.png",
+"name": "Shelling by artillery or aerial bombings - Location of the shelling, colour of who is shelling; Brown = UXO"
+},
+{
+"icon": "/api/icons/E00000/False/template/02.png",
+"name": "Recently Destroyed/Damaged[Visible in footage] Artillery"
+}
+]
+},
+{
+"factionId": 8,
+"name": "Russia Civilian",
+"icons": [
+{
+"icon": "/api/icons/FF6666/False/template/100.png",
+"name": "Civilian or Soldier or Militant (Depending on the colour)"
+},
+{
+"icon": "/api/icons/FF6666/False/template/12.png",
+"name": "Recently destroyed/Damaged brigde[Visible in footage] - if colour is used of a fighting faction = pontoon or similar bridge"
+},
+{
+"icon": "/api/icons/FF6666/False/template/111.png",
+"name": "Short Range (<50km) OWAD (One Way Attack Drone), mostly rotary wing, Flying OR Attacking a target without knowing the outcome: if something is damaged --> icon of the damaged equipment."
+},
+{
+"icon": "/api/icons/FF6666/False/template/70.png",
+"name": "Controlled Demolition OR explosion of unknown origin OR fire of unknown origin where no other icon fits"
+},
+{
+"icon": "/api/icons/FF6666/False/template/10.png",
+"name": "Shelling by artillery or aerial bombings - Location of the shelling, colour of who is shelling; Brown = UXO"
+},
+{
+"icon": "/api/icons/FF6666/False/template/02.png",
+"name": "Recently Destroyed/Damaged[Visible in footage] Artillery"
+}
+]
+},
+{
+"factionId": 127,
+"name": "North Korea",
+"icons": [
+{
+"icon": "/api/icons/6A1D00/False/template/100.png",
+"name": "Civilian or Soldier or Militant (Depending on the colour)"
+},
+{
+"icon": "/api/icons/6A1D00/False/template/12.png",
+"name": "Recently destroyed/Damaged brigde[Visible in footage] - if colour is used of a fighting faction = pontoon or similar bridge"
+},
+{
+"icon": "/api/icons/6A1D00/False/template/111.png",
+"name": "Short Range (<50km) OWAD (One Way Attack Drone), mostly rotary wing, Flying OR Attacking a target without knowing the outcome: if something is damaged --> icon of the damaged equipment."
+},
+{
+"icon": "/api/icons/6A1D00/False/template/70.png",
+"name": "Controlled Demolition OR explosion of unknown origin OR fire of unknown origin where no other icon fits"
+},
+{
+"icon": "/api/icons/6A1D00/False/template/10.png",
+"name": "Shelling by artillery or aerial bombings - Location of the shelling, colour of who is shelling; Brown = UXO"
+},
+{
+"icon": "/api/icons/6A1D00/False/template/02.png",
+"name": "Recently Destroyed/Damaged[Visible in footage] Artillery"
+}
+]
+},
+{
+"factionId": 1,
+"name": "Belarus",
+"icons": [
+{
+"icon": "/api/icons/400080/False/template/100.png",
+"name": "Civilian or Soldier or Militant (Depending on the colour)"
+},
+{
+"icon": "/api/icons/400080/False/template/12.png",
+"name": "Recently destroyed/Damaged brigde[Visible in footage] - if colour is used of a fighting faction = pontoon or similar bridge"
+},
+{
+"icon": "/api/icons/400080/False/template/111.png",
+"name": "Short Range (<50km) OWAD (One Way Attack Drone), mostly rotary wing, Flying OR Attacking a target without knowing the outcome: if something is damaged --> icon of the damaged equipment."
+},
+{
+"icon": "/api/icons/400080/False/template/70.png",
+"name": "Controlled Demolition OR explosion of unknown origin OR fire of unknown origin where no other icon fits"
+},
+{
+"icon": "/api/icons/400080/False/template/10.png",
+"name": "Shelling by artillery or aerial bombings - Location of the shelling, colour of who is shelling; Brown = UXO"
+},
+{
+"icon": "/api/icons/400080/False/template/02.png",
+"name": "Recently Destroyed/Damaged[Visible in footage] Artillery"
+}
+]
+},
+{
+"factionId": 2,
+"name": "Belarus Civilian",
+"icons": [
+{
+"icon": "/api/icons/BD7CFF/False/template/100.png",
+"name": "Civilian or Soldier or Militant (Depending on the colour)"
+},
+{
+"icon": "/api/icons/BD7CFF/False/template/12.png",
+"name": "Recently destroyed/Damaged brigde[Visible in footage] - if colour is used of a fighting faction = pontoon or similar bridge"
+},
+{
+"icon": "/api/icons/BD7CFF/False/template/111.png",
+"name": "Short Range (<50km) OWAD (One Way Attack Drone), mostly rotary wing, Flying OR Attacking a target without knowing the outcome: if something is damaged --> icon of the damaged equipment."
+},
+{
+"icon": "/api/icons/BD7CFF/False/template/70.png",
+"name": "Controlled Demolition OR explosion of unknown origin OR fire of unknown origin where no other icon fits"
+},
+{
+"icon": "/api/icons/BD7CFF/False/template/10.png",
+"name": "Shelling by artillery or aerial bombings - Location of the shelling, colour of who is shelling; Brown = UXO"
+},
+{
+"icon": "/api/icons/BD7CFF/False/template/02.png",
+"name": "Recently Destroyed/Damaged[Visible in footage] Artillery"
+}
+]
+},
+{
+"factionId": 3,
+"name": "Special",
+"icons": [
+{
+"icon": "/api/icons/DDDD00/True/template/100.png",
+"name": "Civilian or Soldier or Militant (Depending on the colour)"
+},
+{
+"icon": "/api/icons/DDDD00/True/template/12.png",
+"name": "Recently destroyed/Damaged brigde[Visible in footage] - if colour is used of a fighting faction = pontoon or similar bridge"
+},
+{
+"icon": "/api/icons/DDDD00/True/template/111.png",
+"name": "Short Range (<50km) OWAD (One Way Attack Drone), mostly rotary wing, Flying OR Attacking a target without knowing the outcome: if something is damaged --> icon of the damaged equipment."
+},
+{
+"icon": "/api/icons/DDDD00/True/template/70.png",
+"name": "Controlled Demolition OR explosion of unknown origin OR fire of unknown origin where no other icon fits"
+},
+{
+"icon": "/api/icons/DDDD00/True/template/10.png",
+"name": "Shelling by artillery or aerial bombings - Location of the shelling, colour of who is shelling; Brown = UXO"
+},
+{
+"icon": "/api/icons/DDDD00/True/template/02.png",
+"name": "Recently Destroyed/Damaged[Visible in footage] Artillery"
+}
+]
+},
+{
+"factionId": 4,
+"name": "NATO",
+"icons": [
+{
+"icon": "/api/icons/0A5900/False/template/100.png",
+"name": "Civilian or Soldier or Militant (Depending on the colour)"
+},
+{
+"icon": "/api/icons/0A5900/False/template/12.png",
+"name": "Recently destroyed/Damaged brigde[Visible in footage] - if colour is used of a fighting faction = pontoon or similar bridge"
+},
+{
+"icon": "/api/icons/0A5900/False/template/111.png",
+"name": "Short Range (<50km) OWAD (One Way Attack Drone), mostly rotary wing, Flying OR Attacking a target without knowing the outcome: if something is damaged --> icon of the damaged equipment."
+},
+{
+"icon": "/api/icons/0A5900/False/template/70.png",
+"name": "Controlled Demolition OR explosion of unknown origin OR fire of unknown origin where no other icon fits"
+},
+{
+"icon": "/api/icons/0A5900/False/template/10.png",
+"name": "Shelling by artillery or aerial bombings - Location of the shelling, colour of who is shelling; Brown = UXO"
+},
+{
+"icon": "/api/icons/0A5900/False/template/02.png",
+"name": "Recently Destroyed/Damaged[Visible in footage] Artillery"
+}
+]
+},
+{
+"factionId": 5,
+"name": "NATO Civilian",
+"icons": [
+{
+"icon": "/api/icons/65BB59/False/template/100.png",
+"name": "Civilian or Soldier or Militant (Depending on the colour)"
+},
+{
+"icon": "/api/icons/65BB59/False/template/12.png",
+"name": "Recently destroyed/Damaged brigde[Visible in footage] - if colour is used of a fighting faction = pontoon or similar bridge"
+},
+{
+"icon": "/api/icons/65BB59/False/template/111.png",
+"name": "Short Range (<50km) OWAD (One Way Attack Drone), mostly rotary wing, Flying OR Attacking a target without knowing the outcome: if something is damaged --> icon of the damaged equipment."
+},
+{
+"icon": "/api/icons/65BB59/False/template/70.png",
+"name": "Controlled Demolition OR explosion of unknown origin OR fire of unknown origin where no other icon fits"
+},
+{
+"icon": "/api/icons/65BB59/False/template/10.png",
+"name": "Shelling by artillery or aerial bombings - Location of the shelling, colour of who is shelling; Brown = UXO"
+},
+{
+"icon": "/api/icons/65BB59/False/template/02.png",
+"name": "Recently Destroyed/Damaged[Visible in footage] Artillery"
+}
+]
+},
+{
+"factionId": 6,
+"name": "Neutral",
+"icons": [
+{
+"icon": "/api/icons/AC7339/False/template/100.png",
+"name": "Civilian or Soldier or Militant (Depending on the colour)"
+},
+{
+"icon": "/api/icons/AC7339/False/template/12.png",
+"name": "Recently destroyed/Damaged brigde[Visible in footage] - if colour is used of a fighting faction = pontoon or similar bridge"
+},
+{
+"icon": "/api/icons/AC7339/False/template/111.png",
+"name": "Short Range (<50km) OWAD (One Way Attack Drone), mostly rotary wing, Flying OR Attacking a target without knowing the outcome: if something is damaged --> icon of the damaged equipment."
+},
+{
+"icon": "/api/icons/AC7339/False/template/70.png",
+"name": "Controlled Demolition OR explosion of unknown origin OR fire of unknown origin where no other icon fits"
+},
+{
+"icon": "/api/icons/AC7339/False/template/10.png",
+"name": "Shelling by artillery or aerial bombings - Location of the shelling, colour of who is shelling; Brown = UXO"
+},
+{
+"icon": "/api/icons/AC7339/False/template/02.png",
+"name": "Recently Destroyed/Damaged[Visible in footage] Artillery"
+}
+]
+},
+{
+"factionId": 11,
+"name": "Unknown",
+"icons": [
+{
+"icon": "/api/icons/666666/False/template/100.png",
+"name": "Civilian or Soldier or Militant (Depending on the colour)"
+},
+{
+"icon": "/api/icons/666666/False/template/12.png",
+"name": "Recently destroyed/Damaged brigde[Visible in footage] - if colour is used of a fighting faction = pontoon or similar bridge"
+},
+{
+"icon": "/api/icons/666666/False/template/111.png",
+"name": "Short Range (<50km) OWAD (One Way Attack Drone), mostly rotary wing, Flying OR Attacking a target without knowing the outcome: if something is damaged --> icon of the damaged equipment."
+},
+{
+"icon": "/api/icons/666666/False/template/70.png",
+"name": "Controlled Demolition OR explosion of unknown origin OR fire of unknown origin where no other icon fits"
+},
+{
+"icon": "/api/icons/666666/False/template/10.png",
+"name": "Shelling by artillery or aerial bombings - Location of the shelling, colour of who is shelling; Brown = UXO"
+},
+{
+"icon": "/api/icons/666666/False/template/02.png",
+"name": "Recently Destroyed/Damaged[Visible in footage] Artillery"
+}
+]
+}
+]
+},
+{
+"conflictCode": "World",
+"factions": []
+}
+]

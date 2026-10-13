@@ -184,6 +184,8 @@ _TOPIC_SIDC = {
     "land/**/neutral/zone/**":       "SNGPES----*****",
     "land/**/hostile/incident/**":   "SHGPIE----*****",  # a strike (dronestrikemap_bridge.py): 2525B incident Explosion, side = the striker
     "land/**/friendly/incident/**":  "SFGPIE----*****",
+    "land/**/neutral/incident/**":   "SNGPIE----*****",  # geoconfirmed_bridge.py: civilian and neutral events
+    "land/**/unknown/incident/**":   "SUGPIE----*****",
     "land/**/neutral/alert/**":      "SNGPES----*****",
     "sea/**/civ/vessel/**":          _civil_sea_sidc,
     "sea/**/mil/vessel/**":          "SNSPXF----*****",  # Neutral Sea Surface (military)

@@ -1,0 +1,234 @@
+{
+"factionMeta": [
+{
+"id": 9,
+"color": "#0051CA",
+"name": "Ukraine (UKR)",
+"conflict": "Ukraine",
+"conflictName": "Ukraine",
+"conflictUrl": "ukraine",
+"conflictCode": "UKR"
+},
+{
+"id": 10,
+"color": "#3184FF",
+"name": "Ukraine Civilian (UKR)",
+"conflict": "Ukraine",
+"conflictName": "Ukraine",
+"conflictUrl": "ukraine",
+"conflictCode": "UKR"
+},
+{
+"id": 7,
+"color": "#E00000",
+"name": "Russia (UKR)",
+"conflict": "Ukraine",
+"conflictName": "Ukraine",
+"conflictUrl": "ukraine",
+"conflictCode": "UKR"
+},
+{
+"id": 8,
+"color": "#FF6666",
+"name": "Russia Civilian (UKR)",
+"conflict": "Ukraine",
+"conflictName": "Ukraine",
+"conflictUrl": "ukraine",
+"conflictCode": "UKR"
+},
+{
+"id": 127,
+"color": "#6A1D00",
+"name": "North Korea (UKR)",
+"conflict": "Ukraine",
+"conflictName": "Ukraine",
+"conflictUrl": "ukraine",
+"conflictCode": "UKR"
+},
+{
+"id": 1,
+"color": "#400080",
+"name": "Belarus (UKR)",
+"conflict": "Ukraine",
+"conflictName": "Ukraine",
+"conflictUrl": "ukraine",
+"conflictCode": "UKR"
+},
+{
+"id": 3,
+"color": "#DDDD00",
+"name": "Special (UKR)",
+"conflict": "Ukraine",
+"conflictName": "Ukraine",
+"conflictUrl": "ukraine",
+"conflictCode": "UKR"
+},
+{
+"id": 4,
+"color": "#0A5900",
+"name": "NATO (UKR)",
+"conflict": "Ukraine",
+"conflictName": "Ukraine",
+"conflictUrl": "ukraine",
+"conflictCode": "UKR"
+},
+{
+"id": 5,
+"color": "#65BB59",
+"name": "NATO Civilian (UKR)",
+"conflict": "Ukraine",
+"conflictName": "Ukraine",
+"conflictUrl": "ukraine",
+"conflictCode": "UKR"
+},
+{
+"id": 6,
+"color": "#AC7339",
+"name": "Neutral (UKR)",
+"conflict": "Ukraine",
+"conflictName": "Ukraine",
+"conflictUrl": "ukraine",
+"conflictCode": "UKR"
+},
+{
+"id": 11,
+"color": "#666666",
+"name": "Unknown (UKR)",
+"conflict": "Ukraine",
+"conflictName": "Ukraine",
+"conflictUrl": "ukraine",
+"conflictCode": "UKR"
+}
+],
+"geojson": {
+"type": "FeatureCollection",
+"features": [
+{
+"type": "Feature",
+"geometry": {
+"type": "Point",
+"coordinates": [
+37.196178,
+48.564331
+]
+},
+"properties": {
+"id": "04ccf108-691a-4b17-9ce6-8b9960acc353",
+"icon": "/api/icons/E00000/False/template/100.png",
+"factionId": 7,
+"color": "#E00000",
+"date": "2026-10-11T00:00:00",
+"dateSort": 20737
+}
+},
+{
+"type": "Feature",
+"geometry": {
+"type": "Point",
+"coordinates": [
+36.973029,
+49.951608
+]
+},
+"properties": {
+"id": "1c63bc7c-c5a4-4ed0-a6e3-5a38235ebf59",
+"icon": "/api/icons/E00000/False/template/70.png",
+"factionId": 7,
+"color": "#E00000",
+"date": "2026-10-09T00:00:00",
+"dateSort": 20735
+}
+},
+{
+"type": "Feature",
+"geometry": {
+"type": "Point",
+"coordinates": [
+37.13367,
+48.29247
+]
+},
+"properties": {
+"id": "26166cc0-15fc-447e-bcc1-44a5e023d1aa",
+"icon": "/api/icons/0051CA/False/template/10.png",
+"factionId": 9,
+"color": "#0051CA",
+"date": "2026-10-11T00:00:00",
+"dateSort": 20737
+}
+},
+{
+"type": "Feature",
+"geometry": {
+"type": "Point",
+"coordinates": [
+37.50617,
+50.05855
+]
+},
+"properties": {
+"id": "4a779bba-44d4-46ac-900e-2f87b7f86112",
+"icon": "/api/icons/0051CA/False/template/02.png",
+"factionId": 9,
+"color": "#0051CA",
+"date": "2026-10-09T00:00:00",
+"dateSort": 20735
+}
+},
+{
+"type": "Feature",
+"geometry": {
+"type": "Point",
+"coordinates": [
+30.512376,
+50.506876
+]
+},
+"properties": {
+"id": "9d782e6f-4dbb-42e7-9607-07afbe495147",
+"icon": "/api/icons/AC7339/False/template/70.png",
+"factionId": 6,
+"color": "#AC7339",
+"date": "2026-10-11T00:00:00",
+"dateSort": 20737
+}
+},
+{
+"type": "Feature",
+"geometry": {
+"type": "Point",
+"coordinates": [
+39.701575,
+47.210218
+]
+},
+"properties": {
+"id": "c8f1ffd8-5c84-4d21-9866-69facaceb021",
+"icon": "/api/icons/AC7339/False/template/12.png",
+"factionId": 6,
+"color": "#AC7339",
+"date": "2026-10-11T00:00:00",
+"dateSort": 20737
+}
+},
+{
+"type": "Feature",
+"geometry": {
+"type": "Point",
+"coordinates": [
+37.5742,
+48.154033
+]
+},
+"properties": {
+"id": "000b525e-70a5-4f36-8254-08daffbfc2f3",
+"icon": "/api/icons/E00000/False/template/111.png",
+"factionId": 7,
+"color": "#E00000",
+"date": "2023-01-27T16:28:00",
+"dateSort": 19384
+}
+}
+]
+}
+}

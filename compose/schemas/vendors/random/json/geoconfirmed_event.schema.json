@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://efdi.ltu/schemas/json/geoconfirmed_event.schema.json",
+  "title": "GeoConfirmed geolocated event",
+  "description": "Published BY bridges/vendors/geoconfirmed/geoconfirmed_bridge.py every GC_POLL_S for each placemark of the Ukraine conflict of the last GC_DAYS days. Data: GeoConfirmed (geoconfirmed.org), volunteer geolocation of conflict footage; every record credits it. The position is the geolocated place. A placemark that leaves the window is retracted with a one-shot {uid, type, _delete: true} tombstone.",
+  "x-efdi-topic": "{TOPIC_ROOT}/land/geoconfirmed/event/{hostile|friendly|neutral|unknown}/incident/event/{uid}/tracks/v1",
+  "x-efdi-producer": "bridges/vendors/geoconfirmed/geoconfirmed_bridge.py",
+  "x-efdi-consumer": "layers/vendors/tak/tak_layer.py, layers/vendors/tak/systematic/sitaware_layer.py",
+  "type": "object",
+  "required": ["_src", "_ts", "uid", "type", "callsign", "lat_deg", "lon_deg", "remarks"],
+  "properties": {
+    "_src": {"const": "geoconfirmed.org"},
+    "_ts": {"type": "number"},
+    "uid": {"type": "string", "description": "GC-<first 12 hex characters of the placemark id>."},
+    "type": {"const": "event"},
+    "callsign": {"type": "string", "description": "'<kind of event> <dd Mon>'."},
+    "lat_deg": {"type": "number"},
+    "lon_deg": {"type": "number"},
+    "target_type": {"const": "event"},
+    "position_uncertainty_m": {"type": "number"},
+    "stale_s": {"type": "number"},
+    "faction": {"type": "string", "description": "The placemark's faction, e.g. 'Russia (UKR)'; the topic's side follows it: Ukraine and NATO friendly, Russia, Belarus and North Korea hostile, civilian and neutral neutral, the rest unknown."},
+    "event_date": {"type": "string", "description": "YYYY-MM-DD."},
+    "remarks": {"type": "string", "description": "The full kind of event, the faction, the placemark id and the credit line."}
+  }
+}
