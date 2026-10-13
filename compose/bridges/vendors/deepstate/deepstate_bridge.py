@@ -61,6 +61,47 @@ def _key_and_english(name: str):
     return key, english
 
 
+OCCUPIED_TOPIC = "{}/land/deepstate/status/occupied".format(TOPIC_ROOT)
+OCCUPIED_EVERY_S = 600
+_OCCUPIED_KEYS = ("geoJSON.status.occupied", "geoJSON.territories.ordlo", "geoJSON.territories.crimea")
+
+
+def occupied_rings(data: dict) -> list:
+    """The outer rings ([lon, lat] points) of the Russian-held territory of a DeepState map document (its occupied areas, ORDLO
+    and Crimea). Not drawn: track fusion uses them to tell on which side of the front a strike landed."""
+    rings = []
+    for feature in (data.get("map") or {}).get("features") or []:
+        geometry = feature.get("geometry") or {}
+        key, _ = _key_and_english((feature.get("properties") or {}).get("name"))
+        if geometry.get("type") not in ("Polygon", "MultiPolygon") or key not in _OCCUPIED_KEYS:
+            continue
+        polygons = [geometry["coordinates"]] if geometry["type"] == "Polygon" else geometry["coordinates"]
+        rings += [[[round(p[0], 4), round(p[1], 4)] for p in polygon[0]] for polygon in polygons if polygon and polygon[0]]
+    return rings
+
+
+_ARMS = (("air-assault", "infantry"), ("airborne", "airborne"), ("paratrooper", "airborne"), ("marine", "infantry"),
+         ("reconnaissance", "recon"), ("intelligence", "recon"), ("tank", "armor"), ("armor", "armor"), ("engineer", "engineer"),
+         ("artillery", "artillery"), ("self-propelled", "artillery"), ("rocket", "artillery"), ("air-defen", "air_defence"),
+         ("motorized", "mech_infantry"), ("motorised", "mech_infantry"), ("rifle", "mech_infantry"))
+_ECHELONS = ("battalion", "regiment", "brigade", "division", "corps", "army")
+
+
+def unit_class(key: str) -> dict:
+    """{"echelon", "arm"} read from a DeepState key "geoJSON.units.<size>.<name>" ("geoJSON.units.brigade.127-motorized-rifle");
+    only what the key says."""
+    parts = str(key or "").split(".")
+    out = {}
+    if len(parts) >= 3 and parts[2] in _ECHELONS:
+        out["echelon"] = parts[2]
+    slug = (parts[3] if len(parts) > 3 else "").replace("_", "-").lower()
+    for word, arm in _ARMS:
+        if word in slug:
+            out["arm"] = arm
+            break
+    return out
+
+
 def _epoch(value) -> float | None:
     try:
         return float(value)
@@ -100,6 +141,7 @@ def map_tracks(data: dict, now: float, markers: bool = True) -> dict:
             "_src": "deepstatemap.live", "_ts": now, "uid": uid, "type": kind, "callsign": name,
             "lat_deg": lat, "lon_deg": lon, "target_type": "unit", "position_uncertainty_m": 5000, "stale_s": STALE_S,
             "remarks": "{} - {}".format(name, credit),
+            **(unit_class(key) if kind == "unit" else {}),
         })
     return out
 
@@ -137,6 +179,8 @@ def main():
         POLL_S, REPUBLISH_S, MAX_AGE_S, "on" if MARKERS_ENABLED else "off"), flush=True)
 
     cached: dict = {}          # uid -> (prefix, track), as last built
+    occupied: list = []
+    next_occupied = 0.0
     published: dict = {}       # what is on the fabric now
     next_poll = 0.0
     try:
@@ -150,13 +194,17 @@ def main():
                     if updated is not None and now - updated > MAX_AGE_S:
                         print("deepstate: map is {:.0f} h old, publishing nothing".format((now - updated) / 3600),
                               flush=True)
-                        cached = {}
+                        cached, occupied = {}, []
                     else:
                         cached = map_tracks(data, now, MARKERS_ENABLED)
+                        occupied = occupied_rings(data)
                         print("deepstate: {} markers".format(len(cached)), flush=True)
             for uid, (prefix, track) in cached.items():
                 track["_ts"] = now                       # the layers expire a track 2 minutes after this
                 _put(session, prefix, track)
+            if occupied and now >= next_occupied:
+                next_occupied = now + OCCUPIED_EVERY_S
+                session.put(OCCUPIED_TOPIC, json.dumps({"rings": occupied, "_ts": now, "_src": "deepstatemap.live"}).encode())
             for uid in set(published) - set(cached):
                 prefix, track = published[uid]
                 session.put(add_version(semantic_topic(prefix, track)),

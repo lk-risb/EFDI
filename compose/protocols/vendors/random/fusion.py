@@ -97,6 +97,11 @@ Strike merging (ground strike markers from Drone Strike Map, GeoConfirmed and an
   with a tombstone on their own topic, which the output layers handle like any delete. A marker with role "other"
   (a tank driving, a POW) is never merged. The bridges only fetch and publish; merging and filtering is done here.
 
+Strike side by place: a strike marker whose side was told only by where it landed (side_basis "place": Drone Strike Map, GeoConfirmed
+  on damaged infrastructure) that lies inside Russian-held territory (the occupied areas, ORDLO and Crimea of DeepState, announced on
+  <ORG>/land/deepstate/status/occupied) is a Ukrainian strike. A hostile one there is retracted and re-published as <uid>-UA on the
+  friendly topic. Front-line proximity of Russian units is not used: units stand within a few kilometres of the front on both sides.
+
 Cross-radar handoff (same-protocol, PSR-only targets):
   When multiple radars of the same type (e.g., two CAT-48 sites) cover overlapping
   areas, a PSR-only target crossing the boundary would otherwise create two separate
@@ -157,7 +162,8 @@ from protocols.vendors.random.proto.normalized_track_pb2 import NormalizedTrack
 from google.protobuf.message import DecodeError
 from namespace_prefix import topic_root
 from protocols.vendors.random.gateway import open_session, publish_collection, subscribe
-from protocols.vendors.random.track_views import strip_version
+from protocols.vendors.random import region_geometry
+from protocols.vendors.random.track_views import add_version, semantic_topic, strip_version
 
 TOPIC_ROOT = topic_root()
 
@@ -337,6 +343,10 @@ class TwinSuppressions:
         now = time.time() if now is None else now
         with self._lock:
             return self._until.get(str(track["uid"]), 0.0) > now
+
+
+OCCUPIED_TOPIC = "{}/land/deepstate/status/occupied".format(TOPIC_ROOT)
+OCCUPIED_TTL_S = 26 * 3600.0         # the DeepState bridge re-announces the occupied territory every 10 minutes
 
 
 # Strike markers (see "Strike merging" in the module docstring)
@@ -780,7 +790,10 @@ class TrackFuser:
         # Loose copies of an ICAO-keyed aircraft (see "Twin suppression" above) and when each was last announced
         self._twins = TwinIndex()
         self._twin_sent: dict[str, float] = {}
-        # Strike markers reported twice (see strike_merge.py)
+        # Russian-held territory (rings, announced by the DeepState bridge), to put a strike told only by its place on the right side
+        self._occupied: list = []
+        self._occupied_seen = 0.0
+        # Strike markers reported twice (see "Strike merging")
         self._strikes = StrikeIndex()
         # Periodic age-out: ensures _radar_by_icao is cleaned even when radar goes
         # silent (no on_radar() calls), so ADS-B fallback kicks in automatically.
@@ -960,6 +973,38 @@ class TrackFuser:
             if self._verbose:
                 print("NEPTUN match {} ~ radar {}".format(uid, radar_uid), flush=True)
 
+    def on_occupied(self, sample):
+        try:
+            rings = json.loads(bytes(sample.payload).decode())["rings"]
+        except (ValueError, UnicodeDecodeError, KeyError, TypeError):
+            return
+        if isinstance(rings, list):
+            with self._lock:
+                self._occupied, self._occupied_seen = [{"rings": [r]} for r in rings if isinstance(r, list)], time.time()
+
+    def _in_occupied(self, lat, lon, now: float) -> bool:
+        with self._lock:
+            regions = self._occupied if now - self._occupied_seen <= OCCUPIED_TTL_S else []
+        return any(region_geometry.contains(region, lon, lat) for region in regions)
+
+    def _reside(self, track: dict, topic: str, now: float) -> None:
+        """A strike marker told only by its place that lands in Russian-held territory is a Ukrainian strike: retract the hostile
+        marker and publish it on the friendly topic as <uid>-UA (a different uid, so the two cannot undo each other)."""
+        uid = str(track.get("uid") or "")
+        with self._lock:
+            if now - self._twin_sent.get("reside:" + uid, 0) < _SUPPRESS_REFRESH_S:
+                return
+            self._twin_sent["reside:" + uid] = now
+        parts = strip_version(topic).split("/")
+        prefix = "/".join(parts[:-2]).replace("/hostile/", "/friendly/", 1)
+        moved = dict(track, uid=uid + "-UA", _fused=True, _ts=now, side_basis="occupied",
+                     remarks=str(track.get("remarks") or "") + " Landed in Russian-held territory (DeepState): a Ukrainian strike.")
+        self._session.put(add_version(semantic_topic(prefix, moved)), json.dumps(moved).encode())
+        self._session.put(topic, json.dumps({"uid": uid, "type": track.get("type", "strike"), "_delete": True, "_ts": now,
+                                             "_src": "trackfusion"}).encode())
+        if self._verbose:
+            print("strike {} landed in occupied territory: friendly".format(uid), flush=True)
+
     def on_any_track(self, sample):
         """Every track on the fabric, whatever its source: announce the loose copies of aircraft that
         another feed already reports by their ICAO address, so the output layers draw one marker."""
@@ -975,6 +1020,15 @@ class TrackFuser:
         if not isinstance(track, dict):
             return
         now = time.time()
+        if (track.get("side_basis") == "place" and not track.get("_fused") and not track.get("_delete")
+                and "/hostile/" in topic and is_strike_topic(topic)):
+            try:
+                lat, lon = float(track["lat_deg"]), float(track["lon_deg"])
+            except (KeyError, TypeError, ValueError):
+                lat = lon = None
+            if lat is not None and self._in_occupied(lat, lon, now):
+                self._reside(track, topic, now)
+                return
         icao = str(track.get("icao24") or "").lower()
         if icao and any(part in topic for part in _MILITARY_AIR):      # military by another feed: civil copies are held back
             with self._lock:
@@ -1222,6 +1276,7 @@ def run(args):
     for topic in _ADSB_TOPICS:
         subs.append(subscribe(session, topic, fuser.on_adsb))
         print("  SUB adsb:  {}".format(topic), flush=True)
+    subs.append(subscribe(session, OCCUPIED_TOPIC, fuser.on_occupied))
     subs.append(subscribe(session, _NEPTUN_TOPIC, fuser.on_neptun))
     print("  SUB neptun: {}".format(_NEPTUN_TOPIC), flush=True)
     for domain in ("air", "land", "sea"):

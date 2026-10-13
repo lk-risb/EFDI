@@ -56,6 +56,7 @@ from layers.vendors.tak.tak_layer import (
 )
 from namespace_prefix import topic_root
 from protocols.vendors.random.gateway import open_session, subscribe
+from protocols.vendors.random import ground_unit
 from protocols.vendors.random.airframe import is_rotorcraft, military_role
 from protocols.vendors.random.fusion import MarkerMemory, TwinSuppressions
 
@@ -135,6 +136,9 @@ def _ground_unit_sidc(affiliation: str):
     it is, the specific MIL-STD-2525B function: infantry UCI, mechanized infantry UCIZ, armor UCA,
     field artillery UCF, reconnaissance UCR."""
     def resolve(track: dict) -> str:
+        size = ground_unit.ECHELON.get(str(track.get("echelon") or ""), "*")
+        if track.get("arm") in ground_unit.FUNCTION:        # the bridge knows the arm: no guessing from the name
+            return "S{}GP{}*{}***".format(affiliation, ground_unit.FUNCTION[track["arm"]], size)
         name = " ".join(str(track.get(key) or "") for key in ("callsign", "label", "name")).lower()
         if "motor rifle" in name or "mechanized" in name or "mechanised" in name:
             function = "UCIZ--"
@@ -148,7 +152,7 @@ def _ground_unit_sidc(affiliation: str):
             function = "UCI---"
         else:
             function = "UC----"
-        return "S{}GP{}*****".format(affiliation, function)
+        return "S{}GP{}*{}***".format(affiliation, function, size)
     return resolve
 
 

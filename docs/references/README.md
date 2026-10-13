@@ -23,6 +23,8 @@ text used, so a reviewer can check our work without re-deriving it.
 - [`aartos/AARTOS.md`](aartos/AARTOS.md) — source and trust assessment for
   `vendors/aartos/aartos_json.py`, including what has been verified against
   a real Aaronia RTSA-Suite PRO deployment and what hasn't.
+- [`symbology/SYMBOLOGY.md`](symbology/SYMBOLOGY.md) — where the SIDC and CoT symbol codes come from (APP-6 preferred over MIL-STD-2525),
+  which were verified against a live source and which were not.
 - [`sapient/SAPIENT.md`](sapient/SAPIENT.md) — source and trust assessment for
   `vendors/sapient/flex335.py` and the vendored `compose/protocols/vendors/sapient/sapient_msg`
   protobuf schema.

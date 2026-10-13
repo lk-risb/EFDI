@@ -182,6 +182,7 @@ def event_tracks(world: dict, kinds: dict, now: float, days: int = DAYS, limit: 
             "callsign": "{} {}".format(_short(full), datetime.strptime(stamp[:10], "%Y-%m-%d").strftime("%d %b")),
             "lat_deg": lat, "lon_deg": lon, "target_type": "event", "position_uncertainty_m": 100,
             "stale_s": STALE_S, "faction": faction, "event_date": stamp[:10], "role": role,
+            **({"side_basis": "place"} if by_place else {}),
             "remarks": "{} - {} - {} - geolocated placemark {}. {}".format(
                 full[:200], faction, note, props["id"], CREDIT),
         })

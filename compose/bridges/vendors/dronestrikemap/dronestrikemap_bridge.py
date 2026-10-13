@@ -152,7 +152,7 @@ def strike_tracks(day: dict, now: float, countries=COUNTRIES) -> dict:
                                                   " - occupied" if occupied else ""),
             "lat_deg": lat, "lon_deg": lon, "target_type": "strike", "position_uncertainty_m": 5000, "place": place,
             "stale_s": STALE_S, "country": country, "region": strike.get("region") or "",
-            "confidence": confidence, "weapons": weapons,
+            "confidence": confidence, "weapons": weapons, "side_basis": "place",
             "remarks": "{}{} - reported by {}. {} strike, inferred from where it landed; the position is the place, "
                        "not the impact point. {}".format(
                 summary or "strike reported", " ({})".format(", ".join(weapons)) if weapons else "",

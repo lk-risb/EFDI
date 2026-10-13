@@ -51,6 +51,7 @@ import zenoh.ext
 from namespace_prefix import topic_root
 from protocols.vendors.random.gateway import open_session, subscribe
 from protocols.vendors.random.tak_transport import TcpSender, RECONNECT_S
+from protocols.vendors.random import ground_unit
 from protocols.vendors.random.airframe import is_rotorcraft
 from protocols.vendors.random.fusion import MarkerMemory, TwinSuppressions
 
@@ -264,7 +265,7 @@ _TOPIC_COT = {
     "land/**/civ/vehicle/**":    ("a-f-G-E-V-C", LAND_STALE_S),
     "land/**/neutral/station/**":("a-n-G-E-S",   LAND_STALE_S),   # ground sensor equipment, as sitaware_layer's SNGPES
     "land/**/friendly/unit/**":  ("a-f-G-U-C",   LAND_STALE_S),
-    "land/**/hostile/unit/**":   ("a-h-G-U-C",   LAND_STALE_S),
+    "land/**/hostile/unit/**":   (lambda track: "a-h-G-U-C" + ground_unit.cot_suffix(track.get("arm")), LAND_STALE_S),   # DeepState units: the arm of service when known, else the generic Combat unit
     "land/**/neutral/unit/**":   ("a-n-G-U-C",   LAND_STALE_S),
     "land/**/unknown/unit/**":   ("a-u-G-U-C",   LAND_STALE_S),
     # NFFI's friendly/unit entity, routed off "land" by its unitSymbol SIDC's

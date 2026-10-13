@@ -62,3 +62,32 @@ def test_fusion_announces_a_military_aircraft_so_the_layers_hold_back_its_civil_
     fuser.on_any_track(sample(root + "/air/dangausakis/adsb/friendly/aircraft/tracks/v1", {"icao24": "ae07a7", "lat_deg": 46.0, "lon_deg": 22.0}))
     (call,) = [c for c in fuser._session.put.call_args_list if "suppress/civil" in c.args[0]]
     assert call.args[0] == fusion.civil_topic(root, "AE07A7") and json.loads(call.args[1])["icao24"] == "ae07a7"
+
+
+def test_a_hostile_strike_told_only_by_its_place_lands_friendly_in_occupied_territory():
+    import json
+    from unittest import mock
+    from protocols.vendors.random import fusion
+    fuser = fusion.TrackFuser.__new__(fusion.TrackFuser)
+    fuser._lock, fuser._session, fuser._verbose = fusion.threading.RLock(), mock.Mock(), False
+    fuser._twins, fuser._strikes, fuser._twin_sent = fusion.TwinIndex(), fusion.StrikeIndex(), {}
+    fuser._occupied, fuser._occupied_seen = [], 0.0
+    root = fusion.TOPIC_ROOT
+    topic = root + "/land/geoconfirmed/event/hostile/incident/event/GC-AAAA/tracks/v1"
+
+    def sample(key, track):
+        return mock.Mock(key_expr=key, payload=json.dumps(track).encode())
+    track = {"uid": "GC-AAAA", "type": "event", "lat_deg": 47.5, "lon_deg": 37.5, "side_basis": "place", "remarks": "x"}
+    fuser.on_any_track(sample(topic, track))
+    assert not fuser._session.put.called                                           # no occupied territory known yet: left hostile
+    fuser.on_occupied(sample(fusion.OCCUPIED_TOPIC, {"rings": [[[36.0, 47.0], [39.0, 47.0], [39.0, 49.0], [36.0, 49.0], [36.0, 47.0]]]}))
+    fuser.on_any_track(sample(topic, dict(track, lat_deg=51.0)))                  # outside the ring: stays hostile
+    assert not fuser._session.put.called
+    fuser.on_any_track(sample(topic, track))
+    keys = {c.args[0]: json.loads(c.args[1]) for c in fuser._session.put.call_args_list}
+    moved = next(v for k, v in keys.items() if "/friendly/incident/" in k)
+    assert moved["uid"] == "GC-AAAA-UA" and moved["_fused"] and "Ukrainian strike" in moved["remarks"]
+    assert keys[topic]["_delete"] and keys[topic]["uid"] == "GC-AAAA"              # the hostile copy is retracted
+    fuser._session.put.reset_mock()
+    fuser.on_any_track(sample(next(k for k in keys if "/friendly/" in k), moved))   # the moved copy is not moved again
+    assert not fuser._session.put.called
