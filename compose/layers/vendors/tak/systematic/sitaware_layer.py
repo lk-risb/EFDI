@@ -697,6 +697,8 @@ def _nvg_shape_style(track: dict) -> str | None:
     kind = track.get("shape_style")
     if kind == "trail":
         return "stroke:{};stroke-opacity:0.8;stroke-width:2;fill:none".format(color)
+    if kind == "border":
+        return "stroke:{};stroke-opacity:1;stroke-width:3;fill:none".format(color)
     if kind == "wash":
         return "stroke:{};stroke-opacity:0.33;stroke-width:1;fill:{};fill-opacity:{}".format(
             color, color, opacity)

@@ -5,6 +5,8 @@ Federation's 83 regions and Belarus's 7 come with an ODbL 1.0 licence that asks 
 the simplified ADM1 GeoJSON through the API, keeps a copy under ${POD_STATE_DIR}/region-geometry (refreshed after
 30 days; an old copy is used when the download fails) and hands back, per region, its name and outer rings.
 
+ADM0 gives the country's own outline (borders).
+
 Bridges use it to draw a country as its regions, like the site's own LT/LV/PL/EE/UA zones, and to find the region
 an alert source names ("Kaliningrad Oblast", "Mordovia") by region_index() / match_region().
 """
@@ -16,7 +18,7 @@ import time
 import urllib.error
 import urllib.request
 
-API = "https://www.geoboundaries.org/api/current/gbOpen/{}/ADM1/"
+API = "https://www.geoboundaries.org/api/current/gbOpen/{}/{}/"
 CACHE_TTL_S = 30 * 86400
 MAX_BYTES = 24 * 1024 * 1024
 CREDIT = "Region outlines: geoBoundaries (wmgeolab, ODbL 1.0) https://www.geoboundaries.org"
@@ -39,12 +41,13 @@ def _valid(data) -> bool:
     return isinstance(data, dict) and isinstance(data.get("features"), list) and bool(data["features"])
 
 
-def fetch_geojson(iso3: str, cache_dir: str | None = None, now: float | None = None, read=_read_url) -> dict | None:
-    """The simplified ADM1 FeatureCollection for an ISO 3166-1 alpha-3 code, or None if there is neither a
+def fetch_geojson(iso3: str, cache_dir: str | None = None, now: float | None = None, read=_read_url,
+                  level: str = "ADM1") -> dict | None:
+    """The simplified `level` (ADM1 regions, ADM0 the country) FeatureCollection for an ISO 3166-1 alpha-3 code, or None if there is neither a
     fresh download nor an old copy."""
     now = time.time() if now is None else now
     cache_dir = cache_dir or _cache_dir()
-    path = os.path.join(cache_dir, "{}-ADM1.geojson".format(iso3.upper()))
+    path = os.path.join(cache_dir, "{}-{}.geojson".format(iso3.upper(), level))
     cached = None
     try:
         with open(path, encoding="utf-8") as handle:
@@ -54,7 +57,7 @@ def fetch_geojson(iso3: str, cache_dir: str | None = None, now: float | None = N
     except (OSError, ValueError):
         cached = None
     try:
-        meta = json.loads(read(API.format(iso3.upper())))
+        meta = json.loads(read(API.format(iso3.upper(), level)))
         meta = meta[0] if isinstance(meta, list) else meta
         data = json.loads(read(meta["simplifiedGeometryGeoJSON"]))
         if not _valid(data):
@@ -80,9 +83,10 @@ def _rings(geometry: dict) -> list:
     return sorted(rings, key=lambda ring: -abs(sum(a[0] * b[1] - b[0] * a[1] for a, b in zip(ring, ring[1:]))))
 
 
-def regions(iso3: str, cache_dir: str | None = None, read=_read_url) -> list:
-    """[{"id": "RU-BEL", "name": "Belgorod Oblast", "rings": [...]}] for a country; [] when unavailable."""
-    data = fetch_geojson(iso3, cache_dir, read=read)
+def regions(iso3: str, cache_dir: str | None = None, read=_read_url, level: str = "ADM1") -> list:
+    """[{"id": "RU-BEL", "name": "Belgorod Oblast", "rings": [...]}] for a country (level ADM0: the country itself);
+    [] when unavailable."""
+    data = fetch_geojson(iso3, cache_dir, read=read, level=level)
     out = []
     for feature in (data or {}).get("features", []):
         props, geometry = feature.get("properties") or {}, feature.get("geometry") or {}

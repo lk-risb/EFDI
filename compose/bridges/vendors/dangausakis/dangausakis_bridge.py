@@ -58,6 +58,9 @@ Env:
                                 colours the site draws (default on; needs DANGAUSAKIS_ZONES)
   DANGAUSAKIS_REGION_SPLIT      "RU:RUS,BY:BLR" (default): draw those standing countries as their regions
                                 (geoBoundaries) instead of one outline; empty keeps the single outline
+  DANGAUSAKIS_BORDERS           "RU:RUS:red,BY:BLR:red,LT:LTU:blue,LV:LVA:blue,EE:EST:blue,PL:POL:blue,UA:UKR:blue" (default): a country
+                                outline, no fill, red for the aggressor states and blue for NATO and Ukraine, drawn over the
+                                regions so the regional split still shows; empty draws none (needs the country zones)
   DANGAUSAKIS_COMMUNITY         set 0 to disable the community drone reports and incident
                                 markers (tracks under air/dangausakis/community and
                                 land/dangausakis/incident); default on
@@ -326,6 +329,38 @@ def region_activity(country_regions: dict, boundaries: dict, presence, threats, 
             if rid.split(":")[0] not in WAR_THEATRE_COUNTRIES]
     hit = incursions.regions(boundaries, contains, now) | presence.inside(site, contains, now) | threats.inside(site, contains, now)
     return activity, hit, [code for code, ids in units.items() if ids]
+
+
+BORDERS = {pair.split(":")[0]: (pair.split(":")[1], pair.split(":")[2]) for pair in
+           os.environ.get("DANGAUSAKIS_BORDERS", "RU:RUS:red,BY:BLR:red,LT:LTU:blue,LV:LVA:blue,EE:EST:blue,PL:POL:blue,UA:UKR:blue")
+           .replace(" ", "").split(",") if pair.count(":") == 2 and pair.split(":")[2] in ("red", "blue")}
+_BORDER_TRACKS: dict = {}   # country code -> {uid: track}: simplifying a whole country is slow and it never changes
+
+
+def border_tracks(now: float) -> dict:
+    """uid -> (topic prefix, track): the outline of each country in BORDERS (geoBoundaries), stroke only, red for an
+    aggressor state and blue for a NATO state. A country whose outline cannot be loaded is left out and tried again."""
+    out = {}
+    for code, (iso3, color) in BORDERS.items():
+        if code not in _BORDER_TRACKS:
+            found = region_geometry.regions(iso3, level="ADM0")
+            rings = sorted([r for found_region in found for r in found_region["rings"]
+                            if _ring_area(r) >= _MIN_PART_DEG2 and _in_theatre(r)], key=_ring_area, reverse=True)[:ZONE_MAX_PARTS]
+            if not rings:
+                continue
+            built = {}
+            for index, ring in enumerate(rings):
+                uid = "DA-BORDER-{}{}".format(code, "-p{}".format(index) if index else "")
+                track = _wash_track(uid, found[0], color, "{} border ({})".format(
+                    code, "aggressor state" if color == "red" else "NATO or Ukraine"),
+                    "Country outline: {}. {}".format("aggressor state" if color == "red" else "NATO member or Ukraine",
+                                                     region_geometry.CREDIT), [ring], now,
+                    max_vertices=COUNTRY_MAX_VERTICES, country=code, alert_id="BORDER:" + code)
+                track["shape_style"], track["level"] = "border", "border"
+                built[uid] = track
+            _BORDER_TRACKS[code] = built
+        out.update({uid: (ZONE_PREFIX, dict(track, _ts=now)) for uid, track in _BORDER_TRACKS[code].items()})
+    return out
 
 
 def load_country_regions(loaded: dict) -> dict:
@@ -723,6 +758,7 @@ def main():
                         war_status.note(code, now)          # Russian units stand in it
                     zones.update(wash_tracks(current, boundaries or {}, standing, now, country_regions,
                                              war_status.countries(now), activity, hit))
+                    zones.update(border_tracks(now))
                 for uid, (prefix, track) in zones.items():
                     # A zone is big (hundreds of points) and TAK stores every event, so an unchanged
                     # zone is re-sent only every ZONE_REFRESH_S, well inside its ZONE_STALE_S.

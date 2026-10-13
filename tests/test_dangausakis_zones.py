@@ -557,3 +557,20 @@ def test_regions_outside_the_war_theatre_turn_yellow_for_russian_units_drones_an
     colours = {uid: t["shape_color"] for uid, (_, t) in out.items()}
     assert colours["DA-WASH-PL:lub"] == colours["DA-WASH-LT:LT-KU"] == "yellow" and colours["DA-WASH-PL:pod"] == "white"
     assert colours["DA-REGION-MD-MD-SN"] == "yellow" and colours["DA-REGION-MD-MD-CU"] == "orange"
+
+
+def test_country_borders_are_red_for_aggressor_states_and_blue_for_nato_and_have_no_fill(monkeypatch):
+    big = [[20.0, 50.0], [30.0, 50.0], [30.0, 56.0], [20.0, 56.0], [20.0, 50.0]]
+    asked = []
+    monkeypatch.setattr(bridge.region_geometry, "regions",
+                        lambda iso3, level="ADM1", **kw: asked.append((iso3, level)) or [{"id": iso3, "name": iso3, "rings": [big]}])
+    monkeypatch.setattr(bridge, "BORDERS", {"RU": ("RUS", "red"), "LT": ("LTU", "blue")})
+    bridge._BORDER_TRACKS.clear()
+    out = bridge.border_tracks(NOW)
+    assert asked == [("RUS", "ADM0"), ("LTU", "ADM0")]
+    colours = {t["country"]: (t["shape_color"], t["shape_style"]) for _, t in out.values()}
+    assert colours == {"RU": ("red", "border"), "LT": ("blue", "border")}
+    assert bridge.border_tracks(NOW + 1) and len(asked) == 2                    # a country is fetched and simplified once
+    xml = tak_layer.track_to_cot(next(t for _, t in out.values() if t["country"] == "LT"), "a-n-G-I-R")
+    assert 'strokeColor value="%d"' % tak_layer._BORDER_COLORS["blue"][0] in xml and 'fillColor value="0"' in xml
+    bridge._BORDER_TRACKS.clear()

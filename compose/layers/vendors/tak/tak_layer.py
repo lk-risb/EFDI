@@ -1573,6 +1573,13 @@ _COUNTRY_COLORS = {
 }
 
 
+# shape_style "border": a country outline with no fill, drawn over its regions: red for an aggressor state, blue for NATO and Ukraine.
+_BORDER_COLORS = {
+    "red":  (_argb(0xFF, 0xFF2020), 0),
+    "blue": (_argb(0xFF, 0x2060FF), 0),
+}
+
+
 # shape_style "trail": the path a threat has flown, drawn as an open line behind its marker.
 _TRAIL_COLORS = {
     "orange": (_argb(0xCC, 0xFF8C00), 0),
@@ -1581,7 +1588,7 @@ _TRAIL_COLORS = {
 
 
 def _shape_colors(track: dict) -> dict:
-    return {"wash": _WASH_COLORS, "country": _COUNTRY_COLORS, "trail": _TRAIL_COLORS}.get(
+    return {"wash": _WASH_COLORS, "country": _COUNTRY_COLORS, "border": _BORDER_COLORS, "trail": _TRAIL_COLORS}.get(
         track.get("shape_style"), _SHAPE_COLORS)
 
 
@@ -1725,7 +1732,7 @@ def track_to_cot(track: dict, cot_type: str, stale_s: float = COT_STALE_S) -> st
                 ET.SubElement(detail, "link", {"point": "{},{},{}".format(ring_lat, ring_lon, _hae(track))})
             ET.SubElement(detail, "__shapeExtras", {"cpvis": "false", "editable": "false"})
             ET.SubElement(detail, "strokeColor", {"value": str(stroke)})
-            ET.SubElement(detail, "strokeWeight", {"value": {"wash": "1.0", "country": "2.0"}.get(style, "3.0")})
+            ET.SubElement(detail, "strokeWeight", {"value": {"wash": "1.0", "country": "2.0", "border": "3.0"}.get(style, "3.0")})
             ET.SubElement(detail, "color", {"value": str(stroke)})      # iTAK/ATAK read the shape colour here
             ET.SubElement(detail, "fillColor", {"value": str(fill)})
     # Custom marker art is opt-in because it is not portable across clients.
