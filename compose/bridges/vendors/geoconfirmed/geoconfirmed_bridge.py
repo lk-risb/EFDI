@@ -45,6 +45,7 @@ from datetime import datetime, timedelta, timezone
 
 from namespace_prefix import topic_root
 import zenoh
+from protocols.vendors.random import region_geometry
 from protocols.vendors.random.gateway import open_session
 from protocols.vendors.random.track_views import add_version, semantic_topic
 
@@ -140,8 +141,14 @@ def _kyiv_days(now: float, count: int) -> list:
     return [(today - timedelta(days=i)).isoformat() for i in range(count)]
 
 
-def event_tracks(world: dict, kinds: dict, now: float, days: int = DAYS, limit: int = MAX_MARKERS) -> dict:
-    """uid -> (topic prefix, track) for the Ukraine-conflict placemarks of the last `days` Kyiv dates, newest first, at most `limit`."""
+def _in_russia(russia: list, lat: float, lon: float) -> bool:
+    return any(region_geometry.contains(region, lon, lat) for region in russia)
+
+
+def event_tracks(world: dict, kinds: dict, now: float, days: int = DAYS, limit: int = MAX_MARKERS, russia=None) -> dict:
+    """uid -> (topic prefix, track) for the Ukraine-conflict placemarks of the last `days` Kyiv dates, newest first, at most `limit`.
+    `russia` is the outline of Russia (region_geometry regions): the owner of damaged infrastructure is neutral, so a strike on
+    it is told by the place, like Drone Strike Map does: in Russia a Ukrainian strike, anywhere else a Russian one."""
     factions = {m["id"]: m["name"] for m in world.get("factionMeta") or [] if m.get("conflictCode") == CONFLICT}
     window = set(_kyiv_days(now, days))
     picked = []
@@ -162,9 +169,12 @@ def event_tracks(world: dict, kinds: dict, now: float, days: int = DAYS, limit: 
     for stamp, props, faction, lat, lon in sorted(picked, key=lambda p: p[0], reverse=True)[:limit]:
         full = kinds.get(_template(props.get("icon"))) or "event"
         side, role = striker(full, faction)
+        by_place = bool(role == "victim" and side in ("neutral", "unknown") and russia)
+        if by_place:
+            side = "friendly" if _in_russia(russia, lat, lon) else "hostile"
         who = _FACTION_LABEL.get(_base_faction(faction)) if role == "striker" else \
             _FACTION_LABEL.get({"friendly": "ukraine", "hostile": "russia"}.get(side, ""), "") if role == "victim" else ""
-        note = ("{} strike{}".format(who, " (the owner was struck, inferred)" if role == "victim" else "") if who
+        note = ("{} strike{}".format(who, " (the place says so, inferred)" if by_place else " (the owner was struck, inferred)" if role == "victim" else "") if who
                 else "not a strike" if role == "other" else "striker unknown")
         uid = "GC-{}".format(str(props["id"]).replace("-", "")[:12]).upper()
         out[uid] = ("{}/{}/incident".format(PREFIX, side), {
@@ -216,6 +226,7 @@ def main():
             time.sleep(10)
     print("geoconfirmed bridge starting (poll {}s, {} day(s), at most {} markers)".format(POLL_S, DAYS, MAX_MARKERS), flush=True)
 
+    russia = region_geometry.regions("RUS", level="ADM0")      # [] when it cannot be loaded: such strikes stay neutral
     world, etag, kinds, next_kinds = None, None, {}, 0.0
     published: dict = {}
     try:
@@ -236,7 +247,7 @@ def main():
                     except ValueError as exc:
                         print("geoconfirmed bad icons JSON: {}".format(exc), flush=True)
             if world is not None:
-                current = event_tracks(world, kinds, now)
+                current = event_tracks(world, kinds, now, russia=russia)
                 for prefix, track in current.values():
                     _put(session, prefix, track)
                 for uid in set(published) - set(current):

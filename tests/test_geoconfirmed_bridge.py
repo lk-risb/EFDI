@@ -135,3 +135,19 @@ def test_a_placemark_without_a_position_or_in_another_conflict_is_skipped():
                  {"geometry": {"type": "Point", "coordinates": [30.0, 50.0]}, "properties": {"id": "c", "factionId": 7, "icon": "x/1.png"}}]}}
     assert gc.event_tracks(world, {}, NOW) == {}
 
+
+
+def test_a_strike_on_infrastructure_is_told_by_the_place_ukrainian_in_russia_russian_elsewhere():
+    world = {"factionMeta": [{"id": 9, "name": "Neutral (UKR)", "conflictCode": "UKR"}],
+             "geojson": {"features": [
+                 {"geometry": {"type": "Point", "coordinates": [38.0, 51.0]},       # in the Russian square below
+                  "properties": {"id": "a" * 8 + "-1", "factionId": 9, "date": "2026-10-12T00:00:00", "icon": "x/90.png"}},
+                 {"geometry": {"type": "Point", "coordinates": [30.0, 49.0]},       # outside it
+                  "properties": {"id": "b" * 8 + "-2", "factionId": 9, "date": "2026-10-12T00:00:00", "icon": "x/90.png"}}]}}
+    kinds = {"90.png": "Recently destroyed/Damaged [Visible in footage] or still burning infrastucture"}
+    square = [{"id": "RU", "name": "Russia", "rings": [[[35.0, 49.0], [45.0, 49.0], [45.0, 55.0], [35.0, 55.0], [35.0, 49.0]]]}]
+    sides = {t["lon_deg"]: (p.split("/")[-2], t["remarks"]) for p, t in gc.event_tracks(world, kinds, NOW, russia=square).values()}
+    assert sides[38.0][0] == "friendly" and "Ukrainian strike (the place says so" in sides[38.0][1]
+    assert sides[30.0][0] == "hostile" and "Russian strike (the place says so" in sides[30.0][1]
+    unknown = {p.split("/")[-2] for p, t in gc.event_tracks(world, kinds, NOW).values()}
+    assert unknown == {"neutral"}                                                   # no outline of Russia: left neutral
