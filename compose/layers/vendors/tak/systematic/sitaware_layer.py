@@ -130,8 +130,12 @@ def _resolve_sidc(resolver, track: dict) -> str:
 _NON_JSON_VIEWS = frozenset({"sapient", "proto", "raw"})
 
 def _friendly_unit_sidc(track: dict) -> str:
-    """NFFI units keep the unspecified frame. A TAK user is one person, so its frame carries the Team/Crew echelon (A), and the function
-    of its role (HQ, medic, RTO) or of its specific CoT type (infantry...) when ground_unit knows one."""
+    """NFFI units keep the unspecified frame. A TAK client is drawn as the APP-6D dismounted individual (a person icon) with the entity of
+    its role (medic, RTO, sniper, forward observer) or type. Any other TAK marker is a unit frame with the Team/Crew echelon (A) and the
+    function of its type when ground_unit knows one."""
+    if track.get("_ingress") == "tak_server" and (track.get("tak_platform") or track.get("tak_device")):
+        # a TAK client (it reports its device) is one person: the APP-6D dismounted individual, numeric SIDC (scheme app6d)
+        return ground_unit.tak_individual_sidc(track.get("cot_type"), track.get("tak_role"))
     if track.get("_ingress") == "tak_server":
         return "SFGP{}*{}***".format(ground_unit.tak_function(track.get("cot_type"), track.get("tak_role")) or "U-----",
                                      ground_unit.ECHELON_TEAM)
@@ -248,6 +252,9 @@ def _callsign(track: dict, uid: str) -> str:
 
 
 def _cot_type_for_sidc(sidc: str) -> str:
+    if sidc.isdigit():                      # APP-6D: affiliation at index 3, symbol set at 4-5
+        return "a-{}-{}".format({"2": "f", "3": "f", "4": "n", "5": "h", "6": "h"}.get(sidc[3:4], "u"),
+                                {"01": "A", "05": "P", "30": "S"}.get(sidc[4:6], "G"))
     affiliation = {"F": "f", "H": "h", "N": "n", "U": "u"}.get(sidc[1:2], "u")
     dimension = sidc[2:3] if sidc[2:3] in {"A", "G", "S", "P"} else "G"
     return "a-{}-{}".format(affiliation, dimension)
@@ -777,7 +784,7 @@ def track_to_nvg_item(
 
     point_attrs = {
         "uri":    "urn:efdi:" + urllib.parse.quote(uid, safe="-._~"),
-        "symbol": symbol_scheme + ":" + sidc,
+        "symbol": ("app6d" if sidc.isdigit() else symbol_scheme) + ":" + sidc,   # a 20-digit SIDC is APP-6D
         "label":  label,
         "modifiers": _nvg_modifiers(track, label),
         "x":      str(round(lon, 6)),

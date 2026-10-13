@@ -246,6 +246,9 @@ def _normalize_event(event: ET.Element) -> tuple[str, dict[str, object]] | None:
         record["callsign"] = detail_map["callsign"]            # the name the user chose: the label of its marker
     if detail_map.get("tak_role"):
         record["tak_role"] = detail_map["tak_role"]
+    for key in ("tak_platform", "tak_device"):       # only a real TAK client reports its device: a user, not a placed marker
+        if detail_map.get(key):
+            record[key] = detail_map[key]
     if detail_map.get("tak_team"):
         record["tak_team"] = detail_map["tak_team"]
     if cot_time:

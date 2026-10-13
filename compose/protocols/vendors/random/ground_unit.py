@@ -41,3 +41,21 @@ def tak_function(cot_type, role):
         if function in known:
             return function
     return ""
+
+
+# A TAK user is one person: APP-6D symbol set 27 (Dismounted Individuals), a person icon. Entity codes (APP-6D set 27 table, checked
+# 2026-10-13): 110000 military, 110101 infantry, 110102 medical, 110103 reconnaissance, 110104 signal, 110202 field artillery observer,
+# 110209 sniper. Modifier 1 46 is "Individual". Numeric 20-digit SIDC: version 10, context 0, identity 3 (friend), set 27, status 0,
+# no HQ/task force/dummy, no amplifier (00), entity (6), modifier 1 (2), modifier 2 (2).
+INDIVIDUAL_ROLE_ENTITY = {"medic": "110102", "rto": "110104", "sniper": "110209", "forwardobserver": "110202"}
+INDIVIDUAL_TYPE_ENTITY = {"I": "110101", "R": "110103"}      # a-f-G-U-C-I infantry, -R reconnaissance
+INDIVIDUAL_MODIFIER_1 = "46"
+
+
+def tak_individual_sidc(cot_type, role) -> str:
+    """The APP-6D dismounted-individual SIDC of a TAK user, from its role, else its specific CoT type, else a plain military individual."""
+    entity = INDIVIDUAL_ROLE_ENTITY.get(str(role or "").strip().lower().replace(" ", ""))
+    if not entity:
+        parts = str(cot_type or "").upper().split("-")
+        entity = INDIVIDUAL_TYPE_ENTITY.get(parts[5], "") if len(parts) > 5 and parts[2:5] == ["G", "U", "C"] else ""
+    return "1003270000{}{}00".format(entity or "110000", INDIVIDUAL_MODIFIER_1)

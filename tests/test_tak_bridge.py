@@ -43,23 +43,31 @@ def test_the_connection_defaults_to_the_tak_layer_one_and_tak_ingest_overrides_i
     assert seen == {"port": 9000, "tls": False}
 
 
-def test_a_clients_role_and_type_pick_the_sitaware_symbol_only_when_known():
+def test_a_tak_client_is_the_app6d_dismounted_individual_by_role_and_type():
     from layers.vendors.tak.systematic import sitaware_layer
-    topic, record = bridge._normalize_event(ET.fromstring(
-        '<event version="2.0" uid="A1" type="a-f-G-U-C" how="m-g" time="2026-10-13T13:00:00Z" start="2026-10-13T13:00:00Z" '
-        'stale="2026-10-13T13:05:00Z"><point lat="54.7" lon="25.3" hae="1" ce="1" le="1"/>'
-        '<detail><contact callsign="Alpha"/><__group name="Cyan" role="HQ"/></detail></event>'))
-    assert record["tak_role"] == "HQ" and record["cot_detail"]["tak_team"] == "Cyan" and record["callsign"] == "Alpha"
+    xml = ('<event version="2.0" uid="A1" type="{}" how="m-g" time="2026-10-13T13:00:00Z" start="2026-10-13T13:00:00Z" '
+           'stale="2026-10-13T13:05:00Z"><point lat="54.7" lon="25.3" hae="1" ce="1" le="1"/>'
+           '<detail><takv device="Pixel" platform="ATAK-CIV"/><contact callsign="Alpha"/><__group name="Cyan" role="{}"/></detail></event>')
     sidc = sitaware_layer._friendly_unit_sidc
-    assert sidc(record) == "SFGPUH----*A***"                                          # headquarters, one person: team/crew
-    assert sidc(dict(record, tak_role="Medic")) == "SFGPUSM---*A***"
-    assert sidc(dict(record, tak_role="RTO")) == "SFGPUUS---*A***"
-    assert sidc(dict(record, tak_role="Team Lead")) == "SFGPU-----*A***"              # no checked entry: the plain unit
-    assert sidc(dict(record, tak_role=None, cot_type="a-f-G-U-C-I-Z")) == "SFGPUCIZ--*A***"
-    assert sidc(dict(record, tak_role=None, cot_type="a-f-G-U-C")) == "SFGPU-----*A***"
-    assert record["tak_team"] == "Cyan" and sitaware_layer._callsign(record, "U") == "Alpha (Cyan)"
-    assert sitaware_layer._callsign(dict(record, _ingress="x"), "U") == "Alpha"
+    topic, record = bridge._normalize_event(ET.fromstring(xml.format("a-f-G-U-C", "HQ")))
+    assert record["tak_role"] == "HQ" and record["tak_team"] == "Cyan" and record["callsign"] == "Alpha"
+    assert sidc(record) == "10032700001100004600"                                  # set 27, military, individual
+    assert sidc(dict(record, tak_role="Medic")) == "10032700001101024600"
+    assert sidc(dict(record, tak_role="RTO")) == "10032700001101044600"
+    assert sidc(dict(record, tak_role="Sniper")) == "10032700001102094600"
+    assert sidc(dict(record, tak_role="Forward Observer")) == "10032700001102024600"
+    assert sidc(dict(record, tak_role="Team Lead")) == "10032700001100004600"
+    assert sidc(dict(record, tak_role=None, cot_type="a-f-G-U-C-I")) == "10032700001101014600"
+    assert sidc(dict(record, tak_role=None, cot_type="a-f-G-U-C-R")) == "10032700001101034600"
+    assert len(sidc(record)) == 20 and sidc(record).isdigit()
+    assert sitaware_layer._callsign(record, "U") == "Alpha (Cyan)" and sitaware_layer._callsign(dict(record, _ingress="x"), "U") == "Alpha"
+    # the numeric SIDC goes out under the APP-6D scheme, and a TAK marker that is no client keeps the unit frame
+    item = sitaware_layer.track_to_nvg_item(record, sidc(record), "2525b")
+    assert 'symbol="app6d:1003270000110000' in item[1]
+    marker = dict(record, tak_platform=None, tak_device=None, tak_role=None)
+    assert sidc(marker) == "SFGPU-----*A***" and sidc(dict(marker, cot_type="a-f-G-U-C-I-Z")) == "SFGPUCIZ--*A***"
     assert sidc({"uid": "nffi", "cot_type": "a-f-G-U-C-I"}) == "SFGPU-----*****"       # not from TAK: as before
+    assert sitaware_layer._cot_type_for_sidc(sidc(record)) == "a-f-G"
 
 
 def test_a_client_with_no_gps_fix_reports_0_0_and_is_not_a_track():

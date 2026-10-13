@@ -20,6 +20,8 @@ Rule: NATO APP-6 is preferred over MIL-STD-2525 where they differ, and codes are
 | `APMFC` cargo, `APMFU` utility, `APMFP` patrol, `APMFR` reconnaissance, `APMFT` trainer, `APMFK` tanker, `APMFB` bomber, `APMFF` fighter | military fixed-wing roles | same list and the 2525C codes it quotes |
 | `OFVPE-----*****` (`OHVPE`, `ONVPE`, `OUVPE` by affiliation) | Stability Operations, Violent Activities, Explosion; used for strike markers | same list (coding scheme O; it was `S?GPIE----` before, which SitaWare drew as an unknown "?") |
 | `UH----` special C2 headquarters component, `USM---` medical, `UUS---` signal unit (also `UULM--` military police, `UUA---` CBRN, `USX---` maintenance, listed but not used) | ground units for TAK roles HQ, medic, RTO | same list |
+| APP-6D symbol set 27 (Dismounted Individuals): entities `110000` military, `110101` infantry, `110102` medical, `110103` reconnaissance, `110104` signal, `110202` field artillery observer, `110209` sniper; modifier 1 `46` Individual | a TAK client is drawn as a person icon | APP-6D symbol set tables as JSON, `milstd` package (https://cdn.jsdelivr.net/npm/milstd@0.1.6/JSON/APP6-D 27 dismounted-individual.json) |
+| number-based SIDC layout: version 0-1 (10 = APP-6D), context 2, identity 3 (3 = friend), symbol set 4-5, status 6, HQ/task force/dummy 7, amplifier 8-9, function id 10-19 (entity 6, modifier 1, modifier 2) | the 20-digit code sent as `app6d:` | milsymbol SIDC documentation |
 
 ## Not verified
 
@@ -30,3 +32,4 @@ Rule: NATO APP-6 is preferred over MIL-STD-2525 where they differ, and codes are
 - Whether each C2 draws every ground-unit subtype icon has not been checked on screen.
 - The headquarters / task-force amplifier (symbol modifier 1) has no checked letter, so it is not used: the TAK role HQ is drawn as the C2 headquarters component. Sniper and forward observer were not found in the unit list and stay the plain unit.
 - Sources disagree on SIDC index positions of the modifiers (modifiers at positions 11-12 in 1-based counting, echelon the second); the code uses index 10-11 zero-based and the echelon at index 11.
+- Whether the SitaWare in use accepts the `app6d:` scheme in the NVG feed, and draws set 27, was not checked; the code that sends it (a TAK client's 20-digit SIDC) has no letter fallback.
