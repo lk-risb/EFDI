@@ -165,6 +165,7 @@ def test_rso_threat_wording_is_orange_and_each_province_gets_an_alert():
 def test_rso_tests_unrelated_notices_expired_and_old_are_ignored():
     for notice in (
         _rso_notice("TESTY SYREN ALARMOWYCH", "Test syren w Bielsku-Białej. Alarm testowy."),
+        _rso_notice("Alert RCB", "UWAGA! Zakończył się atak powietrzny na Ukrainę. Brak zagrożenia na terenie Polski."),   # an all-clear
         _rso_notice("Alarm lotniczy - ćwiczenia"),
         _rso_notice("Przekroczenie PD35 dni PM10"),
         _rso_notice("Alarm lotniczy", valid_to="2026-10-05 12:10:00"),        # ended 10:10Z, before RSO_NOW

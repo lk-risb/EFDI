@@ -107,14 +107,14 @@ def _ac(**kw):
 
 def test_aircraft_track_shape_and_units():
     (prefix, track), = bridge.aircraft_tracks({"aircraft": [_ac()]})
-    assert prefix.endswith("/air/dangausakis/adsb/civ/aircraft")
+    assert prefix.endswith("/air/dangausakis/adsb/friendly/aircraft")
     assert track["icao24"] == "33fd3d" and track["callsign"] == "GRANY01"
     assert track["baro_alt_m"] == 304.8 and track["speed_ms"] == 51.44
     assert track["vertical_rate_ms"] == 3.05 and track["_ts"] == 1791191848.5
 
 
 def test_aircraft_mlat_modality_and_stale_filters():
-    assert bridge.aircraft_tracks({"aircraft": [_ac(signalType="mlat")]})[0][0].endswith("/mlat/civ/aircraft")
+    assert bridge.aircraft_tracks({"aircraft": [_ac(signalType="mlat")]})[0][0].endswith("/mlat/friendly/aircraft")
     assert bridge.aircraft_tracks({"stale": True, "aircraft": [_ac()]}) == []
     assert bridge.aircraft_tracks({"aircraft": [_ac(seenPositionSec=300)]}) == []
     assert bridge.aircraft_tracks({"aircraft": [_ac(hex=""), _ac(lat=None)]}) == []

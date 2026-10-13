@@ -47,7 +47,8 @@ LEVELS = {"red", "orange", "yellow"}
 # Strict phrases only; tests/drills (e.g. "TESTY SYREN ALARMOWYCH") must never alert.
 _PL_AIR = re.compile(r"alarm lotnicz|alarm powietrzn|alarm przeciwlotnicz|"
                      r"zagro[żz]eni[ae] (?:atakiem )?(?:z )?powietrz|atak (?:z )?powietrzn", re.IGNORECASE)
-_PL_NOT_AN_ALERT = re.compile(r"test|[ćc]wicz|pr[óo]b[ay]|sprawdzen", re.IGNORECASE)
+# a test, or an all-clear ("Zakończył się atak powietrzny na Ukrainę. Brak zagrożenia na terenie Polski.")
+_PL_NOT_AN_ALERT = re.compile(r"test|[ćc]wicz|pr[óo]b[ay]|sprawdzen|zako[ńn]cz|odwo[łl]an|brak zagro[żz]eni", re.IGNORECASE)
 # Latvian (112.lv) alert text naming an air raid; the feed's item schema is unverified
 # (it is {"alerts": []} when quiet), so only items that say so are used.
 _LV_AIR = re.compile(r"gaisa (?:trauksme|uzbrukum|apdraud)|gaisa uzbruk|air[ -]raid|air alert|airstrike|"

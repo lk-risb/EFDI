@@ -50,7 +50,7 @@ def test_fpv_drone_is_drawn_as_an_unmanned_aircraft_named_after_its_source():
     assert tak_layer._callsign(record, "UID-X") == "fpv-7"
 
 
-def test_partner_adsb_aircraft_get_the_same_civil_type_dangausakis_gives_them():
+def test_partner_adsb_aircraft_get_the_same_civil_type_as_any_other_civil_adsb_feed():
     batch = AdsbBatch()
     track = batch.tracks.add()
     track.icao24, track.callsign, track.lat, track.lon = "4ca2b1", "RYR123", 52.2, 21.0
@@ -59,11 +59,11 @@ def test_partner_adsb_aircraft_get_the_same_civil_type_dangausakis_gives_them():
     aircraft = usa.aircraft.add()
     aircraft.icao_hex, aircraft.callsign, aircraft.lat, aircraft.lon = "3c6444", "DLH9AB", 51.1, 17.0
     (usareur_record,) = usareur.aircraft_records(usa.SerializeToString())
-    dangausakis_topic = "{}/air/dangausakis/civ/aircraft/tracks/v1".format(tak_layer.TOPIC_ROOT)
+    civil_topic = "{}/air/asterix/adsb/civ/aircraft/tracks/v1".format(tak_layer.TOPIC_ROOT)
     for record in (palantir_record, usareur_record):
         topic = _topic("air", record.pop("affiliation"))
-        assert _tak(topic, record) == _tak(dangausakis_topic, record) == [tak_layer._CIV_AIR_TYPE]
-        assert _sidc(topic, record) == _sidc(dangausakis_topic, record)
+        assert _tak(topic, record) == _tak(civil_topic, record) == [tak_layer._CIV_AIR_TYPE]
+        assert _sidc(topic, record) == _sidc(civil_topic, record)
     assert tak_layer._callsign(palantir_record, "UID") == "RYR123"
 
 

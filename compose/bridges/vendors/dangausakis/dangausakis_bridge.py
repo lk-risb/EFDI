@@ -35,8 +35,8 @@ suppression handshake with fusion. Set NEPTUN_ENABLED=0 to turn that part off.
 
 It also polls .../aircraft (adsb.lol data, ODbL-1.0) and publishes each
 aircraft as a normal track via publish_dual() under
-  <ORG>/air/dangausakis/adsb|mlat/civ/aircraft/...
-keyed by icao24, so tak_layer/sitaware_layer merge it with the same aircraft
+  <ORG>/air/dangausakis/adsb|mlat/friendly/aircraft/...
+keyed by icao24 (the site's aircraft layer is its allied / military one, so they are friendly, not civil), so tak_layer/sitaware_layer merge it with the same aircraft
 from any other ADS-B source into one marker. A feed flagged stale, or a
 position older than 60 s, is not published.
 
@@ -558,7 +558,7 @@ def aircraft_tracks(data: dict) -> list:
         if ac.get("verticalRateFpm") is not None:
             track["vertical_rate_ms"] = round(ac["verticalRateFpm"] * _FT_M / 60, 2)
         modality = "mlat" if ac.get("signalType") == "mlat" else "adsb"
-        out.append(("{}/air/dangausakis/{}/civ/aircraft".format(TOPIC_ROOT, modality),
+        out.append(("{}/air/dangausakis/{}/friendly/aircraft".format(TOPIC_ROOT, modality),
                     {k: v for k, v in track.items() if v not in ("", None)}))
     return out
 
@@ -656,8 +656,8 @@ def main():
     incursion_sub = subscribe(session, incursion_topic(TOPIC_ROOT), incursions.on_sample)
     presence = Presence()                               # Russian units (DeepState)
     presence_sub = subscribe(session, "{}/land/deepstate/frontline/hostile/unit/**".format(TOPIC_ROOT), presence.on_sample)
-    threats = Presence(ttl_s=1800)                      # drones and missiles in flight, community drone reports
-    threat_subs = [subscribe(session, "{}/{}".format(TOPIC_ROOT, pattern), threats.on_sample)
+    in_flight = Presence(ttl_s=1800)                      # drones and missiles in flight, community drone reports
+    threat_subs = [subscribe(session, "{}/{}".format(TOPIC_ROOT, pattern), in_flight.on_sample)
                    for pattern in ("air/mapa/hostile/**", "air/neptun/hostile/**", "air/neptun/unknown/**",
                                    "air/dangausakis/community/**", "land/geoconfirmed/event/hostile/**")]
     next_threats = 0.0
@@ -753,7 +753,7 @@ def main():
                 zones = zone_tracks(current, boundaries or {}, now)
                 if WASH_ENABLED:
                     activity, hit, russian_units = region_activity(
-                        country_regions, boundaries or {}, presence, threats, incursions, now)
+                        country_regions, boundaries or {}, presence, in_flight, incursions, now)
                     for code in russian_units:
                         war_status.note(code, now)          # Russian units stand in it
                     zones.update(wash_tracks(current, boundaries or {}, standing, now, country_regions,
