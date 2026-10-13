@@ -436,3 +436,21 @@ def test_only_standing_countries_listed_in_the_split_are_loaded(monkeypatch):
     got = bridge.load_country_regions({"RU": {}, "BY": {}, "XX": {}}, {})
     assert sorted(got) == ["BY", "RU"] and sorted(seen) == ["BLR", "RUS"]
     assert bridge.load_country_regions({"RU": {}}, got) == got and len(seen) == 2     # already loaded: not asked again
+
+
+def test_a_read_timeout_in_the_middle_of_a_response_is_a_failed_fetch_not_a_crash(monkeypatch):
+    # seen live: urlopen answered, then resp.read() raised TimeoutError, which is not a URLError
+    class Slow:
+        headers = {}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def read(self, *args):
+            raise TimeoutError("The read operation timed out")
+
+    monkeypatch.setattr(bridge.urllib.request, "urlopen", lambda *a, **k: Slow())
+    assert bridge._fetch("region-alerts") is None

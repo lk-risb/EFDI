@@ -18,7 +18,6 @@ import argparse
 import json
 import os
 import time
-import urllib.error
 import urllib.request
 
 from http_json import read_json_response
@@ -40,7 +39,7 @@ def fetch_forecast(place: str) -> dict | None:
     try:
         with urllib.request.urlopen(req, timeout=15) as resp:
             return read_json_response(resp)
-    except (urllib.error.URLError, urllib.error.HTTPError, json.JSONDecodeError) as exc:
+    except (OSError, json.JSONDecodeError) as exc:
         print("meteo.lt fetch error for {}: {}".format(place, exc), flush=True)
         return None
 

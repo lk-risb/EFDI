@@ -25,7 +25,6 @@ import json
 import os
 import time
 import threading
-import urllib.error
 import urllib.request
 
 from http_json import read_json_response
@@ -74,7 +73,7 @@ def _get(path: str) -> dict | None:
     try:
         with urllib.request.urlopen(req, timeout=10) as resp:
             return read_json_response(resp)
-    except (urllib.error.URLError, json.JSONDecodeError) as exc:
+    except (OSError, json.JSONDecodeError) as exc:
         print("dronuradaras fetch error [{}]: {}".format(path, exc), flush=True)
         return None
 

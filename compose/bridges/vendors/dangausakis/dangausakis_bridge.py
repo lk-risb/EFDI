@@ -425,7 +425,7 @@ def load_site_boundaries() -> dict | None:
         with urllib.request.urlopen(urllib.request.Request(API + "region-geometry", headers=_HEADERS),
                                     timeout=30) as resp:
             return boundaries_from_geojson(json.loads(resp.read().decode("utf-8")))
-    except (urllib.error.URLError, ValueError, KeyError) as exc:
+    except (OSError, ValueError, KeyError) as exc:
         print("dangausakis region-geometry failed ({}), trying the map bundle".format(exc), flush=True)
     try:
         with urllib.request.urlopen(urllib.request.Request(MAP_PAGE, headers=_HEADERS), timeout=15) as resp:
@@ -436,7 +436,7 @@ def load_site_boundaries() -> dict | None:
         url = "https://dangausakis.lt" + match.group(0)
         with urllib.request.urlopen(urllib.request.Request(url, headers=_HEADERS), timeout=30) as resp:
             return parse_boundaries(resp.read().decode("utf-8"))
-    except (urllib.error.URLError, ValueError, KeyError) as exc:
+    except (OSError, ValueError, KeyError) as exc:
         print("dangausakis boundaries load failed: {}".format(exc), flush=True)
         return None
 
@@ -483,7 +483,7 @@ def _fetch(path: str) -> dict | None:
     try:
         with urllib.request.urlopen(urllib.request.Request(API + path, headers=_HEADERS), timeout=10) as resp:
             return read_json_response(resp)
-    except (urllib.error.URLError, json.JSONDecodeError) as exc:
+    except (OSError, json.JSONDecodeError) as exc:
         print("dangausakis fetch error: {}".format(exc), flush=True)
         return None
 

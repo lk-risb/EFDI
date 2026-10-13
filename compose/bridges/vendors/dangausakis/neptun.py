@@ -51,7 +51,6 @@ import json
 import os
 import threading
 import time
-import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 
@@ -278,6 +277,6 @@ def fetch_threats() -> dict | None:
     try:
         with urllib.request.urlopen(req, timeout=10) as resp:
             return read_json_response(resp)
-    except (urllib.error.URLError, json.JSONDecodeError) as exc:
+    except (OSError, json.JSONDecodeError) as exc:
         print("neptun fetch error: {}".format(exc), flush=True)
         return None
