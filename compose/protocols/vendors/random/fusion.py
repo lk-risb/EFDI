@@ -185,6 +185,13 @@ _HEX = re.compile(r"^(?:[A-Za-z]+[:_-])*([0-9A-Fa-f]{6})$")      # "48A5C6", "ST
 _UNSAFE = re.compile(r"[^A-Za-z0-9._-]")
 
 
+def civil_topic(topic_root: str, icao24: str) -> str:
+    return "{}/air/trackfusion/suppress/civil/{}".format(topic_root, _UNSAFE.sub("_", str(icao24).lower()))
+
+
+_MILITARY_AIR = ("/friendly/aircraft/", "/hostile/aircraft/", "/neutral/aircraft/", "/mil/aircraft/")
+
+
 def twin_topic(topic_root: str, uid: str) -> str:
     return "{}/air/trackfusion/suppress/twin/{}".format(topic_root, _UNSAFE.sub("_", str(uid)))
 
@@ -288,11 +295,13 @@ class TwinIndex:
 
 
 class TwinSuppressions:
-    """Layer side: on_sample() for the announcements, is_suppressed(track) before drawing a track."""
+    """Layer side: on_sample() for the announcements, is_suppressed(track) before drawing a track; on_military() for the
+    announcements of military aircraft, is_civil_copy(track, topic) before drawing a civil track."""
 
     def __init__(self, ttl_s: float = TWIN_TTL_S):
         self._ttl = ttl_s
         self._until: dict = {}
+        self._military: dict = {}       # icao24 -> time the announcement runs out
         self._lock = threading.Lock()
 
     def on_sample(self, sample) -> None:
@@ -303,6 +312,24 @@ class TwinSuppressions:
         if uid:
             with self._lock:
                 self._until[str(uid)] = time.time() + self._ttl
+
+    def on_military(self, sample) -> None:
+        try:
+            icao = str(json.loads(bytes(sample.payload).decode()).get("icao24") or "").lower()
+        except (ValueError, UnicodeDecodeError, AttributeError):
+            return
+        if icao:
+            with self._lock:
+                self._military[icao] = time.time() + self._ttl
+
+    def is_civil_copy(self, track: dict, topic: str, now: float | None = None) -> bool:
+        """A civil track of an aircraft that another feed reports as military: not drawn, it would turn the marker civil."""
+        icao = str(track.get("icao24") or "").lower()
+        if not icao or "/civ/aircraft" not in topic:
+            return False
+        now = time.time() if now is None else now
+        with self._lock:
+            return self._military.get(icao, 0.0) > now
 
     def is_suppressed(self, track: dict, now: float | None = None) -> bool:
         if track.get("icao24") or not track.get("uid"):
@@ -948,6 +975,14 @@ class TrackFuser:
         if not isinstance(track, dict):
             return
         now = time.time()
+        icao = str(track.get("icao24") or "").lower()
+        if icao and any(part in topic for part in _MILITARY_AIR):      # military by another feed: civil copies are held back
+            with self._lock:
+                due = now - self._twin_sent.get("civil:" + icao, 0) >= _SUPPRESS_REFRESH_S
+                if due:
+                    self._twin_sent["civil:" + icao] = now
+            if due:
+                self._session.put(civil_topic(TOPIC_ROOT, icao), json.dumps({"icao24": icao, "ts": now}).encode())
         for uid, strike_topic, strike_type in self._strikes.observe(track, now, topic):
             with self._lock:
                 if now - self._twin_sent.get(uid, 0) < _SUPPRESS_REFRESH_S:

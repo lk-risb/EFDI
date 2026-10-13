@@ -3,6 +3,7 @@
 import json
 import pathlib
 import sys
+import time
 from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -73,3 +74,17 @@ def test_an_adsb_track_with_no_uid_still_counts_as_the_keyed_copy():
     index = TwinIndex()
     assert index.observe({"icao24": "32001a", "callsign": "GCI1885", "lat_deg": 45.64, "lon_deg": 13.09}, 100.0) == []
     assert index.observe({"uid": "32001a", "callsign": "GCI1885", "lat_deg": 45.67, "lon_deg": 13.14}, 101.0) == ["32001a"]
+
+
+def test_a_civil_track_of_an_aircraft_that_another_feed_reports_as_military_is_held_back():
+    import json
+    from unittest import mock
+    held = TwinSuppressions()
+    civil, military = "R/air/backbone/civ/aircraft/tracks/v1", "R/air/dangausakis/adsb/friendly/aircraft/tracks/v1"
+    track = {"icao24": "AE07A7", "uid": "AE07A7"}
+    assert not held.is_civil_copy(track, civil)                                       # nothing announced yet
+    held.on_military(mock.Mock(payload=json.dumps({"icao24": "ae07a7"}).encode()))
+    assert held.is_civil_copy(track, civil) and held.is_civil_copy(dict(track, icao24="ae07a7"), civil)
+    assert not held.is_civil_copy(track, military)                                    # the military track itself is drawn
+    assert not held.is_civil_copy({"icao24": "111111"}, civil) and not held.is_civil_copy({"uid": "X"}, civil)
+    assert not held.is_civil_copy(track, civil, now=time.time() + 60)                 # the announcement runs out

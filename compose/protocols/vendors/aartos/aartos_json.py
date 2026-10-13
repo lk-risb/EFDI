@@ -242,7 +242,7 @@ def _key_segment(value: str) -> str:
 # Each antenna in a Sample carries its own surveyed position — publish it as a
 # radar/sensor-site marker the same way protocols/vendors/asterix/cat.py does
 # for CAT-34, on the exact topic shape tak_layer.py's dedicated radar-site
-# subscriber already listens on ("land/*/radar/neutral/radar/**"). Bare JSON,
+# subscriber already listens on ("land/*/radar/*/radar/**"). Bare JSON,
 # no dual protobuf view: that subscriber explicitly only reads the plain view
 # (see make_radar_status_handler's _NON_JSON_VIEWS filter), and there is no
 # per-vendor schema for this — matching cat.py's own field names is what lets
@@ -281,14 +281,14 @@ def site_topic(site: dict) -> str:
 
     modality stays the literal "radar" (not passive_rf) — that is the exact
     shape tak_layer.py's dedicated radar-site subscriber already listens on
-    ("land/*/radar/neutral/radar/**"), matching every other sensor-site
+    ("land/*/radar/*/radar/**"), matching every other sensor-site
     marker (e.g. protocols/vendors/asterix/cat.py's CAT-34 sensor status)
     regardless of the sensor's true modality. type resolves to "unknown"
     (a site has no vendor type); id resolves to the antenna's own sensor_id
     (carried as "uid" on the site dict), giving each antenna a distinct key
     instead of every site collapsing onto the same "unknown" id segment.
     """
-    prefix = "{}/land/{}/radar/neutral/radar".format(TOPIC_ROOT, site["sensor_id"])
+    prefix = "{}/land/{}/radar/friendly/radar".format(TOPIC_ROOT, site["sensor_id"])
     return add_version(semantic_topic(prefix, site))
 
 

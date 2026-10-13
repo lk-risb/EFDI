@@ -183,7 +183,8 @@ class NVGFeedCacheTests(unittest.TestCase):
     def test_feed_covers_enabled_ground_and_weather_sources(self):
         self.assertIn("land/**/neutral/station/**", _TOPIC_SIDC)
         self.assertIn("land/**/neutral/sensor/**", _TOPIC_SIDC)
-        self.assertIn("land/**/neutral/radar/**", _TOPIC_SIDC)
+        self.assertEqual(_TOPIC_SIDC["land/**/friendly/radar/**"], "SFGPESR---*****")       # our own military radar sites
+        self.assertEqual(_TOPIC_SIDC["land/**/neutral/radar/**"], "SNGPESR---*****")        # a civil radar
         self.assertIn("env/weather/station/**", _TOPIC_SIDC)
         self.assertEqual(_TOPIC_SIDC["land/**/neutral/station/**"], "SNGPES----*****")
         self.assertEqual(_TOPIC_SIDC["env/weather/station/**"], "SNGPESE---*****")

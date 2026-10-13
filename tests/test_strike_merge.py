@@ -44,3 +44,21 @@ def test_three_reports_of_one_attack_leave_one_and_a_deleted_marker_leaves_the_g
     assert sorted(u for u, _, _ in out) == ["GC-B", "GC-C"]
     index.observe({"uid": "GC-A", "_delete": True}, 4.0, GC.format("GC-A"))
     assert [u for u, _, _ in index.observe(_track("GC-C", 48.0, 37.0004, 100), 5.0, GC.format("GC-C"))] == ["GC-C"]
+
+
+def test_fusion_announces_a_military_aircraft_so_the_layers_hold_back_its_civil_copies():
+    import json
+    from unittest import mock
+    from protocols.vendors.random import fusion
+    fuser = fusion.TrackFuser.__new__(fusion.TrackFuser)        # only what on_any_track uses
+    fuser._lock, fuser._session, fuser._verbose = fusion.threading.RLock(), mock.Mock(), False
+    fuser._twins, fuser._strikes, fuser._twin_sent = fusion.TwinIndex(), fusion.StrikeIndex(), {}
+
+    def sample(topic, track):
+        return mock.Mock(key_expr=topic, payload=json.dumps(track).encode())
+    root = fusion.TOPIC_ROOT
+    fuser.on_any_track(sample(root + "/air/backbone/civ/aircraft/tracks/v1", {"uid": "AE07A7", "icao24": "ae07a7", "lat_deg": 46.0, "lon_deg": 22.0}))
+    assert not [c for c in fuser._session.put.call_args_list if "suppress/civil" in c.args[0]]     # civil traffic announces nothing
+    fuser.on_any_track(sample(root + "/air/dangausakis/adsb/friendly/aircraft/tracks/v1", {"icao24": "ae07a7", "lat_deg": 46.0, "lon_deg": 22.0}))
+    (call,) = [c for c in fuser._session.put.call_args_list if "suppress/civil" in c.args[0]]
+    assert call.args[0] == fusion.civil_topic(root, "AE07A7") and json.loads(call.args[1])["icao24"] == "ae07a7"

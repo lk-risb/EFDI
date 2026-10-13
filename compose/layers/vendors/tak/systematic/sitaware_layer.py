@@ -173,7 +173,8 @@ _TOPIC_SIDC = {
     "land/**/civ/vehicle/**":        "SFGPEVC---*****",  # Friendly Civilian Vehicle
     "land/**/neutral/station/**":    "SNGPES----*****",  # Neutral Ground Sensor (HQ-supported)
     "land/**/neutral/sensor/**":     "SNGPES----*****",  # Neutral Ground Sensor
-    "land/**/neutral/radar/**":      "SNGPESR---*****",  # Neutral Ground Radar
+    "land/**/neutral/radar/**":      "SNGPESR---*****",  # Neutral Ground Radar: a civil radar site
+    "land/**/friendly/radar/**":     "SFGPESR---*****",  # Friendly Ground Radar: our own military radar sites (VERA-NG, Giraffe, AARTOS)
     "land/**/friendly/unit/**":      "SFGPU-----*****",  # Friendly Ground Unit (NFFI)
     "land/**/hostile/unit/**":       _ground_unit_sidc("H"),   # DeepState units etc.: combat unit, function from its name
     "land/**/neutral/unit/**":       "SNGPU-----*****",
@@ -1203,6 +1204,8 @@ def make_handler(
             if verbose:
                 print("NVG feed removed {}".format(uid), flush=True)
             return
+        if _twins.is_civil_copy(track, str(sample.key_expr)):
+            return                                  # the same aircraft is military by another feed: one marker, not civil
         if _twins.is_suppressed(track):
             cache.remove(track)                     # the same aircraft is already shown from its ICAO key
             return
@@ -1281,6 +1284,7 @@ def run(args) -> None:
     subscribers = []
     try:
         subscribers.append(subscribe(session, "{}/air/trackfusion/suppress/twin/*".format(TOPIC_ROOT), _twins.on_sample))
+        subscribers.append(subscribe(session, "{}/air/trackfusion/suppress/civil/*".format(TOPIC_ROOT), _twins.on_military))
         for suffix, sidc in _TOPIC_SIDC.items():
             key = "{}/{}".format(TOPIC_ROOT, suffix)
             item_stale_s = max(args.stale_s, _TOPIC_STALE_S.get(suffix, args.stale_s))

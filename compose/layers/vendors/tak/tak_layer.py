@@ -51,7 +51,7 @@ import zenoh.ext
 from namespace_prefix import topic_root
 from protocols.vendors.random.gateway import open_session, subscribe
 from protocols.vendors.random.tak_transport import TcpSender, RECONNECT_S
-from protocols.vendors.random.airframe import is_rotorcraft, military_role
+from protocols.vendors.random.airframe import is_rotorcraft
 from protocols.vendors.random.fusion import MarkerMemory, TwinSuppressions
 
 # (Re)connect catch-up + mid-session gap-healing for this layer's subscriptions.
@@ -162,14 +162,10 @@ _radar_status: dict[str, dict] = {}   # "sac-sic" → latest CAT-34 status dict
 _CIV_AIR_TYPE = "a-n-A-C-F"
 _MIL_AIR_TYPE = "a-n-A-M-F"
 
-def _wing(cot: str, military: bool = False):
-    """The CoT type of an aircraft, rotary wing (-H) instead of fixed wing (-F) when its aircraft_type is a helicopter and,
-    for a military aircraft, its role (-C cargo, -F fighter, -K tanker ...) when the type has one."""
-    def resolve(track: dict) -> str:
-        kind = track.get("aircraft_type")
-        out = cot[:-1] + "H" if is_rotorcraft(kind) else cot
-        return out + "-" + military_role(kind) if military and military_role(kind) else out
-    return resolve
+def _wing(cot: str):
+    """The CoT type of an aircraft, rotary wing (-H) instead of fixed wing (-F) when its aircraft_type is a helicopter.
+    No role subtype (-C cargo ...): WinTAK has no icon for those and draws only the role letter in the frame."""
+    return lambda track: cot[:-1] + "H" if is_rotorcraft(track.get("aircraft_type")) else cot
 
 
 def _friendly_air_type(track: dict) -> str:
@@ -262,7 +258,7 @@ _TOPIC_COT = {
     # (air/trackfusion/fused/**) + SAPIENT.
     # Raw CAT-48 / CAT-20 are dropped by _RAW_SENSOR_SOURCES check in make_handler.
     "air/**/civ/aircraft/**":    (_wing(_CIV_AIR_TYPE),  AIR_STALE_S),
-    "air/**/mil/aircraft/**":    (_wing(_MIL_AIR_TYPE, True),  AIR_STALE_S),
+    "air/**/mil/aircraft/**":    (_wing(_MIL_AIR_TYPE),  AIR_STALE_S),
     "air/**/unknown/**":         (_unknown_air_type, AIR_STALE_S),
     # LAND — full affiliation matrix for SitaWare / NFFI
     "land/**/civ/vehicle/**":    ("a-f-G-E-V-C", LAND_STALE_S),
@@ -295,10 +291,10 @@ _TOPIC_COT = {
     "land/**/unknown/incident/**":  ("a-u-G-I-E",  LAND_STALE_S),
     "land/**/neutral/alert/**":  ("a-n-G-I-R",    LAND_STALE_S),
     # AIR — full affiliation matrix
-    "air/**/friendly/aircraft/**": (_wing("a-f-A-M-F", True),   AIR_STALE_S),
+    "air/**/friendly/aircraft/**": (_wing("a-f-A-M-F"),   AIR_STALE_S),
     "air/**/friendly/uav/**":      ("a-f-A-M-F-Q", AIR_STALE_S),
-    "air/**/hostile/aircraft/**":  (_wing("a-h-A-M-F", True),   AIR_STALE_S),
-    "air/**/neutral/aircraft/**":  (_wing("a-n-A-M-F", True),   AIR_STALE_S),
+    "air/**/hostile/aircraft/**":  (_wing("a-h-A-M-F"),   AIR_STALE_S),
+    "air/**/neutral/aircraft/**":  (_wing("a-n-A-M-F"),   AIR_STALE_S),
     "air/**/hostile/uav/**":       ("a-h-A-M-F-Q", AIR_STALE_S),
     "air/**/hostile/missile/**":   ("a-h-A-W-M",   AIR_STALE_S),   # NEPTUN missiles
     "air/**/hostile/bomb/**":      ("a-h-A-W-B",   AIR_STALE_S),   # NEPTUN guided (glide) bombs
@@ -334,10 +330,17 @@ _RADAR_COT_TYPE = "a-n-G-E-S-R"
 # listen) gets the standard CoT type for that, distinct from an emitting
 # radar. See CoTtypes.xml's G-U-U-M-S-E subtree (SIGINT/Electronic Warfare).
 _RADAR_COT_TYPE_PASSIVE = "a-n-G-U-U-M-S-E-D"
+# A radar site publishes on .../radar/<friendly|neutral>/radar: the radars this pod ingests (VERA-NG, Giraffe, AARTOS) are
+# our own military sensors, so friendly (blue), and a civil radar is neutral (green), see ASTERIX_CIVIL_RADARS in cat.py.
+# _RADAR_COT_TYPE is also the neutral type of the civil ATC ground stations seen in ADS-B.
+_MIL_RADAR_COT_TYPE = "a-f-G-E-S-R"
+_MIL_RADAR_COT_TYPE_PASSIVE = "a-f-G-U-U-M-S-E-D"
 
 
-def _radar_cot_type(track: dict) -> str:
-    return _RADAR_COT_TYPE_PASSIVE if track.get("passive") else _RADAR_COT_TYPE
+def _radar_cot_type(track: dict, civil: bool = False) -> str:
+    if civil:
+        return _RADAR_COT_TYPE_PASSIVE if track.get("passive") else _RADAR_COT_TYPE
+    return _MIL_RADAR_COT_TYPE_PASSIVE if track.get("passive") else _MIL_RADAR_COT_TYPE
 
 # ATC / ground-station callsigns that appear in ADS-B feeds.
 # Transponders belonging to ATC towers, ground vehicles, ATIS etc. show flight ID "TWR",
@@ -1920,6 +1923,8 @@ def make_handler(cot_type_or_fn, sender, verbose: bool, stale_s: float = COT_STA
             return
         if _is_unfused_sensor_track(track, key):
             return
+        if _twins.is_civil_copy(track, key):
+            return                                  # the same aircraft is military by another feed: one marker, not civil
         if _twins.is_suppressed(track):
             uid = _uid(track)                       # the same aircraft is already drawn from its ICAO key
             sender.send(_delete_point_cot(uid, track.get("_ts")))
@@ -1996,6 +2001,7 @@ def make_radar_status_handler(sender, verbose: bool):
             track = json.loads(bytes(sample.payload).decode())
         except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
             return
+        civil = "/radar/neutral/radar" in str(sample.key_expr)
         sac = track.get("sac"); sic = track.get("sic")
         if sac is not None:
             key = "{}-{}".format(sac, sic if sic is not None else 0)
@@ -2012,15 +2018,15 @@ def make_radar_status_handler(sender, verbose: bool):
             beam_track = dict(track)
             beam_track["sensor_id"] = "BEAM-" + str(track.get("sensor_id", "RADAR"))
             beam_track["sensor_name"] = (track.get("sensor_name") or "RADAR") + " BEAM"
-            xml = track_to_cot(beam_track, _radar_cot_type(track), stale_s=max(rot * 0.6, 1.0))
+            xml = track_to_cot(beam_track, _radar_cot_type(track, civil), stale_s=max(rot * 0.6, 1.0))
         else:
             # Full status: site marker with permanent 360° coverage ring
-            xml = track_to_cot(track, _radar_cot_type(track), stale_s=LAND_STALE_S * 2)
+            xml = track_to_cot(track, _radar_cot_type(track, civil), stale_s=LAND_STALE_S * 2)
         if xml:
             sender.send(xml)
         if verbose:
             print("CoT {} {}  psr={} ssr={} mds={}".format(
-                _radar_cot_type(track), track.get("sensor_name", "RADAR"),
+                _radar_cot_type(track, civil), track.get("sensor_name", "RADAR"),
                 track.get("psr_status", "-"), track.get("ssr_status", "-"),
                 track.get("mds_status", "-")), flush=True)
     return handler
@@ -2067,6 +2073,7 @@ def run(args):
     twin_key = "{}/air/trackfusion/suppress/twin/*".format(TOPIC_ROOT)
     subs.append(subscribe(session, twin_key, _twins.on_sample))
     print("SUB {} → [duplicate suppression from track fusion]".format(twin_key), flush=True)
+    subs.append(subscribe(session, "{}/air/trackfusion/suppress/civil/*".format(TOPIC_ROOT), _twins.on_military))
     for suffix, (cot_type, stale_s) in _TOPIC_COT.items():
         key = "{}/{}".format(TOPIC_ROOT, suffix)
         fn = cot_type.__name__ if callable(cot_type) else str(cot_type)
@@ -2078,7 +2085,7 @@ def run(args):
     # Radar sensor site status (CAT-34) — updates _radar_status dict + renders CoT marker
     # The source segment is a wildcard: a radar names itself by SAC/SIC, so its
     # topic is only known once a record has been decoded.
-    radar_key = "{}/land/*/radar/neutral/radar/**".format(TOPIC_ROOT)
+    radar_key = "{}/land/*/radar/*/radar/**".format(TOPIC_ROOT)
     subs.append(subscribe(session, radar_key,
                 make_radar_status_handler(sender, args.verbose),
                 history=_TRACK_HISTORY, recovery=_TRACK_RECOVERY))

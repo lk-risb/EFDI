@@ -173,7 +173,7 @@ Adresas priima tik GET/HEAD, pagal nutylėjimą reikalauja Basic autentifikavimo
 
 | ATAK piktograma | CoT tipas | Šaltinis |
 | --- | --- | --- |
-| Neutralus radaro sensorius (kliento standartinis MIL simbolis) | `a-n-G-E-S-R` | CAT-34 radaro vieta, įskaitant VERA-NG |
+| Draugiškas radaro sensorius (kliento standartinis MIL simbolis; mūsų pačių karinių radarų vietos) | `a-f-G-E-S-R` | CAT-34 radaro vieta, įskaitant VERA-NG |
 | Mėlynas žemės vienetas | `a-f-G-U-C` | SitaWare draugiškas žemės vienetas |
 | Raudonas žemės vienetas | `a-h-G-U-C` | SitaWare priešiškas žemės vienetas |
 | Geltonas/žalias žemės vienetas | `a-n-G-U-C` | SitaWare neutralus žemės vienetas |

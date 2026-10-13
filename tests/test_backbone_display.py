@@ -150,7 +150,7 @@ def test_aircraft_type_picks_rotary_wing_and_for_military_the_role_in_both_c2s()
         topic = _topic("air", affiliation, "aircraft")
         for kind, wing, role in cases:
             track = {"uid": "X", "aircraft_type": kind}
-            assert _tak(topic, track) == [(cot % (wing, "-" + role if role else ""))], (affiliation, kind)
+            assert _tak(topic, track) == [cot % (wing, "")], (affiliation, kind)      # WinTAK has no icon for role subtypes
             assert _sidc(topic, track) == [(sidc % (wing, role or "-"))], (affiliation, kind)
     civil = _topic("air", "civ", "aircraft")
     assert _tak(civil, {"aircraft_type": "H60"}) == ["a-n-A-C-H"] and _sidc(civil, {"aircraft_type": "H60"}) == ["SNAPCH----*****"]

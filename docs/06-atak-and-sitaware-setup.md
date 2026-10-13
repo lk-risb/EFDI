@@ -194,7 +194,7 @@ Do not clear a shared operational layer to work around this limitation.
 
 | ATAK appearance | CoT type | Source |
 | --- | --- | --- |
-| Neutral radar sensor (client-native MIL symbol) | `a-n-G-E-S-R` | CAT-34 site marker, including VERA-NG |
+| Friendly radar sensor (client-native MIL symbol; our own military radar sites) | `a-f-G-E-S-R` | CAT-34 site marker, including VERA-NG |
 | Blue ground unit | `a-f-G-U-C` | SitaWare friendly ground unit |
 | Red ground unit | `a-h-G-U-C` | SitaWare hostile ground unit |
 | Yellow/green ground unit | `a-n-G-U-C` | SitaWare neutral ground unit |

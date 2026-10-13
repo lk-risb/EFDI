@@ -79,6 +79,22 @@ def _asterix_source(track: dict) -> str:
     return "{:03d}-{:03d}".format(track.get("sac", 0) or 0, track.get("sic", 0) or 0)
 
 
+def _civil_radars() -> frozenset:
+    """The sources (SAC-SIC) of the civil radars, from ASTERIX_CIVIL_RADARS="48-10,48-11"; empty when none are connected."""
+    out = set()
+    for item in os.environ.get("ASTERIX_CIVIL_RADARS", "").replace(" ", "").split(","):
+        sac, _, sic = item.partition("-")
+        if sac.isdigit() and sic.isdigit():
+            out.add("{:03d}-{:03d}".format(int(sac), int(sic)))
+    return frozenset(out)
+
+
+def _radar_site_affil(source: str) -> str:
+    """The affiliation slot of a radar site's topic: neutral for a civil radar, friendly for every other one (the radars this
+    pod ingests are our own military sensors)."""
+    return "neutral" if source in _civil_radars() else "friendly"
+
+
 # ==========================================================================
 # CAT-001 — Transmission of Monoradar Data Target Reports, Ed.1.4
 #
@@ -2904,7 +2920,7 @@ _cat10_TOPIC_010_AIR = _cat10_TOPIC_ROOT + "/air/{source}/radar/civ/aircraft"
 
 _cat10_TOPIC_010_GROUND = _cat10_TOPIC_ROOT + "/land/{source}/radar/unknown/vehicle"
 
-_cat10_TOPIC_010_SENSOR = _cat10_TOPIC_ROOT + "/land/{source}/radar/neutral/radar"
+_cat10_TOPIC_010_SENSOR = _cat10_TOPIC_ROOT + "/land/{source}/radar/{affil}/radar"
 _cat10_RAW_INPUT_TOPIC = "{}/raw/asterix/cat10".format(_cat10_TOPIC_ROOT)
 
 _cat10_CAT_010 = 0x0A
@@ -3377,7 +3393,7 @@ def _cat10__make_cat010_handler(session, site, site_name):
                 )
                 publish_dual(
                     session,
-                    _cat10_TOPIC_010_SENSOR.format(source=_asterix_source(track)),
+                    _cat10_TOPIC_010_SENSOR.format(source=_asterix_source(track), affil=_radar_site_affil(_asterix_source(track))),
                     status,
                     AsterixCat10SensorStatus,
                     wrapper_field="sensor",
@@ -9014,7 +9030,7 @@ _cat34_TOPIC_ROOT = topic_root()
 
 # The observer and the observed are both a radar here: CAT-034 reports the
 # radar's own service status, so the radar is the tracked object.
-_cat34_TOPIC_SENSOR = _cat34_TOPIC_ROOT + "/land/{source}/radar/neutral/radar"
+_cat34_TOPIC_SENSOR = _cat34_TOPIC_ROOT + "/land/{source}/radar/{affil}/radar"
 _cat34_RAW_INPUT_TOPIC = "{}/raw/asterix/cat34".format(_cat34_TOPIC_ROOT)
 
 _cat34_CAT_034 = 0x22
@@ -9263,7 +9279,7 @@ def _cat34__make_cat034_handler(pub_sensor, site, radar_name, configured_range_m
             payload["_ts"] = time.time()
             publish_dual(
                 pub_sensor,
-                _cat34_TOPIC_SENSOR.format(source=_asterix_source(payload)),
+                _cat34_TOPIC_SENSOR.format(source=_asterix_source(payload), affil=_radar_site_affil(_asterix_source(payload))),
                 payload,
                 AsterixCat34Status,
                 wrapper_field="sensor",
@@ -9289,7 +9305,7 @@ def _cat34__make_cat034_handler(pub_sensor, site, radar_name, configured_range_m
             payload["_ts"] = time.time()
             publish_dual(
                 pub_sensor,
-                _cat34_TOPIC_SENSOR.format(source=_asterix_source(payload)),
+                _cat34_TOPIC_SENSOR.format(source=_asterix_source(payload), affil=_radar_site_affil(_asterix_source(payload))),
                 payload,
                 AsterixCat34Status,
                 wrapper_field="sensor",
@@ -9407,7 +9423,7 @@ def _cat34__make_cat034_handler(pub_sensor, site, radar_name, configured_range_m
             # Publish the full status update (no sweep azimuth — just the site marker)
             publish_dual(
                 pub_sensor,
-                _cat34_TOPIC_SENSOR.format(source=_asterix_source(status)),
+                _cat34_TOPIC_SENSOR.format(source=_asterix_source(status), affil=_radar_site_affil(_asterix_source(status))),
                 status,
                 AsterixCat34Status,
                 wrapper_field="sensor",
@@ -9505,7 +9521,7 @@ _cat48_TOPIC_ROOT = topic_root()
 _cat48_TOPIC_048    = _cat48_TOPIC_ROOT + "/air/{source}/radar/unknown/aircraft"
 _cat48_RAW_INPUT_TOPIC = "{}/raw/asterix/cat48".format(_cat48_TOPIC_ROOT)
 _cat48_SITE_INPUT_TOPIC = (
-    _cat48_TOPIC_ROOT + "/land/*/radar/neutral/radar/*/*/tracks/v1"
+    _cat48_TOPIC_ROOT + "/land/*/radar/*/radar/*/*/tracks/v1"
 )
 
 _cat48_CAT_048 = 0x30
