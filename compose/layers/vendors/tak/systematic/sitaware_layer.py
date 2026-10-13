@@ -129,12 +129,18 @@ def _resolve_sidc(resolver, track: dict) -> str:
 # including a bare topic with no view suffix, is the flat JSON payload.
 _NON_JSON_VIEWS = frozenset({"sapient", "proto", "raw"})
 
+# The NVG scheme tag of the APP-6D dismounted-individual symbols of TAK clients. SitaWare drew "app6d:" as a "?", so it is off until a
+# scheme it draws is found: set SITAWARE_TAK_INDIVIDUAL_SCHEME (e.g. app6d, 2525d) to send the 20-digit SIDC under that tag; empty
+# draws a TAK client as a unit frame with the Team/Crew echelon.
+_INDIVIDUAL_SCHEME = os.environ.get("SITAWARE_TAK_INDIVIDUAL_SCHEME", "").strip().lower()
+
+
 def _friendly_unit_sidc(track: dict) -> str:
     """NFFI units keep the unspecified frame. A TAK client is drawn as the APP-6D dismounted individual (a person icon) with the entity of
     its role (medic, RTO, sniper, forward observer) or type. Any other TAK marker is a unit frame with the Team/Crew echelon (A) and the
     function of its type when ground_unit knows one."""
-    if track.get("_ingress") == "tak_server" and (track.get("tak_platform") or track.get("tak_device")):
-        # a TAK client (it reports its device) is one person: the APP-6D dismounted individual, numeric SIDC (scheme app6d)
+    if _INDIVIDUAL_SCHEME and track.get("_ingress") == "tak_server" and (track.get("tak_platform") or track.get("tak_device")):
+        # a TAK client (it reports its device) is one person: the APP-6D dismounted individual, numeric SIDC
         return ground_unit.tak_individual_sidc(track.get("cot_type"), track.get("tak_role"))
     if track.get("_ingress") == "tak_server":
         return "SFGP{}*{}***".format(ground_unit.tak_function(track.get("cot_type"), track.get("tak_role")) or "U-----",
@@ -784,7 +790,7 @@ def track_to_nvg_item(
 
     point_attrs = {
         "uri":    "urn:efdi:" + urllib.parse.quote(uid, safe="-._~"),
-        "symbol": ("app6d" if sidc.isdigit() else symbol_scheme) + ":" + sidc,   # a 20-digit SIDC is APP-6D
+        "symbol": ((_INDIVIDUAL_SCHEME or "app6d") if sidc.isdigit() else symbol_scheme) + ":" + sidc,   # a 20-digit SIDC is APP-6D
         "label":  label,
         "modifiers": _nvg_modifiers(track, label),
         "x":      str(round(lon, 6)),

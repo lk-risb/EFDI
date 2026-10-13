@@ -48,6 +48,7 @@ def test_a_tak_client_is_the_app6d_dismounted_individual_by_role_and_type():
     xml = ('<event version="2.0" uid="A1" type="{}" how="m-g" time="2026-10-13T13:00:00Z" start="2026-10-13T13:00:00Z" '
            'stale="2026-10-13T13:05:00Z"><point lat="54.7" lon="25.3" hae="1" ce="1" le="1"/>'
            '<detail><takv device="Pixel" platform="ATAK-CIV"/><contact callsign="Alpha"/><__group name="Cyan" role="{}"/></detail></event>')
+    sitaware_layer._INDIVIDUAL_SCHEME = "app6d"
     sidc = sitaware_layer._friendly_unit_sidc
     topic, record = bridge._normalize_event(ET.fromstring(xml.format("a-f-G-U-C", "HQ")))
     assert record["tak_role"] == "HQ" and record["tak_team"] == "Cyan" and record["callsign"] == "Alpha"
@@ -68,6 +69,9 @@ def test_a_tak_client_is_the_app6d_dismounted_individual_by_role_and_type():
     assert sidc(marker) == "SFGPU-----*A***" and sidc(dict(marker, cot_type="a-f-G-U-C-I-Z")) == "SFGPUCIZ--*A***"
     assert sidc({"uid": "nffi", "cot_type": "a-f-G-U-C-I"}) == "SFGPU-----*****"       # not from TAK: as before
     assert sitaware_layer._cot_type_for_sidc(sidc(record)) == "a-f-G"
+    sitaware_layer._INDIVIDUAL_SCHEME = ""                                              # off (the default): the unit frame with team/crew
+    assert sidc(dict(record, tak_role="Medic")) == "SFGPUSM---*A***"
+    assert sidc(record) == "SFGPUH----*A***"
 
 
 def test_a_client_with_no_gps_fix_reports_0_0_and_is_not_a_track():
