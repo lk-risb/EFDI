@@ -1,7 +1,7 @@
-eclipse-zenoh==1.9.0
-websocket-client==1.8.0
-pymavlink==2.4.49
+eclipse-zenoh==1.10.1
+websocket-client==1.9.2
+pymavlink==2.4.50
 defusedxml==0.7.1
 paho-mqtt==2.1.0
-protobuf==7.35.1
-grpcio-tools==1.82.1
+protobuf==7.36.2
+grpcio-tools==1.84.0
