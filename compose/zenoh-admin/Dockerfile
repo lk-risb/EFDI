@@ -14,7 +14,7 @@ RUN pnpm build
 # to compiling its C extension from source, which needs gcc. The slim base
 # image has no compiler, so that build stage exists only to have one; its
 # gcc/build output never reaches the final runtime image.
-FROM python:3.13.14-slim@sha256:afe189875f1d2f9b45e287834fb9f2c273a5d59d354ae4050ab9affbf0a6ba06 AS py-builder
+FROM python:3.15.0rc3-slim@sha256:a3af3d230522dd52f7f2191b39e1892912dbcb0c8dee22afdec3dc83baf0f549 AS py-builder
 WORKDIR /app
 RUN apt-get update \
     && apt-get install -y --no-install-recommends build-essential \
@@ -22,7 +22,7 @@ RUN apt-get update \
 COPY requirements.txt .
 RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 
-FROM python:3.13.14-slim@sha256:afe189875f1d2f9b45e287834fb9f2c273a5d59d354ae4050ab9affbf0a6ba06 AS runtime
+FROM python:3.15.0rc3-slim@sha256:a3af3d230522dd52f7f2191b39e1892912dbcb0c8dee22afdec3dc83baf0f549 AS runtime
 ARG GIT_COMMIT=unknown
 LABEL org.opencontainers.image.revision="${GIT_COMMIT}"
 WORKDIR /app
