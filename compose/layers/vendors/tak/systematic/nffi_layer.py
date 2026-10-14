@@ -60,6 +60,20 @@ NFFI_VERSION = sitaware_profile.setting("NFFI_LAYER_VERSION")
 NFFI_NS = "urn:nato:fft:protocols:nffi" + ("14" if NFFI_VERSION == "1.4" else "13")
 COUNTRY = (os.environ.get("NFFI_COUNTRY") or "LTU").strip().upper()[:3]
 FRAMING = os.environ.get("NFFI_LAYER_FRAMING", "ip1").strip().lower()
+
+
+def _header_number(name: str, limit: int) -> int:
+    """An optional header number from the environment; 0 (what SitaWare 6.21 accepts) when unset or out of range."""
+    try:
+        value = int(os.environ.get(name, "0") or 0)
+    except ValueError:
+        return 0
+    return value if 0 <= value < limit else 0
+
+
+HEADER_SYSTEM = _header_number("NFFI_LAYER_HEADER_SYSTEM", 256)        # header byte 8
+HEADER_SUBSYSTEM = _header_number("NFFI_LAYER_HEADER_SUBSYSTEM", 256)  # header byte 9
+HEADER_COUNTRY = _header_number("NFFI_LAYER_HEADER_COUNTRY", 1024)     # header bytes 10-11, ISO 3166 numeric
 STALE_S = float(os.environ.get("NFFI_LAYER_STALE_S", "600"))
 REFRESH_S = float(os.environ.get("NFFI_LAYER_REFRESH_S", "30"))
 SYSTEM = fusion.own_force_track_system()       # "EFDI-" and this pod's namespace: fusion drops our own tracks that come back by it
@@ -135,15 +149,22 @@ def track_message(track: dict, now: float | None = None) -> bytes | None:
     if name:
         _sub(ident, "unitShortName", name)
     remarks = _clean(" ".join(str(track.get(k) or "") for k in ("tak_team", "tak_role")), r"A-Za-z0-9.,:*\- ", 60).strip()
-    if remarks:
-        _sub(_sub(node, "operStatusData"), "remarks", remarks)
+    emergency = _clean(track.get("emergency_str"), r"A-Za-z0-9.,:*\- ", 60).strip()
+    if emergency or remarks:
+        status = _sub(node, "operStatusData")
+        if emergency:                                   # alert comes before remarks in the schema; the cause goes in the remark
+            _sub(status, "alert", "true")
+            remarks = ("EMERGENCY " + emergency.upper() + " " + remarks).strip()[:60]
+        if remarks:
+            _sub(status, "remarks", remarks)
     body = ET.tostring(root, encoding="utf-8")
     return frame((b"" if FRAMING == "nodecl" else b'<?xml version="1.0" encoding="UTF-8"?>\n') + body + b"\n", now=when)
 
 
 def ip1_header(message_type: int, length: int, now: float | None = None) -> bytes:
     """The 16-byte header SitaWare 6.21 writes in front of each NFFI (type 0x04) or FFI (type 0x14, ffi_layer.py) document."""
-    return (bytes([message_type]) + b"\x00\x00\x00" + int(now or time.time()).to_bytes(4, "big") + b"\x00\x00\x00\x00\x01\x00"
+    return (bytes([message_type]) + b"\x00\x00\x00" + int(now or time.time()).to_bytes(4, "big")
+            + bytes([HEADER_SYSTEM, HEADER_SUBSYSTEM]) + HEADER_COUNTRY.to_bytes(2, "big") + b"\x01\x00"
             + length.to_bytes(2, "big"))
 
 
@@ -226,6 +247,7 @@ class NffiFeed:
             while not stop.is_set():
                 try:
                     client = socket.create_connection((host, port), timeout=10)
+                    client.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)       # no 40 ms wait for more data
                 except OSError as exc:
                     print("NFFI connect to {}:{} failed: {} - retry in {:.0f}s".format(host, port, exc, retry_s), flush=True)
                     stop.wait(retry_s)
@@ -259,6 +281,7 @@ class NffiFeed:
             while not stop.is_set():
                 try:
                     client, address = server.accept()
+                    client.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
                 except socket.timeout:
                     continue
                 except OSError:

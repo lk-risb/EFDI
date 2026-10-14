@@ -124,6 +124,24 @@ def test_the_default_is_what_sitaware_621_writes_itself_a_16_byte_header_and_nff
     assert b'secClassification="UNCLASSIFIED"' in framed
 
 
+def test_an_emergency_is_the_alert_flag_before_the_remark_in_operstatusdata():
+    framed = nffi.track_message(dict(CLIENT, emergency_str="medic"))
+    assert b"<alert>true</alert><remarks>EMERGENCY MEDIC" in framed and b"deviceSpecificData" not in framed
+    assert b"<alert>" not in nffi.track_message(CLIENT)
+
+
+def test_the_header_system_subsystem_and_country_are_optional_and_range_checked(monkeypatch):
+    monkeypatch.setattr(nffi, "HEADER_SYSTEM", 7)
+    monkeypatch.setattr(nffi, "HEADER_SUBSYSTEM", 9)
+    monkeypatch.setattr(nffi, "HEADER_COUNTRY", 440)
+    header = nffi.ip1_header(0x04, 5, 100)
+    assert header[8:12] == bytes([7, 9]) + (440).to_bytes(2, "big") and header[12:14] == b"\x01\x00"
+    monkeypatch.setenv("NFFI_LAYER_HEADER_COUNTRY", "5000")
+    assert nffi._header_number("NFFI_LAYER_HEADER_COUNTRY", 1024) == 0
+    monkeypatch.setenv("NFFI_LAYER_HEADER_COUNTRY", "440")
+    assert nffi._header_number("NFFI_LAYER_HEADER_COUNTRY", 1024) == 440
+
+
 def test_the_framing_can_be_changed_by_the_environment_variable(monkeypatch):
     monkeypatch.setattr(nffi, "FRAMING", "nodecl")
     plain = nffi.track_message(CLIENT)

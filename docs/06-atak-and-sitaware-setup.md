@@ -197,9 +197,9 @@ between versions; a setting that is set on its own wins, so versions can be mixe
 
 | Setting | 6.21 (measured on a live system) | 6.22 (an assumption, not measured yet) |
 |---|---|---|
-| `NFFI_LAYER_VERSION` | 1.3 | 1.4 |
-| `FFI_LAYER_SYMBOL_STANDARD` | `APP-6(B)`, the 15-character letter symbol | `APP-6(D)`, the 20-digit symbol with the person icon |
-| `SITAWARE_TAK_INDIVIDUAL_SCHEME` (NVG) | blank: the letter symbol | `app6d` |
+| `NFFI_LAYER_VERSION` | 1.3 | 1.3 (assumed unchanged) |
+| `FFI_LAYER_SYMBOL_STANDARD` | `APP-6(B)`, the 15-character letter symbol | `APP-6(B)` (the FFI route is assumed to stay letter-only; `APP-6(D)` is there to try) |
+| `SITAWARE_TAK_INDIVIDUAL_SCHEME` (NVG) | blank: the letter symbol | `app06`: the NVG feed is the route expected to draw the numeric person symbol; the tag is an untested guess, `2525d` is the other candidate to try |
 | `SITAWARE_TAK_USERS_NVG` | blank: the NVG feed draws the TAK users unless an NFFI or FFI feed is configured | `true` |
 
 **TAK to SitaWare.** A TAK user's position can reach SitaWare Headquarters by FFI, NFFI or the NVG feed. FFI (APP-11 Edition D, `ffi_layer`)
@@ -216,6 +216,14 @@ and is not a force track. How the position was made (GPS or typed in, as on a Wi
 On 6.21, a user is drawn as infantry, Team size (`SFGPUCI----A---`), in all three routes. The numeric person symbol was tried on 6.21:
 the NVG feed drew it as a `?`, and FFI accepted it but drew a plain frame, so on 6.21 keep `APP-6(B)`. How the formats were found out is in
 [`references/nffi/NFFI.md`](references/nffi/NFFI.md).
+
+**Header numbers, emergencies, and delay.** Each NFFI or FFI document is written behind SitaWare's 16-byte header. Its system, subsystem and
+country numbers are 0 by default, which 6.21 accepts; `NFFI_LAYER_HEADER_SYSTEM` (0-255), `NFFI_LAYER_HEADER_SUBSYSTEM` (0-255) and
+`NFFI_LAYER_HEADER_COUNTRY` (ISO 3166 numeric, 0-1023, for example 440 for Lithuania) fill them in, in the WebUI too. Whether a SitaWare uses them
+is not tested. When a TAK user sends an emergency (for example the 911 alert) `tak_bridge` marks that user's track, and `nffi_layer` sends the NFFI
+`alert` flag with a remark that starts with `EMERGENCY` and the cause; the NVG feed shows the same text in the status. The mark stays until TAK sends the cancel.
+The remark, team and role stay in `operStatusData`: the NFFI schema has no `deviceSpecificData` element. A position goes out the moment it arrives; the
+delay is the time the source needs to report it (a TAK client sends a position only every few minutes unless its location reporting is set shorter), not a poll in EFDI.
 
 **SitaWare to TAK (the way back).** `ffi-bridge` (and `nffi-bridge` for the older format) reads SitaWare's own tracks and puts them into the
 fabric, from where `tak_layer` shows them in TAK like any other source. In SitaWare create an **IP1 Classic Server** (NFFI and FFI

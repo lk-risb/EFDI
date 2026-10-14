@@ -24,6 +24,7 @@ import argparse
 import base64
 import hashlib
 import json
+import re
 import os
 import socket
 import ssl
@@ -200,6 +201,32 @@ def _topic_for_record(record: dict[str, object]) -> str:
     return "{}/{}/{}/{}/{}/{}".format(
         TOPIC_ROOT, domain, _TAK_SOURCE, _TAK_PROTOCOL, affiliation, entity
     )
+
+
+_EMERGENCY_TYPES = {"b-a-o-tbl": "911 ALERT", "b-a-o-pan": "RING THE BELL", "b-a-o-opn": "IN CONTACT", "b-a-o-c": "TROOPS IN CONTACT",
+                    "b-a-g": "GEOFENCE BREACH"}
+
+
+def _emergency(event: ET.Element) -> tuple[str, str | None] | None:
+    """(client uid, emergency text) of a TAK emergency frame, text None when it cancels one; None for any other frame. TAK sends an
+    emergency as its own b-a-o-... event next to the client's position, linked to the client by a p-p link (or a uid ending -9-1-1)."""
+    cot_type = _text(event.get("type")) or ""
+    detail = _child(event, "detail")
+    marker = _child(detail, "emergency")
+    if not cot_type.startswith(("b-a-o", "b-a-g")) and marker is None:
+        return None
+    uid = ""
+    if detail is not None:
+        for link in detail:
+            if _local_name(link.tag) == "link" and link.get("relation") == "p-p" and link.get("uid"):
+                uid = link.get("uid") or ""
+    uid = uid or re.sub(r"-9-1-1$", "", _text(event.get("uid")) or "")
+    if not uid:
+        return None
+    if cot_type == "b-a-o-can" or (marker is not None and (marker.get("cancel") or "").lower() == "true"):
+        return uid, None
+    text = (marker.get("type") if marker is not None else "") or _EMERGENCY_TYPES.get(cot_type) or ""
+    return (uid, _text(text, 48) or "ALERT") if (marker is not None or cot_type in _EMERGENCY_TYPES) else None
 
 
 def _normalize_event(event: ET.Element) -> tuple[str, dict[str, object]] | None:
@@ -423,6 +450,7 @@ def run(args) -> None:
 
     known: dict = {}                   # uid -> (topic, record, received at), repeated until the CoT's own stale time
     known_lock = threading.Lock()
+    emergencies: dict = {}             # client uid -> its open emergency, until TAK cancels it
 
     def republish():
         while True:
@@ -466,7 +494,25 @@ def run(args) -> None:
                     if _local_name(elem.tag) != "event":
                         continue
                     raw_pub.put(_raw_topic_message(xml), encoding=zenoh.Encoding.APPLICATION_OCTET_STREAM)
+                    alarm = _emergency(elem)
+                    if alarm is not None:
+                        client, text = alarm
+                        if text:
+                            emergencies[client] = text
+                        else:
+                            emergencies.pop(client, None)
+                        with known_lock:
+                            held = known.get(client)
+                            if held is not None:                 # show it now, not at the client's next position
+                                topic, record, received = held
+                                record = {k: v for k, v in record.items() if k != "emergency_str"}
+                                if text:
+                                    record["emergency_str"] = text
+                                known[client] = (topic, record, received)
+                                publish_dual(session, topic, dict(record, _ts=time.time()), NormalizedTrack, zenoh)
                     normalized = _normalize_event(elem)
+                    if normalized is not None and str(normalized[1].get("uid")) in emergencies:
+                        normalized[1]["emergency_str"] = emergencies[str(normalized[1].get("uid"))]
                     if normalized is not None:
                         topic, record = normalized
                         with known_lock:

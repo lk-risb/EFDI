@@ -98,10 +98,10 @@ def test_the_version_profile_sets_defaults_and_a_setting_of_its_own_wins(monkeyp
     assert profile.setting("FFI_LAYER_SYMBOL_STANDARD") == "APP-6(B)" and profile.setting("NFFI_LAYER_VERSION") == "1.3"
     assert profile.setting("SITAWARE_TAK_INDIVIDUAL_SCHEME") == ""
     monkeypatch.setattr(profile, "VERSION", "6.22")
-    assert profile.setting("FFI_LAYER_SYMBOL_STANDARD") == "APP-6(D)" and profile.setting("NFFI_LAYER_VERSION") == "1.4"
-    assert profile.setting("SITAWARE_TAK_INDIVIDUAL_SCHEME") == "app6d" and profile.setting("SITAWARE_TAK_USERS_NVG") == "true"
-    monkeypatch.setenv("FFI_LAYER_SYMBOL_STANDARD", "APP-6(B)")                       # mix and match: 6.22 with the letter symbol
-    assert profile.setting("FFI_LAYER_SYMBOL_STANDARD") == "APP-6(B)"
+    assert profile.setting("FFI_LAYER_SYMBOL_STANDARD") == "APP-6(B)" and profile.setting("NFFI_LAYER_VERSION") == "1.3"
+    assert profile.setting("SITAWARE_TAK_INDIVIDUAL_SCHEME") == "app06" and profile.setting("SITAWARE_TAK_USERS_NVG") == "true"
+    monkeypatch.setenv("FFI_LAYER_SYMBOL_STANDARD", "APP-6(D)")                       # mix and match: 6.22 with the numeric symbol over FFI
+    assert profile.setting("FFI_LAYER_SYMBOL_STANDARD") == "APP-6(D)"
     monkeypatch.setattr(profile, "VERSION", "9.9")
     assert profile.profile() is profile.PROFILES["6.21"]
 

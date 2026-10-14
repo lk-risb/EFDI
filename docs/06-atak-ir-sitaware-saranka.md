@@ -176,9 +176,9 @@ Adresas priima tik GET/HEAD, pagal nutylėjimą reikalauja Basic autentifikavimo
 
 | Nustatymas | 6.21 (išmatuota veikiančioje sistemoje) | 6.22 (prielaida, dar neišmatuota) |
 |---|---|---|
-| `NFFI_LAYER_VERSION` | 1.3 | 1.4 |
-| `FFI_LAYER_SYMBOL_STANDARD` | `APP-6(B)`, 15 ženklų raidinis simbolis | `APP-6(D)`, 20 skaitmenų simbolis su žmogaus piktograma |
-| `SITAWARE_TAK_INDIVIDUAL_SCHEME` (NVG) | tuščias: raidinis simbolis | `app6d` |
+| `NFFI_LAYER_VERSION` | 1.3 | 1.3 (daroma prielaida, kad nesikeičia) |
+| `FFI_LAYER_SYMBOL_STANDARD` | `APP-6(B)`, 15 ženklų raidinis simbolis | `APP-6(B)` (daroma prielaida, kad FFI kelias lieka tik raidinis; `APP-6(D)` yra išbandymui) |
+| `SITAWARE_TAK_INDIVIDUAL_SCHEME` (NVG) | tuščias: raidinis simbolis | `app06`: NVG srautas yra kelias, kuriuo tikimasi nupiešti skaitmeninį žmogaus simbolį; žyma yra neišbandyta prielaida, kita išbandytina žyma yra `2525d` |
 | `SITAWARE_TAK_USERS_NVG` | tuščias: NVG srautas piešia TAK naudotojus, nebent sukonfigūruotas NFFI ar FFI srautas | `true` |
 
 **Iš TAK į SitaWare.** TAK naudotojo pozicija gali pasiekti SitaWare Headquarters per FFI, NFFI arba NVG srautą. FFI (APP-11 Edition D,
@@ -196,6 +196,15 @@ nenurodo nė vieno iš jų ir nėra pajėgų takelis. Kaip padaryta pozicija (GP
 lygiai 0,0 pozicija atmetama. SitaWare 6.21 naudotojas visais trimis keliais piešiamas kaip pėstininkai, komandos (Team) dydžio
 (`SFGPUCI----A---`). Skaitmeninis žmogaus simbolis su 6.21 išbandytas: NVG srautas jį piešė kaip `?`, o FFI jį priėmė, bet nupiešė paprastą
 rėmelį, todėl 6.21 palikite `APP-6(B)`. Kaip formatai išsiaiškinti, aprašyta [`references/nffi/NFFI.md`](references/nffi/NFFI.md).
+
+**Antraštės numeriai, avarijos ir vėlavimas.** Kiekvienas NFFI ar FFI dokumentas rašomas už SitaWare 16 baitų antraštės. Jos sistemos,
+posistemio ir šalies numeriai pagal nutylėjimą yra 0, ir 6.21 tai priima; juos užpildo `NFFI_LAYER_HEADER_SYSTEM` (0-255),
+`NFFI_LAYER_HEADER_SUBSYSTEM` (0-255) ir `NFFI_LAYER_HEADER_COUNTRY` (ISO 3166 skaitinis kodas, 0-1023, pavyzdžiui, 440 Lietuvai), taip pat ir žiniatinklio
+sąsajoje. Ar SitaWare juos naudoja, neišbandyta. Kai TAK naudotojas siunčia avarinį signalą (pavyzdžiui, 911), `tak_bridge` pažymi to naudotojo
+takelį, o `nffi_layer` siunčia NFFI `alert` žymę su pastaba, prasidedančia `EMERGENCY` ir priežastimi; NVG srautas rodo tą patį tekstą būsenoje.
+Žymė išlieka, kol TAK atsiunčia atšaukimą. Pastaba, komanda ir vaidmuo lieka `operStatusData`: NFFI schemoje nėra `deviceSpecificData` elemento.
+Pozicija išsiunčiama tą akimirką, kai gaunama; vėlavimą lemia šaltinio ataskaitų dažnis (TAK klientas siunčia poziciją tik kas kelias minutes, nebent
+jo vietos ataskaitos nustatytos dažnesnės), o ne EFDI apklausa.
 
 **Iš SitaWare į TAK (kelias atgal).** `ffi-bridge` (ir `nffi-bridge` senesniam formatui) skaito pačios SitaWare takelius ir deda juos į
 tinklą, iš kur `tak_layer` rodo juos TAK kaip bet kurį kitą šaltinį. SitaWare sukurkite **IP1 Classic Server** (NFFI and FFI Manager,

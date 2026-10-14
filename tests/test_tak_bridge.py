@@ -98,3 +98,18 @@ def test_a_clients_last_position_is_repeated_until_its_own_stale_time():
     assert due["t/a"]["_ts"] == now and due["t/a"]["stale_s"] == 120.0 and due["t/a"]["lat_deg"] == 1.0
     assert due["t/c"]["stale_s"] == 290.0
     assert bridge._due_republish(known, now + 400.0) == [] and known == {}
+
+
+def _frame(cot_type, detail, uid="ANDROID-1-9-1-1"):
+    return ET.fromstring('<event version="2.0" uid="{}" type="{}" how="h-e" time="2026-10-13T13:00:00Z" start="2026-10-13T13:00:00Z" '
+                         'stale="2026-10-13T13:05:00Z"><point lat="54.7" lon="25.3" hae="0" ce="10" le="10"/><detail>{}</detail></event>'
+                         .format(uid, cot_type, detail))
+
+
+def test_a_tak_emergency_frame_names_its_client_and_a_cancel_clears_it():
+    alert = _frame("b-a-o-tbl", '<link uid="ANDROID-1" relation="p-p" type="a-f-G-U-C"/><emergency type="911 Alert">Alpha</emergency>')
+    assert bridge._emergency(alert) == ("ANDROID-1", "911 Alert")
+    assert bridge._emergency(_frame("b-a-o-tbl", ""))[0] == "ANDROID-1"                      # the uid suffix names the client
+    assert bridge._emergency(_frame("b-a-o-can", '<emergency cancel="true"/>')) == ("ANDROID-1", None)
+    assert bridge._emergency(_event("a-f-G-U-C")) is None and bridge._emergency(_event("t-x-d-d")) is None
+    assert bridge._normalize_event(alert) is None                                              # still not a track of its own

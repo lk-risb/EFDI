@@ -32,7 +32,7 @@ Rule: NATO APP-6 is preferred over MIL-STD-2525 where they differ, and codes are
 - Whether each C2 draws every ground-unit subtype icon has not been checked on screen.
 - The headquarters / task-force amplifier (symbol modifier 1) has no checked letter, so it is not used: the TAK role HQ is drawn as the C2 headquarters component. Sniper and forward observer were not found in the unit list and stay the plain unit.
 - Sources disagree on SIDC index positions of the modifiers (modifiers at positions 11-12 in 1-based counting, echelon the second); the code uses index 10-11 zero-based and the echelon at index 11.
-- Whether the SitaWare in use accepts the `app6d:` scheme in the NVG feed, and draws set 27, was not checked; the code that sends it (a TAK client's 20-digit SIDC) has no letter fallback.
+- On SitaWare 6.21 the `app6d:` scheme in the NVG feed drew a `?` (measured), so it is probably not a tag SitaWare knows. The tags to measure on a real 6.22 are `app06` and `2525d`, with the same 20-digit code; until one draws the person icon (set 27), the NVG feed sends the letter symbol and the numeric code is only an option (`SITAWARE_TAK_INDIVIDUAL_SCHEME`).
 
 ## TAK users in SitaWare force tracking (added 2026-10-13)
 
